@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { siteConfig } from "@/config/site";
 import { resolveBrand } from "@/app/brandRegistry";
-import type { BrandColor, BrandFont } from "@/styles/brand";
+import type { BrandFont, PaletteGroup } from "@/styles/brand";
 
 interface Props {
   onNavigate: (page: string) => void;
@@ -297,13 +297,23 @@ function LinkedInIcon() {
 
 // ─── PRIMITIVES ───────────────────────────────────────────────────────────────
 
-function ColorsSection({ colors, brandNeedsSetup, onMarkBrandEstablished }: {
-  colors: BrandColor[];
+// A light swatch (dark overlay text) gets a hairline border so it reads against
+// the page. Derived from the manifest `text` field — works for any light color,
+// not just cream.
+function isLightSwatch(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return t !== "#ffffff" && t !== "#fff";
+}
+
+function ColorsSection({ groups, brandNeedsSetup, onMarkBrandEstablished }: {
+  groups: PaletteGroup[];
   brandNeedsSetup?: boolean;
   onMarkBrandEstablished?: () => void;
 }) {
+  const brandColors = groups.flatMap((g) => g.colors);
+  const brandCount = brandColors.length;
   const resolved = useResolvedTokens([
-    ...colors.map((c) => c.token),
+    ...brandColors.map((c) => c.token),
     ...SYSTEM_COLORS.map((c) => c.token).filter((t): t is string => Boolean(t)),
   ]);
   return (
@@ -313,7 +323,7 @@ function ColorsSection({ colors, brandNeedsSetup, onMarkBrandEstablished }: {
         <SectionTitle
           eyebrow="Primitives · Sub-Atomic Tokens"
           title="Colors"
-          desc={`The ${siteConfig.clientName} palette consists of ${colors.length} brand token${colors.length === 1 ? "" : "s"} and ${SYSTEM_COLORS.length} system tokens. All colors should be referenced by CSS variable — never hardcoded hex values in component files.`}
+          desc={`The ${siteConfig.clientName} palette consists of ${brandCount} brand token${brandCount === 1 ? "" : "s"}${groups.length > 1 ? ` across ${groups.length} groups` : ""} and ${SYSTEM_COLORS.length} system tokens. All colors should be referenced by CSS variable — never hardcoded hex values in component files.`}
         />
 
         {brandNeedsSetup && (
@@ -332,18 +342,25 @@ function ColorsSection({ colors, brandNeedsSetup, onMarkBrandEstablished }: {
           </div>
         )}
 
-        <SubHead>Brand Palette</SubHead>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16, marginBottom: 40 }}>
-          {colors.map((c) => (
-            <div key={c.token}>
-              <div style={{ background: `var(${c.token})`, height: 80, borderRadius: 2, marginBottom: 10, border: c.token === "--ta-cream" ? "1px solid #ddd" : "none" }} />
-              <div style={{ fontFamily: A.body, fontSize: 13, fontWeight: 500, color: CA.ink, marginBottom: 2 }}>{c.name}</div>
-              <Token>{c.token}</Token>
-              <div style={{ fontFamily: A.mono, fontSize: 11, color: CA.mid, marginTop: 4 }}>{resolved[c.token] || c.value}</div>
-              <div style={{ fontFamily: A.body, fontSize: 12, color: CA.mid, marginTop: 3, lineHeight: 1.4 }}>{c.role}</div>
+        {groups.map((group) => (
+          <div key={group.title}>
+            <SubHead>{group.title}</SubHead>
+            {group.description && (
+              <div style={{ fontFamily: A.body, fontSize: 13, color: CA.mid, lineHeight: 1.5, margin: "-4px 0 16px" }}>{group.description}</div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16, marginBottom: 40 }}>
+              {group.colors.map((c) => (
+                <div key={c.token}>
+                  <div style={{ background: `var(${c.token})`, height: 80, borderRadius: 2, marginBottom: 10, border: isLightSwatch(c.text) ? "1px solid #ddd" : "none" }} />
+                  <div style={{ fontFamily: A.body, fontSize: 13, fontWeight: 500, color: CA.ink, marginBottom: 2 }}>{c.name}</div>
+                  <Token>{c.token}</Token>
+                  <div style={{ fontFamily: A.mono, fontSize: 11, color: CA.mid, marginTop: 4 }}>{resolved[c.token] || c.value}</div>
+                  <div style={{ fontFamily: A.body, fontSize: 12, color: CA.mid, marginTop: 3, lineHeight: 1.4 }}>{c.role}</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
 
         <SubHead>System Palette</SubHead>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 16 }}>
@@ -1002,7 +1019,7 @@ export function StyleGuide({ onNavigate, variationId, needsSetup, onMarkUpdated,
           </section>
 
           {/* SECTIONS */}
-          <ColorsSection colors={brand.colors} brandNeedsSetup={brandNeedsSetup} onMarkBrandEstablished={onMarkBrandEstablished} />
+          <ColorsSection groups={brand.paletteGroups} brandNeedsSetup={brandNeedsSetup} onMarkBrandEstablished={onMarkBrandEstablished} />
           <SpacingSection />
           <TypographySection fonts={brand.fonts} needsSetup={needsSetup} />
           <SemanticTypesSection />

@@ -45,24 +45,44 @@ export interface BrandFont {
   sample: string;
 }
 
-export interface Brand {
+export interface PaletteGroup {
+  /** Group heading shown as a SubHead in the styleguide, e.g. "Brand Palette". */
+  title: string;
+  /** Optional one-line note shown under the heading. */
+  description?: string;
   colors: BrandColor[];
+}
+
+export interface Brand {
+  /**
+   * Brand color groups — each renders as its own titled subsection in the
+   * styleguide's Colors section. This is the extensible side: add or remove
+   * groups here (or via /setup-styleguide) to create/remove color sections.
+   * The shadcn "System Palette" is a FIXED reference in StyleGuide.tsx and is
+   * intentionally NOT modeled here — leave it alone.
+   */
+  paletteGroups: PaletteGroup[];
   fonts: BrandFont[];
 }
 
 // The template DEFAULT palette & type roles. Ships as-is until a project runs
-// `/setup-styleguide`, which REPLACES these arrays with the established brand and
-// flips the brand-ready flag (VITE_BRAND_READY for the base; a variation's
-// `brandStatus` record field for a variation).
+// `/setup-styleguide`, which REPLACES these for the scope and flips the
+// brand-ready flag (VITE_BRAND_READY for the base; a variation's `brandStatus`
+// record field for a variation).
 export const brand: Brand = {
-  colors: [
-    { name: "Brand Blue",      token: "--ta-blue",       value: "#1e4b96", text: "#ffffff", role: "Links, active nav, accent borders" },
-    { name: "Accent Red",      token: "--ta-red",        value: "#c41230", text: "#ffffff", role: "Star ratings, NEW badge, alerts" },
-    { name: "Page Background", token: "--ta-cream",      value: "#f8f7f3", text: "#111111", role: "Site background, card fills, hero wash" },
-    { name: "Primary Text",    token: "--ta-ink",        value: "#111111", text: "#ffffff", role: "Body text, primary headings" },
-    { name: "Secondary Text",  token: "--ta-gray-dark",  value: "#333333", text: "#ffffff", role: "Secondary body text" },
-    { name: "Metadata",        token: "--ta-gray-mid",   value: "#777777", text: "#ffffff", role: "Captions, timestamps, bylines" },
-    { name: "Dividers",        token: "--ta-gray-light", value: "#cccccc", text: "#111111", role: "Borders, separator lines" },
+  paletteGroups: [
+    {
+      title: "Brand Palette",
+      colors: [
+        { name: "Brand Blue",      token: "--ta-blue",       value: "#1e4b96", text: "#ffffff", role: "Links, active nav, accent borders" },
+        { name: "Accent Red",      token: "--ta-red",        value: "#c41230", text: "#ffffff", role: "Star ratings, NEW badge, alerts" },
+        { name: "Page Background", token: "--ta-cream",      value: "#f8f7f3", text: "#111111", role: "Site background, card fills, hero wash" },
+        { name: "Primary Text",    token: "--ta-ink",        value: "#111111", text: "#ffffff", role: "Body text, primary headings" },
+        { name: "Secondary Text",  token: "--ta-gray-dark",  value: "#333333", text: "#ffffff", role: "Secondary body text" },
+        { name: "Metadata",        token: "--ta-gray-mid",   value: "#777777", text: "#ffffff", role: "Captions, timestamps, bylines" },
+        { name: "Dividers",        token: "--ta-gray-light", value: "#cccccc", text: "#111111", role: "Borders, separator lines" },
+      ],
+    },
   ],
   fonts: [
     { name: "Display", token: "--ta-font-display", stack: "var(--ta-font-display)", role: "Headings, titles, hero text",        sample: "The quick brown fox jumps" },

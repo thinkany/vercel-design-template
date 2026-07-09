@@ -45,12 +45,19 @@ the `?v=` in the styleguide URL (or ask):
 The brand palette lives in **two coupled files that must stay in sync**, both in
 the scope's `styles/` folder:
 1. **`brand.ts`** — the manifest the styleguide renders its **Primitives → Colors**
-   swatches from. Its `brand.colors` array holds `{ name, token, value, text, role }`.
+   swatches from. Its `brand.paletteGroups` array holds **named color groups**,
+   each `{ title, description?, colors: [{ name, token, value, text, role }] }`.
+   Each group renders as its own titled subsection.
 2. **`tokens.css`** — the CSS declarations under `/* ── Brand colors ── */` (e.g.
    `--ta-blue: #1e4b96;`) that components actually consume via `var(--ta-*)`.
 
 The styleguide no longer has a hardcoded color array — it reads `brand.ts` through
 `resolveBrand(variationId)`, so writing the manifest is what makes swatches appear.
+
+**Color groups are the extensible unit.** To **create** a color section, add a new
+`{ title, colors: [...] }` group; to **remove** one, delete its group. The shadcn
+**System Palette** is a FIXED reference (hardcoded in `StyleGuide.tsx`) — it is NOT
+a group and must never be added to, removed, or mixed with `--ta-*` here.
 
 This step **replaces** the default 7-token placeholder palette (blue / red /
 cream / ink / grays) with the scope's real palette. After writing, grep that
@@ -92,18 +99,25 @@ writing.
 stripped (`Brand Blue` → `--ta-brand-blue`). Ensure slugs are unique (suffix
 `-2`, `-3`… on collision).
 
-**Contrast (`text`) field.** For each `brand.colors` entry, compute a legible
-overlay text color from the hex's luminance — dark swatch → `#fff`, light swatch
-→ a near-black. This only affects swatch legibility in the styleguide.
+**Contrast (`text`) field.** For each color entry, compute a legible overlay text
+color from the hex's luminance — dark swatch → `#ffffff`, light swatch → a
+near-black. The styleguide uses this both for legibility and to decide which
+swatches get a hairline border, so set it accurately.
+
+**Group the colors.** Ask which group these belong to (default **"Brand Palette"**,
+or a new named group like "Semantic States" / "Data Viz"). A full palette setup
+usually replaces the single default group; an "add a section" request appends a
+new group and leaves existing ones intact.
 
 **Write both files** in the scope's `styles/` folder for the confirmed palette:
-- Replace the `brand.colors` array in **`brand.ts`** with the new entries
-  (`{ name, token, value: "#hex", text, role }`). The styleguide derives its
-  swatch count and "N brand tokens" prose from this array automatically — no
-  other edit needed.
-- Replace the declarations in the `/* ── Brand colors ── */` block of
-  **`tokens.css`** with the matching `--ta-*` tokens (same hex values), leaving
-  `--admin-*`, `--ta-font-*`, and the system palette untouched.
+- In **`brand.ts`**, write the colors into the target group inside
+  `brand.paletteGroups` (`{ title, description?, colors: [{ name, token,
+  value: "#hex", text, role }] }`) — replacing the default group for a full setup,
+  or appending a new group to add a section. The styleguide derives its swatch
+  count, group headings, and "N brand tokens" prose automatically — no other edit.
+- In **`tokens.css`**, write the matching `--ta-*` declarations under
+  `/* ── Brand colors ── */` (same hex values), leaving `--admin-*`,
+  `--ta-font-*`, and the system palette untouched.
 
 **Set the brand flag** so the styleguide stops showing the "template defaults" notice:
 - **Base** → set `VITE_BRAND_READY="true"` in `.env`.
