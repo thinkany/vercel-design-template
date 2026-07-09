@@ -68,7 +68,7 @@ export function Dashboard() {
             color: "var(--admin-gray-mid)",
             textTransform: "uppercase",
           }}>
-            {siteConfig.name}
+            {siteConfig.companyName}
           </span>
           {siteConfig.subtitle && (
             <>

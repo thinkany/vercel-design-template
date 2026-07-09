@@ -9,6 +9,7 @@ const PLACEHOLDER_NAME = "Project Name";
 const PLACEHOLDER_SUBTITLE = "Subtitle";
 const PLACEHOLDER_TAGLINE = "Your site tagline";
 
+const rawCompany = (import.meta.env.VITE_COMPANY_NAME ?? "").trim();
 const rawName = (import.meta.env.VITE_SITE_NAME ?? "").trim();
 const rawSubtitle = (import.meta.env.VITE_SITE_SUBTITLE ?? "").trim();
 const rawTagline = (import.meta.env.VITE_SITE_TAGLINE ?? "").trim();
@@ -21,6 +22,12 @@ export const siteConfig = {
   isBranded,
   /** Primary name. Falls back to a placeholder only while fully unbranded. */
   name: rawName || PLACEHOLDER_NAME,
+  /**
+   * Company / organization name — shown in the dashboard header wordmark.
+   * Falls back to the site name (then a placeholder) when left blank, so an
+   * unset company name never blanks the header.
+   */
+  companyName: rawCompany || rawName || PLACEHOLDER_NAME,
   /**
    * Secondary label. Falls back to a placeholder only while fully unbranded;
    * once branded, an intentionally-empty subtitle stays empty.

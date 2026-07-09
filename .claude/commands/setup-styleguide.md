@@ -11,6 +11,15 @@ is the living reference every later design decision is checked against. It ships
 mostly-universal, with one **generic example** per component level as a
 copy-me pattern. Your job here is to make its foundation reflect *this* project.
 
+**Make this interactive.** Drive the designer's choices with the
+`AskUserQuestion` tool rather than plain text prompts — it renders clickable
+options plus an "Other → type your own" field and behaves identically in the IDE
+and Claude Desktop. Batch related questions into one call (max 4 per panel).
+Every question includes a free-text "Other", so open values (font-family
+strings, hex codes, stylesheet URLs) are typed there while presets stay one
+click away. For each generic example section in step 2, offer a
+**Keep & restyle / Replace / Remove** question so the designer decides per level.
+
 Walk the designer through these steps:
 
 ## 1. Set the Primitives — fonts & colors (the token layer)

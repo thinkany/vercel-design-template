@@ -8,18 +8,19 @@ function escapeHtml(s) {
   ))
 }
 
-// Brand shown on the preview gate. Set SITE_NAME / SITE_SUBTITLE in Vercel's
+// Brand shown on the preview gate. Set CLIENT_NAME / PROJECT_TITLE in Vercel's
 // Environment Variables. These are edge-runtime vars — SEPARATE from the app's
-// build-time VITE_SITE_* in .env, which the middleware cannot read.
-const SITE_NAME = escapeHtml(process.env.SITE_NAME || 'Preview')
-const SITE_SUBTITLE = escapeHtml(process.env.SITE_SUBTITLE || '')
+// build-time VITE_* in .env, which the middleware cannot read.
+const CLIENT_NAME = escapeHtml(process.env.CLIENT_NAME || 'Preview')
+const PROJECT_TITLE = escapeHtml(process.env.PROJECT_TITLE || 'A Design System')
+//const COMPANY_NAME = escapeHtml(process.env.COMPANY_NAME || '')
 
 const LOGIN_PAGE = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${SITE_NAME}</title>
+  <title>${CLIENT_NAME} : ${PROJECT_TITLE}</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+CiAgPHN0eWxlPgogICAgLnJpbmcgeyBmaWxsOiBub25lOyBzdHJva2U6ICMwMDA7IHN0cm9rZS13aWR0aDogMS41IH0KICAgIC5kb3QgeyBmaWxsOiAjMDAwIH0KICAgIEBtZWRpYSAocHJlZmVycy1jb2xvci1zY2hlbWU6IGRhcmspIHsKICAgICAgLnJpbmcgeyBzdHJva2U6ICNmZmYgfQogICAgICAuZG90IHsgZmlsbDogI2ZmZiB9CiAgICB9CiAgPC9zdHlsZT4KICA8Y2lyY2xlIGNsYXNzPSJyaW5nIiBjeD0iMTYiIGN5PSIxNiIgcj0iMTMiIC8+CiAgPGNpcmNsZSBjbGFzcz0iZG90IiBjeD0iMTYiIGN5PSIxNiIgcj0iMi4yNSIgLz4KPC9zdmc+Cg==" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -68,6 +69,15 @@ const LOGIN_PAGE = `<!DOCTYPE html>
       text-transform: uppercase;
       color: rgba(0,0,0,0.4);
       margin-top: 12px;
+    }
+
+    .brand-credit {
+      font-family: 'Inter', sans-serif;
+      font-weight: 400;
+      font-size: 12px;
+      letter-spacing: 0.02em;
+      color: rgba(0,0,0,0.4);
+      margin-top: 10px;
     }
 
     .gate {
@@ -195,8 +205,8 @@ const LOGIN_PAGE = `<!DOCTYPE html>
 <body>
   <div class="wrap">
     <div class="brand">
-      <div class="brand-name">${SITE_NAME}</div>
-      ${SITE_SUBTITLE ? `<div class="brand-subtitle">${SITE_SUBTITLE}</div>` : ''}
+      <div class="brand-name">${CLIENT_NAME}</div>
+      ${PROJECT_TITLE ? `<div class="brand-subtitle">${PROJECT_TITLE}</div>` : ''}
     </div>
 
     <div class="gate">
@@ -223,7 +233,7 @@ const LOGIN_PAGE = `<!DOCTYPE html>
       </form>
     </div>
 
-    <p class="footer-note">Staging environment &mdash; not for distribution</p>
+    <p class="footer-note">Design preview environment &mdash; not meant for distribution</p>
   </div>
 
   <script>

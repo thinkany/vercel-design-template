@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  /** Company / organization name — shown in the dashboard header wordmark. */
+  readonly VITE_COMPANY_NAME: string;
   /** Public site name — fills the primary part of the title lockup. */
   readonly VITE_SITE_NAME: string;
   /** Public site subtitle — fills the secondary part of the title lockup. */

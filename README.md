@@ -95,8 +95,8 @@ The password screen (`middleware.js`) runs on Vercel's **edge runtime**, which
 
 | Variable | Purpose | Required? |
 |---|---|---|
-| `SITE_NAME` | Project name on the login screen (large wordmark) | Falls back to `Preview` if unset |
-| `SITE_SUBTITLE` | Small line under the name | Optional — hidden if unset |
+| `CLIENT_NAME` | Project name on the login screen (large wordmark) | Falls back to `Preview` if unset |
+| `PROJECT_TITLE` | Appears next to the CLIENT_NAME or as a Small note under the CLIENT_NAME | Optional — hidden if unset |
 | `ADMIN_PASS` | Admin password for the gate | **Required** |
 | `AUTH_PASS` | Client password for the gate | **Required** |
 
