@@ -19,20 +19,20 @@ interface Props {
 // styleguide always reflects the project's single source of truth. Edit values
 // in tokens.css, not here.
 const F = {
-  fraunces: "var(--dfr-font-display)",
-  serif: "var(--dfr-font-serif)",
-  sans: "var(--dfr-font-sans)",
-  mono: "var(--dfr-font-mono)",
+  fraunces: "var(--ta-font-display)",
+  serif: "var(--ta-font-serif)",
+  sans: "var(--ta-font-sans)",
+  mono: "var(--ta-font-mono)",
 };
 
 const C = {
-  blue: "var(--dfr-blue)",
-  red: "var(--dfr-red)",
-  cream: "var(--dfr-cream)",
-  ink: "var(--dfr-ink)",
-  dark: "var(--dfr-gray-dark)",
-  mid: "var(--dfr-gray-mid)",
-  light: "var(--dfr-gray-light)",
+  blue: "var(--ta-blue)",
+  red: "var(--ta-red)",
+  cream: "var(--ta-cream)",
+  ink: "var(--ta-ink)",
+  dark: "var(--ta-gray-dark)",
+  mid: "var(--ta-gray-mid)",
+  light: "var(--ta-gray-light)",
   card: "#efefef",  // project-specific surface, no brand token
   white: "#ffffff",
 };
@@ -60,13 +60,13 @@ function useResolvedTokens(tokens: string[]): Record<string, string> {
 // ─── DATA ─────────────────────────────────────────────────────────────────────
 
 const BRAND_COLORS = [
-  { name: "Brand Blue",      token: "--dfr-blue",       value: C.blue,    text: "#fff", role: "Links, active nav, accent borders" },
-  { name: "Accent Red",      token: "--dfr-red",        value: C.red,     text: "#fff", role: "Star ratings, NEW badge, alerts" },
-  { name: "Page Background", token: "--dfr-cream",      value: C.cream,   text: C.ink,  role: "Site background, card fills, hero wash" },
-  { name: "Primary Text",    token: "--dfr-ink",        value: C.ink,     text: "#fff", role: "Body text, primary headings" },
-  { name: "Secondary Text",  token: "--dfr-gray-dark",  value: C.dark,    text: "#fff", role: "Secondary body text" },
-  { name: "Metadata",        token: "--dfr-gray-mid",   value: C.mid,     text: "#fff", role: "Captions, timestamps, bylines" },
-  { name: "Dividers",        token: "--dfr-gray-light", value: C.light,   text: C.ink,  role: "Borders, separator lines" },
+  { name: "Brand Blue",      token: "--ta-blue",       value: C.blue,    text: "#fff", role: "Links, active nav, accent borders" },
+  { name: "Accent Red",      token: "--ta-red",        value: C.red,     text: "#fff", role: "Star ratings, NEW badge, alerts" },
+  { name: "Page Background", token: "--ta-cream",      value: C.cream,   text: C.ink,  role: "Site background, card fills, hero wash" },
+  { name: "Primary Text",    token: "--ta-ink",        value: C.ink,     text: "#fff", role: "Body text, primary headings" },
+  { name: "Secondary Text",  token: "--ta-gray-dark",  value: C.dark,    text: "#fff", role: "Secondary body text" },
+  { name: "Metadata",        token: "--ta-gray-mid",   value: C.mid,     text: "#fff", role: "Captions, timestamps, bylines" },
+  { name: "Dividers",        token: "--ta-gray-light", value: C.light,   text: C.ink,  role: "Borders, separator lines" },
 ];
 
 // token: a CSS variable name (resolved live) or null for a hardcoded surface.
@@ -76,14 +76,14 @@ const SYSTEM_COLORS: { name: string; token: string | null; fallback: string; tex
   { name: "Card Surface",    token: null,                 fallback: "#efefef", text: C.ink },
   { name: "Input BG",        token: "--input-background", fallback: "#f3f3f5", text: C.ink },
   { name: "Dark BG",         token: null,                 fallback: "#111111", text: "#fff" },
-  { name: "Nav Dropdown BG", token: "--dfr-cream",        fallback: "#f8f7f3", text: C.ink },
+  { name: "Nav Dropdown BG", token: "--ta-cream",        fallback: "#f8f7f3", text: C.ink },
 ];
 
 const FONT_FAMILIES = [
-  { name: "Display", token: "--dfr-font-display", stack: F.fraunces, role: "Headings, titles, hero text",         sample: "The quick brown fox jumps" },
-  { name: "Serif",   token: "--dfr-font-serif",   stack: F.serif,    role: "Body copy, long-form reading",        sample: "The quick brown fox jumps over the lazy dog." },
-  { name: "Sans",    token: "--dfr-font-sans",    stack: F.sans,     role: "UI labels, navigation, metadata",     sample: "THE QUICK BROWN FOX · 24 JUNE 2026" },
-  { name: "Mono",    token: "--dfr-font-mono",    stack: F.mono,     role: "Numeric data, tabular values, code",  sample: "0123456789  ·  ★★★★½" },
+  { name: "Display", token: "--ta-font-display", stack: F.fraunces, role: "Headings, titles, hero text",         sample: "The quick brown fox jumps" },
+  { name: "Serif",   token: "--ta-font-serif",   stack: F.serif,    role: "Body copy, long-form reading",        sample: "The quick brown fox jumps over the lazy dog." },
+  { name: "Sans",    token: "--ta-font-sans",    stack: F.sans,     role: "UI labels, navigation, metadata",     sample: "THE QUICK BROWN FOX · 24 JUNE 2026" },
+  { name: "Mono",    token: "--ta-font-mono",    stack: F.mono,     role: "Numeric data, tabular values, code",  sample: "0123456789  ·  ★★★★½" },
 ];
 
 const TYPE_SCALE = [9, 10, 11, 12, 13, 14, 15, 16, 18, 21, 24, 28, 34];
@@ -290,7 +290,7 @@ function ColorsSection() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16, marginBottom: 40 }}>
           {BRAND_COLORS.map((c) => (
             <div key={c.token}>
-              <div style={{ background: `var(${c.token})`, height: 80, borderRadius: 2, marginBottom: 10, border: c.token === "--dfr-cream" ? "1px solid #ddd" : "none" }} />
+              <div style={{ background: `var(${c.token})`, height: 80, borderRadius: 2, marginBottom: 10, border: c.token === "--ta-cream" ? "1px solid #ddd" : "none" }} />
               <div style={{ fontFamily: F.sans, fontSize: 13, fontWeight: 500, color: C.ink, marginBottom: 2 }}>{c.name}</div>
               <Token>{c.token}</Token>
               <div style={{ fontFamily: F.mono, fontSize: 11, color: C.mid, marginTop: 4 }}>{resolved[c.token] || c.value}</div>
@@ -436,7 +436,7 @@ function SemanticTypesSection() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "60px 1fr", gap: 20, padding: "14px 0", alignItems: "baseline" }}>
               <Token>&lt;code&gt;</Token>
-              <code style={{ fontFamily: F.mono, fontSize: 13, color: C.blue, background: "#f0f0f0", padding: "2px 6px", borderRadius: 2 }}>--dfr-blue</code>
+              <code style={{ fontFamily: F.mono, fontSize: 13, color: C.blue, background: "#f0f0f0", padding: "2px 6px", borderRadius: 2 }}>--ta-blue</code>
             </div>
           </div>
         </DemoBox>

@@ -28,7 +28,7 @@ export const INITIAL_VARIATIONS: Variation[] = [
   },
 ];
 
-const STORAGE_KEY = "dfr-variations-v2";
+const STORAGE_KEY = "ta-variations-v2";
 
 export function loadVariations(): Variation[] {
   try {

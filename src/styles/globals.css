@@ -1,5 +1,5 @@
 /* ©2004-2026 Deep Focus Review. All rights reserved. */
-/* DFR font tokens — unlayered :root overrides Tailwind's @layer theme defaults */
+/* Font tokens — unlayered :root overrides Tailwind's @layer theme defaults */
 :root {
   --font-sans: Helvetica, Arial, sans-serif;
   --font-cabin: 'Cabin', Helvetica, Arial, sans-serif;
@@ -11,22 +11,22 @@ img {
   border-radius: 2px;
 }
 
-/* Accessible links on dark backgrounds — apply .dfr-dark to any dark container */
-.dfr-dark a {
+/* Accessible links on dark backgrounds — apply .ta-dark to any dark container */
+.ta-dark a {
   color: #ffffff;
   text-decoration: underline;
 }
-.dfr-dark a:hover {
+.ta-dark a:hover {
   color: rgba(255, 255, 255, 0.75);
 }
 
 /* Site-wide image hover — radial vignette: vibrant center, darkened edges.
-   Applied by tagging a hover <img> with .dfr-img-hover; :has() puts the
+   Applied by tagging a hover <img> with .ta-img-hover; :has() puts the
    overlay on that image's wrapper so the center stays fully vibrant. */
-*:has(> .dfr-img-hover) {
+*:has(> .ta-img-hover) {
   position: relative;
 }
-*:has(> .dfr-img-hover)::after {
+*:has(> .ta-img-hover)::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -36,6 +36,6 @@ img {
   transition: opacity 0.55s ease;
   background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.72) 100%);
 }
-*:has(> .dfr-img-hover):hover::after {
+*:has(> .ta-img-hover):hover::after {
   opacity: 1;
 }

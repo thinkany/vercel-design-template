@@ -4,13 +4,13 @@
 
 | Token | Tailwind class | Value | Usage |
 |---|---|---|---|
-| `--dfr-blue` | `bg-dfr-blue` / `text-dfr-blue` | `#1e4b96` | Links, accent borders, active states |
-| `--dfr-red` | `bg-dfr-red` / `text-dfr-red` | `#c41230` | Star ratings, alert labels, promo badges |
-| `--dfr-cream` | `bg-dfr-cream` | `#f8f7f3` | Page background, hero wash, card fills |
-| `--dfr-ink` | `text-dfr-ink` | `#111111` | Primary body text, headings |
-| `--dfr-gray-dark` | `text-dfr-gray-dark` | `#333333` | Secondary body text |
-| `--dfr-gray-mid` | `text-dfr-gray-mid` | `#777777` | Metadata, captions, timestamps |
-| `--dfr-gray-light` | `border-dfr-gray-light` | `#cccccc` | Dividers, subtle borders |
+| `--ta-blue` | `bg-ta-blue` / `text-ta-blue` | `#1e4b96` | Links, accent borders, active states |
+| `--ta-red` | `bg-ta-red` / `text-ta-red` | `#c41230` | Star ratings, alert labels, promo badges |
+| `--ta-cream` | `bg-ta-cream` | `#f8f7f3` | Page background, hero wash, card fills |
+| `--ta-ink` | `text-ta-ink` | `#111111` | Primary body text, headings |
+| `--ta-gray-dark` | `text-ta-gray-dark` | `#333333` | Secondary body text |
+| `--ta-gray-mid` | `text-ta-gray-mid` | `#777777` | Metadata, captions, timestamps |
+| `--ta-gray-light` | `border-ta-gray-light` | `#cccccc` | Dividers, subtle borders |
 
 Never hardcode these hex values in component files — always use the CSS variable or Tailwind utility.
 
@@ -110,7 +110,7 @@ Avoid arbitrary pixel values in new code. Use `clamp()` only for responsive hero
 ## Code Conventions
 
 - **No inline `style={{}}`** — use Tailwind utility classes or CSS variables. Phase 4 will migrate existing inline styles.
-- **Colors:** Always reference `var(--dfr-*)` or Tailwind `text-dfr-*` / `bg-dfr-*` utilities. Never hardcode hex values.
+- **Colors:** Always reference `var(--ta-*)` or Tailwind `text-ta-*` / `bg-ta-*` utilities. Never hardcode hex values.
 - **Fonts:** Use `font-fraunces`, `font-source-serif`, `font-dm-sans`, `font-dm-mono` Tailwind classes.
 - **Dark mode:** Supported via `.dark` class on `<html>`. Use `dark:` Tailwind variants, not manual media queries.
 - **TypeScript:** All components are `.tsx`. Data files (`siteData.ts`, `navData.ts`, etc.) live in `src/app/components/` alongside components — move to `src/data/` when doing a cleanup pass.
@@ -120,6 +120,6 @@ Avoid arbitrary pixel values in new code. Use `clamp()` only for responsive hero
 ## Content Notes
 
 - **Image CDN:** Poster images pull from `deepfocusreview.com`'s WordPress CDN (`cdn.deepfocusreview.com` or `deepfocusreview.com/wp-content/...`). No local copies.
-- **Star ratings:** Rendered as Unicode stars (`★☆`) in `font-dm-mono`, colored `text-dfr-red`.
+- **Star ratings:** Rendered as Unicode stars (`★☆`) in `font-dm-mono`, colored `text-ta-red`.
 - **Date format:** "Month DD YYYY" — e.g. "June 24 2026".
 - **Film titles:** Always italicized in prose. In card UI, use Fraunces italic.

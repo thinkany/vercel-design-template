@@ -231,10 +231,10 @@ const LOGIN_PAGE = `<!DOCTYPE html>
         acc[parts[0]] = decodeURIComponent(parts.slice(1).join('='));
         return acc;
       }, {});
-      if (cookies['dfr-auth']) {
+      if (cookies['ta-auth']) {
         // Bad password was attempted — clear it and show error
-        document.cookie = 'dfr-auth=; path=/; max-age=0';
-        document.cookie = 'dfr-role=; path=/; max-age=0';
+        document.cookie = 'ta-auth=; path=/; max-age=0';
+        document.cookie = 'ta-role=; path=/; max-age=0';
         document.getElementById('err').classList.add('visible');
         document.getElementById('pw').classList.add('error');
       }
@@ -249,7 +249,7 @@ const LOGIN_PAGE = `<!DOCTYPE html>
       if (!pw) return;
       err.classList.remove('visible');
       input.classList.remove('error');
-      document.cookie = 'dfr-auth=' + encodeURIComponent(pw) + '; path=/; SameSite=Strict; max-age=86400';
+      document.cookie = 'ta-auth=' + encodeURIComponent(pw) + '; path=/; SameSite=Strict; max-age=86400';
       window.location.reload();
     }
 
@@ -285,7 +285,7 @@ function parseCookies(header) {
 
 export default function middleware(req) {
   const cookies = parseCookies(req.headers.get('cookie'))
-  const auth = cookies['dfr-auth']
+  const auth = cookies['ta-auth']
 
   // Fail closed: require a non-empty cookie AND a configured password. Without
   // the `auth &&` guards, an unset ADMIN_PASS/AUTH_PASS would make
@@ -302,14 +302,14 @@ export default function middleware(req) {
   }
 
   // If role cookie is already correct, pass through
-  if (cookies['dfr-role'] === role) return
+  if (cookies['ta-role'] === role) return
 
   // Otherwise set the role cookie via redirect (one-time, transparent to user)
   return new Response(null, {
     status: 302,
     headers: {
       'Location': req.url,
-      'Set-Cookie': `dfr-role=${role}; path=/; SameSite=Strict; max-age=86400`,
+      'Set-Cookie': `ta-role=${role}; path=/; SameSite=Strict; max-age=86400`,
     },
   })
 }

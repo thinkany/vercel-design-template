@@ -4,7 +4,7 @@
 
 @import 'tw-animate-css';
 
-@utility dfr-box {
+@utility ta-box {
   border-radius: 2px;
 }
 

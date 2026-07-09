@@ -76,23 +76,48 @@ variation's styleguide (`/?v={id}&styleguide`) shows a review reminder with a
 *Mark as updated* button until you've adapted it. The base styleguide and each
 variation are managed independently.
 
+## Vercel Instructions
+
+The template deploys to Vercel and auto-builds on every push to git. Configuration
+lives in **two different places** — set both for a fully branded, protected deploy.
+
+### App branding → committed `.env`
+
+The dashboard, styleguide, and site pages read their brand from the committed
+`.env` (`VITE_SITE_*`), baked into the bundle at build time. Set these with
+`/setup-project` (see above) — they travel with the repo and deploy automatically.
+
+### Login gate + secrets → Vercel Environment Variables
+
+The password screen (`middleware.js`) runs on Vercel's **edge runtime**, which
+**cannot** read `.env` / `VITE_*`. Set these in the Vercel dashboard under
+**Project → Settings → Environment Variables** (plain names, **no `VITE_` prefix**):
+
+| Variable | Purpose | Required? |
+|---|---|---|
+| `SITE_NAME` | Project name on the login screen (large wordmark) | Falls back to `Preview` if unset |
+| `SITE_SUBTITLE` | Small line under the name | Optional — hidden if unset |
+| `ADMIN_PASS` | Admin password for the gate | **Required** |
+| `AUTH_PASS` | Client password for the gate | **Required** |
+
+- Without `ADMIN_PASS` / `AUTH_PASS` the site stays locked (fail-closed) — no one
+  can get in until they're set.
+- `SITE_NAME` / `SITE_SUBTITLE` are **separate** from the app's `VITE_SITE_*`. For a
+  fully branded deploy, set the name in **both** places — `.env` for the app, the
+  Vercel dashboard for the gate.
+- A logo on the login screen can be added later via an optional `SITE_LOGO` var.
+- After changing dashboard env vars, **redeploy** for them to take effect.
+
 ## Good to know
 
 - **`.env` is committed on purpose.** It holds only *public* brand config, so it
-  travels with the repo and deploys automatically. Never put secrets in it — the
-  preview-gate passwords (`ADMIN_PASS` / `AUTH_PASS`) belong in Vercel's
-  environment variables or a local, git-ignored `.env.local`.
+  travels with the repo and deploys automatically. Never put secrets in it — gate
+  passwords and `SITE_*` go in Vercel's Environment Variables (see above) or a
+  local, git-ignored `.env.local`.
 - **Brand values are build-time.** The dev server reloads on `.env` changes, but
   a live deploy needs a rebuild to pick them up — Vercel does this automatically
   on each push.
-- **The preview gate is branded separately.** The password screen lives in
-  `middleware.js` and runs on Vercel's edge runtime, which *cannot* read `.env` /
-  `VITE_*`. To brand it, add plain **`SITE_NAME`** and **`SITE_SUBTITLE`** vars in
-  your Vercel project's Environment Variables (next to `ADMIN_PASS` / `AUTH_PASS`).
-  Unset, it falls back to "Preview". A logo can be added later via a `SITE_LOGO`
-  var.
 - **Instructions for Claude live in `CLAUDE.md`,** kept separate from this
   human-facing README. That's where the project's conventions and working rules
   for the AI assistant are defined.
-```
 

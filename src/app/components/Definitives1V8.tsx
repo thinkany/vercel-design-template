@@ -184,7 +184,7 @@ export function Definitives1V8({ onNavigate }: Props) {
                 <RectangleAd borderColor="rgba(0,0,0,0.1)" />
               </div>
 
-              <div className="dfr-dark" style={{ background: "#111", color: "#f8f7f3", padding: "20px", marginTop: 24 }}>
+              <div className="ta-dark" style={{ background: "#111", color: "#f8f7f3", padding: "20px", marginTop: 24 }}>
                 <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 15, fontWeight: 600, fontStyle: "italic", marginBottom: 8 }}>About The Definitives</div>
                 <p style={{ fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 13, lineHeight: 1.6, color: "rgba(248,247,243,0.7)", marginBottom: 14 }}>
                   Essays on essential cinema, published since 2006. New entries appear first on Patreon.

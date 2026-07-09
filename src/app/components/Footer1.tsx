@@ -20,7 +20,7 @@ const COLS = [
 
 export function Footer1({ onNavigate }: Props) {
   return (
-    <footer className="dfr-dark" style={{ background: "#111111", color: "#f8f7f3", fontFamily: "'DM Sans', system-ui, sans-serif", marginTop: 80 }}>
+    <footer className="ta-dark" style={{ background: "#111111", color: "#f8f7f3", fontFamily: "'DM Sans', system-ui, sans-serif", marginTop: 80 }}>
       {/* Top rule */}
       <div style={{ height: 3, background: "#1e4b96" }} />
 

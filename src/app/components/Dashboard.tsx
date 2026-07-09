@@ -42,7 +42,7 @@ export function Dashboard() {
   return (
     <div style={{
       minHeight: "100vh",
-      background: "var(--dfr-cream)",
+      background: "var(--ta-cream)",
       fontFamily: "'DM Sans', system-ui, sans-serif",
     }}>
 
@@ -64,19 +64,19 @@ export function Dashboard() {
             fontSize: 11,
             fontWeight: 500,
             letterSpacing: "0.16em",
-            color: "var(--dfr-gray-mid)",
+            color: "var(--ta-gray-mid)",
             textTransform: "uppercase",
           }}>
             {siteConfig.name}
           </span>
           {siteConfig.subtitle && (
             <>
-              <span style={{ color: "var(--dfr-gray-light)", fontSize: 16 }}>·</span>
+              <span style={{ color: "var(--ta-gray-light)", fontSize: 16 }}>·</span>
               <span style={{
                 fontSize: 11,
                 fontWeight: 500,
                 letterSpacing: "0.14em",
-                color: "var(--dfr-gray-mid)",
+                color: "var(--ta-gray-mid)",
                 textTransform: "uppercase",
               }}>
                 {siteConfig.subtitle}
@@ -88,8 +88,8 @@ export function Dashboard() {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button
             onClick={() => {
-              document.cookie = "dfr-auth=; path=/; max-age=0";
-              document.cookie = "dfr-role=; path=/; max-age=0";
+              document.cookie = "ta-auth=; path=/; max-age=0";
+              document.cookie = "ta-role=; path=/; max-age=0";
               window.location.href = "/";
             }}
             style={{
@@ -102,7 +102,7 @@ export function Dashboard() {
               letterSpacing: "0.12em",
               textTransform: "uppercase",
               cursor: "pointer",
-              color: "var(--dfr-gray-mid)",
+              color: "var(--ta-gray-mid)",
               fontFamily: "inherit",
             }}
           >
@@ -112,7 +112,7 @@ export function Dashboard() {
           <button
             onClick={() => setShowMakeModal(true)}
             style={{
-              background: "var(--dfr-blue)",
+              background: "var(--ta-blue)",
               color: "#fff",
               border: "none",
               borderRadius: 3,
@@ -140,13 +140,13 @@ export function Dashboard() {
             fontFamily: "Georgia, serif",
             fontSize: 36,
             fontWeight: 300,
-            color: "var(--dfr-ink)",
+            color: "var(--ta-ink)",
             margin: "0 0 8px",
             letterSpacing: "-0.02em",
           }}>
             {siteTitle}
           </h1>
-          <p style={{ fontSize: 14, color: "var(--dfr-gray-mid)", margin: 0 }}>
+          <p style={{ fontSize: 14, color: "var(--ta-gray-mid)", margin: 0 }}>
             {variations.length} design variation{variations.length !== 1 ? "s" : ""}
           </p>
         </div>
@@ -182,10 +182,10 @@ export function Dashboard() {
       {/* Base-guard dialog */}
       {dialog?.type === "base-guard" && (
         <Overlay onClose={() => setDialog(null)}>
-          <h3 style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 300, color: "var(--dfr-ink)", margin: "0 0 12px" }}>
+          <h3 style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 300, color: "var(--ta-ink)", margin: "0 0 12px" }}>
             Can't remove this one
           </h3>
-          <p style={{ fontSize: 14, color: "var(--dfr-gray-dark)", lineHeight: 1.65, margin: "0 0 28px" }}>
+          <p style={{ fontSize: 14, color: "var(--ta-gray-dark)", lineHeight: 1.65, margin: "0 0 28px" }}>
             Oh sorry! We can not remove the base variation, we need it as our foundation.
           </p>
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -195,7 +195,7 @@ export function Dashboard() {
                 padding: "10px 22px",
                 border: "none",
                 borderRadius: 3,
-                background: "var(--dfr-blue)",
+                background: "var(--ta-blue)",
                 color: "#fff",
                 cursor: "pointer",
                 fontSize: 13,
@@ -212,13 +212,13 @@ export function Dashboard() {
       {/* Remove confirmation dialog */}
       {dialog?.type === "remove" && (
         <Overlay onClose={() => setDialog(null)}>
-          <h3 style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 300, color: "var(--dfr-ink)", margin: "0 0 10px" }}>
+          <h3 style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 300, color: "var(--ta-ink)", margin: "0 0 10px" }}>
             Remove this variation?
           </h3>
-          <p style={{ fontSize: 14, fontWeight: 500, color: "var(--dfr-ink)", margin: "0 0 6px" }}>
+          <p style={{ fontSize: 14, fontWeight: 500, color: "var(--ta-ink)", margin: "0 0 6px" }}>
             {dialog.variation.title}
           </p>
-          <p style={{ fontSize: 13, color: "var(--dfr-gray-mid)", lineHeight: 1.65, margin: "0 0 28px" }}>
+          <p style={{ fontSize: 13, color: "var(--ta-gray-mid)", lineHeight: 1.65, margin: "0 0 28px" }}>
             This removes it from the dashboard. Files on disk are not deleted.
           </p>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
@@ -242,7 +242,7 @@ export function Dashboard() {
                 padding: "9px 18px",
                 border: "none",
                 borderRadius: 3,
-                background: "var(--dfr-red)",
+                background: "var(--ta-red)",
                 color: "#fff",
                 cursor: "pointer",
                 fontSize: 13,

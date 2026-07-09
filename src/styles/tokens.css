@@ -11,19 +11,19 @@
 
 :root {
   /* ── Brand colors ─────────────────────────────────────────────── */
-  --dfr-blue: #1e4b96;
-  --dfr-red: #c41230;
-  --dfr-cream: #f8f7f3;
-  --dfr-ink: #111111;
-  --dfr-gray-dark: #333333;
-  --dfr-gray-mid: #777777;
-  --dfr-gray-light: #cccccc;
+  --ta-blue: #1e4b96;
+  --ta-red: #c41230;
+  --ta-cream: #f8f7f3;
+  --ta-ink: #111111;
+  --ta-gray-dark: #333333;
+  --ta-gray-mid: #777777;
+  --ta-gray-light: #cccccc;
 
   /* ── Font families ────────────────────────────────────────────── */
-  --dfr-font-display: 'Fraunces', Georgia, serif;
-  --dfr-font-serif: 'Source Serif 4', Georgia, serif;
-  --dfr-font-sans: 'DM Sans', system-ui, sans-serif;
-  --dfr-font-mono: 'DM Mono', monospace;
+  --ta-font-display: 'Fraunces', Georgia, serif;
+  --ta-font-serif: 'Source Serif 4', Georgia, serif;
+  --ta-font-sans: 'DM Sans', system-ui, sans-serif;
+  --ta-font-mono: 'DM Mono', monospace;
 
   /* ── System palette (shadcn/ui primitives) ────────────────────── */
   --font-size: 16px;

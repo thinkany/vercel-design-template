@@ -231,7 +231,7 @@ export function Direction1V8({ onNavigate, view, setView }: { onNavigate?: (page
                   <p style={{ fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 13, lineHeight: 1.55, color: "#444" }}>{r.snippet}</p>
                 </div>
               ))}
-              <div className="dfr-dark" style={{ background: "#111111", color: "#f8f7f3", padding: "24px 20px", marginTop: 8 }}>
+              <div className="ta-dark" style={{ background: "#111111", color: "#f8f7f3", padding: "24px 20px", marginTop: 8 }}>
                 <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 18, fontWeight: 600, marginBottom: 8, fontStyle: "italic" }}>The Weekly Reel</div>
                 <p style={{ fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 13, lineHeight: 1.55, color: "rgba(248,247,243,0.75)", marginBottom: 16 }}>New reviews, essays, and interviews delivered every Friday.</p>
                 <input placeholder="your@email.com" style={{ width: "100%", padding: "8px 10px", background: "transparent", border: "1px solid rgba(248,247,243,0.3)", color: "#f8f7f3", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: 12, marginBottom: 8, outline: "none", boxSizing: "border-box" }} />

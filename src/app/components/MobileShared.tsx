@@ -149,7 +149,7 @@ export function MobileSectionHeader({ label, topMargin = 32 }: { label: string; 
 
 export function MobileNewsletter() {
   return (
-    <div className="dfr-dark" style={{ background: "#111111", color: "#f8f7f3", padding: "24px 16px", marginTop: 32 }}>
+    <div className="ta-dark" style={{ background: "#111111", color: "#f8f7f3", padding: "24px 16px", marginTop: 32 }}>
       <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 18, fontWeight: 600, fontStyle: "italic", marginBottom: 6 }}>The Weekly Reel</div>
       <p style={{ fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 13, lineHeight: 1.55, color: "rgba(248,247,243,0.7)", marginBottom: 16 }}>
         New reviews, essays, and interviews delivered every Friday.
@@ -173,7 +173,7 @@ const FOOTER_LINKS = [
 
 export function MobileFooter({ onNavigate }: { onNavigate: (page: string) => void }) {
   return (
-    <footer className="dfr-dark" style={{ background: "#111111", color: "#f8f7f3", padding: "32px 16px 24px", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <footer className="ta-dark" style={{ background: "#111111", color: "#f8f7f3", padding: "32px 16px 24px", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <div style={{ height: 3, background: "#1e4b96", marginBottom: 24, marginLeft: -16, marginRight: -16 }} />
 
       {/* Logo + tagline */}

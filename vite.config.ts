@@ -6,7 +6,7 @@ import react from '@vitejs/plugin-react'
 // Dev-only plugin: handles POST /api/variation/create to copy files for new variations
 function variationApiPlugin() {
   return {
-    name: 'dfr-variation-api',
+    name: 'ta-variation-api',
     apply: 'serve' as const,
     configureServer(server: any) {
       server.middlewares.use(async (req: any, res: any, next: any) => {

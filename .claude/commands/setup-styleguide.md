@@ -18,10 +18,10 @@ Walk the designer through these steps:
 The single source of truth is **`src/styles/tokens.css`** — pure CSS custom
 properties that both the live site and the styleguide read from. Edit:
 
-- **Colors** → the `--dfr-*` brand tokens (and the system palette) in
+- **Colors** → the `--ta-*` brand tokens (and the system palette) in
   `src/styles/tokens.css`. Set colors here, never as hardcoded hex in components.
 - **Fonts** → declare/import the families in `src/styles/fonts.css`, then point
-  the `--dfr-font-*` tokens in `src/styles/tokens.css` at them.
+  the `--ta-font-*` tokens in `src/styles/tokens.css` at them.
 
 Confirm the changes show up in the styleguide's **Primitives → Colors / Type
 Scale** sections — those swatches read the live token values, so they should

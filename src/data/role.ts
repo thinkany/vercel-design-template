@@ -12,7 +12,7 @@ export type Role = "admin" | "client" | "unknown";
 
 // In local dev there is no middleware, so default to admin.
 export function getRole(): Role {
-  const r = getCookie("dfr-role");
+  const r = getCookie("ta-role");
   if (r === "admin") return "admin";
   if (r === "client") return "client";
   // No cookie → assume local dev session → full access

@@ -5,20 +5,20 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* Brand colors → Tailwind utilities: bg-dfr-blue, text-dfr-red, etc. */
-  --color-dfr-blue: var(--dfr-blue);
-  --color-dfr-red: var(--dfr-red);
-  --color-dfr-cream: var(--dfr-cream);
-  --color-dfr-ink: var(--dfr-ink);
-  --color-dfr-gray-dark: var(--dfr-gray-dark);
-  --color-dfr-gray-mid: var(--dfr-gray-mid);
-  --color-dfr-gray-light: var(--dfr-gray-light);
+  /* Brand colors → Tailwind utilities: bg-ta-blue, text-ta-red, etc. */
+  --color-ta-blue: var(--ta-blue);
+  --color-ta-red: var(--ta-red);
+  --color-ta-cream: var(--ta-cream);
+  --color-ta-ink: var(--ta-ink);
+  --color-ta-gray-dark: var(--ta-gray-dark);
+  --color-ta-gray-mid: var(--ta-gray-mid);
+  --color-ta-gray-light: var(--ta-gray-light);
 
   /* Font families → Tailwind utilities: font-fraunces, font-source-serif, etc. */
-  --font-fraunces: var(--dfr-font-display);
-  --font-source-serif: var(--dfr-font-serif);
-  --font-dm-sans: var(--dfr-font-sans);
-  --font-dm-mono: var(--dfr-font-mono);
+  --font-fraunces: var(--ta-font-display);
+  --font-source-serif: var(--ta-font-serif);
+  --font-dm-sans: var(--ta-font-sans);
+  --font-dm-mono: var(--ta-font-mono);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);

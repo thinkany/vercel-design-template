@@ -103,7 +103,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
               fontSize: 10,
               fontWeight: 500,
               letterSpacing: "0.15em",
-              color: "var(--dfr-gray-mid)",
+              color: "var(--ta-gray-mid)",
               textTransform: "uppercase",
               marginBottom: 6,
             }}>
@@ -113,7 +113,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
               fontFamily: "Fraunces, serif",
               fontSize: 22,
               fontWeight: 300,
-              color: "var(--dfr-ink)",
+              color: "var(--ta-ink)",
               margin: 0,
               letterSpacing: "-0.01em",
             }}>
@@ -126,7 +126,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
               background: "none",
               border: "none",
               cursor: "pointer",
-              color: "var(--dfr-gray-mid)",
+              color: "var(--ta-gray-mid)",
               fontSize: 22,
               lineHeight: 1,
               padding: "2px 4px",
@@ -146,7 +146,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
               fontSize: 10,
               fontWeight: 500,
               letterSpacing: "0.14em",
-              color: "var(--dfr-gray-mid)",
+              color: "var(--ta-gray-mid)",
               textTransform: "uppercase",
               marginBottom: 12,
             }}>
@@ -165,7 +165,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                       gap: 14,
                       padding: "10px 14px",
                       border: selected
-                        ? "2px solid var(--dfr-blue)"
+                        ? "2px solid var(--ta-blue)"
                         : "1px solid rgba(0,0,0,0.12)",
                       borderRadius: 3,
                       background: selected ? "rgba(30,75,150,0.04)" : "#fff",
@@ -206,7 +206,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                         <span style={{
                           display: "inline-block",
                           padding: "1px 6px",
-                          background: "var(--dfr-blue)",
+                          background: "var(--ta-blue)",
                           color: "#fff",
                           fontSize: 9,
                           fontWeight: 500,
@@ -217,10 +217,10 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                           {v.version}
                         </span>
                       </div>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--dfr-ink)", marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--ta-ink)", marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {v.title}
                       </div>
-                      <div style={{ fontSize: 11, color: "var(--dfr-gray-mid)" }}>
+                      <div style={{ fontSize: 11, color: "var(--ta-gray-mid)" }}>
                         Modified {v.modifiedAt}
                       </div>
                     </div>
@@ -230,8 +230,8 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                       width: 16,
                       height: 16,
                       borderRadius: "50%",
-                      border: `2px solid ${selected ? "var(--dfr-blue)" : "rgba(0,0,0,0.2)"}`,
-                      background: selected ? "var(--dfr-blue)" : "transparent",
+                      border: `2px solid ${selected ? "var(--ta-blue)" : "rgba(0,0,0,0.2)"}`,
+                      background: selected ? "var(--ta-blue)" : "transparent",
                       flexShrink: 0,
                       display: "flex",
                       alignItems: "center",
@@ -262,7 +262,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                 fontSize: 10,
                 fontWeight: 500,
                 letterSpacing: "0.14em",
-                color: "var(--dfr-gray-mid)",
+                color: "var(--ta-gray-mid)",
                 textTransform: "uppercase",
                 marginBottom: 8,
               }}>
@@ -281,7 +281,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                   fontSize: 14,
                   fontFamily: "inherit",
                   outline: "none",
-                  color: "var(--dfr-ink)",
+                  color: "var(--ta-ink)",
                   background: "#fff",
                   boxSizing: "border-box",
                 }}
@@ -294,7 +294,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                 fontSize: 10,
                 fontWeight: 500,
                 letterSpacing: "0.14em",
-                color: "var(--dfr-gray-mid)",
+                color: "var(--ta-gray-mid)",
                 textTransform: "uppercase",
                 marginBottom: 8,
               }}>
@@ -313,7 +313,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                   fontSize: 13,
                   fontFamily: "inherit",
                   outline: "none",
-                  color: "var(--dfr-ink)",
+                  color: "var(--ta-ink)",
                   background: "#fff",
                   resize: "vertical",
                   lineHeight: 1.6,
@@ -330,13 +330,13 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                 type="checkbox"
                 checked={needsStyleguide}
                 onChange={(e) => setNeedsStyleguide(e.target.checked)}
-                style={{ marginTop: 2, width: 16, height: 16, accentColor: "var(--dfr-blue)", cursor: "pointer", flexShrink: 0 }}
+                style={{ marginTop: 2, width: 16, height: 16, accentColor: "var(--ta-blue)", cursor: "pointer", flexShrink: 0 }}
               />
               <span>
-                <span style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--dfr-ink)", marginBottom: 3 }}>
+                <span style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--ta-ink)", marginBottom: 3 }}>
                   This variation needs its own styleguide changes
                 </span>
-                <span style={{ display: "block", fontSize: 12, color: "var(--dfr-gray-mid)", lineHeight: 1.5 }}>
+                <span style={{ display: "block", fontSize: 12, color: "var(--ta-gray-mid)", lineHeight: 1.5 }}>
                   The source styleguide is copied either way. Check this to flag the copy for review — its styleguide will show a setup reminder until you mark it updated.
                 </span>
               </span>
@@ -344,7 +344,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
           </div>
 
           {apiError && (
-            <p style={{ fontSize: 12, color: "var(--dfr-red)", marginTop: 12 }}>
+            <p style={{ fontSize: 12, color: "var(--ta-red)", marginTop: 12 }}>
               {apiError}
             </p>
           )}
@@ -369,7 +369,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
               fontSize: 12,
               fontFamily: "inherit",
               letterSpacing: "0.08em",
-              color: "var(--dfr-gray-dark)",
+              color: "var(--ta-gray-dark)",
             }}
           >
             Cancel
@@ -381,7 +381,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
               padding: "9px 20px",
               border: "none",
               borderRadius: 3,
-              background: canCreate ? "var(--dfr-blue)" : "var(--dfr-gray-light)",
+              background: canCreate ? "var(--ta-blue)" : "var(--ta-gray-light)",
               color: "#fff",
               cursor: canCreate ? "pointer" : "not-allowed",
               fontSize: 12,
