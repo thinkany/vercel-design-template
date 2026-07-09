@@ -1,9 +1,14 @@
 // ©2004-2026 Deep Focus Review. All rights reserved.
 import { useState, useEffect } from "react";
 import { siteConfig } from "@/config/site";
+import { resolveBrand } from "@/app/brandRegistry";
+import type { BrandColor, BrandFont } from "@/styles/brand";
 
 interface Props {
   onNavigate: (page: string) => void;
+  // The active scope, so the styleguide renders THIS scope's brand manifest.
+  // Defaults to the base (v00) when omitted.
+  variationId?: string;
   // Whether this styleguide still needs setup (drives the banner). For the base
   // (v00) App derives this from VITE_STYLEGUIDE_READY; for a variation, from its
   // styleguideStatus.
@@ -11,6 +16,12 @@ interface Props {
   // Present only for variations: marks this variation's styleguide "updated"
   // (clears the banner). Absent for the base, which uses /setup-styleguide.
   onMarkUpdated?: () => void;
+  // Whether this scope's brand palette is still the template default (drives the
+  // Colors notice). Base derives it from VITE_BRAND_READY; variation from brandStatus.
+  brandNeedsSetup?: boolean;
+  // Present only for variations: marks this variation's brand palette established
+  // (clears the Colors notice). Absent for the base, which uses VITE_BRAND_READY.
+  onMarkBrandEstablished?: () => void;
 }
 
 // ─── STYLE CONSTANTS ──────────────────────────────────────────────────────────
@@ -86,15 +97,9 @@ function useResolvedTokens(tokens: string[]): Record<string, string> {
 
 // ─── DATA ─────────────────────────────────────────────────────────────────────
 
-const BRAND_COLORS = [
-  { name: "Brand Blue",      token: "--ta-blue",       value: C.blue,    text: "#fff", role: "Links, active nav, accent borders" },
-  { name: "Accent Red",      token: "--ta-red",        value: C.red,     text: "#fff", role: "Star ratings, NEW badge, alerts" },
-  { name: "Page Background", token: "--ta-cream",      value: C.cream,   text: C.ink,  role: "Site background, card fills, hero wash" },
-  { name: "Primary Text",    token: "--ta-ink",        value: C.ink,     text: "#fff", role: "Body text, primary headings" },
-  { name: "Secondary Text",  token: "--ta-gray-dark",  value: C.dark,    text: "#fff", role: "Secondary body text" },
-  { name: "Metadata",        token: "--ta-gray-mid",   value: C.mid,     text: "#fff", role: "Captions, timestamps, bylines" },
-  { name: "Dividers",        token: "--ta-gray-light", value: C.light,   text: C.ink,  role: "Borders, separator lines" },
-];
+// The brand palette (BRAND_COLORS) and type roles (FONT_FAMILIES) now come from
+// the per-scope brand manifest (src/styles/brand.ts, resolved via resolveBrand)
+// so each variation renders its own siloed palette. See the StyleGuide component.
 
 // token: a CSS variable name (resolved live) or null for a hardcoded surface.
 const SYSTEM_COLORS: { name: string; token: string | null; fallback: string; text: string }[] = [
@@ -104,13 +109,6 @@ const SYSTEM_COLORS: { name: string; token: string | null; fallback: string; tex
   { name: "Input BG",        token: "--input-background", fallback: "#f3f3f5", text: C.ink },
   { name: "Dark BG",         token: null,                 fallback: "#111111", text: "#fff" },
   { name: "Nav Dropdown BG", token: "--ta-cream",        fallback: "#f8f7f3", text: C.ink },
-];
-
-const FONT_FAMILIES = [
-  { name: "Display", token: "--ta-font-display", stack: F.display,  role: "Headings, titles, hero text",         sample: "The quick brown fox jumps" },
-  { name: "Serif",   token: "--ta-font-serif",   stack: F.serif,    role: "Body copy, long-form reading",        sample: "The quick brown fox jumps over the lazy dog." },
-  { name: "Sans",    token: "--ta-font-sans",    stack: F.sans,     role: "UI labels, navigation, metadata",     sample: "THE QUICK BROWN FOX · 24 JUNE 2026" },
-  { name: "Mono",    token: "--ta-font-mono",    stack: F.mono,     role: "Numeric data, tabular values, code",  sample: "0123456789  ·  ★★★★½" },
 ];
 
 const TYPE_SCALE = [9, 10, 11, 12, 13, 14, 15, 16, 18, 21, 24, 28, 34];
@@ -299,9 +297,13 @@ function LinkedInIcon() {
 
 // ─── PRIMITIVES ───────────────────────────────────────────────────────────────
 
-function ColorsSection() {
+function ColorsSection({ colors, brandNeedsSetup, onMarkBrandEstablished }: {
+  colors: BrandColor[];
+  brandNeedsSetup?: boolean;
+  onMarkBrandEstablished?: () => void;
+}) {
   const resolved = useResolvedTokens([
-    ...BRAND_COLORS.map((c) => c.token),
+    ...colors.map((c) => c.token),
     ...SYSTEM_COLORS.map((c) => c.token).filter((t): t is string => Boolean(t)),
   ]);
   return (
@@ -311,12 +313,28 @@ function ColorsSection() {
         <SectionTitle
           eyebrow="Primitives · Sub-Atomic Tokens"
           title="Colors"
-          desc={`The ${siteConfig.name} palette consists of seven brand tokens and six system tokens. All colors should be referenced by CSS variable — never hardcoded hex values in component files.`}
+          desc={`The ${siteConfig.clientName} palette consists of ${colors.length} brand token${colors.length === 1 ? "" : "s"} and ${SYSTEM_COLORS.length} system tokens. All colors should be referenced by CSS variable — never hardcoded hex values in component files.`}
         />
+
+        {brandNeedsSetup && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", border: `1px solid ${CA.light}`, background: CA.cream, borderRadius: 3, padding: "12px 16px", marginBottom: 24 }}>
+            <div style={{ fontFamily: A.body, fontSize: 13, color: CA.dark, lineHeight: 1.5 }}>
+              <strong style={{ fontWeight: 600 }}>Template default palette.</strong> This scope's brand hasn't been established yet — run <Token>/setup-styleguide</Token> to set its <Token>--ta-*</Token> colors.
+            </div>
+            {onMarkBrandEstablished && (
+              <button
+                onClick={onMarkBrandEstablished}
+                style={{ flexShrink: 0, background: CA.blue, color: "#fff", border: "none", borderRadius: 3, padding: "7px 14px", fontFamily: A.body, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", cursor: "pointer", whiteSpace: "nowrap" }}
+              >
+                Mark brand established
+              </button>
+            )}
+          </div>
+        )}
 
         <SubHead>Brand Palette</SubHead>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16, marginBottom: 40 }}>
-          {BRAND_COLORS.map((c) => (
+          {colors.map((c) => (
             <div key={c.token}>
               <div style={{ background: `var(${c.token})`, height: 80, borderRadius: 2, marginBottom: 10, border: c.token === "--ta-cream" ? "1px solid #ddd" : "none" }} />
               <div style={{ fontFamily: A.body, fontSize: 13, fontWeight: 500, color: CA.ink, marginBottom: 2 }}>{c.name}</div>
@@ -385,8 +403,8 @@ function fontName(stack: string): string {
 // ligatures — so the chosen type is visible "in action." Everything else on the
 // styleguide sticks to the gated-screen pairing: Display headings + Sans body.
 // Empty until the styleguide has been configured for this project.
-function TypographySection({ needsSetup }: { needsSetup?: boolean }) {
-  const resolvedFonts = useResolvedTokens(FONT_FAMILIES.map((f) => f.token));
+function TypographySection({ fonts, needsSetup }: { fonts: BrandFont[]; needsSetup?: boolean }) {
+  const resolvedFonts = useResolvedTokens(fonts.map((f) => f.token));
   const selected = !needsSetup;
   return (
     <section id="primitives-typography" data-sg-section="primitives-typography">
@@ -397,13 +415,13 @@ function TypographySection({ needsSetup }: { needsSetup?: boolean }) {
           title="Typography"
           desc={
             selected
-              ? `The typefaces selected for ${siteConfig.name}. Each role maps to a CSS variable — reference it by token, never by font name. Headings use Display; body copy uses Sans.`
+              ? `The typefaces selected for ${siteConfig.clientName}. Each role maps to a CSS variable — reference it by token, never by font name. Headings use Display; body copy uses Sans.`
               : "The project's typefaces appear here once they've been selected. Set them in tokens.css (or run /setup-styleguide) and their specimens will populate this section."
           }
         />
         {selected ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {FONT_FAMILIES.map((ff) => {
+            {fonts.map((ff) => {
               const stack = resolvedFonts[ff.token] || ff.stack;
               return (
                 <DemoBox key={ff.name} bg={C.white} pad={28}>
@@ -438,8 +456,8 @@ function TypographySection({ needsSetup }: { needsSetup?: boolean }) {
   );
 }
 
-function TypeScaleSection() {
-  const resolvedFonts = useResolvedTokens(FONT_FAMILIES.map((f) => f.token));
+function TypeScaleSection({ fonts }: { fonts: BrandFont[] }) {
+  const resolvedFonts = useResolvedTokens(fonts.map((f) => f.token));
   return (
     <section id="primitives-typescale" data-sg-section="primitives-typescale">
       <Divider />
@@ -447,10 +465,10 @@ function TypeScaleSection() {
         <SectionTitle
           eyebrow="Primitives · Sub-Atomic Tokens"
           title="Type Scale"
-          desc={`Thirteen type sizes form the visual scale. Each is shown across all four ${siteConfig.name} font families to illustrate how the same size reads differently at each voice.`}
+          desc={`${TYPE_SCALE.length} type sizes form the visual scale. Each is shown across all ${fonts.length} ${siteConfig.clientName} font families to illustrate how the same size reads differently at each voice.`}
         />
 
-        {FONT_FAMILIES.map((ff) => (
+        {fonts.map((ff) => (
           <div key={ff.name} style={{ marginBottom: 48 }}>
             <SubHead>{ff.name} — {ff.role}</SubHead>
             <div style={{ fontFamily: A.mono, fontSize: 11, color: CA.mid, marginBottom: 10 }}>{ff.token} → {fontName(resolvedFonts[ff.token] || ff.stack)}</div>
@@ -503,7 +521,7 @@ function SemanticTypesSection() {
         <SectionTitle
           eyebrow="Primitives · Sub-Atomic Tokens"
           title="Semantic Types"
-          desc={`Semantic typographic roles assign specific font, size, weight, and color to HTML elements. These rules should be consistent across all ${siteConfig.name} pages.`}
+          desc={`Semantic typographic roles assign specific font, size, weight, and color to HTML elements. These rules should be consistent across all ${siteConfig.clientName} pages.`}
         />
         <DemoBox bg={C.white} pad={40}>
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
@@ -752,7 +770,7 @@ function HeaderSection() {
         />
         <DemoBox bg={C.white} pad={0}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 24px", borderBottom: `1px solid ${C.light}` }}>
-            <div style={{ fontFamily: F.display, fontSize: 22, fontWeight: 700, color: C.ink, letterSpacing: "-0.01em" }}>{siteConfig.name}</div>
+            <div style={{ fontFamily: F.display, fontSize: 22, fontWeight: 700, color: C.ink, letterSpacing: "-0.01em" }}>{siteConfig.clientName}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
               {["Home", "About", "Work", "Contact"].map((l) => (
                 <span key={l} style={{ fontFamily: F.sans, fontSize: 13, fontWeight: 500, letterSpacing: "0.04em", color: C.dark }}>{l}</span>
@@ -829,8 +847,10 @@ function ExamplePageSection({ onNavigate }: { onNavigate: (p: string) => void })
 
 // ─── MAIN EXPORT ──────────────────────────────────────────────────────────────
 
-export function StyleGuide({ onNavigate, needsSetup, onMarkUpdated }: Props) {
+export function StyleGuide({ onNavigate, variationId, needsSetup, onMarkUpdated, brandNeedsSetup, onMarkBrandEstablished }: Props) {
   const [activeId, setActiveId] = useState("intro");
+  // This scope's siloed brand palette & type roles (falls back to the base).
+  const brand = resolveBrand(variationId ?? "v00");
 
   useEffect(() => {
     const els = document.querySelectorAll<HTMLElement>("[data-sg-section]");
@@ -890,8 +910,8 @@ export function StyleGuide({ onNavigate, needsSetup, onMarkUpdated }: Props) {
       <div style={{ background: CA.ink, borderBottom: `3px solid ${CA.blue}` }}>
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "28px 48px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <div style={{ fontFamily: A.body, fontSize: 10, fontWeight: 600, letterSpacing: "0.18em", color: "#fff", marginBottom: 6, textTransform: "uppercase" }}>{siteConfig.name}</div>
-            <h1 style={{ fontFamily: A.heading, fontSize: 28, fontWeight: 700, color: "#fff", margin: 0, lineHeight: 1.1 }}>Design System</h1>
+            <div style={{ fontFamily: A.body, fontSize: 10, fontWeight: 600, letterSpacing: "0.18em", color: "#fff", marginBottom: 6, textTransform: "uppercase" }}>{siteConfig.clientName}</div>
+            <h1 style={{ fontFamily: A.heading, fontSize: 28, fontWeight: 700, color: "#fff", margin: 0, lineHeight: 1.1 }}>{siteConfig.isBranded && siteConfig.projectName ? siteConfig.projectName : "Design System"}</h1>
             <div style={{ fontFamily: A.body, fontSize: 13, color: "rgba(255,255,255,0.5)", marginTop: 6, fontStyle: "italic" }}>
               Atomic Design System
             </div>
@@ -955,7 +975,7 @@ export function StyleGuide({ onNavigate, needsSetup, onMarkUpdated }: Props) {
             <div style={{ maxWidth: 680 }}>
               <div style={{ fontFamily: A.body, fontSize: 10, fontWeight: 600, letterSpacing: "0.18em", color: CA.blue, marginBottom: 12 }}>INTRODUCTION</div>
               <h1 style={{ fontFamily: A.heading, fontSize: 40, fontWeight: 700, color: CA.ink, lineHeight: 1.1, margin: "0 0 20px" }}>
-                The {siteConfig.name} Design System
+                The {siteConfig.clientName} Design System
               </h1>
               <p style={{ fontFamily: A.body, fontSize: 16, color: CA.dark, lineHeight: 1.7, marginBottom: 16 }}>
                 This system follows <strong>Brad Frost's Atomic Design</strong> methodology, extended downward with a <em>Primitives</em> (sub-atomic) layer that defines the raw tokens all atoms are built from.
@@ -982,12 +1002,12 @@ export function StyleGuide({ onNavigate, needsSetup, onMarkUpdated }: Props) {
           </section>
 
           {/* SECTIONS */}
-          <ColorsSection />
+          <ColorsSection colors={brand.colors} brandNeedsSetup={brandNeedsSetup} onMarkBrandEstablished={onMarkBrandEstablished} />
           <SpacingSection />
-          <TypographySection needsSetup={needsSetup} />
+          <TypographySection fonts={brand.fonts} needsSetup={needsSetup} />
           <SemanticTypesSection />
           <LineHeightSection />
-          <TypeScaleSection />
+          <TypeScaleSection fonts={brand.fonts} />
 
           <ButtonsSection />
           <BadgesSection />

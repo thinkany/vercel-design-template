@@ -1,38 +1,39 @@
 // Public site / brand configuration.
 //
-// Values come from the committed .env (VITE_SITE_*). Fill them with the
-// `/setup-project` command or by hand. On a fresh, unbranded template pull
-// both are blank and neutral placeholders are shown instead — so the app
-// always renders something intentional and signals "needs branding".
+// Values come from the committed .env (VITE_CLIENT_NAME / VITE_PROJECT_NAME /
+// VITE_COMPANY_NAME / VITE_SITE_TAGLINE). Fill them with the `/setup-project`
+// command or by hand. On a fresh, unbranded template pull they are blank and
+// neutral placeholders are shown instead — so the app always renders something
+// intentional and signals "needs branding".
 
-const PLACEHOLDER_NAME = "Project Name";
-const PLACEHOLDER_SUBTITLE = "Subtitle";
+const PLACEHOLDER_CLIENT = "Client Name";
+const PLACEHOLDER_PROJECT = "Project Name";
 const PLACEHOLDER_TAGLINE = "Your site tagline";
 
 const rawCompany = (import.meta.env.VITE_COMPANY_NAME ?? "").trim();
-const rawName = (import.meta.env.VITE_SITE_NAME ?? "").trim();
-const rawSubtitle = (import.meta.env.VITE_SITE_SUBTITLE ?? "").trim();
+const rawClient = (import.meta.env.VITE_CLIENT_NAME ?? "").trim();
+const rawProject = (import.meta.env.VITE_PROJECT_NAME ?? "").trim();
 const rawTagline = (import.meta.env.VITE_SITE_TAGLINE ?? "").trim();
 
-// The template is considered "branded" once a name has been provided.
-const isBranded = rawName.length > 0;
+// The template is considered "branded" once a client name has been provided.
+const isBranded = rawClient.length > 0;
 
 export const siteConfig = {
   /** False until the site has been branded (via /setup-project or by hand). */
   isBranded,
-  /** Primary name. Falls back to a placeholder only while fully unbranded. */
-  name: rawName || PLACEHOLDER_NAME,
+  /** Client name. Falls back to a placeholder only while fully unbranded. */
+  clientName: rawClient || PLACEHOLDER_CLIENT,
   /**
    * Company / organization name — shown in the dashboard header wordmark.
-   * Falls back to the site name (then a placeholder) when left blank, so an
+   * Falls back to the client name (then a placeholder) when left blank, so an
    * unset company name never blanks the header.
    */
-  companyName: rawCompany || rawName || PLACEHOLDER_NAME,
+  companyName: rawCompany || rawClient || PLACEHOLDER_CLIENT,
   /**
-   * Secondary label. Falls back to a placeholder only while fully unbranded;
-   * once branded, an intentionally-empty subtitle stays empty.
+   * Project name — the secondary label. Falls back to a placeholder only while
+   * fully unbranded; once branded, an intentionally-empty project name stays empty.
    */
-  subtitle: isBranded ? rawSubtitle : PLACEHOLDER_SUBTITLE,
+  projectName: isBranded ? rawProject : PLACEHOLDER_PROJECT,
   /**
    * Optional tagline. Falls back to a placeholder only while fully unbranded;
    * once branded, an intentionally-empty tagline stays empty (and is hidden).
@@ -41,12 +42,12 @@ export const siteConfig = {
 };
 
 /**
- * Composed title lockup, e.g. "Deep Focus Review : Refinements".
- * Drops the separator when there is no subtitle.
+ * Composed title lockup, e.g. "ACME ltd : Refinements".
+ * Drops the separator when there is no project name.
  */
-export const siteTitle = siteConfig.subtitle
-  ? `${siteConfig.name} : ${siteConfig.subtitle}`
-  : siteConfig.name;
+export const siteTitle = siteConfig.projectName
+  ? `${siteConfig.clientName} : ${siteConfig.projectName}`
+  : siteConfig.clientName;
 
 /**
  * Phase II marker. True once the styleguide has been configured for this
@@ -56,3 +57,13 @@ export const siteTitle = siteConfig.subtitle
  */
 export const styleguideReady =
   (import.meta.env.VITE_STYLEGUIDE_READY ?? "").trim().toLowerCase() === "true";
+
+/**
+ * Brand-palette marker for the BASE (v00) scope. True once this project's brand
+ * palette has been established (src/styles/brand.ts + the --ta-* tokens rewritten
+ * by /setup-styleguide) and VITE_BRAND_READY set to "true". While false, the
+ * styleguide flags its Colors section as showing template defaults. Variations
+ * ignore this and use their own `brandStatus` record field.
+ */
+export const brandReady =
+  (import.meta.env.VITE_BRAND_READY ?? "").trim().toLowerCase() === "true";

@@ -59,6 +59,9 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
       modifiedAt: formatNowDateTime(),
       isBase: false,
       styleguideStatus: needsStyleguide ? "needs-review" : "updated",
+      // A new variation inherits the source palette; flag it for review so its
+      // Colors read as inherited/default until its own brand is established.
+      brandStatus: needsStyleguide ? "needs-review" : "established",
     };
 
     setIsCreating(false);

@@ -25,13 +25,13 @@ function HomeContent({ onNavigate }: { onNavigate: (page: string) => void }) {
       padding: "80px 32px",
       textAlign: "center",
     }}>
-      {siteConfig.subtitle && (
+      {siteConfig.projectName && (
         <div style={{ fontFamily: "var(--ta-font-sans)", fontSize: 11, fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--ta-gray-mid)", marginBottom: 20 }}>
-          {siteConfig.subtitle}
+          {siteConfig.projectName}
         </div>
       )}
       <h1 style={{ fontFamily: "var(--ta-font-display)", fontSize: "clamp(36px, 6vw, 64px)", fontWeight: 400, color: "var(--ta-ink)", margin: "0 0 20px", lineHeight: 1.05, letterSpacing: "-0.02em" }}>
-        {siteConfig.name}
+        {siteConfig.clientName}
       </h1>
       <p style={{ fontFamily: "var(--ta-font-serif)", fontSize: 17, color: "var(--ta-gray-dark)", lineHeight: 1.6, maxWidth: 440, margin: "0 0 36px" }}>
         This is your starting point. Build your home page here, and reference the

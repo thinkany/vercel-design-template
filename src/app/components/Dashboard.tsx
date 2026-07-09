@@ -70,7 +70,7 @@ export function Dashboard() {
           }}>
             {siteConfig.companyName}
           </span>
-          {siteConfig.subtitle && (
+          {siteConfig.projectName && (
             <>
               <span style={{ color: "var(--admin-gray-light)", fontSize: 16 }}>·</span>
               <span style={{
@@ -80,7 +80,7 @@ export function Dashboard() {
                 color: "var(--admin-gray-mid)",
                 textTransform: "uppercase",
               }}>
-                {siteConfig.subtitle}
+                {siteConfig.projectName}
               </span>
             </>
           )}
@@ -145,11 +145,11 @@ export function Dashboard() {
             letterSpacing: "-0.02em",
           }}>
             <span style={{ fontWeight: 700 }}>
-              {siteConfig.name}{siteConfig.subtitle ? " :" : ""}
+              {siteConfig.clientName}{siteConfig.projectName ? " :" : ""}
             </span>
-            {siteConfig.subtitle && (
+            {siteConfig.projectName && (
               <span style={{ fontFamily: "var(--admin-font-body)", fontWeight: 300 }}>
-                {" "}{siteConfig.subtitle}
+                {" "}{siteConfig.projectName}
               </span>
             )}
           </h1>

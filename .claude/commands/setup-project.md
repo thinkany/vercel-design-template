@@ -1,11 +1,11 @@
 ---
-description: Brand this template — set the site name/subtitle in .env and the preview-gate fonts
-argument-hint: "[name] | [subtitle]  (optional; you'll be prompted if omitted)"
+description: Brand this template — set the client/project name in .env and the preview-gate fonts
+argument-hint: "[client name] | [project name]  (optional; you'll be prompted if omitted)"
 ---
 
 You are branding this scaffold for a specific project. The public brand values
 live in the committed `.env` at the project root as `VITE_COMPANY_NAME`,
-`VITE_SITE_NAME`, `VITE_SITE_SUBTITLE`, and `VITE_SITE_TAGLINE`. They are
+`VITE_CLIENT_NAME`, `VITE_PROJECT_NAME`, and `VITE_SITE_TAGLINE`. They are
 consumed through `src/config/site.ts` and drive the dashboard header wordmark,
 the title lockup, the styleguide masthead, and the browser tab title.
 
@@ -22,7 +22,7 @@ back to a plain text prompt if a value truly has no reasonable presets.
 Follow these steps:
 
 1. **Read the current values.** Open `.env` and note the current
-   `VITE_COMPANY_NAME`, `VITE_SITE_NAME`, and `VITE_SITE_SUBTITLE` (they may be
+   `VITE_COMPANY_NAME`, `VITE_CLIENT_NAME`, and `VITE_PROJECT_NAME` (they may be
    blank on a fresh template pull).
 
 2. **Ask for the company name FIRST.** This is the first question the user sees.
@@ -38,13 +38,13 @@ Follow these steps:
 
 3. **Determine the remaining brand values.**
    - If the user passed arguments in `$ARGUMENTS`, parse them as
-     `name | subtitle` (subtitle optional).
+     `client name | project name` (project name optional).
    - Otherwise, **prompt the user**:
-     - Ask for the **site name** — the primary title (e.g. the
-       "Deep Focus Review" part of "Deep Focus Review : Refinements").
+     - Ask for the **client name** — the primary title (e.g. the
+       "ACME ltd" part of "ACME ltd : Refinements").
        Show the current value if one is set. This one is required; if the
        user leaves it blank, ask again — the template stays unbranded without it.
-     - Ask for the **subtitle** — the secondary label (e.g. the "Refinements"
+     - Ask for the **project name** — the secondary label (e.g. the "Refinements"
        part). Show the current value if set. Blank is allowed (the title
        lockup simply drops the separator).
      - Ask for the **tagline** — an optional line shown in the masthead/header.
@@ -52,7 +52,7 @@ Follow these steps:
 
 4. **Write the values back** into `.env`, preserving its comments and the rest
    of the file. Quote the values: `VITE_COMPANY_NAME="Acme Inc"`,
-   `VITE_SITE_NAME="Acme Studio"`.
+   `VITE_CLIENT_NAME="ACME ltd"`.
 
 5. **Confirm** what you set, and remind the user that these are Vite build-time
    vars: the dev server reloads automatically on `.env` change, but a running

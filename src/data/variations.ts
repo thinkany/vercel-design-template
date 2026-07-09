@@ -13,6 +13,11 @@ export interface Variation {
   // this variation's styleguide until the designer marks it done ("updated").
   // Base (v00) ignores this and uses the committed VITE_STYLEGUIDE_READY flag.
   styleguideStatus?: "needs-review" | "updated";
+  // Per-variation brand-palette state. "needs-review" flags this variation's
+  // Colors as template defaults until its brand palette is established for this
+  // variation only (via /setup-styleguide, then "Mark brand established").
+  // Base (v00) ignores this and uses the committed VITE_BRAND_READY flag.
+  brandStatus?: "needs-review" | "established";
 }
 
 export const INITIAL_VARIATIONS: Variation[] = [

@@ -14,7 +14,7 @@ npm run dev
 ```
 
 The app runs at http://localhost:5173. Fresh from git it is intentionally
-unbranded — the dashboard shows neutral placeholders (`Project Name : Subtitle`)
+unbranded — the dashboard shows neutral placeholders (`Client Name : Project Name`)
 until you configure it in the step below.
 
 ## First-time setup — branding the template
@@ -27,12 +27,12 @@ Open this project in Claude Code and run:
 /setup-project
 ```
 
-Claude prompts you for a **site name** and an optional **subtitle**, writes them
-into `.env`, and the dev server reloads with your branding applied. You can also
-pass them inline:
+Claude prompts you for a **client name** and an optional **project name**, writes
+them into `.env`, and the dev server reloads with your branding applied. You can
+also pass them inline:
 
 ```
-/setup-project Acme Studio | Case Studies
+/setup-project ACME ltd | Case Studies
 ```
 
 ### By hand
@@ -40,8 +40,8 @@ pass them inline:
 Edit `.env` in the project root:
 
 ```
-VITE_SITE_NAME="Acme Studio"
-VITE_SITE_SUBTITLE="Case Studies"
+VITE_CLIENT_NAME="ACME ltd"
+VITE_PROJECT_NAME="Case Studies"
 VITE_SITE_TAGLINE="Design work, start to finish"
 ```
 

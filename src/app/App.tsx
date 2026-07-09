@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 
 import { resolveComponent } from "./variationRegistry";
 import { loadVariations, saveVariations } from "../data/variations";
-import { siteConfig, styleguideReady } from "../config/site";
+import { siteConfig, styleguideReady, brandReady } from "../config/site";
 
 import { Dashboard } from "./components/Dashboard";
 
@@ -30,19 +30,19 @@ export default function App() {
 
   useEffect(() => {
     if (page === "dashboard") {
-      document.title = siteConfig.subtitle
-        ? `${siteConfig.subtitle} : ${siteConfig.name}`
-        : siteConfig.name;
+      document.title = siteConfig.projectName
+        ? `${siteConfig.projectName} : ${siteConfig.clientName}`
+        : siteConfig.clientName;
       return;
     }
     const variation = loadVariations().find(v => v.id === variationId);
     if (variation) {
       if (page === "styleguide") {
-        document.title = `${variation.version} Styles : ${siteConfig.name}`;
+        document.title = `${variation.version} Styles : ${siteConfig.clientName}`;
       } else {
         document.title = variation.isBase
-          ? `${variation.version} base - ${siteConfig.name}`
-          : `${variation.version} ${siteConfig.name}`;
+          ? `${variation.version} base - ${siteConfig.clientName}`
+          : `${variation.version} ${siteConfig.clientName}`;
       }
     }
   }, [variationId, page]);
@@ -76,6 +76,20 @@ export default function App() {
     window.location.reload();
   }
 
+  // Per-variation brand-palette state. Base (v00) uses the committed
+  // VITE_BRAND_READY flag; variations carry their own brandStatus.
+  const brandNeedsSetup = isBase
+    ? !brandReady
+    : activeVariation?.brandStatus === "needs-review";
+
+  function markBrandEstablished() {
+    const updated = loadVariations().map(v =>
+      v.id === variationId ? { ...v, brandStatus: "established" as const } : v,
+    );
+    saveVariations(updated);
+    window.location.reload();
+  }
+
   return (
     <div style={{ minHeight: "100vh" }}>
       {page === "dashboard" && <Dashboard />}
@@ -83,8 +97,11 @@ export default function App() {
       {page === "styleguide" && (
         <Styles
           onNavigate={setPage}
+          variationId={variationId}
           needsSetup={styleguideNeedsSetup}
           onMarkUpdated={isBase ? undefined : markStyleguideUpdated}
+          brandNeedsSetup={brandNeedsSetup}
+          onMarkBrandEstablished={isBase ? undefined : markBrandEstablished}
         />
       )}
     </div>

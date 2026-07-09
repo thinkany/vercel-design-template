@@ -302,7 +302,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
               fontFamily: "var(--admin-font-body)",
             }}
           >
-            View Site ↗
+            View Design ↗
           </a>
         </div>
 
