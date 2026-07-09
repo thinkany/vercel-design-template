@@ -18,11 +18,23 @@ interface Props {
 // Fonts & colors are read from the design tokens (src/styles/tokens.css) so the
 // styleguide always reflects the project's single source of truth. Edit values
 // in tokens.css, not here.
+// PROJECT design fonts — what the styleguide DOCUMENTS and what the demo design
+// components render in. Neutral placeholders until a project selects its fonts;
+// edit the values in tokens.css (--ta-font-*), never here.
 const F = {
-  fraunces: "var(--ta-font-display)",
-  serif: "var(--ta-font-serif)",
-  sans: "var(--ta-font-sans)",
-  mono: "var(--ta-font-mono)",
+  display: "var(--ta-font-display)",  // project display / headings
+  serif: "var(--ta-font-serif)",      // project serif / long-form
+  sans: "var(--ta-font-sans)",        // project sans / body & UI
+  mono: "var(--ta-font-mono)",        // project mono / code
+};
+
+// ADMIN UI fonts — the styleguide's OWN chrome (titles, nav, labels, controls).
+// Shared with the gated page and dashboard, kept SEPARATE from the project fonts
+// above so the tooling stays consistent no matter which fonts a project picks.
+const A = {
+  heading: "var(--admin-font-heading)",  // DM Sans (700)
+  body: "var(--admin-font-body)",        // Inter (300)
+  mono: "var(--admin-font-mono)",        // DM Mono
 };
 
 const C = {
@@ -34,6 +46,21 @@ const C = {
   mid: "var(--ta-gray-mid)",
   light: "var(--ta-gray-light)",
   card: "#efefef",  // project-specific surface, no brand token
+  white: "#ffffff",
+};
+
+// ADMIN UI colors — the styleguide's structural chrome (dividers, rules, nav,
+// header, labels). Separate from the project palette above so the tooling keeps
+// its colors even if a project renames or removes its --ta-* brand tokens; a
+// designer retints the admin UI by editing --admin-* in tokens.css.
+const CA = {
+  blue: "var(--admin-blue)",
+  red: "var(--admin-red)",
+  cream: "var(--admin-cream)",
+  ink: "var(--admin-ink)",
+  dark: "var(--admin-gray-dark)",
+  mid: "var(--admin-gray-mid)",
+  light: "var(--admin-gray-light)",
   white: "#ffffff",
 };
 
@@ -80,7 +107,7 @@ const SYSTEM_COLORS: { name: string; token: string | null; fallback: string; tex
 ];
 
 const FONT_FAMILIES = [
-  { name: "Display", token: "--ta-font-display", stack: F.fraunces, role: "Headings, titles, hero text",         sample: "The quick brown fox jumps" },
+  { name: "Display", token: "--ta-font-display", stack: F.display,  role: "Headings, titles, hero text",         sample: "The quick brown fox jumps" },
   { name: "Serif",   token: "--ta-font-serif",   stack: F.serif,    role: "Body copy, long-form reading",        sample: "The quick brown fox jumps over the lazy dog." },
   { name: "Sans",    token: "--ta-font-sans",    stack: F.sans,     role: "UI labels, navigation, metadata",     sample: "THE QUICK BROWN FOX · 24 JUNE 2026" },
   { name: "Mono",    token: "--ta-font-mono",    stack: F.mono,     role: "Numeric data, tabular values, code",  sample: "0123456789  ·  ★★★★½" },
@@ -122,9 +149,10 @@ const NAV_SECTIONS = [
   { id: null, label: "PRIMITIVES", group: null, isHeader: true },
   { id: "primitives-colors", label: "Colors", group: "prims", isHeader: false },
   { id: "primitives-spacing", label: "Spacing", group: "prims", isHeader: false },
-  { id: "primitives-typography", label: "Type Scale", group: "prims", isHeader: false },
-  { id: "primitives-lineheight", label: "Line Height", group: "prims", isHeader: false },
+  { id: "primitives-typography", label: "Typography", group: "prims", isHeader: false },
   { id: "primitives-semantic", label: "Semantic Types", group: "prims", isHeader: false },
+  { id: "primitives-lineheight", label: "Line Height", group: "prims", isHeader: false },
+  { id: "primitives-typescale", label: "Type Scale", group: "prims", isHeader: false },
 
   { id: null, label: "ATOMS", group: null, isHeader: true },
   { id: "atoms-buttons", label: "Buttons", group: "atoms", isHeader: false },
@@ -148,19 +176,19 @@ const NAV_SECTIONS = [
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 function Divider() {
-  return <div style={{ borderTop: `3px solid ${C.blue}`, margin: "64px 0 0" }} />;
+  return <div style={{ borderTop: `3px solid ${CA.blue}`, margin: "64px 0 0" }} />;
 }
 
 function SectionTitle({ eyebrow, title, desc }: { eyebrow: string; title: string; desc: string }) {
   return (
     <div style={{ marginBottom: 40 }}>
-      <div style={{ fontFamily: F.sans, fontSize: 11, fontWeight: 500, letterSpacing: "0.15em", color: C.blue, textTransform: "uppercase", marginBottom: 8 }}>
+      <div style={{ fontFamily: A.body, fontSize: 11, fontWeight: 500, letterSpacing: "0.15em", color: CA.blue, textTransform: "uppercase", marginBottom: 8 }}>
         {eyebrow}
       </div>
-      <h2 style={{ fontFamily: F.fraunces, fontSize: 28, fontWeight: 400, color: C.ink, margin: "0 0 12px", lineHeight: 1.2 }}>
+      <h2 style={{ fontFamily: A.heading, fontSize: 28, fontWeight: 700, color: CA.ink, margin: "0 0 12px", lineHeight: 1.2 }}>
         {title}
       </h2>
-      <p style={{ fontFamily: F.serif, fontSize: 16, color: C.dark, lineHeight: 1.6, maxWidth: 640, margin: 0 }}>
+      <p style={{ fontFamily: A.body, fontSize: 16, color: CA.dark, lineHeight: 1.6, maxWidth: 640, margin: 0 }}>
         {desc}
       </p>
     </div>
@@ -169,13 +197,13 @@ function SectionTitle({ eyebrow, title, desc }: { eyebrow: string; title: string
 
 function SubHead({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontFamily: F.sans, fontSize: 11, fontWeight: 500, letterSpacing: "0.12em", color: C.mid, textTransform: "uppercase", borderTop: `1px solid ${C.light}`, paddingTop: 12, marginBottom: 20, marginTop: 40 }}>
+    <div style={{ fontFamily: A.body, fontSize: 11, fontWeight: 500, letterSpacing: "0.12em", color: CA.mid, textTransform: "uppercase", borderTop: `1px solid ${CA.light}`, paddingTop: 12, marginBottom: 20, marginTop: 40 }}>
       {children}
     </div>
   );
 }
 
-function DemoBox({ children, bg = C.cream, pad = 32 }: { children: React.ReactNode; bg?: string; pad?: number }) {
+function DemoBox({ children, bg = CA.cream, pad = 32 }: { children: React.ReactNode; bg?: string; pad?: number }) {
   return (
     <div style={{ background: bg, padding: pad, borderRadius: 2, border: `1px solid rgba(0,0,0,0.06)`, marginBottom: 8 }}>
       {children}
@@ -185,7 +213,7 @@ function DemoBox({ children, bg = C.cream, pad = 32 }: { children: React.ReactNo
 
 function Token({ children }: { children: React.ReactNode }) {
   return (
-    <code style={{ fontFamily: F.mono, fontSize: 11, background: "#f0f0f0", color: C.blue, padding: "2px 6px", borderRadius: 2 }}>
+    <code style={{ fontFamily: A.mono, fontSize: 11, background: "#f0f0f0", color: CA.blue, padding: "2px 6px", borderRadius: 2 }}>
       {children}
     </code>
   );
@@ -194,15 +222,15 @@ function Token({ children }: { children: React.ReactNode }) {
 function LevelBadge({ level }: { level: "primitive" | "atom" | "molecule" | "organism" | "template" | "page" }) {
   const map: Record<string, { bg: string; text: string }> = {
     primitive: { bg: "#6b46c1", text: "#fff" },
-    atom:      { bg: C.blue,   text: "#fff" },
+    atom:      { bg: CA.blue,   text: "#fff" },
     molecule:  { bg: "#0d7a55", text: "#fff" },
-    organism:  { bg: C.ink,    text: "#fff" },
+    organism:  { bg: CA.ink,    text: "#fff" },
     template:  { bg: "#a16207", text: "#fff" },
-    page:      { bg: C.red,    text: "#fff" },
+    page:      { bg: CA.red,    text: "#fff" },
   };
   const s = map[level];
   return (
-    <span style={{ display: "inline-block", fontFamily: F.sans, fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", background: s.bg, color: s.text, padding: "3px 7px", borderRadius: 2, verticalAlign: "middle", marginLeft: 8 }}>
+    <span style={{ display: "inline-block", fontFamily: A.body, fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", background: s.bg, color: s.text, padding: "3px 7px", borderRadius: 2, verticalAlign: "middle", marginLeft: 8 }}>
       {level}
     </span>
   );
@@ -291,10 +319,10 @@ function ColorsSection() {
           {BRAND_COLORS.map((c) => (
             <div key={c.token}>
               <div style={{ background: `var(${c.token})`, height: 80, borderRadius: 2, marginBottom: 10, border: c.token === "--ta-cream" ? "1px solid #ddd" : "none" }} />
-              <div style={{ fontFamily: F.sans, fontSize: 13, fontWeight: 500, color: C.ink, marginBottom: 2 }}>{c.name}</div>
+              <div style={{ fontFamily: A.body, fontSize: 13, fontWeight: 500, color: CA.ink, marginBottom: 2 }}>{c.name}</div>
               <Token>{c.token}</Token>
-              <div style={{ fontFamily: F.mono, fontSize: 11, color: C.mid, marginTop: 4 }}>{resolved[c.token] || c.value}</div>
-              <div style={{ fontFamily: F.serif, fontSize: 12, color: C.mid, marginTop: 3, lineHeight: 1.4 }}>{c.role}</div>
+              <div style={{ fontFamily: A.mono, fontSize: 11, color: CA.mid, marginTop: 4 }}>{resolved[c.token] || c.value}</div>
+              <div style={{ fontFamily: A.body, fontSize: 12, color: CA.mid, marginTop: 3, lineHeight: 1.4 }}>{c.role}</div>
             </div>
           ))}
         </div>
@@ -307,9 +335,9 @@ function ColorsSection() {
             return (
               <div key={c.name}>
                 <div style={{ background: bg, height: 56, borderRadius: 2, marginBottom: 8, border: "1px solid rgba(0,0,0,0.08)" }} />
-                <div style={{ fontFamily: F.sans, fontSize: 12, fontWeight: 500, color: C.ink, marginBottom: 2 }}>{c.name}</div>
+                <div style={{ fontFamily: A.body, fontSize: 12, fontWeight: 500, color: CA.ink, marginBottom: 2 }}>{c.name}</div>
                 <Token>{c.token ?? "(hardcoded)"}</Token>
-                <div style={{ fontFamily: F.mono, fontSize: 11, color: C.mid, marginTop: 4 }}>{shown}</div>
+                <div style={{ fontFamily: A.mono, fontSize: 11, color: CA.mid, marginTop: 4 }}>{shown}</div>
               </div>
             );
           })}
@@ -332,10 +360,10 @@ function SpacingSection() {
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {SPACING_SCALE.map((s) => (
             <div key={s.px} style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <div style={{ fontFamily: F.mono, fontSize: 11, color: C.mid, width: 28, textAlign: "right", flexShrink: 0 }}>{s.px}px</div>
-              <div style={{ background: C.blue, height: 20, width: s.px * 4, minWidth: 2, borderRadius: 1, flexShrink: 0 }} />
-              <div style={{ fontFamily: F.mono, fontSize: 11, color: C.blue, width: 120, flexShrink: 0 }}>{s.tw}</div>
-              <div style={{ fontFamily: F.serif, fontSize: 13, color: C.mid }}>{s.use}</div>
+              <div style={{ fontFamily: A.mono, fontSize: 11, color: CA.mid, width: 28, textAlign: "right", flexShrink: 0 }}>{s.px}px</div>
+              <div style={{ background: CA.blue, height: 20, width: s.px * 4, minWidth: 2, borderRadius: 1, flexShrink: 0 }} />
+              <div style={{ fontFamily: A.mono, fontSize: 11, color: CA.blue, width: 120, flexShrink: 0 }}>{s.tw}</div>
+              <div style={{ fontFamily: A.body, fontSize: 13, color: CA.mid }}>{s.use}</div>
             </div>
           ))}
         </div>
@@ -344,26 +372,92 @@ function SpacingSection() {
   );
 }
 
-function TypographySection() {
+// Extracts the primary family name from a font-family stack, e.g.
+// "'Inter', system-ui, sans-serif" → "Inter".
+function fontName(stack: string): string {
+  const first = stack.split(",")[0]?.trim() ?? "";
+  return first.replace(/^['"]|['"]$/g, "");
+}
+
+// The project's selected typefaces, shown as named specimens. This is the one
+// primitives section (alongside Type Scale, Line Height, Semantic Types) that
+// intentionally renders each family in its own voice — name, pangram, and
+// ligatures — so the chosen type is visible "in action." Everything else on the
+// styleguide sticks to the gated-screen pairing: Display headings + Sans body.
+// Empty until the styleguide has been configured for this project.
+function TypographySection({ needsSetup }: { needsSetup?: boolean }) {
   const resolvedFonts = useResolvedTokens(FONT_FAMILIES.map((f) => f.token));
+  const selected = !needsSetup;
   return (
     <section id="primitives-typography" data-sg-section="primitives-typography">
       <Divider />
       <div style={{ paddingTop: 48 }}>
         <SectionTitle
           eyebrow="Primitives · Sub-Atomic Tokens"
-          title="Typography Scale"
+          title="Typography"
+          desc={
+            selected
+              ? `The typefaces selected for ${siteConfig.name}. Each role maps to a CSS variable — reference it by token, never by font name. Headings use Display; body copy uses Sans.`
+              : "The project's typefaces appear here once they've been selected. Set them in tokens.css (or run /setup-styleguide) and their specimens will populate this section."
+          }
+        />
+        {selected ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {FONT_FAMILIES.map((ff) => {
+              const stack = resolvedFonts[ff.token] || ff.stack;
+              return (
+                <DemoBox key={ff.name} bg={C.white} pad={28}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 12, marginBottom: 18 }}>
+                    <div>
+                      <div style={{ fontFamily: A.body, fontSize: 11, fontWeight: 600, letterSpacing: "0.14em", color: CA.blue, textTransform: "uppercase", marginBottom: 6 }}>{ff.name} · {ff.role}</div>
+                      <Token>{ff.token}</Token>
+                    </div>
+                    <div style={{ fontFamily: ff.stack, fontSize: 34, color: C.ink, lineHeight: 1 }}>{fontName(stack)}</div>
+                  </div>
+                  <div style={{ fontFamily: ff.stack, fontSize: 22, color: C.ink, lineHeight: 1.3, marginBottom: 14 }}>
+                    The quick brown fox jumps over the lazy dog
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 28px" }}>
+                    <span style={{ fontFamily: ff.stack, fontSize: 18, color: C.dark }}>ABCDEFGHIJKLM · abcdefghijklm · 0123456789</span>
+                    <span style={{ fontFamily: ff.stack, fontSize: 18, color: C.mid }}>fi fl ffi ffl — Waffle office affluent</span>
+                  </div>
+                </DemoBox>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ border: `1px dashed ${CA.light}`, borderRadius: 2, padding: "56px 32px", textAlign: "center", background: CA.cream }}>
+            <div style={{ fontFamily: A.heading, fontSize: 24, fontWeight: 700, color: CA.mid, marginBottom: 10 }}>No typeface selected yet</div>
+            <div style={{ fontFamily: A.body, fontSize: 14, color: CA.mid, lineHeight: 1.6, maxWidth: 440, margin: "0 auto" }}>
+              Choose the project's fonts in <Token>tokens.css</Token> — or run <Token>/setup-styleguide</Token> — and their specimens will appear here.
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function TypeScaleSection() {
+  const resolvedFonts = useResolvedTokens(FONT_FAMILIES.map((f) => f.token));
+  return (
+    <section id="primitives-typescale" data-sg-section="primitives-typescale">
+      <Divider />
+      <div style={{ paddingTop: 48 }}>
+        <SectionTitle
+          eyebrow="Primitives · Sub-Atomic Tokens"
+          title="Type Scale"
           desc={`Thirteen type sizes form the visual scale. Each is shown across all four ${siteConfig.name} font families to illustrate how the same size reads differently at each voice.`}
         />
 
         {FONT_FAMILIES.map((ff) => (
           <div key={ff.name} style={{ marginBottom: 48 }}>
             <SubHead>{ff.name} — {ff.role}</SubHead>
-            <div style={{ fontFamily: F.mono, fontSize: 11, color: C.mid, marginBottom: 10 }}>{ff.token} → {resolvedFonts[ff.token] || ff.stack}</div>
+            <div style={{ fontFamily: A.mono, fontSize: 11, color: CA.mid, marginBottom: 10 }}>{ff.token} → {fontName(resolvedFonts[ff.token] || ff.stack)}</div>
             <DemoBox bg={C.white} pad={24}>
               {TYPE_SCALE.map((size) => (
                 <div key={size} style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 6 }}>
-                  <span style={{ fontFamily: F.mono, fontSize: 10, color: C.mid, width: 28, flexShrink: 0, textAlign: "right" }}>{size}</span>
+                  <span style={{ fontFamily: A.mono, fontSize: 10, color: CA.mid, width: 28, flexShrink: 0, textAlign: "right" }}>{size}</span>
                   <span style={{ fontFamily: ff.stack, fontSize: size, color: C.ink, lineHeight: 1.2 }}>{ff.sample}</span>
                 </div>
               ))}
@@ -388,11 +482,11 @@ function LineHeightSection() {
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           {LINE_HEIGHTS.map((lh) => (
             <div key={lh.value} style={{ display: "grid", gridTemplateColumns: "80px 1fr 220px", gap: 24, padding: "20px 0", borderBottom: "1px solid rgba(0,0,0,0.06)", alignItems: "start" }}>
-              <div style={{ fontFamily: F.mono, fontSize: 13, color: C.blue, fontWeight: 500 }}>{lh.label}</div>
+              <div style={{ fontFamily: A.mono, fontSize: 13, color: CA.blue, fontWeight: 500 }}>{lh.label}</div>
               <div style={{ fontFamily: F.serif, fontSize: 15, color: C.ink, lineHeight: lh.value }}>
                 Line height sets the vertical rhythm of running text. Tighter values suit large headings; looser values give long-form body copy room to breathe and stay comfortable to read across a full measure.
               </div>
-              <div style={{ fontFamily: F.sans, fontSize: 12, color: C.mid, paddingTop: 2, lineHeight: 1.5 }}>{lh.use}</div>
+              <div style={{ fontFamily: A.body, fontSize: 12, color: CA.mid, paddingTop: 2, lineHeight: 1.5 }}>{lh.use}</div>
             </div>
           ))}
         </div>
@@ -414,11 +508,11 @@ function SemanticTypesSection() {
         <DemoBox bg={C.white} pad={40}>
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
             {[
-              { tag: "h1", size: 34, family: F.fraunces, weight: 400, color: C.ink,  lh: 1.1, text: "Primary page heading" },
-              { tag: "h2", size: 24, family: F.fraunces, weight: 400, color: C.ink,  lh: 1.2, text: "Section heading" },
-              { tag: "h3", size: 21, family: F.fraunces, weight: 400, color: C.ink,  lh: 1.2, text: "Subsection heading" },
-              { tag: "h4", size: 18, family: F.fraunces, weight: 600, color: C.ink,  lh: 1.3, text: "Group label" },
-              { tag: "h5", size: 15, family: F.fraunces, weight: 600, color: C.ink,  lh: 1.3, text: "Minor heading" },
+              { tag: "h1", size: 34, family: F.display, weight: 700, color: C.ink,  lh: 1.1, text: "Primary page heading" },
+              { tag: "h2", size: 24, family: F.display, weight: 700, color: C.ink,  lh: 1.2, text: "Section heading" },
+              { tag: "h3", size: 21, family: F.display, weight: 700, color: C.ink,  lh: 1.2, text: "Subsection heading" },
+              { tag: "h4", size: 18, family: F.display, weight: 600, color: C.ink,  lh: 1.3, text: "Group label" },
+              { tag: "h5", size: 15, family: F.display, weight: 600, color: C.ink,  lh: 1.3, text: "Minor heading" },
               { tag: "h6", size: 13, family: F.sans,     weight: 500, color: C.dark, lh: 1.4, text: "OVERLINE · JUNE 2026" },
               { tag: "p",  size: 15, family: F.serif,    weight: 400, color: C.dark, lh: 1.6, text: "Body copy sets the reading rhythm for long-form content — comfortable measure, generous line height, and a serif voice tuned for sustained reading." },
               { tag: "caption", size: 12, family: F.sans, weight: 400, color: C.mid, lh: 1.4, text: "Byline · June 24, 2026" },
@@ -559,21 +653,21 @@ function FormControlsSection() {
 
         <SubHead>Standard Text Input</SubHead>
         <DemoBox bg={C.white}>
-          <input type="text" placeholder="Enter email address" style={{ width: 280, padding: "8px 12px", fontFamily: F.serif, fontSize: 14, color: C.ink, background: "transparent", border: `1px solid ${C.light}`, borderRadius: 2, outline: "none" }} />
+          <input type="text" placeholder="Enter email address" style={{ width: 280, padding: "8px 12px", fontFamily: F.sans, fontSize: 14, color: C.ink, background: "transparent", border: `1px solid ${C.light}`, borderRadius: 2, outline: "none" }} />
         </DemoBox>
 
         <SubHead>Search Input</SubHead>
         <DemoBox bg={C.white}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, border: `1px solid ${C.light}`, padding: "6px 12px", borderRadius: 2, width: 240, background: "transparent" }}>
             <SearchIcon />
-            <input type="search" placeholder="Search…" style={{ border: "none", outline: "none", fontFamily: F.serif, fontSize: 13, color: C.ink, background: "transparent", width: "100%" }} />
+            <input type="search" placeholder="Search…" style={{ border: "none", outline: "none", fontFamily: F.sans, fontSize: 13, color: C.ink, background: "transparent", width: "100%" }} />
           </div>
         </DemoBox>
 
         <SubHead>Newsletter Input (Dark Background)</SubHead>
         <DemoBox bg={C.ink} pad={32}>
           <div style={{ display: "flex", gap: 10 }}>
-            <input type="email" placeholder="your@email.com" style={{ flex: 1, padding: "9px 14px", fontFamily: F.serif, fontSize: 14, color: "#fff", background: "transparent", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 2, outline: "none" }} />
+            <input type="email" placeholder="your@email.com" style={{ flex: 1, padding: "9px 14px", fontFamily: F.sans, fontSize: 14, color: "#fff", background: "transparent", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 2, outline: "none" }} />
             <button style={{ background: C.blue, color: "#fff", border: "none", padding: "9px 20px", fontFamily: F.sans, fontSize: 12, fontWeight: 600, letterSpacing: "0.1em", cursor: "pointer", borderRadius: 2 }}>SUBSCRIBE</button>
           </div>
         </DemoBox>
@@ -606,7 +700,7 @@ function IconographySection() {
             {icons.map(({ name, el }) => (
               <div key={name} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "24px 32px", borderRight: "1px solid rgba(0,0,0,0.06)", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
                 <div style={{ color: C.ink }}>{el}</div>
-                <div style={{ fontFamily: F.sans, fontSize: 10, color: C.mid, letterSpacing: "0.08em" }}>{name.toUpperCase()}</div>
+                <div style={{ fontFamily: A.body, fontSize: 10, color: CA.mid, letterSpacing: "0.08em" }}>{name.toUpperCase()}</div>
               </div>
             ))}
           </div>
@@ -633,8 +727,8 @@ function CardSection() {
             <div style={{ height: 150, background: C.card }} />
             <div style={{ padding: "16px 18px 18px" }}>
               <div style={{ fontFamily: F.sans, fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", color: C.blue, textTransform: "uppercase", marginBottom: 8 }}>Category</div>
-              <div style={{ fontFamily: F.fraunces, fontSize: 20, color: C.ink, lineHeight: 1.2, marginBottom: 8 }}>Card heading goes here</div>
-              <div style={{ fontFamily: F.serif, fontSize: 14, color: C.dark, lineHeight: 1.6, marginBottom: 14 }}>A short supporting description showing how body copy sits within the card at the chosen type scale.</div>
+              <div style={{ fontFamily: F.display, fontSize: 20, fontWeight: 700, color: C.ink, lineHeight: 1.2, marginBottom: 8 }}>Card heading goes here</div>
+              <div style={{ fontFamily: F.sans, fontSize: 14, color: C.dark, lineHeight: 1.6, marginBottom: 14 }}>A short supporting description showing how body copy sits within the card at the chosen type scale.</div>
               <button style={{ fontFamily: F.sans, fontSize: 11, fontWeight: 500, letterSpacing: "0.1em", color: C.blue, background: "transparent", border: `1px solid ${C.blue}`, padding: "6px 14px", borderRadius: 2, cursor: "pointer" }}>READ MORE →</button>
             </div>
           </div>
@@ -658,7 +752,7 @@ function HeaderSection() {
         />
         <DemoBox bg={C.white} pad={0}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 24px", borderBottom: `1px solid ${C.light}` }}>
-            <div style={{ fontFamily: F.fraunces, fontSize: 22, color: C.ink, letterSpacing: "-0.01em" }}>{siteConfig.name}</div>
+            <div style={{ fontFamily: F.display, fontSize: 22, fontWeight: 700, color: C.ink, letterSpacing: "-0.01em" }}>{siteConfig.name}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
               {["Home", "About", "Work", "Contact"].map((l) => (
                 <span key={l} style={{ fontFamily: F.sans, fontSize: 13, fontWeight: 500, letterSpacing: "0.04em", color: C.dark }}>{l}</span>
@@ -718,10 +812,10 @@ function ExamplePageSection({ onNavigate }: { onNavigate: (p: string) => void })
           <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 2, overflow: "hidden", background: C.white }}>
             <div style={{ background: C.blue, padding: "10px 16px" }}>
               <div style={{ fontFamily: F.sans, fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.6)", marginBottom: 2 }}>Example</div>
-              <div style={{ fontFamily: F.fraunces, fontSize: 16, color: "#fff", fontWeight: 400 }}>Home</div>
+              <div style={{ fontFamily: F.display, fontSize: 16, color: "#fff", fontWeight: 700 }}>Home</div>
             </div>
             <div style={{ padding: "16px 16px 14px" }}>
-              <div style={{ fontFamily: F.serif, fontSize: 13, color: C.dark, lineHeight: 1.5, marginBottom: 14 }}>A generic landing page assembled from the template above. Replace it with your project's real page.</div>
+              <div style={{ fontFamily: F.sans, fontSize: 13, color: C.dark, lineHeight: 1.5, marginBottom: 14 }}>A generic landing page assembled from the template above. Replace it with your project's real page.</div>
               <button onClick={() => onNavigate("home")} style={{ fontFamily: F.sans, fontSize: 11, fontWeight: 500, letterSpacing: "0.1em", color: C.blue, background: "transparent", border: `1px solid ${C.blue}`, padding: "5px 14px", borderRadius: 2, cursor: "pointer" }}>
                 VIEW PAGE →
               </button>
@@ -760,12 +854,12 @@ export function StyleGuide({ onNavigate, needsSetup, onMarkUpdated }: Props) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: C.white, fontFamily: F.sans }}>
+    <div style={{ minHeight: "100vh", background: CA.white, fontFamily: A.body, fontWeight: 300 }}>
 
       {/* STYLEGUIDE SETUP BANNER — base uses VITE_STYLEGUIDE_READY; a variation
           uses its own styleguideStatus and offers a "Mark as updated" action. */}
       {needsSetup && (
-        <div style={{ background: "#fef3c7", borderBottom: "1px solid #f0d488", padding: "12px 48px", display: "flex", alignItems: "flex-start", gap: 12, fontFamily: F.sans, fontSize: 13, color: "#663d00", lineHeight: 1.55 }}>
+        <div style={{ background: "#fef3c7", borderBottom: "1px solid #f0d488", padding: "12px 48px", display: "flex", alignItems: "flex-start", gap: 12, fontFamily: A.body, fontSize: 13, color: "#663d00", lineHeight: 1.55 }}>
           <span style={{ fontSize: 15, lineHeight: 1.2 }}>⚙</span>
           <span style={{ flex: 1 }}>
             {onMarkUpdated ? (
@@ -775,16 +869,16 @@ export function StyleGuide({ onNavigate, needsSetup, onMarkUpdated }: Props) {
             ) : (
               <>
                 <strong>This styleguide isn't configured yet.</strong> Set your fonts &amp; colors and adapt the example sections for this project <em>before</em> designing — run{" "}
-                <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 6px", borderRadius: 3, fontFamily: F.mono, fontSize: 12 }}>/setup-styleguide</code>.
+                <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 6px", borderRadius: 3, fontFamily: A.mono, fontSize: 12 }}>/setup-styleguide</code>.
                 {" "}Clear this notice by setting{" "}
-                <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 6px", borderRadius: 3, fontFamily: F.mono, fontSize: 12 }}>VITE_STYLEGUIDE_READY=true</code>{" "}in <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 6px", borderRadius: 3, fontFamily: F.mono, fontSize: 12 }}>.env</code>.
+                <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 6px", borderRadius: 3, fontFamily: A.mono, fontSize: 12 }}>VITE_STYLEGUIDE_READY=true</code>{" "}in <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 6px", borderRadius: 3, fontFamily: A.mono, fontSize: 12 }}>.env</code>.
               </>
             )}
           </span>
           {onMarkUpdated && (
             <button
               onClick={onMarkUpdated}
-              style={{ flexShrink: 0, background: "#663d00", color: "#fff", border: "none", borderRadius: 3, padding: "6px 12px", fontFamily: F.sans, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", cursor: "pointer", whiteSpace: "nowrap" }}
+              style={{ flexShrink: 0, background: "#663d00", color: "#fff", border: "none", borderRadius: 3, padding: "6px 12px", fontFamily: A.body, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", cursor: "pointer", whiteSpace: "nowrap" }}
             >
               Mark as updated
             </button>
@@ -793,25 +887,25 @@ export function StyleGuide({ onNavigate, needsSetup, onMarkUpdated }: Props) {
       )}
 
       {/* PAGE HEADER */}
-      <div style={{ background: C.ink, borderBottom: `3px solid ${C.blue}` }}>
+      <div style={{ background: CA.ink, borderBottom: `3px solid ${CA.blue}` }}>
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "28px 48px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <div style={{ fontFamily: F.sans, fontSize: 10, fontWeight: 600, letterSpacing: "0.18em", color: "#fff", marginBottom: 6, textTransform: "uppercase" }}>{siteConfig.name}</div>
-            <h1 style={{ fontFamily: F.fraunces, fontSize: 28, fontWeight: 400, color: "#fff", margin: 0, lineHeight: 1.1 }}>Design System</h1>
-            <div style={{ fontFamily: F.serif, fontSize: 13, color: "rgba(255,255,255,0.5)", marginTop: 6, fontStyle: "italic" }}>
+            <div style={{ fontFamily: A.body, fontSize: 10, fontWeight: 600, letterSpacing: "0.18em", color: "#fff", marginBottom: 6, textTransform: "uppercase" }}>{siteConfig.name}</div>
+            <h1 style={{ fontFamily: A.heading, fontSize: 28, fontWeight: 700, color: "#fff", margin: 0, lineHeight: 1.1 }}>Design System</h1>
+            <div style={{ fontFamily: A.body, fontSize: 13, color: "rgba(255,255,255,0.5)", marginTop: 6, fontStyle: "italic" }}>
               Atomic Design System
             </div>
           </div>
           <div style={{ display: "flex", gap: 10 }}>
             <button
               onClick={() => onNavigate("dashboard")}
-              style={{ fontFamily: F.sans, fontSize: 11, fontWeight: 500, letterSpacing: "0.1em", color: "rgba(255,255,255,0.65)", background: "transparent", border: "1px solid rgba(255,255,255,0.2)", padding: "8px 18px", borderRadius: 2, cursor: "pointer" }}
+              style={{ fontFamily: A.body, fontSize: 11, fontWeight: 500, letterSpacing: "0.1em", color: "rgba(255,255,255,0.65)", background: "transparent", border: "1px solid rgba(255,255,255,0.2)", padding: "8px 18px", borderRadius: 2, cursor: "pointer" }}
             >
               ← DASHBOARD
             </button>
             <button
               onClick={() => onNavigate("home")}
-              style={{ fontFamily: F.sans, fontSize: 11, fontWeight: 500, letterSpacing: "0.1em", color: "rgba(255,255,255,0.65)", background: "transparent", border: "1px solid rgba(255,255,255,0.2)", padding: "8px 18px", borderRadius: 2, cursor: "pointer" }}
+              style={{ fontFamily: A.body, fontSize: 11, fontWeight: 500, letterSpacing: "0.1em", color: "rgba(255,255,255,0.65)", background: "transparent", border: "1px solid rgba(255,255,255,0.2)", padding: "8px 18px", borderRadius: 2, cursor: "pointer" }}
             >
               ← BACK TO SITE
             </button>
@@ -823,11 +917,11 @@ export function StyleGuide({ onNavigate, needsSetup, onMarkUpdated }: Props) {
       <div style={{ display: "flex", maxWidth: 1280, margin: "0 auto" }}>
 
         {/* LEFT NAV */}
-        <nav style={{ width: 220, flexShrink: 0, position: "sticky", top: 0, height: "100vh", overflowY: "auto", background: C.cream, borderRight: "1px solid rgba(0,0,0,0.06)", padding: "32px 0 80px" }}>
+        <nav style={{ width: 220, flexShrink: 0, position: "sticky", top: 0, height: "100vh", overflowY: "auto", background: CA.cream, borderRight: "1px solid rgba(0,0,0,0.06)", padding: "32px 0 80px" }}>
           {NAV_SECTIONS.map((item, i) => {
             if (item.isHeader) {
               return (
-                <div key={i} style={{ fontFamily: F.sans, fontSize: 9, fontWeight: 700, letterSpacing: "0.18em", color: C.mid, padding: "20px 24px 6px", borderTop: i > 0 ? "1px solid rgba(0,0,0,0.06)" : "none", marginTop: i > 0 ? 8 : 0 }}>
+                <div key={i} style={{ fontFamily: A.body, fontSize: 9, fontWeight: 700, letterSpacing: "0.18em", color: CA.mid, padding: "20px 24px 6px", borderTop: i > 0 ? "1px solid rgba(0,0,0,0.06)" : "none", marginTop: i > 0 ? 8 : 0 }}>
                   {item.label}
                 </div>
               );
@@ -840,10 +934,10 @@ export function StyleGuide({ onNavigate, needsSetup, onMarkUpdated }: Props) {
                 style={{
                   display: "block", width: "100%", textAlign: "left",
                   padding: "7px 24px 7px 28px",
-                  fontFamily: F.sans, fontSize: 13, fontWeight: isActive ? 500 : 400,
-                  color: isActive ? C.blue : C.dark,
+                  fontFamily: A.body, fontSize: 13, fontWeight: isActive ? 500 : 400,
+                  color: isActive ? CA.blue : CA.dark,
                   background: isActive ? "rgba(30,75,150,0.06)" : "transparent",
-                  border: "none", borderLeft: `2px solid ${isActive ? C.blue : "transparent"}`,
+                  border: "none", borderLeft: `2px solid ${isActive ? CA.blue : "transparent"}`,
                   cursor: "pointer", letterSpacing: "0.01em",
                 }}
               >
@@ -859,28 +953,28 @@ export function StyleGuide({ onNavigate, needsSetup, onMarkUpdated }: Props) {
           {/* INTRO */}
           <section id="intro" data-sg-section="intro">
             <div style={{ maxWidth: 680 }}>
-              <div style={{ fontFamily: F.sans, fontSize: 10, fontWeight: 600, letterSpacing: "0.18em", color: C.blue, marginBottom: 12 }}>INTRODUCTION</div>
-              <h1 style={{ fontFamily: F.fraunces, fontSize: 40, fontWeight: 400, color: C.ink, lineHeight: 1.1, margin: "0 0 20px" }}>
+              <div style={{ fontFamily: A.body, fontSize: 10, fontWeight: 600, letterSpacing: "0.18em", color: CA.blue, marginBottom: 12 }}>INTRODUCTION</div>
+              <h1 style={{ fontFamily: A.heading, fontSize: 40, fontWeight: 700, color: CA.ink, lineHeight: 1.1, margin: "0 0 20px" }}>
                 The {siteConfig.name} Design System
               </h1>
-              <p style={{ fontFamily: F.serif, fontSize: 16, color: C.dark, lineHeight: 1.7, marginBottom: 16 }}>
+              <p style={{ fontFamily: A.body, fontSize: 16, color: CA.dark, lineHeight: 1.7, marginBottom: 16 }}>
                 This system follows <strong>Brad Frost's Atomic Design</strong> methodology, extended downward with a <em>Primitives</em> (sub-atomic) layer that defines the raw tokens all atoms are built from.
               </p>
-              <p style={{ fontFamily: F.serif, fontSize: 16, color: C.dark, lineHeight: 1.7, marginBottom: 24 }}>
+              <p style={{ fontFamily: A.body, fontSize: 16, color: CA.dark, lineHeight: 1.7, marginBottom: 24 }}>
                 The hierarchy flows: <strong>Primitives → Atoms → Molecules → Organisms → Templates → Pages.</strong> Each level builds exclusively from the level below it. No organism should contain a hard-coded color value that isn't a CSS variable from the Primitives layer.
               </p>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
                 {[
                   { level: "Primitives", badge: "#6b46c1", desc: "Raw design tokens: colors, spacing, type scale, line heights. The sub-atomic layer." },
-                  { level: "Atoms",      badge: C.blue,    desc: "Single-purpose UI units: buttons, badges, form inputs, icons." },
+                  { level: "Atoms",      badge: CA.blue,    desc: "Single-purpose UI units: buttons, badges, form inputs, icons." },
                   { level: "Molecules",  badge: "#0d7a55", desc: "Purposeful combinations of atoms, e.g. a content card." },
-                  { level: "Organisms",  badge: C.ink,     desc: "Standalone page sections, e.g. a site header, hero, or footer." },
+                  { level: "Organisms",  badge: CA.ink,     desc: "Standalone page sections, e.g. a site header, hero, or footer." },
                   { level: "Templates",  badge: "#a16207", desc: "Page layout wireframes: column structure and organism sequencing, no real content." },
-                  { level: "Pages",      badge: C.red,     desc: "Specific instances of templates populated with real content." },
+                  { level: "Pages",      badge: CA.red,     desc: "Specific instances of templates populated with real content." },
                 ].map(({ level, badge, desc }) => (
-                  <div key={level} style={{ background: C.cream, padding: "16px", borderRadius: 2, borderTop: `3px solid ${badge}` }}>
-                    <div style={{ fontFamily: F.sans, fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: badge, marginBottom: 6 }}>{level.toUpperCase()}</div>
-                    <div style={{ fontFamily: F.serif, fontSize: 13, color: C.dark, lineHeight: 1.5 }}>{desc}</div>
+                  <div key={level} style={{ background: CA.cream, padding: "16px", borderRadius: 2, borderTop: `3px solid ${badge}` }}>
+                    <div style={{ fontFamily: A.body, fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: badge, marginBottom: 6 }}>{level.toUpperCase()}</div>
+                    <div style={{ fontFamily: A.body, fontSize: 13, color: CA.dark, lineHeight: 1.5 }}>{desc}</div>
                   </div>
                 ))}
               </div>
@@ -890,9 +984,10 @@ export function StyleGuide({ onNavigate, needsSetup, onMarkUpdated }: Props) {
           {/* SECTIONS */}
           <ColorsSection />
           <SpacingSection />
-          <TypographySection />
-          <LineHeightSection />
+          <TypographySection needsSetup={needsSetup} />
           <SemanticTypesSection />
+          <LineHeightSection />
+          <TypeScaleSection />
 
           <ButtonsSection />
           <BadgesSection />

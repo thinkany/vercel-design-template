@@ -1,5 +1,5 @@
 ---
-description: Brand this template — set the site name and subtitle in .env
+description: Brand this template — set the site name/subtitle in .env and the preview-gate fonts
 argument-hint: "[name] | [subtitle]  (optional; you'll be prompted if omitted)"
 ---
 
@@ -42,6 +42,33 @@ Follow these steps:
    **`SITE_SUBTITLE`** (plain names, no `VITE_` prefix) to their Vercel project's
    Environment Variables — alongside the gate secrets `ADMIN_PASS` / `AUTH_PASS`.
    Give them the exact values to paste. Unset, the gate falls back to "Preview".
+
+6. **Configure the preview-gate fonts.** The gate in `middleware.js` has its own
+   inline `<style>`, independent of the app's design system (it can't read the
+   app's token layer). It uses two font roles: the **wordmark** (`.brand-name`)
+   and the **body font** — used by everything else on the gate (subtitle, the
+   "Preview Access" label, the password input, the Enter button, and the footer).
+
+   Ask the user whether they want to set custom gate fonts. If yes, prompt for:
+   - A **webfont stylesheet URL** to load in the gate `<head>` (e.g. a
+     Typography.com / Adobe Fonts / Google Fonts CSS link). Optional — skip for
+     system fonts. Show the current `<link rel="stylesheet">` href if one is set.
+   - The **wordmark font-family** value, e.g. `'Vitesse A', 'Vitesse B', sans-serif`.
+   - The **body font-family** value, e.g. `"Forza A", "Forza B", sans-serif` —
+     applied to the subtitle and every other gate element.
+
+   Then edit `middleware.js`:
+   - If a stylesheet URL was given, set the `<link rel="stylesheet">` href to it,
+     and set the `<link rel="preconnect">` href to that URL's origin (scheme +
+     host). If the user wants no external font, remove both `<link>` lines.
+   - Replace the `font-family` on the `.brand-name` rule with the wordmark value.
+   - Replace **all** occurrences of the current body `font-family` value (the one
+     on the `body` rule — the same string is repeated on `.brand-subtitle`,
+     `.label`, `.pw-wrap input`, and `button[type="submit"]`) with the body value.
+   - Warn that font services like Typography.com / Adobe Fonts are **domain-locked**:
+     the fonts load only on whitelisted domains, so the user must add their Vercel
+     domain to the service's allowlist or the gate falls back to the stack's
+     system font (`sans-serif`).
 
 Do **not** put secrets (ADMIN_PASS / AUTH_PASS for the preview gate) in `.env`
 — those belong in Vercel's Environment Variables or a local `.env.local`.

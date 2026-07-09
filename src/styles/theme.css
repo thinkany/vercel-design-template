@@ -14,8 +14,7 @@
   --color-ta-gray-mid: var(--ta-gray-mid);
   --color-ta-gray-light: var(--ta-gray-light);
 
-  /* Font families → Tailwind utilities: font-fraunces, font-source-serif, etc. */
-  --font-fraunces: var(--ta-font-display);
+  /* Font families → Tailwind utilities: font-source-serif, font-dm-sans, etc. */
   --font-source-serif: var(--ta-font-serif);
   --font-dm-sans: var(--ta-font-sans);
   --font-dm-mono: var(--ta-font-mono);

@@ -16,18 +16,16 @@ const MobileIcon = () => (
 interface ViewToggleProps {
   view: "desktop" | "mobile";
   onChange: (v: "desktop" | "mobile") => void;
-  /** Tailwind-compatible inline style overrides for the bar wrapper */
+  /** Inline style overrides for the bar wrapper */
   barStyle?: React.CSSProperties;
-  activeColor?: string;
-  activeBg?: string;
 }
 
-export function ViewToggle({ view, onChange, barStyle, activeColor = "#7a6655", activeBg = "#7a6655" }: ViewToggleProps) {
+export function ViewToggle({ view, onChange, barStyle }: ViewToggleProps) {
   return (
     <div
       style={{
-        background: "#f0e8da",
-        borderBottom: "1px solid #c9b99a",
+        background: "#fff",
+        borderBottom: "1px solid rgba(0,0,0,0.08)",
         padding: "10px 32px",
         display: "flex",
         alignItems: "center",
@@ -36,23 +34,23 @@ export function ViewToggle({ view, onChange, barStyle, activeColor = "#7a6655", 
         ...barStyle,
       }}
     >
-      <span style={{ fontFamily: "'Caveat', cursive", fontSize: 13, color: "#a0856a", marginRight: 8 }}>
-        View as:
+      <span style={{ fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginRight: 6 }}>
+        View
       </span>
       {(["desktop", "mobile"] as const).map((v) => (
         <button
           key={v}
           onClick={() => onChange(v)}
           style={{
-            background: view === v ? activeBg : "transparent",
-            border: `1px solid ${activeColor}`,
-            color: view === v ? "#faf8f3" : activeColor,
-            fontFamily: "'Lora', Georgia, serif",
+            background: view === v ? "var(--admin-blue)" : "transparent",
+            border: `1px solid ${view === v ? "var(--admin-blue)" : "rgba(0,0,0,0.2)"}`,
+            color: view === v ? "#fff" : "var(--admin-gray-dark)",
+            fontFamily: "var(--admin-font-body)",
             fontSize: 12,
-            fontStyle: "italic",
-            padding: "4px 14px",
+            fontWeight: 500,
+            padding: "4px 12px",
             cursor: "pointer",
-            borderRadius: 2,
+            borderRadius: 3,
             transition: "background 0.15s, color 0.15s",
             display: "flex",
             alignItems: "center",

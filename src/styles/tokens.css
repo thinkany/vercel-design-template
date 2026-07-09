@@ -19,11 +19,38 @@
   --ta-gray-mid: #777777;
   --ta-gray-light: #cccccc;
 
-  /* ── Font families ────────────────────────────────────────────── */
-  --ta-font-display: 'Fraunces', Georgia, serif;
-  --ta-font-serif: 'Source Serif 4', Georgia, serif;
-  --ta-font-sans: 'DM Sans', system-ui, sans-serif;
-  --ta-font-mono: 'DM Mono', monospace;
+  /* ── Admin UI fonts ─────────────────────────────────────────────
+     For the ADMIN surfaces ONLY — the gated page (middleware.js), the
+     dashboard, and the styleguide's own chrome. Kept separate from the
+     project's --ta-font-* design tokens so the tooling looks consistent
+     regardless of which fonts a project selects. Mirrors the gated page:
+       brand-name     → --admin-font-heading  (DM Sans · wght 700)
+       brand-subtitle → --admin-font-body     (Inter · wght 300)           */
+  --admin-font-heading: 'DM Sans', system-ui, sans-serif;
+  --admin-font-body: 'Inter', system-ui, sans-serif;
+  --admin-font-mono: 'DM Mono', ui-monospace, monospace;
+
+  /* ── Admin UI colors ────────────────────────────────────────────
+     For the styleguide's structural chrome, the dashboard, and the gated
+     page. Kept SEPARATE from the project's --ta-* brand palette below so the
+     tooling keeps its colors even if a project renames or removes its brand
+     tokens. A designer can retint the admin UI by editing these hexes.     */
+  --admin-blue: #1e4b96;
+  --admin-red: #c41230;
+  --admin-cream: #f8f7f3;
+  --admin-ink: #111111;
+  --admin-gray-dark: #333333;
+  --admin-gray-mid: #777777;
+  --admin-gray-light: #cccccc;
+
+  /* ── Project design fonts ───────────────────────────────────────
+     The project's OWN typefaces — documented in the styleguide's specimen
+     sections and rendered on the demo designed pages / variations. Neutral
+     system placeholders until a project selects its fonts (/setup-styleguide). */
+  --ta-font-display: system-ui, sans-serif;
+  --ta-font-serif: Georgia, 'Times New Roman', serif;
+  --ta-font-sans: system-ui, sans-serif;
+  --ta-font-mono: ui-monospace, 'SFMono-Regular', Menlo, monospace;
 
   /* ── System palette (shadcn/ui primitives) ────────────────────── */
   --font-size: 16px;

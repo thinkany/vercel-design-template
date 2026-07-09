@@ -107,7 +107,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
           transition: "opacity 0.18s ease",
         }}>
           <span style={{
-            fontFamily: "var(--font-serif)",
+            fontFamily: "var(--admin-font-heading)",
             fontStyle: "italic",
             fontSize: 45,
             fontWeight: 700,
@@ -136,14 +136,14 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
           <span style={{
             display: "inline-block",
             padding: "2px 8px",
-            background: "var(--ta-blue)",
+            background: "var(--admin-blue)",
             color: "#fff",
             fontSize: 10,
             fontWeight: 500,
             letterSpacing: "0.12em",
             textTransform: "uppercase",
             borderRadius: 2,
-            fontFamily: "'DM Sans', system-ui, sans-serif",
+            fontFamily: "var(--admin-font-body)",
           }}>
             {variation.label ?? (variation.isBase ? "Original" : "Client Edits")}
           </span>
@@ -157,8 +157,8 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
             textTransform: "uppercase",
             border: "1px solid rgba(0,0,0,0.15)",
             borderRadius: 2,
-            color: "var(--ta-gray-mid)",
-            fontFamily: "'DM Sans', system-ui, sans-serif",
+            color: "var(--admin-gray-mid)",
+            fontFamily: "var(--admin-font-body)",
           }}>
             {variation.version}
           </span>
@@ -173,8 +173,8 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
               textTransform: "uppercase",
               border: "1px solid rgba(0,0,0,0.15)",
               borderRadius: 2,
-              color: "var(--ta-gray-mid)",
-              fontFamily: "'DM Sans', system-ui, sans-serif",
+              color: "var(--admin-gray-mid)",
+              fontFamily: "var(--admin-font-body)",
             }}>
               Base
             </span>
@@ -183,11 +183,11 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
 
         {/* Title */}
         <h2 style={{
-          fontFamily: "Georgia, 'Times New Roman', Times, serif",
+          fontFamily: "var(--admin-font-heading)",
           fontSize: 20,
           fontWeight: 700,
           fontStyle: "italic",
-          color: "var(--ta-ink)",
+          color: "var(--admin-ink)",
           margin: 0,
           lineHeight: 1.25,
           letterSpacing: "-0.01em",
@@ -198,7 +198,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
         {/* Description */}
         <p style={{
           fontSize: 15,
-          color: "var(--ta-gray-dark)",
+          color: "var(--admin-gray-dark)",
           lineHeight: 1.65,
           margin: 0,
         }}>
@@ -213,18 +213,18 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
           gap: 28,
         }}>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", color: "var(--ta-gray-mid)", textTransform: "uppercase", marginBottom: 3, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+            <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", color: "var(--admin-gray-mid)", textTransform: "uppercase", marginBottom: 3, fontFamily: "var(--admin-font-body)" }}>
               Created
             </div>
-            <div style={{ fontSize: 12, color: "var(--ta-gray-dark)", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+            <div style={{ fontSize: 12, color: "var(--admin-gray-dark)", fontFamily: "var(--admin-font-body)" }}>
               {variation.createdAt}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", color: "var(--ta-gray-mid)", textTransform: "uppercase", marginBottom: 3, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+            <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", color: "var(--admin-gray-mid)", textTransform: "uppercase", marginBottom: 3, fontFamily: "var(--admin-font-body)" }}>
               Modified
             </div>
-            <div style={{ fontSize: 12, color: "var(--ta-gray-dark)", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+            <div style={{ fontSize: 12, color: "var(--admin-gray-dark)", fontFamily: "var(--admin-font-body)" }}>
               {variation.modifiedAt}
             </div>
           </div>
@@ -244,21 +244,21 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
         borderLeft: "1px solid rgba(0,0,0,0.06)",
       }}>
         {/* View button */}
-        <div style={{ display: "inline-flex" }}>
+        <div style={{ display: "block", width: "100%" }}>
           {hoveringView && createPortal(
             <div style={{
               position: "fixed",
               top: tooltipPos.top,
               right: tooltipPos.right,
               transform: "translateY(-100%) translateY(-6px)",
-              background: "var(--ta-ink)",
+              background: "var(--admin-ink)",
               color: "#fff",
               fontSize: 11,
               lineHeight: 1.4,
               padding: "6px 10px",
               borderRadius: 3,
               whiteSpace: "nowrap",
-              fontFamily: "'DM Sans', system-ui, sans-serif",
+              fontFamily: "var(--admin-font-body)",
               pointerEvents: "none",
               zIndex: 9999,
             }}>
@@ -271,7 +271,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
                 height: 0,
                 borderLeft: "5px solid transparent",
                 borderRight: "5px solid transparent",
-                borderTop: "5px solid var(--ta-ink)",
+                borderTop: "5px solid var(--admin-ink)",
               }} />
             </div>,
             document.body
@@ -284,10 +284,14 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
             onMouseEnter={handleMouseEnter}
             onMouseLeave={() => setHoveringView(false)}
             style={{
-              display: "inline-block",
-              padding: "10px 20px",
-              background: "var(--ta-blue)",
+              display: "block",
+              width: "100%",
+              boxSizing: "border-box",
+              textAlign: "center",
+              padding: "9px 20px",
+              background: "var(--admin-blue)",
               color: "#fff",
+              border: "1px solid var(--admin-blue)",
               borderRadius: 999,
               fontSize: 11,
               fontWeight: 500,
@@ -295,7 +299,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
               textTransform: "uppercase",
               textDecoration: "none",
               whiteSpace: "nowrap",
-              fontFamily: "'DM Sans', system-ui, sans-serif",
+              fontFamily: "var(--admin-font-body)",
             }}
           >
             View Site ↗
@@ -308,11 +312,14 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
           target="_blank"
           rel="noopener noreferrer"
           style={{
-            display: "inline-block",
+            display: "block",
+            width: "100%",
+            boxSizing: "border-box",
+            textAlign: "center",
             padding: "9px 20px",
             background: "transparent",
-            color: "var(--ta-blue)",
-            border: "1px solid var(--ta-blue)",
+            color: "var(--admin-blue)",
+            border: "1px solid var(--admin-blue)",
             borderRadius: 999,
             fontSize: 11,
             fontWeight: 500,
@@ -320,7 +327,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
             textTransform: "uppercase",
             textDecoration: "none",
             whiteSpace: "nowrap",
-            fontFamily: "'DM Sans', system-ui, sans-serif",
+            fontFamily: "var(--admin-font-body)",
           }}
         >
           Styleguide ↗
@@ -333,12 +340,12 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
             style={{
               background: "transparent",
               border: "none",
-              color: "var(--ta-gray-mid)",
+              color: "var(--admin-gray-mid)",
               fontSize: 11,
               letterSpacing: "0.08em",
               cursor: "pointer",
               padding: "4px 0",
-              fontFamily: "'DM Sans', system-ui, sans-serif",
+              fontFamily: "var(--admin-font-body)",
               textDecoration: "underline",
               textUnderlineOffset: 3,
             }}

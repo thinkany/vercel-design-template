@@ -20,9 +20,10 @@ const LOGIN_PAGE = `<!DOCTYPE html>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${SITE_NAME}</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+CiAgPHN0eWxlPgogICAgLnJpbmcgeyBmaWxsOiBub25lOyBzdHJva2U6ICMwMDA7IHN0cm9rZS13aWR0aDogMS41IH0KICAgIC5kb3QgeyBmaWxsOiAjMDAwIH0KICAgIEBtZWRpYSAocHJlZmVycy1jb2xvci1zY2hlbWU6IGRhcmspIHsKICAgICAgLnJpbmcgeyBzdHJva2U6ICNmZmYgfQogICAgICAuZG90IHsgZmlsbDogI2ZmZiB9CiAgICB9CiAgPC9zdHlsZT4KICA8Y2lyY2xlIGNsYXNzPSJyaW5nIiBjeD0iMTYiIGN5PSIxNiIgcj0iMTMiIC8+CiAgPGNpcmNsZSBjbGFzcz0iZG90IiBjeD0iMTYiIGN5PSIxNiIgcj0iMi4yNSIgLz4KPC9zdmc+Cg==" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300;1,9..144,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@700&family=Inter:wght@300&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -33,7 +34,7 @@ const LOGIN_PAGE = `<!DOCTYPE html>
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      font-family: 'DM Sans', system-ui, sans-serif;
+      font-family: 'Inter', sans-serif;
     }
 
     .wrap {
@@ -49,18 +50,20 @@ const LOGIN_PAGE = `<!DOCTYPE html>
     }
 
     .brand-name {
-      font-family: 'Fraunces', Georgia, serif;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 700;
+      font-display: swap;
       font-size: clamp(32px, 6vw, 48px);
-      font-weight: 400;
       color: #1a1a1a;
       letter-spacing: -0.01em;
       line-height: 1.05;
     }
 
     .brand-subtitle {
-      font-family: 'DM Sans', system-ui, sans-serif;
+      font-family: 'Inter', sans-serif;
+      font-weight: 300;
+      font-style: normal;
       font-size: 12px;
-      font-weight: 500;
       letter-spacing: 0.18em;
       text-transform: uppercase;
       color: rgba(0,0,0,0.4);
@@ -77,7 +80,7 @@ const LOGIN_PAGE = `<!DOCTYPE html>
     }
 
     .label {
-      font-family: 'DM Sans', system-ui, sans-serif;
+      font-family: 'Inter', sans-serif;
       font-size: 11px;
       font-weight: 500;
       letter-spacing: 0.18em;
@@ -109,7 +112,7 @@ const LOGIN_PAGE = `<!DOCTYPE html>
       border: 1px solid rgba(0,0,0,0.18);
       background: #fff;
       border-radius: 3px;
-      font-family: 'DM Sans', system-ui, sans-serif;
+      font-family: 'Inter', sans-serif;
       font-size: 15px;
       color: #1a1a1a;
       outline: none;
@@ -168,7 +171,7 @@ const LOGIN_PAGE = `<!DOCTYPE html>
       color: #fff;
       border: none;
       border-radius: 3px;
-      font-family: 'DM Sans', system-ui, sans-serif;
+      font-family: 'Inter', sans-serif;
       font-size: 13px;
       font-weight: 500;
       letter-spacing: 0.12em;

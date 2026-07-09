@@ -24,7 +24,6 @@ export const INITIAL_VARIATIONS: Variation[] = [
     createdAt: "06/27/2026",
     modifiedAt: "06/27/2026 12:00",
     isBase: true,
-    screenshot: "/screenshots/v00.png",
   },
 ];
 

@@ -1,7 +1,7 @@
 // ©2004-2026 Deep Focus Review. All rights reserved.
 import { useState } from "react";
 import { loadVariations, saveVariations, type Variation } from "@/data/variations";
-import { siteConfig, siteTitle } from "@/config/site";
+import { siteConfig } from "@/config/site";
 import { getRole } from "@/data/role";
 import { VariationCard } from "./VariationCard";
 import { MakeVariationModal } from "./MakeVariationModal";
@@ -42,8 +42,9 @@ export function Dashboard() {
   return (
     <div style={{
       minHeight: "100vh",
-      background: "var(--ta-cream)",
-      fontFamily: "'DM Sans', system-ui, sans-serif",
+      background: "var(--admin-cream)",
+      fontFamily: "var(--admin-font-body)",
+      fontWeight: 300,
     }}>
 
       {/* Sticky header */}
@@ -64,19 +65,19 @@ export function Dashboard() {
             fontSize: 11,
             fontWeight: 500,
             letterSpacing: "0.16em",
-            color: "var(--ta-gray-mid)",
+            color: "var(--admin-gray-mid)",
             textTransform: "uppercase",
           }}>
             {siteConfig.name}
           </span>
           {siteConfig.subtitle && (
             <>
-              <span style={{ color: "var(--ta-gray-light)", fontSize: 16 }}>·</span>
+              <span style={{ color: "var(--admin-gray-light)", fontSize: 16 }}>·</span>
               <span style={{
                 fontSize: 11,
                 fontWeight: 500,
                 letterSpacing: "0.14em",
-                color: "var(--ta-gray-mid)",
+                color: "var(--admin-gray-mid)",
                 textTransform: "uppercase",
               }}>
                 {siteConfig.subtitle}
@@ -102,7 +103,7 @@ export function Dashboard() {
               letterSpacing: "0.12em",
               textTransform: "uppercase",
               cursor: "pointer",
-              color: "var(--ta-gray-mid)",
+              color: "var(--admin-gray-mid)",
               fontFamily: "inherit",
             }}
           >
@@ -112,7 +113,7 @@ export function Dashboard() {
           <button
             onClick={() => setShowMakeModal(true)}
             style={{
-              background: "var(--ta-blue)",
+              background: "var(--admin-blue)",
               color: "#fff",
               border: "none",
               borderRadius: 3,
@@ -137,16 +138,22 @@ export function Dashboard() {
         {/* Page heading */}
         <div style={{ marginBottom: 40 }}>
           <h1 style={{
-            fontFamily: "Georgia, serif",
+            fontFamily: "var(--admin-font-heading)",
             fontSize: 36,
-            fontWeight: 300,
-            color: "var(--ta-ink)",
+            color: "var(--admin-ink)",
             margin: "0 0 8px",
             letterSpacing: "-0.02em",
           }}>
-            {siteTitle}
+            <span style={{ fontWeight: 700 }}>
+              {siteConfig.name}{siteConfig.subtitle ? " :" : ""}
+            </span>
+            {siteConfig.subtitle && (
+              <span style={{ fontFamily: "var(--admin-font-body)", fontWeight: 300 }}>
+                {" "}{siteConfig.subtitle}
+              </span>
+            )}
           </h1>
-          <p style={{ fontSize: 14, color: "var(--ta-gray-mid)", margin: 0 }}>
+          <p style={{ fontSize: 14, color: "var(--admin-gray-mid)", margin: 0 }}>
             {variations.length} design variation{variations.length !== 1 ? "s" : ""}
           </p>
         </div>
@@ -182,10 +189,10 @@ export function Dashboard() {
       {/* Base-guard dialog */}
       {dialog?.type === "base-guard" && (
         <Overlay onClose={() => setDialog(null)}>
-          <h3 style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 300, color: "var(--ta-ink)", margin: "0 0 12px" }}>
+          <h3 style={{ fontFamily: "var(--admin-font-heading)", fontSize: 22, fontWeight: 300, color: "var(--admin-ink)", margin: "0 0 12px" }}>
             Can't remove this one
           </h3>
-          <p style={{ fontSize: 14, color: "var(--ta-gray-dark)", lineHeight: 1.65, margin: "0 0 28px" }}>
+          <p style={{ fontSize: 14, color: "var(--admin-gray-dark)", lineHeight: 1.65, margin: "0 0 28px" }}>
             Oh sorry! We can not remove the base variation, we need it as our foundation.
           </p>
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -195,7 +202,7 @@ export function Dashboard() {
                 padding: "10px 22px",
                 border: "none",
                 borderRadius: 3,
-                background: "var(--ta-blue)",
+                background: "var(--admin-blue)",
                 color: "#fff",
                 cursor: "pointer",
                 fontSize: 13,
@@ -212,13 +219,13 @@ export function Dashboard() {
       {/* Remove confirmation dialog */}
       {dialog?.type === "remove" && (
         <Overlay onClose={() => setDialog(null)}>
-          <h3 style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 300, color: "var(--ta-ink)", margin: "0 0 10px" }}>
+          <h3 style={{ fontFamily: "var(--admin-font-heading)", fontSize: 22, fontWeight: 300, color: "var(--admin-ink)", margin: "0 0 10px" }}>
             Remove this variation?
           </h3>
-          <p style={{ fontSize: 14, fontWeight: 500, color: "var(--ta-ink)", margin: "0 0 6px" }}>
+          <p style={{ fontSize: 14, fontWeight: 500, color: "var(--admin-ink)", margin: "0 0 6px" }}>
             {dialog.variation.title}
           </p>
-          <p style={{ fontSize: 13, color: "var(--ta-gray-mid)", lineHeight: 1.65, margin: "0 0 28px" }}>
+          <p style={{ fontSize: 13, color: "var(--admin-gray-mid)", lineHeight: 1.65, margin: "0 0 28px" }}>
             This removes it from the dashboard. Files on disk are not deleted.
           </p>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
@@ -242,7 +249,7 @@ export function Dashboard() {
                 padding: "9px 18px",
                 border: "none",
                 borderRadius: 3,
-                background: "var(--ta-red)",
+                background: "var(--admin-red)",
                 color: "#fff",
                 cursor: "pointer",
                 fontSize: 13,
@@ -270,7 +277,7 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
         alignItems: "center",
         justifyContent: "center",
         zIndex: 1000,
-        fontFamily: "'DM Sans', system-ui, sans-serif",
+        fontFamily: "var(--admin-font-body)",
       }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
