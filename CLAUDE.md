@@ -71,6 +71,34 @@ complete copy under **`src/variations/{id}/`** (`components/` + `styles/`).
   in [src/data/variations.ts](src/data/variations.ts). Base v00 is seeded from
   `INITIAL_VARIATIONS`.
 
+### Adding a page (beyond Home)
+
+The scaffold ships three pages — Dashboard, Home, StyleGuide — and has no router.
+A design is expressed as a **variation** (a full copy of Home + its styleguide),
+not as a multi-page site, so extra pages (About, Pricing, …) are a deliberate
+add. To wire one — e.g. `About`:
+
+1. **Build the component.** Create `src/app/components/About.tsx` (base v00).
+   **Model it on [Home.tsx](src/app/components/Home.tsx)** — that is the canonical
+   design-surface pattern: a Tailwind-first content function wrapped by the
+   `ViewToggle` + `PhoneFrame`/`TabletFrame` responsive preview. Copy that
+   structure so the new page keeps the desktop/tablet/mobile preview. Do **not**
+   model it on `Dashboard.tsx` / `StyleGuide.tsx` — those are `--admin-*` tooling
+   chrome, not design surfaces.
+2. **Resolve + render it in [App.tsx](src/app/App.tsx).** Add
+   `const About = resolveComponent(variationId, "About");` alongside the existing
+   `resolveComponent` calls, then a render branch:
+   `{page === "about" && <About onNavigate={setPage} view={view} setView={setView} orientation={orientation} setOrientation={setOrientation} />}`.
+3. **Make it reachable.** Navigate to it from any page via `onNavigate("about")`
+   (the `onNavigate` prop is `setPage`). To make it URL-addressable, add a branch
+   to `getInitialPage()` (e.g. `if (params.has("about")) return "about";`).
+4. **Variations inherit it for free** via `resolveComponent`'s fallback to base
+   v00. To diverge a variation's version, drop `About.tsx` into
+   `src/variations/{id}/components/` — no `App.tsx` change needed.
+
+Same rules as everywhere: Tailwind utilities + `--ta-*` tokens, never hardcoded
+hex/fonts, edit `src/variations/{id}/` (not the base) when working on a variation.
+
 ### Styling & tokens
 
 CSS entry [src/styles/index.css](src/styles/index.css) imports, in order:

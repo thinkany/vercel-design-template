@@ -7,6 +7,7 @@
 // intentional and signals "needs branding".
 
 const PLACEHOLDER_CLIENT = "Client Name";
+const PLACEHOLDER_COMPANY = "Company Name";
 const PLACEHOLDER_PROJECT = "Project Name";
 const PLACEHOLDER_TAGLINE = "Your site tagline";
 
@@ -24,11 +25,11 @@ export const siteConfig = {
   /** Client name. Falls back to a placeholder only while fully unbranded. */
   clientName: rawClient || PLACEHOLDER_CLIENT,
   /**
-   * Company / organization name — shown in the dashboard header wordmark.
-   * Falls back to the client name (then a placeholder) when left blank, so an
-   * unset company name never blanks the header.
+   * Company / organization name — the design agency, shown in the dashboard
+   * header ("Designed by {companyName}"). Falls back to its own placeholder when
+   * left blank, so an unset company name never blanks the header.
    */
-  companyName: rawCompany || rawClient || PLACEHOLDER_CLIENT,
+  companyName: rawCompany || PLACEHOLDER_COMPANY,
   /**
    * Project name — the secondary label. Falls back to a placeholder only while
    * fully unbranded; once branded, an intentionally-empty project name stays empty.

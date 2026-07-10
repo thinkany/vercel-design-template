@@ -56,14 +56,14 @@ export function Home({ onNavigate, view, setView, orientation, setOrientation }:
   const toggleOrientation = () =>
     setOrientation(orientation === "portrait" ? "landscape" : "portrait");
   return (
-    <div style={{ minHeight: "100vh", background: "var(--ta-cream)", display: "flex", flexDirection: "column" }}>
+    <div className="min-h-screen bg-ta-cream flex flex-col">
       <ViewToggle view={view} onChange={setView} orientation={orientation} onRotate={toggleOrientation} />
       {view === "mobile" ? (
         <PhoneFrame bg="var(--ta-cream)" orientation={orientation}>{content}</PhoneFrame>
       ) : view === "tablet" ? (
         <TabletFrame bg="var(--ta-cream)" orientation={orientation}>{content}</TabletFrame>
       ) : (
-        <div style={{ flex: 1, display: "flex" }}>{content}</div>
+        <div className="flex-1 flex">{content}</div>
       )}
     </div>
   );

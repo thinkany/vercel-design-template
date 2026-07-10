@@ -60,30 +60,25 @@ export function Dashboard() {
         justifyContent: "space-between",
         padding: "0 40px",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{
             fontSize: 11,
             fontWeight: 500,
-            letterSpacing: "0.16em",
+            letterSpacing: "0.14em",
+            color: "var(--admin-gray-light)",
+            textTransform: "uppercase",
+          }}>
+            Designed by
+          </span>
+          <span style={{
+            fontSize: 11,
+            fontWeight: 500,
+            letterSpacing: "0.14em",
             color: "var(--admin-gray-mid)",
             textTransform: "uppercase",
           }}>
             {siteConfig.companyName}
           </span>
-          {siteConfig.projectName && (
-            <>
-              <span style={{ color: "var(--admin-gray-light)", fontSize: 16 }}>·</span>
-              <span style={{
-                fontSize: 11,
-                fontWeight: 500,
-                letterSpacing: "0.14em",
-                color: "var(--admin-gray-mid)",
-                textTransform: "uppercase",
-              }}>
-                {siteConfig.projectName}
-              </span>
-            </>
-          )}
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
