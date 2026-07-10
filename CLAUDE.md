@@ -12,6 +12,10 @@ designs as **variations** and shares a live, password-gated preview via Vercel.
 Stack: **React 18 + Vite 6 + Tailwind 4**, originally a **Figma Make** export,
 deployed on **Vercel** (auto-builds on every `git push`). No backend.
 
+The workflow runs *through* Claude Code — designers use it to brand the template
+and build designs — so a Claude plan that includes Claude Code is a prerequisite
+(subscription is the simplest path; an API key also works but is metered).
+
 ## Hard constraints — read first
 
 - **The local dev server is the live design surface.** The user runs

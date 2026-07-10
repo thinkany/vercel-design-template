@@ -8,6 +8,12 @@ on Vercel, which auto-builds on every push to git.
 
 ## Getting started
 
+**Prerequisite: Claude access.** This template is built and configured *with*
+Claude Code, so you need a Claude plan that includes it — a subscription is the
+simplest path (a heavier plan gives more headroom for sustained design work). See
+[Claude pricing](https://www.anthropic.com/pricing). A developer API key also
+works but is metered per use; most designers should just use a subscription.
+
 **Prerequisite: Node.js.** If you don't already have it, download the **LTS**
 version from [nodejs.org](https://nodejs.org) and run the installer (a
 click-through `.pkg` on Mac / `.msi` on Windows — all defaults are fine). This is
