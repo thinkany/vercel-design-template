@@ -1,5 +1,8 @@
 node_modules/
 dist/
+# Local npm lockfile — throwaway. Vercel builds with pnpm (see vercel.json /
+# pnpm-lock.yaml); npm install locally is only for the dev server.
+package-lock.json
 .DS_Store
 *.local
 .vercel

@@ -21,6 +21,37 @@ back to a plain text prompt if a value truly has no reasonable presets.
 
 Follow these steps:
 
+0. **Preflight — install dependencies.** Before any branding, make sure the
+   project can actually run. This is often the first time a non-technical
+   designer has opened a code project, so be gentle and do the work for them.
+
+   a. Check whether Node.js is installed by running `node -v` and `npm -v` from
+      the project root.
+
+   b. **If Node is missing** (command not found), STOP and guide them — do not
+      attempt to auto-install a system runtime. Detect their OS and give a
+      friendly, non-technical message, e.g.:
+      > "This project needs **Node.js** to run, and it isn't installed yet.
+      > It's a one-time, click-through install:
+      > 1. Go to **https://nodejs.org** and download the **LTS** version
+      >    (the big green button — the installer is a `.pkg` on Mac / `.msi` on
+      >    Windows).
+      > 2. Open the downloaded file and click through the installer (all
+      >    defaults are fine).
+      > 3. Come back here and run **`/setup-project`** again."
+      Then end the run — the rest of setup can't proceed without Node.
+
+   c. **If Node is present**, run `npm install` from the project root and report
+      the result plainly (success, or the actual error if it fails). This uses
+      npm for the local dev server; note that **Vercel builds with pnpm** (see
+      `vercel.json` / `pnpm-lock.yaml`), so the `package-lock.json` npm creates
+      is git-ignored and throwaway — do not commit it.
+
+   d. Once install succeeds, continue to branding below. At the very end of the
+      whole setup, remind them they can preview locally with **`npm run dev`**
+      (opens at http://localhost:5173) for instant feedback, separate from the
+      Vercel preview deploy.
+
 1. **Read the current values.** Open `.env` and note the current
    `VITE_COMPANY_NAME`, `VITE_CLIENT_NAME`, and `VITE_PROJECT_NAME` (they may be
    blank on a fresh template pull).
@@ -58,7 +89,16 @@ Follow these steps:
    vars: the dev server reloads automatically on `.env` change, but a running
    production build must be rebuilt/redeployed (Vercel does this on push).
 
-6. **Remind about the preview gate (Vercel only).** The login page in
+6. **Remind about the preview gate (Vercel only).** First confirm they have a
+   Vercel project. A [Vercel](https://vercel.com) account is **required** — it's
+   what turns this project into a live, shareable website for client preview (the
+   free "Hobby" tier is enough). If they haven't connected it yet, point them to
+   the easiest path: create a free account at https://vercel.com (sign in with
+   GitHub), push this repo to a GitHub repository, then in Vercel choose
+   **Add New → Project** and import it — every `git push` then auto-deploys. The
+   env-var steps below all live in that Vercel project, so it must exist first.
+
+   The login page in
    `middleware.js` runs on Vercel's edge runtime and CANNOT read `.env` /
    `VITE_*`. To brand it, the user must add matching **`CLIENT_NAME`** and
    **`PROJECT_TITLE`** (plain names, no `VITE_` prefix) to their Vercel project's

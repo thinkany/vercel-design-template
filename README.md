@@ -8,6 +8,12 @@ on Vercel, which auto-builds on every push to git.
 
 ## Getting started
 
+**Prerequisite: Node.js.** If you don't already have it, download the **LTS**
+version from [nodejs.org](https://nodejs.org) and run the installer (a
+click-through `.pkg` on Mac / `.msi` on Windows — all defaults are fine). This is
+a one-time setup. Running `/setup-project` in Claude Code checks for this and
+walks you through it if it's missing.
+
 ```bash
 npm install
 npm run dev
@@ -80,6 +86,25 @@ variation are managed independently.
 
 The template deploys to Vercel and auto-builds on every push to git. Configuration
 lives in **two different places** — set both for a fully branded, protected deploy.
+
+### Connecting to Vercel (required)
+
+A [Vercel](https://vercel.com) account is required — it's what turns this project
+into a **live, shareable website** for client preview. The free "Hobby" tier is
+enough. The easiest, recommended path is to sync through **GitHub** so every push
+auto-deploys:
+
+1. **Create a free Vercel account** at [vercel.com](https://vercel.com) — sign in
+   with GitHub so the two are already linked.
+2. **Push this project to a GitHub repository** (private is fine).
+3. In Vercel, click **Add New → Project** and **import** that GitHub repo. Vercel
+   reads `vercel.json` and configures the build automatically — just click
+   **Deploy**.
+4. You now get a **live URL** you can share. From here on, **every `git push`
+   auto-deploys** a fresh build, and pull requests get their own preview URLs.
+
+Then set the environment variables below so the deploy is branded and
+password-protected before you share the link.
 
 ### App branding → committed `.env`
 
