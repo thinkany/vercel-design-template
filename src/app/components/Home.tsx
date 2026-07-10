@@ -2,7 +2,7 @@
 import { PhoneFrame } from "./PhoneFrame";
 import { TabletFrame } from "./TabletFrame";
 import { ViewToggle } from "./ViewToggle";
-import { siteConfig } from "@/config/site";
+import { siteConfig, previewConfig } from "@/config/site";
 
 type View = "desktop" | "tablet" | "mobile";
 type Orientation = "portrait" | "landscape";
@@ -57,7 +57,7 @@ export function Home({ onNavigate, view, setView, orientation, setOrientation }:
     setOrientation(orientation === "portrait" ? "landscape" : "portrait");
   return (
     <div className="min-h-screen bg-ta-cream flex flex-col">
-      <ViewToggle view={view} onChange={setView} orientation={orientation} onRotate={toggleOrientation} />
+      <ViewToggle view={view} onChange={setView} views={previewConfig.views} orientation={orientation} onRotate={toggleOrientation} />
       {view === "mobile" ? (
         <PhoneFrame bg="var(--ta-cream)" orientation={orientation}>{content}</PhoneFrame>
       ) : view === "tablet" ? (

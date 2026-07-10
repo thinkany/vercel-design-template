@@ -81,9 +81,35 @@ Follow these steps:
      - Ask for the **tagline** — an optional line shown in the masthead/header.
        Show the current value if set. Blank is allowed (it's simply hidden).
 
+3b. **Ask the project type & preview shape.** This decides the device-preview
+   matrix (`VITE_PROJECT_TYPE` + `VITE_ENABLE_TABLET`, consumed by `previewConfig`
+   in `src/config/site.ts`). Ask both in a single `AskUserQuestion` call:
+
+   1. Header "Project type". Question: "What kind of project is this? It sets
+      which device previews you design against." Three options:
+      - **"Web Site"** — the default (list first). Desktop + mobile are the
+        baseline. → writes `VITE_PROJECT_TYPE="website"`.
+      - **"App"** — mobile-first; the desktop preview is hidden (an app that
+        needs desktop is really a website). → `VITE_PROJECT_TYPE="app"`.
+      - **"Brand Guideline (coming soon)"** — parked; the home view shows a
+        "coming soon" Brand placeholder (`src/app/components/Brand.tsx`) instead
+        of a device preview. Set it if that's the intent, but tell the user it's
+        stubbed. → `VITE_PROJECT_TYPE="brand"`. (The tablet question below then
+        doesn't apply — brand mode has no device preview.)
+   2. Header "Tablet view". Question: "Include a tablet preview as well?" Both
+      Web Site and App default to **no** tablet unless asked. Options:
+      **"No — skip tablet"** (default, first) / **"Yes — add tablet"**. "Yes"
+      writes `VITE_ENABLE_TABLET="true"`; "No" leaves it blank.
+
+   Note the effect back to the user: an **App** opens on the phone preview with
+   no desktop button; a **Web Site** opens on desktop; tablet appears only if
+   they opted in.
+
 4. **Write the values back** into `.env`, preserving its comments and the rest
    of the file. Quote the values: `VITE_COMPANY_NAME="Acme Inc"`,
-   `VITE_CLIENT_NAME="ACME ltd"`.
+   `VITE_CLIENT_NAME="ACME ltd"`, `VITE_PROJECT_TYPE="app"`, and
+   `VITE_ENABLE_TABLET="true"` (leave `VITE_ENABLE_TABLET=""` when tablet was
+   declined).
 
 5. **Confirm** what you set, and remind the user that these are Vite build-time
    vars: the dev server reloads automatically on `.env` change, but a running

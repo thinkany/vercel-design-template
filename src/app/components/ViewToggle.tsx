@@ -39,6 +39,11 @@ const ICONS = {
 interface ViewToggleProps {
   view: ViewOption;
   onChange: (v: ViewOption) => void;
+  /**
+   * Which device buttons to show, in order. Driven by project type (see
+   * previewConfig in config/site). Defaults to all three when omitted.
+   */
+  views?: readonly ViewOption[];
   /** Current device orientation; the rotate control toggles it. */
   orientation?: Orientation;
   onRotate?: () => void;
@@ -46,7 +51,7 @@ interface ViewToggleProps {
   barStyle?: React.CSSProperties;
 }
 
-export function ViewToggle({ view, onChange, orientation = "portrait", onRotate, barStyle }: ViewToggleProps) {
+export function ViewToggle({ view, onChange, views = ["desktop", "tablet", "mobile"], orientation = "portrait", onRotate, barStyle }: ViewToggleProps) {
   const canRotate = view !== "desktop" && !!onRotate;
   return (
     <div
@@ -64,7 +69,7 @@ export function ViewToggle({ view, onChange, orientation = "portrait", onRotate,
       <span style={{ fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginRight: 6 }}>
         View
       </span>
-      {(["desktop", "tablet", "mobile"] as const).map((v) => {
+      {views.map((v) => {
         const Icon = ICONS[v];
         return (
         <button

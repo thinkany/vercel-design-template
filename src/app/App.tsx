@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 
 import { resolveComponent } from "./variationRegistry";
 import { loadVariations, saveVariations } from "../data/variations";
-import { siteConfig, styleguideReady, brandReady } from "../config/site";
+import { siteConfig, styleguideReady, brandReady, previewConfig, projectType } from "../config/site";
 
 import { Dashboard } from "./components/Dashboard";
 
@@ -25,7 +25,7 @@ const variationTokenLoaders = import.meta.glob("../variations/*/styles/tokens.cs
 
 export default function App() {
   const [page, setPage] = useState(getInitialPage);
-  const [view, setView] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  const [view, setView] = useState<"desktop" | "tablet" | "mobile">(previewConfig.defaultView);
   const [orientation, setOrientation] = useState<"portrait" | "landscape">("portrait");
   const variationId = getVariationId();
 
@@ -59,7 +59,12 @@ export default function App() {
 
   // Resolve page components for the active variation (falls back to base v00).
   const Home = resolveComponent(variationId, "Home");
+  const Brand = resolveComponent(variationId, "Brand");
   const Styles = resolveComponent(variationId, "StyleGuide");
+
+  // Brand Guideline projects (VITE_PROJECT_TYPE="brand") render the Brand
+  // placeholder in place of the Home design preview (no device frames).
+  const isBrandProject = projectType === "brand";
 
   // Per-variation styleguide setup state. The base (v00) uses the committed
   // VITE_STYLEGUIDE_READY flag; variations carry their own styleguideStatus.
@@ -94,7 +99,10 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh" }}>
       {page === "dashboard" && <Dashboard />}
-      {page === "home" && <Home onNavigate={setPage} view={view} setView={setView} orientation={orientation} setOrientation={setOrientation} />}
+      {page === "home" && (isBrandProject
+        ? <Brand onNavigate={setPage} />
+        : <Home onNavigate={setPage} view={view} setView={setView} orientation={orientation} setOrientation={setOrientation} />
+      )}
       {page === "styleguide" && (
         <Styles
           onNavigate={setPage}

@@ -68,3 +68,47 @@ export const styleguideReady =
  */
 export const brandReady =
   (import.meta.env.VITE_BRAND_READY ?? "").trim().toLowerCase() === "true";
+
+/**
+ * Project type — chosen once at /setup-project, drives the device-preview matrix.
+ * A whole-project decision (every variation of an app is an app), so it lives in
+ * the committed .env rather than on the per-variation record.
+ *
+ *   "website" — desktop + mobile are the baseline (tablet optional).
+ *   "app"     — mobile-first; desktop is hidden entirely (tablet optional).
+ *   "brand"   — Brand Guideline mode. STUBBED / coming soon: App.tsx renders the
+ *               Brand.tsx placeholder in place of the Home preview, so the device
+ *               matrix below is unused for it (kept website-like just for safety).
+ *               Revisit when the Brand Guideline surface is built out.
+ *
+ * Unset (fresh template) falls back to "website".
+ */
+export type ProjectType = "website" | "app" | "brand";
+export type View = "desktop" | "tablet" | "mobile";
+
+const rawProjectType = (import.meta.env.VITE_PROJECT_TYPE ?? "").trim().toLowerCase();
+export const projectType: ProjectType =
+  rawProjectType === "app" || rawProjectType === "brand" ? rawProjectType : "website";
+
+// Whether the designer opted into a tablet preview (setup follow-up question).
+const enableTablet =
+  (import.meta.env.VITE_ENABLE_TABLET ?? "").trim().toLowerCase() === "true";
+
+/**
+ * Derived device-preview config consumed by the responsive preview (ViewToggle +
+ * the frame selection in Home). `views` is the ordered set of device buttons to
+ * show (width-descending); `defaultView` is the one selected on load. Components
+ * read this instead of hardcoding the device matrix.
+ */
+function computePreviewConfig(): { views: View[]; defaultView: View } {
+  const isApp = projectType === "app";
+  // Full width-descending order, filtered by project type + the tablet opt-in.
+  const views = (["desktop", "tablet", "mobile"] as View[]).filter((v) => {
+    if (v === "desktop") return !isApp;      // apps hide desktop entirely
+    if (v === "tablet") return enableTablet; // tablet is opt-in for every type
+    return true;                             // mobile is always available
+  });
+  return { views, defaultView: isApp ? "mobile" : "desktop" };
+}
+
+export const previewConfig = computePreviewConfig();
