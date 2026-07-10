@@ -21,7 +21,7 @@ export function TabletFrame({
         {/* Outer shell */}
         <div
           style={{
-            background: "#2a211a",
+            background: "linear-gradient(135deg, #c9c6bf 0%, #a8a49d 40%, #918d86 60%, #b6b3ac 100%)",
             borderRadius: 36,
             padding: 18,
             boxShadow: "0 0 0 1px rgba(255,255,255,0.06), 0 32px 80px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.04)",
@@ -32,7 +32,7 @@ export function TabletFrame({
         >
           {/* Front camera */}
           <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: landscape ? 0 : 10, marginRight: landscape ? 10 : 0 }}>
-            <div style={{ background: "#1a1210", width: 8, height: 8, borderRadius: "50%" }} />
+            <div style={{ background: "#0a0a0a", width: 8, height: 8, borderRadius: "50%" }} />
           </div>
           {/* Screen */}
           <div
@@ -54,13 +54,13 @@ export function TabletFrame({
         {/* Side buttons — power on the top edge, volume on the near side */}
         {landscape ? (
           <>
-            <div style={{ position: "absolute", top: -4, left: 90, height: 4, width: 56, background: "#1a1210", borderRadius: "2px 2px 0 0" }} />
-            <div style={{ position: "absolute", left: -4, top: 60, width: 4, height: 44, background: "#1a1210", borderRadius: "2px 0 0 2px" }} />
+            <div style={{ position: "absolute", top: -4, left: 90, height: 4, width: 56, background: "#6e6a64", borderRadius: "2px 2px 0 0" }} />
+            <div style={{ position: "absolute", left: -4, top: 60, width: 4, height: 44, background: "#6e6a64", borderRadius: "2px 0 0 2px" }} />
           </>
         ) : (
           <>
-            <div style={{ position: "absolute", top: -4, right: 90, height: 4, width: 56, background: "#1a1210", borderRadius: "2px 2px 0 0" }} />
-            <div style={{ position: "absolute", right: -4, top: 60, width: 4, height: 44, background: "#1a1210", borderRadius: "0 2px 2px 0" }} />
+            <div style={{ position: "absolute", top: -4, right: 90, height: 4, width: 56, background: "#6e6a64", borderRadius: "2px 2px 0 0" }} />
+            <div style={{ position: "absolute", right: -4, top: 60, width: 4, height: 44, background: "#6e6a64", borderRadius: "0 2px 2px 0" }} />
           </>
         )}
       </div>

@@ -14,10 +14,14 @@
   --color-ta-gray-mid: var(--ta-gray-mid);
   --color-ta-gray-light: var(--ta-gray-light);
 
-  /* Font families → Tailwind utilities: font-source-serif, font-dm-sans, etc. */
-  --font-source-serif: var(--ta-font-serif);
-  --font-dm-sans: var(--ta-font-sans);
-  --font-dm-mono: var(--ta-font-mono);
+  /* Project design fonts → Tailwind utilities: font-ta-display, font-ta-serif,
+     font-ta-sans, font-ta-mono. These map 1:1 to the --ta-font-* design tokens
+     in tokens.css, so designed pages consume them via className (font-ta-*)
+     instead of inline style. Names intentionally mirror the tokens. */
+  --font-ta-display: var(--ta-font-display);
+  --font-ta-serif: var(--ta-font-serif);
+  --font-ta-sans: var(--ta-font-sans);
+  --font-ta-mono: var(--ta-font-mono);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);

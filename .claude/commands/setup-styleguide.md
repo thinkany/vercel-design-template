@@ -160,6 +160,24 @@ for that scope:
 
 (Vite reloads on `.env` changes.)
 
+## 4. Offer to smooth out permission prompts (closing hint)
+
+Onboarding is done and the designer is about to start building pages — the phase
+with the most repetitive edit/command approvals. As the **final step**, surface
+(don't silently skip) that they can cut down the prompting. You can't switch the
+mode for them — it's a user-controlled keyboard toggle — so present it as a tip:
+
+- **Auto-accept edits** — press **`Shift+Tab`** to cycle the permission mode until
+  it reads *"auto-accept edits on"*. File edits/writes then apply without asking
+  (commands still prompt). This is the closest analog to Desktop's "auto" and the
+  best default for iterating on designs.
+- **`/fewer-permission-prompts`** — offer to run this skill; it scans recent
+  activity and writes a tailored allowlist into `.claude/settings.json` so the
+  common Bash approvals stop recurring. Ask before running it.
+
+Keep it to a one-or-two-line nudge, not a lecture — a designer who's happy with
+the prompts can ignore it.
+
 ## Variations carry their own styleguide — fully siloed
 
 This command configures **one scope**. The base (v00) lives in `src/styles/` +

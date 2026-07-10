@@ -20,34 +20,30 @@ interface Props {
 // type, and components. It keeps the desktop/mobile responsive preview.
 function HomeContent({ onNavigate }: { onNavigate: (page: string) => void }) {
   return (
-    <div style={{
-      minHeight: "100%",
-      width: "100%",
-      background: "var(--ta-cream)",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "80px 32px",
-      textAlign: "center",
-    }}>
+    <div className="min-h-full w-full bg-ta-cream flex flex-col items-center justify-center px-8 py-20 text-center">
       {siteConfig.projectName && (
-        <div style={{ fontFamily: "var(--ta-font-sans)", fontSize: 11, fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--ta-gray-mid)", marginBottom: 20 }}>
+        <div className="font-ta-sans text-[11px] font-semibold tracking-[0.18em] uppercase text-ta-gray-mid mb-5">
           {siteConfig.projectName}
         </div>
       )}
-      <h1 style={{ fontFamily: "var(--ta-font-display)", fontSize: "clamp(36px, 6vw, 64px)", fontWeight: 400, color: "var(--ta-ink)", margin: "0 0 20px", lineHeight: 1.05, letterSpacing: "-0.02em" }}>
+      <h1 className="font-ta-display text-[clamp(36px,6vw,64px)] font-normal text-ta-ink mb-5 leading-[1.05] tracking-[-0.02em]">
         {siteConfig.clientName}
       </h1>
-      <p style={{ fontFamily: "var(--ta-font-serif)", fontSize: 17, color: "var(--ta-gray-dark)", lineHeight: 1.6, maxWidth: 440, margin: "0 0 36px" }}>
+      <p className="font-ta-serif text-[17px] text-ta-gray-dark leading-[1.6] max-w-[440px] mb-9">
         This is your starting point. Build your home page here, and reference the
         styleguide for tokens, type, and components.
       </p>
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
-        <button onClick={() => onNavigate("styleguide")} style={{ fontFamily: "var(--ta-font-sans)", fontSize: 12, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "#fff", background: "var(--ta-blue)", border: "none", padding: "11px 22px", borderRadius: 3, cursor: "pointer" }}>
+      <div className="flex gap-3 flex-wrap justify-center">
+        <button
+          onClick={() => onNavigate("styleguide")}
+          className="font-ta-sans text-xs font-medium tracking-[0.1em] uppercase text-white bg-ta-blue px-[22px] py-[11px] rounded-[3px] cursor-pointer"
+        >
           Open styleguide
         </button>
-        <button onClick={() => onNavigate("dashboard")} style={{ fontFamily: "var(--ta-font-sans)", fontSize: 12, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--ta-gray-dark)", background: "transparent", border: "1px solid rgba(0,0,0,0.2)", padding: "11px 22px", borderRadius: 3, cursor: "pointer" }}>
+        <button
+          onClick={() => onNavigate("dashboard")}
+          className="font-ta-sans text-xs font-medium tracking-[0.1em] uppercase text-ta-gray-dark bg-transparent border border-black/20 px-[22px] py-[11px] rounded-[3px] cursor-pointer"
+        >
           Dashboard
         </button>
       </div>
