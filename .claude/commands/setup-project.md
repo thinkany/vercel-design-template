@@ -117,6 +117,5 @@ Do **not** put secrets (ADMIN_PASS / AUTH_PASS for the preview gate) in `.env`
 — those belong in Vercel's Environment Variables or a local `.env.local`.
 
 Note for later: the preview gate shows a text wordmark (name + subtitle) — a
-logo could be added via an optional `SITE_LOGO` env var in `middleware.js`. The
-`©` comment headers in source files are also still DFR-branded. Both are out of
-scope for this command; flag them if the user wants a full rebrand.
+logo could be added via an optional `SITE_LOGO` env var in `middleware.js`. This
+is out of scope for this command; flag it if the user wants a full rebrand.

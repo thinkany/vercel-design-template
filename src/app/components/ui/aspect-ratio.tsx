@@ -1,4 +1,4 @@
-// ©2004-2026 Deep Focus Review. All rights reserved.
+// ©2026 thinkany llc. All rights reserved.
 "use client";
 
 import * as AspectRatioPrimitive from "@radix-ui/react-aspect-ratio";

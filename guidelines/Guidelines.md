@@ -1,4 +1,4 @@
-# Deep Focus Review — Design System Guidelines
+# Design System Guidelines
 
 ## Brand Colors
 

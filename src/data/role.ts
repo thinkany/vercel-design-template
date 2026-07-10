@@ -1,4 +1,4 @@
-// ©2004-2026 Deep Focus Review. All rights reserved.
+// ©2026 thinkany llc. All rights reserved.
 function getCookie(name: string): string {
   return (
     document.cookie

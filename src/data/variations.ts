@@ -1,4 +1,4 @@
-// ©2004-2026 Deep Focus Review. All rights reserved.
+// ©2026 thinkany llc. All rights reserved.
 export interface Variation {
   id: string;         // "v00", "v01", … (v00 is the base)
   version: string;    // "v0.0", "v0.1", …

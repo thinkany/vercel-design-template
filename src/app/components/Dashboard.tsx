@@ -1,4 +1,4 @@
-// ©2004-2026 Deep Focus Review. All rights reserved.
+// ©2026 thinkany llc. All rights reserved.
 import { useState } from "react";
 import { loadVariations, saveVariations, type Variation } from "@/data/variations";
 import { siteConfig } from "@/config/site";

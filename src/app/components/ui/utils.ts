@@ -1,4 +1,4 @@
-// ©2004-2026 Deep Focus Review. All rights reserved.
+// ©2026 thinkany llc. All rights reserved.
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 

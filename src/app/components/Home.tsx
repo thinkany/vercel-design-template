@@ -1,12 +1,18 @@
-// ©2004-2026 Deep Focus Review. All rights reserved.
+// ©2026 thinkany llc. All rights reserved.
 import { PhoneFrame } from "./PhoneFrame";
+import { TabletFrame } from "./TabletFrame";
 import { ViewToggle } from "./ViewToggle";
 import { siteConfig } from "@/config/site";
 
+type View = "desktop" | "tablet" | "mobile";
+type Orientation = "portrait" | "landscape";
+
 interface Props {
   onNavigate: (page: string) => void;
-  view: "desktop" | "mobile";
-  setView: (v: "desktop" | "mobile") => void;
+  view: View;
+  setView: (v: View) => void;
+  orientation: Orientation;
+  setOrientation: (o: Orientation) => void;
 }
 
 // Neutral starter page. This is where a project's real home page gets built —
@@ -49,13 +55,17 @@ function HomeContent({ onNavigate }: { onNavigate: (page: string) => void }) {
   );
 }
 
-export function Home({ onNavigate, view, setView }: Props) {
+export function Home({ onNavigate, view, setView, orientation, setOrientation }: Props) {
   const content = <HomeContent onNavigate={onNavigate} />;
+  const toggleOrientation = () =>
+    setOrientation(orientation === "portrait" ? "landscape" : "portrait");
   return (
     <div style={{ minHeight: "100vh", background: "var(--ta-cream)", display: "flex", flexDirection: "column" }}>
-      <ViewToggle view={view} onChange={setView} />
+      <ViewToggle view={view} onChange={setView} orientation={orientation} onRotate={toggleOrientation} />
       {view === "mobile" ? (
-        <PhoneFrame bg="var(--ta-cream)">{content}</PhoneFrame>
+        <PhoneFrame bg="var(--ta-cream)" orientation={orientation}>{content}</PhoneFrame>
+      ) : view === "tablet" ? (
+        <TabletFrame bg="var(--ta-cream)" orientation={orientation}>{content}</TabletFrame>
       ) : (
         <div style={{ flex: 1, display: "flex" }}>{content}</div>
       )}

@@ -1,4 +1,4 @@
-// ©2004-2026 Deep Focus Review. All rights reserved.
+// ©2026 thinkany llc. All rights reserved.
 import { useState, useEffect } from "react";
 
 import { resolveComponent } from "./variationRegistry";
@@ -25,7 +25,8 @@ const variationTokenLoaders = import.meta.glob("../variations/*/styles/tokens.cs
 
 export default function App() {
   const [page, setPage] = useState(getInitialPage);
-  const [view, setView] = useState<"desktop" | "mobile">("desktop");
+  const [view, setView] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  const [orientation, setOrientation] = useState<"portrait" | "landscape">("portrait");
   const variationId = getVariationId();
 
   useEffect(() => {
@@ -93,7 +94,7 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh" }}>
       {page === "dashboard" && <Dashboard />}
-      {page === "home" && <Home onNavigate={setPage} view={view} setView={setView} />}
+      {page === "home" && <Home onNavigate={setPage} view={view} setView={setView} orientation={orientation} setOrientation={setOrientation} />}
       {page === "styleguide" && (
         <Styles
           onNavigate={setPage}
