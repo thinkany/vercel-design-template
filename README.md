@@ -33,7 +33,12 @@ until you configure it in the step below.
 
 ### With Claude (recommended)
 
-Open this project in Claude Code and run:
+**Easiest start:** open the project's folder in Claude Code and just say
+**"Hello."** On a fresh, unbranded copy, Claude greets you and offers to walk you
+through the initial setup automatically. (Claude waits for that first message
+before it does anything — selecting the folder alone won't start it.)
+
+Or run the setup command yourself at any time:
 
 ```
 /setup-project
