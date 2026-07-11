@@ -76,28 +76,61 @@ complete copy under **`src/variations/{id}/`** (`components/` + `styles/`).
 The scaffold ships three pages — Dashboard, Home, StyleGuide — and has no router.
 A design is expressed as a **variation** (a full copy of Home + its styleguide),
 not as a multi-page site, so extra pages (About, Pricing, …) are a deliberate
-add. To wire one — e.g. `About`:
+add. Design pages are driven by a **manifest**
+([src/app/pages.ts](src/app/pages.ts)) — App.tsx routes/renders from it, and the
+Figma export ([scripts/export-to-figma.mjs](scripts/export-to-figma.mjs))
+enumerates it — so wiring a page is two steps. e.g. `About`:
 
 1. **Build the component.** Create `src/app/components/About.tsx` (base v00).
-   **Model it on [Home.tsx](src/app/components/Home.tsx)** — that is the canonical
-   design-surface pattern: a Tailwind-first content function wrapped by the
-   `ViewToggle` + `PhoneFrame`/`TabletFrame` responsive preview. Copy that
-   structure so the new page keeps the desktop/tablet/mobile preview. Do **not**
-   model it on `Dashboard.tsx` / `StyleGuide.tsx` — those are `--admin-*` tooling
-   chrome, not design surfaces.
-2. **Resolve + render it in [App.tsx](src/app/App.tsx).** Add
-   `const About = resolveComponent(variationId, "About");` alongside the existing
-   `resolveComponent` calls, then a render branch:
-   `{page === "about" && <About onNavigate={setPage} view={view} setView={setView} orientation={orientation} setOrientation={setOrientation} />}`.
-3. **Make it reachable.** Navigate to it from any page via `onNavigate("about")`
-   (the `onNavigate` prop is `setPage`). To make it URL-addressable, add a branch
-   to `getInitialPage()` (e.g. `if (params.has("about")) return "about";`).
-4. **Variations inherit it for free** via `resolveComponent`'s fallback to base
-   v00. To diverge a variation's version, drop `About.tsx` into
-   `src/variations/{id}/components/` — no `App.tsx` change needed.
+   **Model it on [Home.tsx](src/app/components/Home.tsx)** — the canonical
+   design-surface pattern: a Tailwind-first content function, then wrap it in
+   **[`<DesignSurface>`](src/app/DesignSurface.tsx)** (the shared responsive
+   preview shell). That wrapper is what gives the page the desktop/tablet/mobile
+   preview **and** makes it exportable to Figma per breakpoint by default — do
+   not hand-roll `ViewToggle`/`PhoneFrame` in the page. Do **not** model it on
+   `Dashboard.tsx` / `StyleGuide.tsx` — those are `--admin-*` tooling chrome, not
+   design surfaces.
+2. **Register it in [pages.ts](src/app/pages.ts).** Add one row:
+   `{ id: "about", route: "about", name: "About", component: "About" }`. That
+   single line wires **routing** (`?v={id}&about`), **rendering** (App resolves +
+   renders it via `resolveComponent`), and **Figma export** (captured
+   automatically at every active breakpoint). No `App.tsx` edit needed.
+
+Navigate to it from any page via `onNavigate("about")` (the `onNavigate` prop is
+`setPage`). **Variations inherit it for free** via `resolveComponent`'s fallback
+to base v00; to diverge a variation's version, drop `About.tsx` into
+`src/variations/{id}/components/`.
 
 Same rules as everywhere: Tailwind utilities + `--ta-*` tokens, never hardcoded
 hex/fonts, edit `src/variations/{id}/` (not the base) when working on a variation.
+
+### Exporting designs to Figma
+
+When the user asks to export/send designs to Figma, capture each design page at
+each active breakpoint via [scripts/export-to-figma.mjs](scripts/export-to-figma.mjs)
+(driven by the [pages.ts](src/app/pages.ts) manifest + `previewConfig.views`). The
+script renders the isolated route `?v={id}&{route}&capture={view}` — a bare design
+surface (no `ViewToggle`/bezel) via [DesignSurface](src/app/DesignSurface.tsx).
+
+Prereqs: dev server running; puppeteer (ships as an `optionalDependencies` entry
+— a local `npm install` pulls it in; the Vercel deploy skips it via the
+`--no-optional` install command in [vercel.json](vercel.json), so the export
+never touches the client-facing build); Figma MCP connected. Two modes:
+
+- **Dry-run** (offline PNGs, no Figma): `npm run export:figma` (`-- -v {id}`,
+  `-- --pages a,b`, `-- --views desktop,mobile`). Use to preview.
+- **Live send** — you orchestrate it (a plain `npm run` can't mint Figma capture
+  IDs):
+  1. Read the active views/pages from the script's manifest (or run dry-run).
+  2. Get a target `fileKey` (`create_new_file`, or the user's Figma URL).
+  3. For **each page × active breakpoint**, call `generate_figma_design(fileKey)`
+     to mint a `captureId` + submit `endpoint`; write a JSON keyed `"{page}-{view}"`.
+  4. `npm run export:figma -- --captures captures.json` — the script submits each.
+  5. Poll each `captureId` via `generate_figma_design(fileKey, captureId)` until
+     `completed`.
+
+Captures are pixel-accurate frames, not linked component instances. Human-facing
+usage is in [README.md](README.md) → "Exporting designs to Figma".
 
 ### Styling & tokens
 

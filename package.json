@@ -6,7 +6,8 @@
   "packageManager": "pnpm@11.9.0",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "export:figma": "node scripts/export-to-figma.mjs"
   },
   "dependencies": {
     "@popperjs/core": "2.11.8",
@@ -66,6 +67,9 @@
     "@vitejs/plugin-react": "4.7.0",
     "tailwindcss": "4.1.12",
     "vite": "6.3.5"
+  },
+  "optionalDependencies": {
+    "puppeteer": "25.3.0"
   },
   "peerDependencies": {
     "react": "18.3.1",

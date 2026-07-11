@@ -10,3 +10,6 @@ package-lock.json
 # Secrets/local overrides go in .env.local — already ignored by *.local above.
 .claude/settings.local.json
 pnpm-workspace 2.yaml
+
+# Figma export output (local, throwaway)
+figma-export/

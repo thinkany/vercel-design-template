@@ -144,6 +144,63 @@ The password screen (`middleware.js`) runs on Vercel's **edge runtime**, which
 - A logo on the login screen can be added later via an optional `SITE_LOGO` var.
 - After changing dashboard env vars, **redeploy** for them to take effect.
 
+## Exporting designs to Figma
+
+You can push your designs into Figma — **one frame per page × screen size**
+(Desktop / Tablet / Mobile), captured as the design surface only (no preview
+toolbar, no device bezel). Every design page is included automatically, and the
+capture uses each breakpoint's real viewport width, so the layout you get in
+Figma is the true responsive design, not a scaled-down thumbnail. Tablet is
+included only if you enabled it during setup.
+
+### With Claude (recommended)
+
+Keep the dev server running (`npm run dev`) and just ask Claude — for example:
+
+```
+Export the current designs to Figma
+```
+
+Claude captures each design page at each active breakpoint and sends them into a
+Figma file (it will create one for you, or you can paste a link to an existing
+file). You can steer it — e.g. *"export variation v01"* or *"just the home page."*
+
+This step runs **through Claude** by design: sending into Figma uses your
+authenticated Figma connection, which lives with Claude rather than the local app.
+
+**Prerequisites**
+
+- **Figma connected in Claude.** The Figma integration (MCP) must be enabled and
+  you must be signed in to Figma, so Claude can create/write the file.
+- **A headless browser** — this ships with the project. A normal `npm install`
+  pulls it in locally (downloading a headless Chromium the first time). It's an
+  *optional* dependency, so the **Vercel deploy skips it entirely** — the export
+  is a local-only tool and never touches the client-facing site.
+
+### Preview locally first (optional)
+
+To see exactly what would be sent — as image files, without touching Figma —
+generate them to disk:
+
+```bash
+npm run export:figma
+```
+
+This writes one PNG per page × breakpoint into `figma-export/` (git-ignored).
+Handy flags (note the `--` before them):
+
+```bash
+npm run export:figma -- -v v01            # a specific variation (default: v00)
+npm run export:figma -- --pages home      # limit to certain pages
+```
+
+### Notes
+
+- The **dev server must be running** — that's what the export renders.
+- Captures are **pixel-accurate frames**, not linked design-system components.
+- Adding a new design page (see `CLAUDE.md`) makes it part of the export
+  automatically — no extra wiring.
+
 ## Good to know
 
 - **`.env` is committed on purpose.** It holds only *public* brand config, so it

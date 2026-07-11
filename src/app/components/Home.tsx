@@ -1,8 +1,6 @@
 // ©2026 thinkany llc. All rights reserved.
-import { PhoneFrame } from "./PhoneFrame";
-import { TabletFrame } from "./TabletFrame";
-import { ViewToggle } from "./ViewToggle";
-import { siteConfig, previewConfig } from "@/config/site";
+import { DesignSurface } from "../DesignSurface";
+import { siteConfig } from "@/config/site";
 
 type View = "desktop" | "tablet" | "mobile";
 type Orientation = "portrait" | "landscape";
@@ -13,6 +11,13 @@ interface Props {
   setView: (v: View) => void;
   orientation: Orientation;
   setOrientation: (o: Orientation) => void;
+  /**
+   * Isolated capture mode (set via `?capture={view}`). When present, Home
+   * renders ONLY the design surface — no ViewToggle chrome, no device bezel —
+   * so the export tool (scripts/export-to-figma.mjs) can snapshot the real
+   * responsive design at whatever viewport width it sets per breakpoint.
+   */
+  capture?: View;
 }
 
 // Neutral starter page. This is where a project's real home page gets built —
@@ -51,20 +56,18 @@ function HomeContent({ onNavigate }: { onNavigate: (page: string) => void }) {
   );
 }
 
-export function Home({ onNavigate, view, setView, orientation, setOrientation }: Props) {
-  const content = <HomeContent onNavigate={onNavigate} />;
-  const toggleOrientation = () =>
-    setOrientation(orientation === "portrait" ? "landscape" : "portrait");
+export function Home({ onNavigate, view, setView, orientation, setOrientation, capture }: Props) {
+  // The responsive-preview shell + isolated capture mode live in DesignSurface,
+  // so this page just supplies its content. Every design page follows this shape.
   return (
-    <div className="min-h-screen bg-ta-cream flex flex-col">
-      <ViewToggle view={view} onChange={setView} views={previewConfig.views} orientation={orientation} onRotate={toggleOrientation} />
-      {view === "mobile" ? (
-        <PhoneFrame bg="var(--ta-cream)" orientation={orientation}>{content}</PhoneFrame>
-      ) : view === "tablet" ? (
-        <TabletFrame bg="var(--ta-cream)" orientation={orientation}>{content}</TabletFrame>
-      ) : (
-        <div className="flex-1 flex">{content}</div>
-      )}
-    </div>
+    <DesignSurface
+      view={view}
+      setView={setView}
+      orientation={orientation}
+      setOrientation={setOrientation}
+      capture={capture}
+    >
+      <HomeContent onNavigate={onNavigate} />
+    </DesignSurface>
   );
 }

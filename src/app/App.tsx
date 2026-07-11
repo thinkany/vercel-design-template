@@ -3,15 +3,29 @@ import { useState, useEffect } from "react";
 
 import { resolveComponent } from "./variationRegistry";
 import { loadVariations, saveVariations } from "../data/variations";
-import { siteConfig, styleguideReady, brandReady, previewConfig, projectType } from "../config/site";
+import { siteConfig, styleguideReady, brandReady, previewConfig, previewWidths, projectType } from "../config/site";
+import type { View } from "../config/site";
 
 import { Dashboard } from "./components/Dashboard";
+import { designPages, defaultDesignPageId } from "./pages";
 
 function getInitialPage(): string {
   const params = new URLSearchParams(window.location.search);
   if (params.has("styleguide")) return "styleguide";
-  if (params.has("v")) return "home";
+  // Explicit design-page route flags (e.g. ?v=v00&about). Home has no flag.
+  for (const p of designPages) {
+    if (p.route && params.has(p.route)) return p.id;
+  }
+  // `?v=…` (or an isolated `?capture=…`) with no page flag → the default page.
+  if (params.has("v") || params.has("capture")) return defaultDesignPageId;
   return "dashboard";
+}
+
+// Isolated capture view requested via `?capture={desktop|tablet|mobile}` — the
+// export tool (scripts/export-to-figma.mjs) loads one URL per active breakpoint.
+function getCaptureView(): View | undefined {
+  const raw = new URLSearchParams(window.location.search).get("capture");
+  return raw === "desktop" || raw === "tablet" || raw === "mobile" ? raw : undefined;
 }
 
 function getVariationId(): string {
@@ -28,6 +42,19 @@ export default function App() {
   const [view, setView] = useState<"desktop" | "tablet" | "mobile">(previewConfig.defaultView);
   const [orientation, setOrientation] = useState<"portrait" | "landscape">("portrait");
   const variationId = getVariationId();
+  const captureView = getCaptureView();
+
+  // Expose the active breakpoint set + widths so the headless export tool can
+  // read the project's real device matrix instead of hardcoding it. Tablet is
+  // present here only when VITE_ENABLE_TABLET is on (see previewConfig).
+  useEffect(() => {
+    (window as unknown as { __PREVIEW_CONFIG__?: unknown }).__PREVIEW_CONFIG__ = {
+      views: previewConfig.views,
+      defaultView: previewConfig.defaultView,
+      widths: previewWidths,
+      pages: designPages.map(({ id, route, name }) => ({ id, route, name })),
+    };
+  }, []);
 
   useEffect(() => {
     if (page === "dashboard") {
@@ -57,10 +84,16 @@ export default function App() {
     if (key) variationTokenLoaders[key]();
   }, [variationId]);
 
-  // Resolve page components for the active variation (falls back to base v00).
-  const Home = resolveComponent(variationId, "Home");
+  // Resolve chrome/mode components for the active variation (falls back to base).
   const Brand = resolveComponent(variationId, "Brand");
   const Styles = resolveComponent(variationId, "StyleGuide");
+
+  // The active DESIGN page (Home or any page added to the manifest), resolved
+  // for this variation. Adding a row to pages.ts makes a new page render here.
+  const activeDesignPage = designPages.find(p => p.id === page);
+  const DesignPageComponent = activeDesignPage
+    ? resolveComponent(variationId, activeDesignPage.component)
+    : null;
 
   // Brand Guideline projects (VITE_PROJECT_TYPE="brand") render the Brand
   // placeholder in place of the Home design preview (no device frames).
@@ -99,9 +132,9 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh" }}>
       {page === "dashboard" && <Dashboard />}
-      {page === "home" && (isBrandProject
+      {DesignPageComponent && (isBrandProject
         ? <Brand onNavigate={setPage} />
-        : <Home onNavigate={setPage} view={view} setView={setView} orientation={orientation} setOrientation={setOrientation} />
+        : <DesignPageComponent onNavigate={setPage} view={view} setView={setView} orientation={orientation} setOrientation={setOrientation} capture={captureView} />
       )}
       {page === "styleguide" && (
         <Styles

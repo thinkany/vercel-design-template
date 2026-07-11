@@ -112,3 +112,16 @@ function computePreviewConfig(): { views: View[]; defaultView: View } {
 }
 
 export const previewConfig = computePreviewConfig();
+
+/**
+ * Viewport widths (px) used to render each breakpoint for the Figma export
+ * (scripts/export-to-figma.mjs) and any headless snapshot. These mirror the
+ * content widths the in-app device frames simulate (PhoneFrame screen = 370,
+ * TabletFrame screen = 664), so an exported design matches what the designer
+ * sees in the preview. Desktop has no frame, so a standard artboard width.
+ */
+export const previewWidths: Record<View, number> = {
+  desktop: 1440,
+  tablet: 664,
+  mobile: 370,
+};
