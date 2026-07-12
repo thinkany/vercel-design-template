@@ -37,10 +37,9 @@
  *       "home-mobile":  { "captureId": "...", "endpoint": "..." },
  *       "about-mobile": { "captureId": "...", "endpoint": "..." } }
  *
- * PREREQUISITE: puppeteer — ships as an `optionalDependencies` entry in
- *   package.json, so a local `npm install` pulls it in (downloading a headless
- *   Chromium once). On Vercel the install sets PUPPETEER_SKIP_DOWNLOAD=true so
- *   no browser is fetched and the export never runs (it's local-only).
+ * PREREQUISITE: none to run manually. puppeteer is auto-installed locally on the
+ *   first export (npm i puppeteer --no-save). It is deliberately NOT a project
+ *   dependency, so it never installs on Vercel — the deploy never runs this.
  */
 
 import { mkdir, writeFile, readFile } from "node:fs/promises";
@@ -91,11 +90,23 @@ async function loadPuppeteer() {
   try {
     return (await import("puppeteer")).default;
   } catch {
-    console.error(
-      "\n✗ puppeteer is not installed (it ships as an optional dependency).\n" +
-        "  Run `npm install` to pull it in, then retry.\n"
-    );
-    process.exit(1);
+    // Not installed yet — provision it locally on FIRST export (one-time). This
+    // path only runs when you actually export, so puppeteer never enters
+    // package.json or the Vercel deploy (which never invokes this script).
+    console.log("→ First export: installing puppeteer locally (one-time; downloads a headless Chromium)…\n");
+    try {
+      const { execSync } = await import("node:child_process");
+      execSync("npm install puppeteer@25.3.0 --no-save", { stdio: "inherit" });
+    } catch {
+      console.error("\n✗ Couldn't auto-install puppeteer. Install it manually, then retry:\n  npm install puppeteer\n");
+      process.exit(1);
+    }
+    try {
+      return (await import("puppeteer")).default;
+    } catch {
+      console.error("\n✗ puppeteer installed but failed to load. Try `npm install puppeteer`, then retry.\n");
+      process.exit(1);
+    }
   }
 }
 

@@ -172,11 +172,10 @@ authenticated Figma connection, which lives with Claude rather than the local ap
 
 - **Figma connected in Claude.** The Figma integration (MCP) must be enabled and
   you must be signed in to Figma, so Claude can create/write the file.
-- **A headless browser** — this ships with the project. A normal `npm install`
-  pulls it in locally (downloading a headless Chromium the first time). It's an
-  *optional* dependency used only by the local export tool: the Vercel deploy
-  **never downloads the browser and never runs the export**, so it stays a
-  local-only capability.
+- **A headless browser** — installed **automatically the first time you run an
+  export** (a one-time download of a headless Chromium). It lives *outside* the
+  project's dependencies, so it never installs on Vercel — the export is a purely
+  local tool and never touches the client-facing deploy.
 
 ### Preview locally first (optional)
 
