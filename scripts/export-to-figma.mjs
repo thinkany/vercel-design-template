@@ -39,8 +39,8 @@
  *
  * PREREQUISITE: puppeteer — ships as an `optionalDependencies` entry in
  *   package.json, so a local `npm install` pulls it in (downloading a headless
- *   Chromium once). The Vercel deploy skips it (installCommand uses
- *   --no-optional), so it never touches the client-facing build.
+ *   Chromium once). On Vercel the install sets PUPPETEER_SKIP_DOWNLOAD=true so
+ *   no browser is fetched and the export never runs (it's local-only).
  */
 
 import { mkdir, writeFile, readFile } from "node:fs/promises";

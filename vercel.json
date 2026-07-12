@@ -1,7 +1,7 @@
 {
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist",
-  "installCommand": "PUPPETEER_SKIP_DOWNLOAD=true pnpm install --no-frozen-lockfile --no-optional",
+  "installCommand": "PUPPETEER_SKIP_DOWNLOAD=true pnpm install --no-frozen-lockfile",
   "framework": "vite",
   "headers": [
     {

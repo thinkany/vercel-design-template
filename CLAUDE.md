@@ -113,9 +113,11 @@ script renders the isolated route `?v={id}&{route}&capture={view}` — a bare de
 surface (no `ViewToggle`/bezel) via [DesignSurface](src/app/DesignSurface.tsx).
 
 Prereqs: dev server running; puppeteer (ships as an `optionalDependencies` entry
-— a local `npm install` pulls it in; the Vercel deploy skips it via the
-`--no-optional` install command in [vercel.json](vercel.json), so the export
-never touches the client-facing build); Figma MCP connected. Two modes:
+— a local `npm install` pulls it in with a headless Chromium; on Vercel the
+install sets `PUPPETEER_SKIP_DOWNLOAD=true` so no browser is fetched and the
+export never runs — see [vercel.json](vercel.json). **Do NOT add `--no-optional`
+to that install command** — it strips Rollup's native binary (an
+optionalDependency) and breaks the Vite build); Figma MCP connected. Two modes:
 
 - **Dry-run** (offline PNGs, no Figma): `npm run export:figma` (`-- -v {id}`,
   `-- --pages a,b`, `-- --views desktop,mobile`). Use to preview.

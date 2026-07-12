@@ -174,8 +174,9 @@ authenticated Figma connection, which lives with Claude rather than the local ap
   you must be signed in to Figma, so Claude can create/write the file.
 - **A headless browser** — this ships with the project. A normal `npm install`
   pulls it in locally (downloading a headless Chromium the first time). It's an
-  *optional* dependency, so the **Vercel deploy skips it entirely** — the export
-  is a local-only tool and never touches the client-facing site.
+  *optional* dependency used only by the local export tool: the Vercel deploy
+  **never downloads the browser and never runs the export**, so it stays a
+  local-only capability.
 
 ### Preview locally first (optional)
 
