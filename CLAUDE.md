@@ -154,6 +154,11 @@ Brand-guideline projects (`projectType === "brand"`) have no design pages — of
 **Styleguide only** and skip the prompt. **If the request already names a scope**
 ("export the styleguide", "send the pages") skip the prompt and run that path.
 
+**Reuse vs. new file:** the manifest reports `existingFile` for the variation. If
+one is recorded, **default to updating it** (mention which file); only ask
+new-vs-update when the user's intent is unclear. If none is recorded, create a new
+file and record it (see the live flow's step 2).
+
 ### Exporting designs to Figma
 
 When the user asks to export/send designs to Figma, capture each design page at
@@ -218,8 +223,37 @@ Two pieces drive the brand/structure half:
 
 **Live flow** (you orchestrate — a plain `npm run` can't call the Figma MCP):
   1. `npm run export:brand -- -v {id}` and read the manifest.
-  2. Get a `fileKey` (`create_new_file` "…{Variation}", or the user's `/design/` URL).
-     **One file per variation.**
+  2. **Target file — reuse the recorded one, else create + record** (one file per
+     variation; no duplicate files):
+     - The manifest's **`existingFile`** is the Figma file this variation last
+       exported to (from the git-ignored `figma-export/figma-files.json` registry).
+       If present, **verify it still exists** — a quick `get_metadata` /
+       `use_figma` read on that `fileKey`; on failure treat as missing — then
+       **reuse it** (the builder updates it in place, no duplicate Pages).
+     - Else, or if the user chose "start new": create at the **recorded
+       destination** (`manifest.target`). **If no target is set, ask Individual vs
+       Team first** (see destination resolution below), then
+       `create_new_file({ fileName: "…{Variation}", planKey, projectId? })` and
+       **record it** so the next export reuses it:
+       `npm run export:brand -- -v {id} --record --file-key {key} --file-url {url}
+       --file-name {name}` (`--file-key` also accepts a full `/design/` URL).
+       `--forget` drops the mapping.
+
+  **Destination resolution** (where NEW files are created — project-wide, set once):
+  `manifest.target` holds it. When unset, ask **Individual (personal drafts)** vs
+  **Team (shared project)**:
+    - Resolve candidate teams from the Figma **`whoami`**, **filtered to editor
+      seats** — exclude `seat_type` `view` and `developer`; they can't author
+      files, so never offer them. (A user may end up with exactly one eligible
+      plan — that's fine.)
+    - **Individual** → the user's Full-seat/personal `planKey`, no `projectId`.
+    - **Team** → the chosen plan's `planKey` **+ a `projectId`** from a Figma
+      project/folder URL the user provides. Without a URL the file lands in that
+      team's **private drafts** (not shared) — say so and let them decide.
+    - Persist it: `npm run export:brand -- --set-target --scope {individual|team}
+      --plan {planKey} [--plan-name {name}] [--project {url}]` (`--forget-target`
+      resets). Reused files (`existingFile`) keep their own home — destination
+      only governs newly-created files.
   3. Run **`scaffold`** → note the returned `anchors` (`{pageId}` per design page).
   4. **Fill the design Pages:** for each design page × active breakpoint, mint
      `generate_figma_design(fileKey, pageId)` with that page's anchor id so the

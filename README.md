@@ -254,6 +254,16 @@ npm run export:brand -- --print   # print the full manifest
 
 - Each **design page** becomes its own Figma **Page**; the **Styleguide** is its
   own Page in the same file. Re-running updates in place — no duplicate pages.
+- **Claude remembers the Figma file per variation** (after the first export), so
+  re-exporting updates that same file instead of creating a new one. Ask it to
+  *"start a new file"* to override, or *"forget the Figma file for v01"* to reset.
+- **Destination — your drafts or a team.** The first time you create a file,
+  Claude asks whether to put new files in your **personal drafts** (Individual) or
+  a **shared team project** (Team), and remembers the choice. Team options are
+  limited to teams where your Figma seat can create files (an editor/Full seat —
+  View/Dev seats are skipped). For a Team file that teammates can open, you give
+  Claude a **project (folder) URL** once; without it, a team file stays in that
+  team's private drafts. Change it anytime — *"export to my team's 2026 project."*
 - **Colors** map to Figma variables with their role as the description and the
   CSS variable (`var(--ta-blue)`) as Dev-Mode code syntax.
 - **Fonts:** if the project hasn't picked real typefaces yet (a fresh template

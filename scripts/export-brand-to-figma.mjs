@@ -33,6 +33,18 @@
  *   node scripts/export-brand-to-figma.mjs --out some/dir  # override output dir
  *   node scripts/export-brand-to-figma.mjs --print         # print manifest, don't write
  *
+ * FILE REGISTRY (remember one Figma file per variation, so re-exports UPDATE it):
+ *   ... --record --file-key <key|/design/ URL> [--file-url <u>] [--file-name <n>]
+ *   ... --forget                               # drop this variation's mapping
+ *   The default run reports the recorded file as manifest.existingFile.
+ *
+ * DESTINATION (where NEW files are created — team vs individual; project-wide):
+ *   ... --set-target --scope individual --plan <planKey> [--plan-name <n>]
+ *   ... --set-target --scope team --plan <planKey> --project <url> [--plan-name <n>]
+ *   ... --forget-target
+ *   The default run reports it as manifest.target. Editor-seat filtering of teams
+ *   happens at orchestration time (Claude reads Figma whoami) — see CLAUDE.md.
+ *
  * PREREQUISITE: none beyond the repo's own devDeps — esbuild (a Vite dep, always
  *   present locally) is used to transpile brand.ts. Nothing is added to
  *   package.json and this never runs on Vercel.
@@ -48,15 +60,83 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 
 function parseArgs(argv) {
-  const args = { variation: "v00", out: "figma-export", print: false };
+  const args = {
+    variation: "v00", out: "figma-export", print: false,
+    record: false, forget: false, fileKey: null, fileUrl: null, fileName: null,
+    setTarget: false, forgetTarget: false, scope: null, plan: null, planName: null, project: null,
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--variation" || a === "-v") args.variation = argv[++i];
     else if (a === "--out") args.out = argv[++i];
     else if (a === "--print") args.print = true;
+    else if (a === "--record") args.record = true;
+    else if (a === "--forget") args.forget = true;
+    else if (a === "--file-key") args.fileKey = argv[++i];
+    else if (a === "--file-url") args.fileUrl = argv[++i];
+    else if (a === "--file-name") args.fileName = argv[++i];
+    else if (a === "--set-target") args.setTarget = true;
+    else if (a === "--forget-target") args.forgetTarget = true;
+    else if (a === "--scope") args.scope = argv[++i];
+    else if (a === "--plan") args.plan = argv[++i];
+    else if (a === "--plan-name") args.planName = argv[++i];
+    else if (a === "--project") args.project = argv[++i];
     else if (a === "--help" || a === "-h") args.help = true;
   }
   return args;
+}
+
+// ── Figma file registry — one file per variation, remembered across exports ───
+// Maps variationId → the Figma file it was exported to, so re-exports UPDATE that
+// file in place instead of spawning a duplicate. Lives in the (git-ignored)
+// output dir; personal to this checkout (fileKeys point at the user's drafts).
+// Claude records a key after create_new_file, and reads it back before the next
+// export (verifying the file still exists via the Figma MCP before reusing).
+function registryPath(outDir) {
+  return join(ROOT, outDir, "figma-files.json");
+}
+async function readRegistry(outDir) {
+  try {
+    return JSON.parse(await readFile(registryPath(outDir), "utf8"));
+  } catch {
+    return {};
+  }
+}
+async function writeRegistry(outDir, reg) {
+  await mkdir(join(ROOT, outDir), { recursive: true });
+  await writeFile(registryPath(outDir), JSON.stringify(reg, null, 2) + "\n", "utf8");
+}
+// Derive a fileKey from a Figma /design/ URL if a full URL was passed.
+function keyFromUrl(url) {
+  const m = String(url || "").match(/\/design\/([A-Za-z0-9]+)/);
+  return m ? m[1] : null;
+}
+
+// ── Export destination — WHERE new files are created (team vs individual) ──────
+// A project-wide (not per-variation) choice, remembered so it's set once. Claude
+// resolves the eligible team(s) from the Figma `whoami` (filtered to EDITOR seats
+// — View/Dev seats can't author files) and, for a shared team project, a project
+// URL; then records it here. On the next export, new files are created with this
+// `planKey` (+ `projectId` for a shared folder). Reused files keep their own home.
+function targetPath(outDir) {
+  return join(ROOT, outDir, "figma-target.json");
+}
+async function readTarget(outDir) {
+  try {
+    return JSON.parse(await readFile(targetPath(outDir), "utf8"));
+  } catch {
+    return null;
+  }
+}
+async function writeTarget(outDir, target) {
+  await mkdir(join(ROOT, outDir), { recursive: true });
+  await writeFile(targetPath(outDir), JSON.stringify(target, null, 2) + "\n", "utf8");
+}
+// Extract a numeric projectId from a Figma project URL, e.g.
+//   figma.com/files/project/:id · /files/:org/project/:id · /files/team/:t/project/:id
+function projectIdFromUrl(url) {
+  const m = String(url || "").match(/project\/(\d+)/);
+  return m ? m[1] : (/^\d+$/.test(String(url || "").trim()) ? String(url).trim() : null);
 }
 
 // ── Source resolution (mirrors src/app/brandRegistry.ts siloing) ──────────────
@@ -225,6 +305,22 @@ function buildManifest(variationId, brand, tokens, designPages) {
 function printSummary(m, styleDir) {
   const rel = styleDir.replace(ROOT + "/", "");
   console.log(`\nBrand manifest — variation ${m.variationId}  (source: ${rel})`);
+  if (m.existingFile?.fileKey) {
+    console.log(`\n  ↻ Recorded Figma file for ${m.variationId}: ${m.existingFile.fileUrl || m.existingFile.fileKey}`);
+    console.log(`    Reuse it (update in place) unless the user wants a new one.`);
+  } else {
+    console.log(`\n  ✎ No Figma file recorded for ${m.variationId} yet — a new one will be`);
+    console.log(`    created and recorded (npm run export:brand -- --record …).`);
+  }
+  if (m.target?.planKey) {
+    const where = m.target.scope === "team"
+      ? `team ${m.target.planName || m.target.planKey}${m.target.projectId ? ` · project ${m.target.projectId}` : " · drafts (no project set)"}`
+      : `individual drafts (${m.target.planName || m.target.planKey})`;
+    console.log(`  ⌂ New files go to: ${where}`);
+  } else {
+    console.log(`  ⌂ No export destination set — Claude will ask (Individual vs Team)`);
+    console.log(`    and record it (npm run export:brand -- --set-target …).`);
+  }
   console.log(`\n  Figma file structure (one file for this variation):`);
   for (const p of m.designPages) console.log(`    ▸ ${p.name}   (Page — design frames per breakpoint)`);
   console.log(`    ${m.separatorName}`);
@@ -242,14 +338,96 @@ function printSummary(m, styleDir) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
-    console.log("Usage: node scripts/export-brand-to-figma.mjs [-v v00] [--out dir] [--print]");
+    console.log(`Usage: node scripts/export-brand-to-figma.mjs [options]
+
+  -v, --variation <id>   Variation to export (default: v00)
+  --out <dir>            Output dir (default: figma-export)
+  --print                Print the manifest instead of writing it
+
+  File registry (remember one Figma file per variation):
+  --record --file-key <k> [--file-url <u>] [--file-name <n>]
+                         Record the Figma file this variation exports to, so the
+                         next export updates it in place. Accepts a full /design/
+                         URL as --file-key too. Run after create_new_file.
+  --forget               Remove this variation's recorded file.
+
+  Export destination (where NEW files are created; project-wide):
+  --set-target --scope individual --plan <planKey> [--plan-name <n>]
+  --set-target --scope team --plan <planKey> [--plan-name <n>] --project <url>
+                         Remember where new files go. planKey comes from Figma
+                         whoami; --project is a Figma project/folder URL (its
+                         numeric id is extracted) for shared team visibility.
+  --forget-target        Clear the destination (Claude will ask again).`);
     return;
   }
+
+  // Destination bookkeeping modes — no manifest generation.
+  if (args.forgetTarget) {
+    const t = await readTarget(args.out);
+    if (t) { await writeFile(targetPath(args.out), JSON.stringify(null) + "\n", "utf8"); console.log("Cleared the export destination."); }
+    else console.log("No export destination was set.");
+    return;
+  }
+  if (args.setTarget) {
+    const scope = args.scope === "team" ? "team" : "individual";
+    if (!args.plan) throw new Error("--set-target needs --plan <planKey> (from Figma whoami)");
+    if (scope === "team" && !args.project) {
+      console.warn("Note: no --project URL given — a team file lands in the team's DRAFTS (private), not a shared project folder.");
+    }
+    const target = {
+      scope,
+      planKey: args.plan,
+      planName: args.planName || null,
+      projectId: scope === "team" ? projectIdFromUrl(args.project) : null,
+      projectUrl: scope === "team" && args.project ? args.project : null,
+      updatedAt: new Date().toISOString(),
+    };
+    await writeTarget(args.out, target);
+    const where = scope === "team"
+      ? `team ${target.planName || target.planKey}${target.projectId ? ` · project ${target.projectId}` : " · drafts"}`
+      : `individual drafts (${target.planName || target.planKey})`;
+    console.log(`Export destination set: ${where}`);
+    return;
+  }
+
+  // Registry bookkeeping modes — no manifest generation.
+  if (args.forget) {
+    const reg = await readRegistry(args.out);
+    if (reg[args.variation]) {
+      delete reg[args.variation];
+      await writeRegistry(args.out, reg);
+      console.log(`Forgot the recorded Figma file for ${args.variation}.`);
+    } else {
+      console.log(`No recorded Figma file for ${args.variation}.`);
+    }
+    return;
+  }
+  if (args.record) {
+    const fileKey = keyFromUrl(args.fileKey) || args.fileKey;
+    if (!fileKey) throw new Error("--record needs --file-key <key|/design/ URL>");
+    const reg = await readRegistry(args.out);
+    reg[args.variation] = {
+      fileKey,
+      fileUrl: args.fileUrl || `https://www.figma.com/design/${fileKey}`,
+      fileName: args.fileName || null,
+      updatedAt: new Date().toISOString(),
+    };
+    await writeRegistry(args.out, reg);
+    console.log(`Recorded Figma file for ${args.variation}: ${reg[args.variation].fileUrl}`);
+    return;
+  }
+
   const styleDir = resolveStyleDir(args.variation);
   const brand = await loadBrand(styleDir);
   const tokens = await loadTokens(styleDir);
   const designPages = await loadDesignPages();
   const manifest = buildManifest(args.variation, brand, tokens, designPages);
+  // Attach the recorded Figma file (if any) so Claude reuses it instead of
+  // creating a duplicate. Claude must still verify it exists before reusing.
+  const reg = await readRegistry(args.out);
+  manifest.existingFile = reg[args.variation] || null;
+  // Attach the export destination (where NEW files are created).
+  manifest.target = await readTarget(args.out);
 
   printSummary(manifest, styleDir);
 
