@@ -165,6 +165,58 @@ what keeps Vercel green. Two modes:
 Captures are pixel-accurate frames, not linked component instances. Human-facing
 usage is in [README.md](README.md) → "Exporting designs to Figma".
 
+### Exporting to Figma as ONE cohesive file (pages + styleguide)
+
+The full first-time export produces **one Figma file per variation** whose **Pages
+panel** mirrors the project: a **Page per design page** (Home, About, …) holding
+that page's per-breakpoint frames, a `———` separator, a **Styleguide** Page (real
+color **variables** + text **styles** + a specimen), then scaffolded **Block
+Library** / **Components** Pages (titled covers, built out later). This weaves the
+two export paths — the design **page capture** (screenshots, above) and the
+**brand library** (design-system objects) — into a single organized file.
+
+Two pieces drive the brand/structure half:
+
+- **[scripts/export-brand-to-figma.mjs](scripts/export-brand-to-figma.mjs)** — the
+  deterministic, offline manifest. Reads a variation's `brand.ts` (names/roles, via
+  esbuild transpile) + `tokens.css` (live `--ta-*` values), plus the shared
+  [pages.ts](src/app/pages.ts) design-page list, and emits
+  `figma-export/brand-{id}.json`: the **file structure** (design pages → separator →
+  Styleguide → scaffold sections), colors (inferred **scopes** + `var(--ta-*)` code
+  syntax), and type roles. Variation-aware/siloed like
+  [brandRegistry.ts](src/app/brandRegistry.ts) (v00 → base; `vNN` → its own
+  `styles/`, else base). Touches no Figma account. `npm run export:brand`
+  (`-- -v {id}`, `-- --print`).
+- **[scripts/figma-brand-library.plugin.js](scripts/figma-brand-library.plugin.js)**
+  — the Plugin API **builder**. NOT run by node; its body is embedded into a
+  `use_figma` call (prepend `const MANIFEST = {…}; const PHASE = "…";`). **Idempotent**
+  phases (find-by-name update, never duplicate): `scaffold` (the Pages panel;
+  returns each design page's **Figma page id**) → `variables` → `textstyles` →
+  `specimen` (built **on the Styleguide Page**). Load the `figma-use` +
+  `figma-generate-library` skills first.
+
+**Live flow** (you orchestrate — a plain `npm run` can't call the Figma MCP):
+  1. `npm run export:brand -- -v {id}` and read the manifest.
+  2. Get a `fileKey` (`create_new_file` "…{Variation}", or the user's `/design/` URL).
+     **One file per variation.**
+  3. Run **`scaffold`** → note the returned `anchors` (`{pageId}` per design page).
+  4. **Fill the design Pages:** for each design page × active breakpoint, mint
+     `generate_figma_design(fileKey, pageId)` with that page's anchor id so the
+     frame lands on the **named Page** (not a new one), then run
+     `npm run export:figma -- --captures …` and poll. Arrange the breakpoint frames
+     on the page.
+  5. Run **`variables`** → **`textstyles`** → **`specimen`** (sequential, never
+     parallel), each embedding `MANIFEST` + the matching `PHASE` + the builder body.
+  6. Screenshot the Styleguide frame + a scaffold cover to verify.
+
+**Fonts:** the builder uses the project's real `--ta-font-*` family when Figma has
+it, else a role-based **proxy** (Display→Playfair Display, Serif→Lora, Sans→Inter,
+Mono→JetBrains Mono) — an unbranded template ships `system-ui`/`Georgia`
+placeholders that aren't Figma fonts. Proxies are labelled "(proxy)". **Colors are
+single-mode** ("Value") — `tokens.css` defines only light `--ta-*` values; a
+light/dark brand collection is a token-model change first. Like the page export,
+this is **offline + MCP only — it never runs on Vercel.**
+
 ### Styling & tokens
 
 CSS entry [src/styles/index.css](src/styles/index.css) imports, in order:

@@ -7,7 +7,8 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "export:figma": "node scripts/export-to-figma.mjs"
+    "export:figma": "node scripts/export-to-figma.mjs",
+    "export:brand": "node scripts/export-brand-to-figma.mjs"
   },
   "dependencies": {
     "@popperjs/core": "2.11.8",

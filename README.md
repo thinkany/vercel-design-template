@@ -201,6 +201,63 @@ npm run export:figma -- --pages home      # limit to certain pages
 - Adding a new design page (see `CLAUDE.md`) makes it part of the export
   automatically — no extra wiring.
 
+## Exporting to Figma as one cohesive file
+
+The full export builds **one Figma file per variation**, organized just like the
+project — so the pages *and* the styleguide live together:
+
+```
+Home            ← Page: your design, one frame per screen size
+About           ← Page (once you add it)
+———
+Styleguide      ← Page: color variables + text styles + a specimen
+Block Library   ← Page: scaffold (built out later)
+Components      ← Page: scaffold (built out later)
+```
+
+Each **design page becomes its own Figma Page** (named for the page), and the
+**Styleguide** is its own Page in the same file — real, editable Figma objects
+(drop a color swatch from the variable picker, apply a text style to any layer),
+not just screenshots, generated straight from your styleguide tokens.
+
+### With Claude (recommended)
+
+Just ask — for example:
+
+```
+Export this to Figma as a cohesive file
+```
+
+Claude creates the Figma file, sets up the Pages (Home / About / … + Styleguide +
+scaffold sections), captures each design page at each screen size onto its Page,
+and builds the color variables, text styles, and specimen on the Styleguide Page.
+Re-running is safe — it **updates in place** instead of duplicating, so it's easy
+to keep Figma in sync after a change. You can steer it — e.g. *"export variation
+v01."*
+
+### Preview the styleguide side first (optional)
+
+To inspect what will be created — the file structure + tokens, without touching
+Figma:
+
+```bash
+npm run export:brand              # variation v00
+npm run export:brand -- -v v01    # a specific variation
+npm run export:brand -- --print   # print the full manifest
+```
+
+### Notes
+
+- Each **design page** becomes its own Figma **Page**; the **Styleguide** is its
+  own Page in the same file. Re-running updates in place — no duplicate pages.
+- **Colors** map to Figma variables with their role as the description and the
+  CSS variable (`var(--ta-blue)`) as Dev-Mode code syntax.
+- **Fonts:** if the project hasn't picked real typefaces yet (a fresh template
+  ships system-font placeholders), the specimen uses clearly-labelled stand-in
+  faces so you can still see the type scale. Once you've branded it, it uses your
+  real fonts where Figma has them.
+- Runs entirely offline + through Figma — it **never** affects the Vercel deploy.
+
 ## Good to know
 
 - **`.env` is committed on purpose.** It holds only *public* brand config, so it
