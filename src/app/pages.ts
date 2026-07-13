@@ -16,10 +16,14 @@
  *
  * TO ADD A PAGE (e.g. About):
  *   1. Create src/app/components/About.tsx, modelled on Home.tsx — wrap your
- *      content in <DesignSurface> (that's what makes it responsive + exportable).
+ *      content in <DesignSurface> and pass it `onNavigate` (that wires the
+ *      global Header/Footer links). <DesignSurface> is what makes the page
+ *      responsive + exportable, and renders the shared Header/Footer for you on
+ *      website projects (pass `chrome={false}` for a bare page).
  *   2. Add one row below: { id: "about", route: "about", name: "About",
  *      component: "About" }.
- *   That's it — routing, the ViewToggle, and Figma export all pick it up.
+ *   That's it — routing, the ViewToggle, Figma export, and the nav (Header/
+ *   Footer auto-list every page here) all pick it up.
  */
 export interface DesignPage {
   /** Internal page id (App's page state). Home is "home". */

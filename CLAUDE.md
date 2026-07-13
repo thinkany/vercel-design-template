@@ -85,9 +85,11 @@ enumerates it — so wiring a page is two steps. e.g. `About`:
    **Model it on [Home.tsx](src/app/components/Home.tsx)** — the canonical
    design-surface pattern: a Tailwind-first content function, then wrap it in
    **[`<DesignSurface>`](src/app/DesignSurface.tsx)** (the shared responsive
-   preview shell). That wrapper is what gives the page the desktop/tablet/mobile
-   preview **and** makes it exportable to Figma per breakpoint by default — do
-   not hand-roll `ViewToggle`/`PhoneFrame` in the page. Do **not** model it on
+   preview shell) and pass it the `onNavigate` prop. That wrapper is what gives
+   the page the desktop/tablet/mobile preview, renders the shared Header/Footer
+   (see **Global elements** below), **and** makes it exportable to Figma per
+   breakpoint by default — do not hand-roll `ViewToggle`/`PhoneFrame` in the
+   page. Do **not** model it on
    `Dashboard.tsx` / `StyleGuide.tsx` — those are `--admin-*` tooling chrome, not
    design surfaces.
 2. **Register it in [pages.ts](src/app/pages.ts).** Add one row:
@@ -103,6 +105,33 @@ to base v00; to diverge a variation's version, drop `About.tsx` into
 
 Same rules as everywhere: Tailwind utilities + `--ta-*` tokens, never hardcoded
 hex/fonts, edit `src/variations/{id}/` (not the base) when working on a variation.
+
+### Global elements (Header / Footer)
+
+Shared site chrome lives in **[Header.tsx](src/app/components/Header.tsx)** +
+**[Footer.tsx](src/app/components/Footer.tsx)** and is rendered **once, globally,
+by [DesignSurface](src/app/DesignSurface.tsx)** — not per page. So a menu/footer
+edit made in that one component cascades to **every design page, every
+breakpoint, and every variation** (a variation diverges by dropping its own
+`Header.tsx`/`Footer.tsx` into `src/variations/{id}/components/`, resolved via
+`resolveComponent`). The nav is single-source too: both files map the
+[pages.ts](src/app/pages.ts) manifest, so adding a page auto-adds its nav link.
+
+- **Website projects only.** `DesignSurface` gates chrome on
+  `projectType === "website"`; `app` and `brand` projects render **no** website
+  Header/Footer (apps carry their own in-screen nav). A single page can opt out
+  with `chrome={false}` (e.g. a full-bleed landing).
+- **Responsive via container queries, NOT viewport.** The device frames
+  ([PhoneFrame](src/app/components/PhoneFrame.tsx)/`TabletFrame`) render page
+  content in a **fixed-width box inside your real browser window**, so Tailwind's
+  viewport utilities (`md:`/`lg:`) and `vw`/`vh` units read the **window, not the
+  frame** — a `md:` hamburger would wrongly show desktop nav inside the phone
+  preview. `DesignSurface` marks the design surface **`@container`**, so use
+  **container-query variants (`@sm:`/`@lg:` …) and `cqw`/`cqi` units** for
+  responsive design: they key off the frame width in the live preview *and* the
+  viewport width the export tool sets per breakpoint, so **preview and Figma
+  export agree**. Portal-based overlays (shadcn `Sheet`/`Dialog`/`Drawer`) escape
+  the frame to `document.body`; use inline positioning for in-frame menus.
 
 ### Exporting designs to Figma
 
@@ -196,6 +225,17 @@ Before hand-rolling UI, use the resources already installed:
 
 ## Conventions
 
+- **Content is single-source — never fork it by breakpoint.** A design page's
+  copy and images are authored **once**. `DesignSurface` renders that one content
+  node inside each device frame (desktop/tablet/mobile); the breakpoints differ
+  only in the viewport/frame *around* it, not the content itself. So a copy or
+  image change made in one place **cascades to every device automatically** — you
+  never edit "the mobile version" separately. Make breakpoints differ only
+  through responsive *styling* (Tailwind `sm:`/`md:`/`lg:` variants, `clamp()`),
+  **never by branching content on `view`** (e.g.
+  `view === "mobile" ? <copyA/> : <copyB/>`) or duplicating text/images per
+  device. The same applies to shared globals (Header/Footer): they live in one
+  component consumed by every page — edit that component, not each page.
 - **Tailwind-first.** Build components and elements with Tailwind utility
   classes. Apply the active variation's design values — the fonts, colors, and
   structures defined in its styleguide (`--ta-*` / `--ta-font-*` tokens, exposed

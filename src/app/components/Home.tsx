@@ -66,6 +66,7 @@ export function Home({ onNavigate, view, setView, orientation, setOrientation, c
       orientation={orientation}
       setOrientation={setOrientation}
       capture={capture}
+      onNavigate={onNavigate}
     >
       <HomeContent onNavigate={onNavigate} />
     </DesignSurface>
