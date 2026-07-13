@@ -133,6 +133,27 @@ breakpoint, and every variation** (a variation diverges by dropping its own
   export agree**. Portal-based overlays (shadcn `Sheet`/`Dialog`/`Drawer`) escape
   the frame to `document.body`; use inline positioning for in-frame menus.
 
+### Exporting to Figma — ask which scope FIRST
+
+There are two export surfaces (both detailed below): the **design Pages/App**
+(frame captures) and the **Styleguide** (design-system objects). When the user says
+"export to Figma" **without naming a scope, do NOT guess** — present a three-way
+choice with **AskUserQuestion**, then route:
+
+- **Both Styleguide and Pages/App** → the cohesive one-file flow ("Exporting to
+  Figma as ONE cohesive file" below): `scaffold` → capture Pages onto their Figma
+  Pages → `variables` → `textstyles` → `specimen`.
+- **Styleguide only** → the brand builder phases only (`scaffold` for the
+  Styleguide Page if needed → `variables` → `textstyles` → `specimen`); skip page
+  captures.
+- **Pages/App only** → the page-capture flow only ("Exporting designs to Figma"
+  below); skip variables/styles/specimen.
+
+Label the third option **"App"** when `projectType === "app"`, else **"Pages"**.
+Brand-guideline projects (`projectType === "brand"`) have no design pages — offer
+**Styleguide only** and skip the prompt. **If the request already names a scope**
+("export the styleguide", "send the pages") skip the prompt and run that path.
+
 ### Exporting designs to Figma
 
 When the user asks to export/send designs to Figma, capture each design page at

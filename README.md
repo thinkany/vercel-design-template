@@ -225,12 +225,16 @@ not just screenshots, generated straight from your styleguide tokens.
 Just ask — for example:
 
 ```
-Export this to Figma as a cohesive file
+Export to Figma
 ```
 
-Claude creates the Figma file, sets up the Pages (Home / About / … + Styleguide +
-scaffold sections), captures each design page at each screen size onto its Page,
-and builds the color variables, text styles, and specimen on the Styleguide Page.
+If you don't say what to export, Claude asks first — **Both Styleguide and
+Pages/App**, **Styleguide only**, or **Pages/App only** — so you never have to
+remember flags. (Naming it up front — *"export just the styleguide"* — skips the
+question.) For the full export, Claude creates the Figma file, sets up the Pages
+(Home / About / … + Styleguide + scaffold sections), captures each design page at
+each screen size onto its Page, and builds the color variables, text styles, and
+specimen on the Styleguide Page.
 Re-running is safe — it **updates in place** instead of duplicating, so it's easy
 to keep Figma in sync after a change. You can steer it — e.g. *"export variation
 v01."*
