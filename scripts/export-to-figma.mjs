@@ -131,7 +131,7 @@ async function main() {
     capturesMap = JSON.parse(await readFile(args.captures, "utf8"));
   }
 
-  const browser = await puppeteer.launch({ headless: "new" });
+  const browser = await puppeteer.launch({ headless: "new", protocolTimeout: 600000 });
   try {
     const page = await browser.newPage();
     const { views, widths, pages: allPages } = await readManifest(page, args.url, args.views);
