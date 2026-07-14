@@ -7,8 +7,6 @@ interface ImportMetaEnv {
   readonly VITE_CLIENT_NAME: string;
   /** Project name — fills the secondary part of the title lockup. */
   readonly VITE_PROJECT_NAME: string;
-  /** Public site tagline — shown in the masthead/header. Optional. */
-  readonly VITE_SITE_TAGLINE: string;
   /** Phase II marker — "true" once the styleguide is configured for the project. */
   readonly VITE_STYLEGUIDE_READY: string;
   /** Brand-palette marker (base scope) — "true" once the --ta-* brand is established. */

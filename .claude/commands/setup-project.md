@@ -5,7 +5,7 @@ argument-hint: "[client name] | [project name]  (optional; you'll be prompted if
 
 You are branding this scaffold for a specific project. The public brand values
 live in the committed `.env` at the project root as `VITE_COMPANY_NAME`,
-`VITE_CLIENT_NAME`, `VITE_PROJECT_NAME`, and `VITE_SITE_TAGLINE`. They are
+`VITE_CLIENT_NAME`, and `VITE_PROJECT_NAME`. They are
 consumed through `src/config/site.ts` and drive the dashboard header wordmark,
 the title lockup, the styleguide masthead, and the browser tab title.
 
@@ -25,8 +25,10 @@ Follow these steps:
    project can actually run. This is often the first time a non-technical
    designer has opened a code project, so be gentle and do the work for them.
 
-   a. Check whether Node.js is installed by running `node -v` and `npm -v` from
-      the project root.
+   a. Check whether Node.js is installed **and current enough** by running
+      `node -v` and `npm -v` from the project root. Note the Node version (the
+      number after the `v`). This project runs on Vite 6, so it needs **Node 20.19
+      or newer**; the current **LTS** (v22) is the safe default.
 
    b. **If Node is missing** (command not found), STOP and guide them — do not
       attempt to auto-install a system runtime. Detect their OS and give a
@@ -41,16 +43,29 @@ Follow these steps:
       > 3. Come back here and run **`/setup-project`** again."
       Then end the run — the rest of setup can't proceed without Node.
 
-   c. **If Node is present**, run `npm install` from the project root and report
-      the result plainly (success, or the actual error if it fails). This uses
-      npm for the local dev server; note that **Vercel builds with pnpm** (see
-      `vercel.json` / `pnpm-lock.yaml`), so the `package-lock.json` npm creates
-      is git-ignored and throwaway — do not commit it.
+   c. **If Node is present but older than v20.19**, STOP and ask them to update —
+      an out-of-date Node fails later with a cryptic Vite error, so catch it now.
+      Same friendly tone, and tell them their current version:
+      > "Your Node.js is **v{their version}**, but this project needs **v20.19 or
+      > newer**. Updating is the same quick, click-through install:
+      > 1. Go to **https://nodejs.org** and download the **LTS** version (v22).
+      > 2. Open it and click through (all defaults are fine) — it replaces the
+      >    old version.
+      > 3. Come back here and run **`/setup-project`** again."
+      If they use **nvm**, the faster path is `nvm install 22 && nvm use 22` (an
+      `.nvmrc` pinned to 22 is committed, so `nvm use` picks it up). Then end the run.
 
-   d. Once install succeeds, continue to branding below. At the very end of the
-      whole setup, remind them they can preview locally with **`npm run dev`**
-      (opens at http://localhost:5173) for instant feedback, separate from the
-      Vercel preview deploy.
+   d. **If Node is present and v20.19 or newer**, run `npm install` from the
+      project root and report the result plainly (success, or the actual error if
+      it fails). This uses npm for the local dev server; note that **Vercel builds
+      with pnpm** (see `vercel.json` / `pnpm-lock.yaml`), so the `package-lock.json`
+      npm creates is git-ignored and throwaway — do not commit it.
+
+   e. Once install succeeds, continue to branding below. Hold the `npm run dev`
+      local-preview reminder for the **true end of onboarding** — after Phase II
+      (the styleguide) wraps, per step 8 — so it lands last: they can preview
+      locally with **`npm run dev`** (http://localhost:5173) for instant feedback,
+      separate from the Vercel preview deploy.
 
 1. **Read the current values.** Open `.env` and note the current
    `VITE_COMPANY_NAME`, `VITE_CLIENT_NAME`, and `VITE_PROJECT_NAME` (they may be
@@ -58,8 +73,16 @@ Follow these steps:
 
 2. **Ask for the company name FIRST.** This is the first question the user sees.
    `VITE_COMPANY_NAME` fills the dashboard header wordmark. Use `AskUserQuestion`
-   with a single question whose text is "What is your company name?" and whose
-   `header` (the short chip label) is **"Your Company Name"**. Provide exactly
+   with a single question whose `question` text is the two lines below, with a
+   **blank line between them** (put a real `\n\n` in the string so it renders as
+   two lines, not one run-on sentence):
+
+   > What is your company name?
+   >
+   > This name will appear on the login screen and throughout your client-facing
+   > dashboard.
+
+   Its `header` (the short chip label) is **"Your Company Name"**. Provide exactly
    two preset options — the tool auto-adds a free-text "Other → type your own"
    field, so do NOT add a redundant "enter your own" preset:
    - **"Design Template For"** — the default (list it first).
@@ -70,23 +93,39 @@ Follow these steps:
 3. **Determine the remaining brand values.**
    - If the user passed arguments in `$ARGUMENTS`, parse them as
      `client name | project name` (project name optional).
-   - Otherwise, **prompt the user**:
-     - Ask for the **client name** — the primary title (e.g. the
-       "ACME ltd" part of "ACME ltd : Refinements").
-       Show the current value if one is set. This one is required; if the
-       user leaves it blank, ask again — the template stays unbranded without it.
-     - Ask for the **project name** — the secondary label (e.g. the "Refinements"
-       part). Show the current value if set. Blank is allowed (the title
-       lockup simply drops the separator).
-     - Ask for the **tagline** — an optional line shown in the masthead/header.
-       Show the current value if set. Blank is allowed (it's simply hidden).
+   - Otherwise, **prompt the user**. Each `AskUserQuestion` text below puts a
+     **blank line between the two sentences** (a real `\n\n` in the `question`
+     string) so it reads as two lines, not one run-on sentence:
+     - **Client name** (required). `header` "Client Name", `question`:
+
+       > What is your client's name?
+       >
+       > This appears throughout the project in prominent locations.
+
+       Show the current value if one is set. If the user leaves it blank, ask
+       again — the template stays unbranded without it.
+     - **Project name** (optional). `header` "Project Name", `question`:
+
+       > What do you want to call this project?
+       >
+       > Example: Web Redesign, Web Refresh, Brand Guidelines, or just a simple title.
+
+       Show the current value if set. Blank is allowed (the title lockup simply
+       drops the separator).
 
 3b. **Ask the project type & preview shape.** This decides the device-preview
    matrix (`VITE_PROJECT_TYPE` + `VITE_ENABLE_TABLET`, consumed by `previewConfig`
    in `src/config/site.ts`). Ask both in a single `AskUserQuestion` call:
 
-   1. Header "Project type". Question: "What kind of project is this? It sets
-      which device previews you design against." Three options:
+   1. Header "Project Type". Question (blank line between the two sentences — a
+      real `\n\n` in the `question` string):
+
+      > What type of project are you designing for?
+      >
+      > This will determine which device previews (desktop, tablet, and/or
+      > mobile) are available in your workspace.
+
+      Three options:
       - **"Web Site"** — the default (list first). Desktop + mobile are the
         baseline. → writes `VITE_PROJECT_TYPE="website"`.
       - **"App"** — mobile-first; the desktop preview is hidden (an app that
@@ -140,13 +179,22 @@ Follow these steps:
 
    Run this as an **interactive `AskUserQuestion` flow**:
 
-   **6a. Opt-in gate.** One question:
-   - Question: "Would you like to brand your design environment's font families?
-     The preview gate uses two roles — a **wordmark** font for the brand name /
-     headings, and a **body** font for everything else (subtitle, labels, the
-     password input, and the Enter button)."
-   - Header: "Brand fonts", options: **"Yes — set custom fonts"** /
-     **"No — use system fonts"**.
+   **6a. Opt-in gate.** One question. Header **"Your Company Fonts"**; `question`
+   text is the three paragraphs below, each separated by a **blank line** (real
+   `\n\n` in the string) so it isn't one run-on block:
+
+   > Would you like to apply your brand fonts to this project's admin screens?
+   >
+   > The login preview uses two font families: one for your brand name and
+   > headings, and another for all other text (subtitles, labels, password field,
+   > and the Enter button). The interior Styleguide page will use the brand font
+   > in the header and the secondary font for all body copy.
+   >
+   > These settings apply only to the admin experience. You will choose separate
+   > fonts for the client design in a few moments, and your company fonts will not
+   > affect that design.
+
+   Options: **"Yes — set custom fonts"** / **"No — use system fonts"**.
    - If **No**, remove the external `<link>` lines and leave the system stack;
      skip the rest of this step and finish.
 
@@ -179,9 +227,45 @@ Follow these steps:
      domain to the service's allowlist or the gate falls back to the stack's
      system font (`sans-serif`).
 
+   Then apply the **same two fonts to the interior admin chrome** (the Styleguide
+   page + dashboard), so the P7 promise holds — that chrome reads the
+   `--admin-font-*` tokens, NOT the gate's inline `<style>`:
+   - **Load the fonts for the app too.** The gate loads its own copy via
+     `middleware.js`; the React app loads fonts in `src/styles/fonts.css`. If the
+     stylesheet is a **Google Fonts** URL, add its families to the existing
+     `@import` there (or add a second `@import`). For a **non-Google** provider
+     (Adobe / Typography.com), add a `<link rel="stylesheet">` (+ `preconnect`) to
+     `index.html`'s `<head>` instead.
+   - In `src/styles/tokens.css`, set **`--admin-font-heading`** to the wordmark
+     family and **`--admin-font-body`** to the secondary family (keep a system
+     fallback in each stack, e.g. `'Wordmark', system-ui, sans-serif`). Leave
+     `--admin-font-mono` and every `--admin-*` **color** token untouched.
+   - These two `--admin-font-*` roles are the ONE part of `--admin-*` that project
+     branding sets — they carry the company / agency fonts (see CLAUDE.md). On
+     **"No"** above, leave them at their template defaults (DM Sans / Inter).
+
 Do **not** put secrets (ADMIN_PASS / AUTH_PASS for the preview gate) in `.env`
 — those belong in Vercel's Environment Variables or a local `.env.local`.
 
 Note for later: the preview gate shows a text wordmark (name + subtitle) — a
 logo could be added via an optional `SITE_LOGO` env var in `middleware.js`. This
 is out of scope for this command; flag it if the user wants a full rebrand.
+
+## 8. Continue straight into Phase II — the styleguide
+
+Branding + company fonts are done, but onboarding isn't — **don't leave the
+designer at a dead end.** The company-fonts prompt (P7) told them they'd choose the
+client's design fonts "in a few moments," so flow directly into it and keep it
+feeling like one continuous setup, not a second disconnected command:
+
+- Give a **one-line bridge** — e.g. *"Your brand and company fonts are set. Now
+  let's define the client's design foundation: colors and fonts."* — then
+  **invoke the `/setup-styleguide` skill** to continue Phase II. That fulfils the
+  "in a few moments" promise.
+- **Off-ramp:** if the designer would rather pause (wants to set up Vercel first,
+  or says "not now"), respect it — tell them they can run **`/setup-styleguide`**
+  whenever they're ready, and give the `npm run dev` preview reminder (from step
+  0d) now instead of at the end of Phase II.
+
+Do the `npm run dev` local-preview reminder at the **true end of onboarding** —
+after the styleguide (Phase II) wraps, or now if they paused here.

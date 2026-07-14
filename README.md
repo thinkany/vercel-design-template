@@ -14,11 +14,13 @@ simplest path (a heavier plan gives more headroom for sustained design work). Se
 [Claude pricing](https://www.anthropic.com/pricing). A developer API key also
 works but is metered per use; most designers should just use a subscription.
 
-**Prerequisite: Node.js.** If you don't already have it, download the **LTS**
-version from [nodejs.org](https://nodejs.org) and run the installer (a
-click-through `.pkg` on Mac / `.msi` on Windows — all defaults are fine). This is
-a one-time setup. Running `/setup-project` in Claude Code checks for this and
-walks you through it if it's missing.
+**Prerequisite: Node.js 20.19+.** This project runs on Vite 6, which needs
+**Node 20.19 or newer** — the current **LTS** (v22) is the safe default. If you
+don't already have it, download the LTS from [nodejs.org](https://nodejs.org) and
+run the installer (a click-through `.pkg` on Mac / `.msi` on Windows — all defaults
+are fine). This is a one-time setup. Running `/setup-project` in Claude Code checks
+your Node version and walks you through installing or updating it if needed. (Using
+`nvm`? There's an `.nvmrc` — just run `nvm use`.)
 
 ```bash
 npm install
@@ -59,7 +61,6 @@ Edit `.env` in the project root:
 ```
 VITE_CLIENT_NAME="ACME ltd"
 VITE_PROJECT_NAME="Case Studies"
-VITE_SITE_TAGLINE="Design work, start to finish"
 ```
 
 Then restart the dev server if it doesn't reload on its own.

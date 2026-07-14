@@ -3,8 +3,10 @@ description: Phase II — configure the styleguide (fonts, colors, example secti
 ---
 
 This is **Phase II** of standing up a new project from this template, done
-*after* `/setup-project` (which sets the brand name/subtitle/tagline in `.env`)
-and *before* any real page/site design work.
+*after* `/setup-project` (which sets the brand name/subtitle in `.env`)
+and *before* any real page/site design work. `/setup-project` **hands off directly
+to this command**, so the designer usually arrives here mid-flow — treat it as one
+continuous setup, not a fresh start, and don't re-introduce the whole project.
 
 The styleguide (`src/app/components/StyleGuide.tsx`, viewable at `/?styleguide`)
 is the living reference every later design decision is checked against. It ships
@@ -177,6 +179,15 @@ mode for them — it's a user-controlled keyboard toggle — so present it as a 
 
 Keep it to a one-or-two-line nudge, not a lecture — a designer who's happy with
 the prompts can ignore it.
+
+## 5. Sign off — onboarding complete
+
+Both phases are now done (brand + company fonts in Phase I, client colors + fonts
+and the styleguide here in Phase II). Give the local-preview reminder that
+`/setup-project` deferred to this point (its step 0d): they can preview anytime
+with **`npm run dev`** (opens at http://localhost:5173) for instant, hot-reloading
+feedback — separate from the Vercel preview deploy — and they're now ready to start
+designing pages.
 
 ## Variations carry their own styleguide — fully siloed
 

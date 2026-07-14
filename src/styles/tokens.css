@@ -19,11 +19,13 @@
   --ta-gray-mid: #777777;
   --ta-gray-light: #cccccc;
 
-  /* ── Admin UI fonts ─────────────────────────────────────────────
-     For the ADMIN surfaces ONLY — the gated page (middleware.js), the
-     dashboard, and the styleguide's own chrome. Kept separate from the
-     project's --ta-font-* design tokens so the tooling looks consistent
-     regardless of which fonts a project selects. Mirrors the gated page:
+  /* ── Admin UI fonts (COMPANY / agency fonts) ────────────────────
+     The company's fonts for the ADMIN experience — the gated page
+     (middleware.js), the dashboard, and the styleguide's own chrome. Set by
+     /setup-project's font step (heading = wordmark, body = secondary) so the
+     login gate + interior admin chrome share one identity. Separate from the
+     project's --ta-font-* CLIENT design tokens (owned by /setup-styleguide).
+     Defaults below ship until /setup-project runs:
        brand-name     → --admin-font-heading  (DM Sans · wght 700)
        brand-subtitle → --admin-font-body     (Inter · wght 300)           */
   --admin-font-heading: 'DM Sans', system-ui, sans-serif;

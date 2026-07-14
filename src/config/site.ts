@@ -1,7 +1,7 @@
 // Public site / brand configuration.
 //
 // Values come from the committed .env (VITE_CLIENT_NAME / VITE_PROJECT_NAME /
-// VITE_COMPANY_NAME / VITE_SITE_TAGLINE). Fill them with the `/setup-project`
+// VITE_COMPANY_NAME). Fill them with the `/setup-project`
 // command or by hand. On a fresh, unbranded template pull they are blank and
 // neutral placeholders are shown instead — so the app always renders something
 // intentional and signals "needs branding".
@@ -9,12 +9,10 @@
 const PLACEHOLDER_CLIENT = "Client Name";
 const PLACEHOLDER_COMPANY = "Company Name";
 const PLACEHOLDER_PROJECT = "Project Name";
-const PLACEHOLDER_TAGLINE = "Your site tagline";
 
 const rawCompany = (import.meta.env.VITE_COMPANY_NAME ?? "").trim();
 const rawClient = (import.meta.env.VITE_CLIENT_NAME ?? "").trim();
 const rawProject = (import.meta.env.VITE_PROJECT_NAME ?? "").trim();
-const rawTagline = (import.meta.env.VITE_SITE_TAGLINE ?? "").trim();
 
 // The template is considered "branded" once a client name has been provided.
 const isBranded = rawClient.length > 0;
@@ -35,11 +33,6 @@ export const siteConfig = {
    * fully unbranded; once branded, an intentionally-empty project name stays empty.
    */
   projectName: isBranded ? rawProject : PLACEHOLDER_PROJECT,
-  /**
-   * Optional tagline. Falls back to a placeholder only while fully unbranded;
-   * once branded, an intentionally-empty tagline stays empty (and is hidden).
-   */
-  tagline: isBranded ? rawTagline : PLACEHOLDER_TAGLINE,
 };
 
 /**

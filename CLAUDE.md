@@ -283,8 +283,14 @@ win (a variation can diverge its own fonts/colors).
 - **`--ta-*` / `--ta-font-*`** = the **project** palette & type. Designer-owned;
   configured by `/setup-styleguide`. This is what designed pages consume.
 - **`--admin-*`** = the **tooling** chrome (Dashboard, styleguide's own chrome,
-  the preview gate). Fixed and intentional — **never touch `--admin-*`** during
-  project branding.
+  the preview gate). Its **color** tokens are fixed and intentional — **never
+  touch the `--admin-*` colors** during project branding. **One exception:** the
+  two type roles **`--admin-font-heading`** / **`--admin-font-body`** are the
+  *company / agency* fonts for the admin experience — **`/setup-project`**'s font
+  step sets them (heading = wordmark, body = secondary), alongside the gate's
+  inline fonts, so the login gate + Styleguide + dashboard chrome share one
+  typographic identity. `/setup-styleguide` still never touches `--admin-*` — it
+  owns the *client* design fonts (`--ta-font-*`).
 
 [src/styles/brand.ts](src/styles/brand.ts) is the human-facing manifest
 (names/roles/order) the styleguide renders; [tokens.css](src/styles/tokens.css)
