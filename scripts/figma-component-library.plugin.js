@@ -104,16 +104,13 @@ if (PHASE === "components") {
       node.paddingLeft = node.paddingRight = v.paddingX;
       node.paddingTop = node.paddingBottom = 0;
       node.cornerRadius = v.radius;
-      // Fixed height; hug width for text buttons, fixed square for icon.
-      node.counterAxisSizingMode = "FIXED";
-      node.primaryAxisSizingMode = v.iconOnly ? "FIXED" : "AUTO";
-      node.resize(v.iconOnly ? (v.width || v.height) : Math.max(v.height, 1), v.height);
 
       const fill = paintFor(v.fill);
       node.fills = fill ? [fill] : [];
       const stroke = paintFor(v.border);
       if (stroke) { node.strokes = [stroke]; node.strokeWeight = 1; } else { node.strokes = []; }
 
+      // Child FIRST (so the auto-layout parent can hug it), then size.
       if (v.iconOnly) {
         // Icon placeholder: a 16×16 rounded square tinted with the text color.
         const box = figma.createRectangle();
@@ -132,6 +129,12 @@ if (PHASE === "components") {
         if (v.underline) label.textDecoration = "UNDERLINE";
         node.appendChild(label);
       }
+
+      // Size LAST: resize() resets sizing modes to FIXED, so set modes AFTER it.
+      // Fixed height; hug width for text buttons, fixed square for icon.
+      node.resize(v.iconOnly ? (v.width || v.height) : Math.max(v.height, 1), v.height);
+      node.counterAxisSizingMode = "FIXED";
+      node.primaryAxisSizingMode = v.iconOnly ? "FIXED" : "AUTO";
       nodes.push(node);
     }
 
@@ -143,8 +146,7 @@ if (PHASE === "components") {
     // Tidy grid: auto-layout the set with wrapping, padding, and a light frame.
     set.layoutMode = "HORIZONTAL";
     set.layoutWrap = "WRAP";
-    set.primaryAxisSizingMode = "AUTO";
-    set.counterAxisSizingMode = "AUTO";
+    set.counterAxisAlignItems = "CENTER";
     set.itemSpacing = 24;
     set.counterAxisSpacing = 24;
     set.paddingLeft = set.paddingRight = set.paddingTop = set.paddingBottom = 40;
@@ -152,6 +154,10 @@ if (PHASE === "components") {
     set.fills = [solid({ r: 0.973, g: 0.969, b: 0.953 }, 1)]; // #f8f7f3 wash
     set.strokes = [solid({ r: 0.886, g: 0.878, b: 0.855 }, 1)];
     set.strokeWeight = 1;
+    // Fixed width forces the wrap; hug height. Modes AFTER resize (see above).
+    set.resize(1040, Math.max(set.height, 1));
+    set.primaryAxisSizingMode = "FIXED";
+    set.counterAxisSizingMode = "AUTO";
 
     // Position clear of existing content on the page.
     const rightEdge = page.children.reduce((mx, n) => (n.id === set.id ? mx : Math.max(mx, n.x + n.width)), 0);
