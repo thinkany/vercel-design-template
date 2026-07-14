@@ -76,8 +76,8 @@ export function ViewToggle({ view, onChange, views = ["desktop", "tablet", "mobi
           key={v}
           onClick={() => onChange(v)}
           style={{
-            background: view === v ? "var(--admin-blue)" : "transparent",
-            border: `1px solid ${view === v ? "var(--admin-blue)" : "rgba(0,0,0,0.2)"}`,
+            background: view === v ? "var(--admin-accent)" : "transparent",
+            border: `1px solid ${view === v ? "var(--admin-accent)" : "rgba(0,0,0,0.2)"}`,
             color: view === v ? "#fff" : "var(--admin-gray-dark)",
             fontFamily: "var(--admin-font-body)",
             fontSize: 12,

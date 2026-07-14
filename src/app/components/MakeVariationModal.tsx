@@ -168,7 +168,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                       gap: 14,
                       padding: "10px 14px",
                       border: selected
-                        ? "2px solid var(--admin-blue)"
+                        ? "2px solid var(--admin-accent)"
                         : "1px solid rgba(0,0,0,0.12)",
                       borderRadius: 3,
                       background: selected ? "rgba(30,75,150,0.04)" : "#fff",
@@ -209,7 +209,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                         <span style={{
                           display: "inline-block",
                           padding: "1px 6px",
-                          background: "var(--admin-blue)",
+                          background: "var(--admin-accent)",
                           color: "#fff",
                           fontSize: 9,
                           fontWeight: 500,
@@ -233,8 +233,8 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                       width: 16,
                       height: 16,
                       borderRadius: "50%",
-                      border: `2px solid ${selected ? "var(--admin-blue)" : "rgba(0,0,0,0.2)"}`,
-                      background: selected ? "var(--admin-blue)" : "transparent",
+                      border: `2px solid ${selected ? "var(--admin-accent)" : "rgba(0,0,0,0.2)"}`,
+                      background: selected ? "var(--admin-accent)" : "transparent",
                       flexShrink: 0,
                       display: "flex",
                       alignItems: "center",
@@ -333,7 +333,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                 type="checkbox"
                 checked={needsStyleguide}
                 onChange={(e) => setNeedsStyleguide(e.target.checked)}
-                style={{ marginTop: 2, width: 16, height: 16, accentColor: "var(--admin-blue)", cursor: "pointer", flexShrink: 0 }}
+                style={{ marginTop: 2, width: 16, height: 16, accentColor: "var(--admin-accent)", cursor: "pointer", flexShrink: 0 }}
               />
               <span>
                 <span style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--admin-ink)", marginBottom: 3 }}>
@@ -347,7 +347,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
           </div>
 
           {apiError && (
-            <p style={{ fontSize: 12, color: "var(--admin-red)", marginTop: 12 }}>
+            <p style={{ fontSize: 12, color: "var(--admin-danger)", marginTop: 12 }}>
               {apiError}
             </p>
           )}
@@ -384,7 +384,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
               padding: "9px 20px",
               border: "none",
               borderRadius: 3,
-              background: canCreate ? "var(--admin-blue)" : "var(--admin-gray-light)",
+              background: canCreate ? "var(--admin-accent)" : "var(--admin-gray-light)",
               color: "#fff",
               cursor: canCreate ? "pointer" : "not-allowed",
               fontSize: 12,

@@ -28,8 +28,11 @@ const LOGIN_PAGE = `<!DOCTYPE html>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* Neutral admin chrome — mirrors the --admin-* tokens in src/styles/tokens.css
+       (edge runtime can't read them). Black / grays / white, kept free of any
+       client brand color so the gate reads as foundation, not brand. */
     body {
-      background: #f8f7f3;
+      background: #fafafa;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -132,7 +135,7 @@ const LOGIN_PAGE = `<!DOCTYPE html>
     }
 
     .pw-wrap input:focus {
-      border-color: #1e4b96;
+      border-color: #1a1a1a;
     }
 
     .pw-wrap input::placeholder {
@@ -140,7 +143,7 @@ const LOGIN_PAGE = `<!DOCTYPE html>
     }
 
     .pw-wrap input.error {
-      border-color: #c0392b;
+      border-color: #b3261e;
     }
 
     .toggle-vis {
@@ -164,7 +167,7 @@ const LOGIN_PAGE = `<!DOCTYPE html>
 
     .error-msg {
       font-size: 12px;
-      color: #c0392b;
+      color: #b3261e;
       display: none;
       text-align: left;
       letter-spacing: 0.02em;
@@ -177,7 +180,7 @@ const LOGIN_PAGE = `<!DOCTYPE html>
     button[type="submit"] {
       width: 100%;
       padding: 12px 16px;
-      background: #1e4b96;
+      background: #1a1a1a;
       color: #fff;
       border: none;
       border-radius: 3px;
@@ -191,7 +194,7 @@ const LOGIN_PAGE = `<!DOCTYPE html>
     }
 
     button[type="submit"]:hover {
-      background: #163a78;
+      background: #000000;
     }
 
     .footer-note {
