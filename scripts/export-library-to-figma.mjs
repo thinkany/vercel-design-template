@@ -164,65 +164,120 @@ function resolvePaint(spec, tokens) {
   return { kind: "literal", rgb: { r: rgb.r, g: rgb.g, b: rgb.b }, a: rgb.a };
 }
 
-// ── The Button spec — mirrors src/app/components/ui/button.tsx's cva() ─────────
-// Geometry from the size classes (Tailwind: 1 unit = 4px; rounded-md = 6px;
-// text-sm = 14px; font-medium = 500; gap-2 = 8px). Colors name the semantic
-// token each variant's utility resolves to (bg-primary → --primary, etc.).
-const BUTTON = {
-  name: "Button",
-  label: "Button",
-  properties: {
-    variant: ["default", "destructive", "outline", "secondary", "ghost", "link"],
-    size: ["default", "sm", "lg", "icon"],
+// ── The component registry — each entry mirrors one ui/*.tsx cva() ────────────
+// Only variant-driven "atom" components (single label/icon child) belong here;
+// slotted panels (alert) and composite/behavioral components (dialog, table,
+// sidebar, navigation-menu) need a richer model and are intentionally excluded.
+//
+// A spec declares:
+//   properties   — the cva variant axes, in order (the Figma variant properties)
+//   variantAxis  — which axis carries COLOR (fill/text/border per value)
+//   sizeAxis      — which axis carries GEOMETRY (height/paddingX per value), or
+//                   null when the component has no size axis (geometry from base)
+//   base         — shared geometry (radius/gap/fontSize/fontWeight) + fallback
+//                  height/paddingX for size-less components
+// fill/text/border name a --token, a literal hex, or "transparent"/null.
+// Geometry follows Tailwind (1 unit = 4px; rounded-md = 6px; text-sm = 14px;
+// text-xs = 12px; font-medium = 500).
+const COMPONENTS = [
+  {
+    name: "Button", label: "Button",           // ui/button.tsx
+    properties: {
+      variant: ["default", "destructive", "outline", "secondary", "ghost", "link"],
+      size: ["default", "sm", "lg", "icon"],
+    },
+    variantAxis: "variant", sizeAxis: "size",
+    base: { fontSize: 14, fontWeight: 500, radius: 6, gap: 8 },
+    sizes: {
+      default: { height: 36, paddingX: 16 },
+      sm: { height: 32, paddingX: 12 },
+      lg: { height: 40, paddingX: 24 },
+      icon: { height: 36, width: 36, paddingX: 0, iconOnly: true },
+    },
+    variants: {
+      default: { fill: "--primary", text: "--primary-foreground", border: null },
+      destructive: { fill: "--destructive", text: "#ffffff", border: null },
+      outline: { fill: "--background", text: "--foreground", border: "--border" },
+      secondary: { fill: "--secondary", text: "--secondary-foreground", border: null },
+      ghost: { fill: "transparent", text: "--foreground", border: null },
+      link: { fill: "transparent", text: "--primary", border: null, underline: true },
+    },
   },
-  base: { fontSize: 14, fontWeight: 500, radius: 6, gap: 8 },
-  sizes: {
-    default: { height: 36, paddingX: 16 },
-    sm: { height: 32, paddingX: 12 },
-    lg: { height: 40, paddingX: 24 },
-    icon: { height: 36, width: 36, paddingX: 0, iconOnly: true },
+  {
+    name: "Badge", label: "Badge",             // ui/badge.tsx — single axis, no size
+    properties: { variant: ["default", "secondary", "destructive", "outline"] },
+    variantAxis: "variant", sizeAxis: null,
+    // text-xs pill: rounded-md, px-2, py-0.5 → ~20px tall. border always present.
+    base: { fontSize: 12, fontWeight: 500, radius: 6, gap: 4, height: 20, paddingX: 8 },
+    variants: {
+      default: { fill: "--primary", text: "--primary-foreground", border: null },
+      secondary: { fill: "--secondary", text: "--secondary-foreground", border: null },
+      destructive: { fill: "--destructive", text: "#ffffff", border: null },
+      outline: { fill: "transparent", text: "--foreground", border: "--border" },
+    },
   },
-  // fill/text/border name a --token, a literal hex, or "transparent"/null.
-  variants: {
-    default: { fill: "--primary", text: "--primary-foreground", border: null },
-    destructive: { fill: "--destructive", text: "#ffffff", border: null },
-    outline: { fill: "--background", text: "--foreground", border: "--border" },
-    secondary: { fill: "--secondary", text: "--secondary-foreground", border: null },
-    ghost: { fill: "transparent", text: "--foreground", border: null },
-    link: { fill: "transparent", text: "--primary", border: null, underline: true },
+  {
+    name: "Toggle", label: "Toggle",           // ui/toggle.tsx — icon control
+    properties: { variant: ["default", "outline"], size: ["default", "sm", "lg"] },
+    variantAxis: "variant", sizeAxis: "size",
+    base: { fontSize: 14, fontWeight: 500, radius: 6, gap: 8 },
+    // min-w square icon control (h-9/px-2/min-w-9, etc.). Rendered icon-only.
+    sizes: {
+      default: { height: 36, width: 36, paddingX: 8, iconOnly: true },
+      sm: { height: 32, width: 32, paddingX: 6, iconOnly: true },
+      lg: { height: 40, width: 40, paddingX: 10, iconOnly: true },
+    },
+    variants: {
+      // default = bg-transparent; outline adds a border. (--input is transparent
+      // in this token set, so the visible outline uses --border.)
+      default: { fill: "transparent", text: "--foreground", border: null },
+      outline: { fill: "transparent", text: "--foreground", border: "--border" },
+    },
   },
-};
+];
 
 // ── Build the manifest ────────────────────────────────────────────────────────
+
+// Cartesian product over ordered [axisName, values] pairs → [{axis: value, …}].
+function cartesian(axes) {
+  let combos = [{}];
+  for (const [name, values] of axes) {
+    const next = [];
+    for (const c of combos) for (const v of values) next.push({ ...c, [name]: v });
+    combos = next;
+  }
+  return combos;
+}
+
 function buildComponent(spec, tokens) {
+  const axes = Object.entries(spec.properties); // ordered: [[variant,[…]],[size,[…]]]
+  const combos = cartesian(axes);
   const variantEntries = [];
   const usedTokens = new Map(); // token → figmaName, for the System variable set
   const note = (paint) => { if (paint.kind === "var") usedTokens.set(paint.token, paint.figmaName); };
 
-  for (const variant of spec.properties.variant) {
-    for (const size of spec.properties.size) {
-      const vSpec = spec.variants[variant];
-      const sSpec = spec.sizes[size];
-      const fill = resolvePaint(vSpec.fill, tokens);
-      const text = resolvePaint(vSpec.text, tokens);
-      const border = resolvePaint(vSpec.border, tokens);
-      note(fill); note(text); note(border);
-      variantEntries.push({
-        props: { variant, size },
-        // Figma variant-set naming convention (combineAsVariants parses this):
-        name: `variant=${variant}, size=${size}`,
-        height: sSpec.height,
-        width: sSpec.width || null,
-        paddingX: sSpec.paddingX,
-        iconOnly: !!sSpec.iconOnly,
-        radius: spec.base.radius,
-        gap: spec.base.gap,
-        fontSize: spec.base.fontSize,
-        fontWeight: spec.base.fontWeight,
-        underline: !!vSpec.underline,
-        fill, text, border,
-      });
-    }
+  for (const combo of combos) {
+    const vSpec = spec.variants[combo[spec.variantAxis]];             // color per variant
+    const sSpec = spec.sizeAxis ? spec.sizes[combo[spec.sizeAxis]] : spec.base; // geometry
+    const fill = resolvePaint(vSpec.fill, tokens);
+    const text = resolvePaint(vSpec.text, tokens);
+    const border = resolvePaint(vSpec.border, tokens);
+    note(fill); note(text); note(border);
+    variantEntries.push({
+      props: { ...combo },
+      // Figma variant-set naming convention (combineAsVariants parses this):
+      name: axes.map(([a]) => `${a}=${combo[a]}`).join(", "),
+      height: sSpec.height,
+      width: sSpec.width || null,
+      paddingX: sSpec.paddingX,
+      iconOnly: !!sSpec.iconOnly,
+      radius: spec.base.radius,
+      gap: spec.base.gap,
+      fontSize: spec.base.fontSize,
+      fontWeight: spec.base.fontWeight,
+      underline: !!vSpec.underline,
+      fill, text, border,
+    });
   }
 
   const variables = [...usedTokens.entries()].map(([token, figmaName]) => {
@@ -235,11 +290,14 @@ function buildComponent(spec, tokens) {
     };
   }).sort((x, y) => x.figmaName.localeCompare(y.figmaName));
 
+  // Default variant combo (cva defaultVariants → first value of each axis here).
+  const defaultVariant = Object.fromEntries(axes.map(([a, vals]) => [a, vals[0]]));
+
   return {
     name: spec.name,
     label: spec.label,
     properties: spec.properties,
-    defaultVariant: { variant: "default", size: "default" },
+    defaultVariant,
     variants: variantEntries,
     variables,
   };
@@ -251,7 +309,7 @@ function buildManifest(variationId, tokens) {
     collectionName: "System",     // Figma variable collection for shadcn primitives
     componentsPageName: "Components",
     generatedAt: new Date().toISOString(),
-    components: [buildComponent(BUTTON, tokens)],
+    components: COMPONENTS.map((spec) => buildComponent(spec, tokens)),
   };
 }
 
@@ -262,8 +320,9 @@ function printSummary(m, styleDir) {
   for (const c of m.components) {
     const axes = Object.entries(c.properties).map(([k, vs]) => `${k}×${vs.length}`).join("  ");
     console.log(`\n  ▸ ${c.name}  (component set — ${c.variants.length} variants: ${axes})`);
-    console.log(`    variant: ${c.properties.variant.join(", ")}`);
-    console.log(`    size:    ${c.properties.size.join(", ")}`);
+    for (const [axis, vals] of Object.entries(c.properties)) {
+      console.log(`    ${(axis + ":").padEnd(9)}${vals.join(", ")}`);
+    }
     console.log(`    ${c.variables.length} bound variables → collection "${m.collectionName}":`);
     for (const v of c.variables) {
       const hex = "#" + [v.rgb.r, v.rgb.g, v.rgb.b].map((x) => Math.round(x * 255).toString(16).padStart(2, "0")).join("");
