@@ -135,29 +135,46 @@ breakpoint, and every variation** (a variation diverges by dropping its own
 
 ### Exporting to Figma — ask which scope FIRST
 
-There are two export surfaces (both detailed below): the **design Pages/App**
-(frame captures) and the **Styleguide** (design-system objects). When the user says
-"export to Figma" **without naming a scope, do NOT guess** — present a three-way
-choice with **AskUserQuestion**, then route:
+Two export surfaces (both detailed below): the **design Pages/App** (frame
+captures) and the **Styleguide** (design-system objects). When the user says
+"export to Figma" **without naming a scope, do NOT guess** — ask first with
+**AskUserQuestion**. The three export prompts are **locked copy — use them
+verbatim** (adapt only the `{Pages|App}` label):
 
-- **Both Styleguide and Pages/App** → the cohesive one-file flow ("Exporting to
+**P15 · header "Export scope"** — *"What would you like to send to Figma?"*
+- **Both Styleguide and {Pages|App}** → the cohesive one-file flow ("Exporting to
   Figma as ONE cohesive file" below): `scaffold` → capture Pages onto their Figma
   Pages → `variables` → `textstyles` → `specimen`.
 - **Styleguide only** → the brand builder phases only (`scaffold` for the
   Styleguide Page if needed → `variables` → `textstyles` → `specimen`); skip page
   captures.
-- **Pages/App only** → the page-capture flow only ("Exporting designs to Figma"
+- **{Pages|App} only** → the page-capture flow only ("Exporting designs to Figma"
   below); skip variables/styles/specimen.
 
-Label the third option **"App"** when `projectType === "app"`, else **"Pages"**.
-Brand-guideline projects (`projectType === "brand"`) have no design pages — offer
-**Styleguide only** and skip the prompt. **If the request already names a scope**
-("export the styleguide", "send the pages") skip the prompt and run that path.
+Use **"App"** for `projectType === "app"`, else **"Pages"**. Brand-guideline
+projects (`projectType === "brand"`) have no design pages — run **Styleguide only**
+and skip the prompt. **If the request already names a scope** ("export the
+styleguide", "send the pages") skip the prompt and run that path.
 
-**Reuse vs. new file:** the manifest reports `existingFile` for the variation. If
-one is recorded, **default to updating it** (mention which file); only ask
-new-vs-update when the user's intent is unclear. If none is recorded, create a new
-file and record it (see the live flow's step 2).
+Two follow-ups, only when a **new** file will be created (skip both when reusing a
+recorded file):
+
+**P16 · header "Destination"** — asked when `manifest.target` is unset —
+*"Where should the new Figma file go?"*
+- **My drafts (private to me)** → individual scope: the user's Full-seat plan, no
+  `projectId`.
+- **A team project (shared)** → a team `planKey` **+ a `projectId`** from a project
+  URL. Offer only teams with an **editor seat** (filter `whoami`, exclude
+  `seat_type` `view`/`developer`); without a project URL the file lands in that
+  team's private drafts. Persist the choice via `--set-target` (see the live flow).
+
+**P17 · header "Figma file"** — asked only when `existingFile` IS recorded and the
+user's intent is unclear — *"Update the existing Figma file, or start a new one?"*
+- **Update it** (default) → reuse the recorded file (verify it still exists first).
+- **Start a new file** → create + record a new one (then P16 if no destination set).
+
+When a file is recorded, **default to Update it** (mention which file); only pop
+P17 if intent is genuinely unclear.
 
 ### Exporting designs to Figma
 
@@ -367,8 +384,20 @@ Before hand-rolling UI, use the resources already installed:
 
 ## Setup commands (skills)
 
-- **`/setup-project`** — brand the scaffold: preflight `npm install`, write
-  `VITE_*` names to `.env`, configure preview-gate fonts, point to Vercel setup.
-- **`/setup-styleguide`** — Phase II: set project fonts/colors in `tokens.css` +
-  `brand.ts`, adapt styleguide sections, flip `VITE_STYLEGUIDE_READY` /
-  `VITE_BRAND_READY`.
+The onboarding prompt **copy is authored and locked in these two command files** —
+they are the canonical source of the P1–P14 wording (question text, headers,
+options). **Do NOT duplicate that copy into this file; edit it there.**
+`/setup-project` **hands off directly into `/setup-styleguide`**, so the two run as
+one continuous flow.
+
+- **[`/setup-project`](.claude/commands/setup-project.md)** — brand the scaffold:
+  preflight `npm install` (checks Node ≥ 20.19), write `VITE_*` names to `.env`,
+  choose project type, set the **company / admin** fonts (gate + `--admin-font-*`),
+  point to Vercel setup, then hand off to →
+- **[`/setup-styleguide`](.claude/commands/setup-styleguide.md)** — Phase II: set
+  the **client** fonts/colors in `tokens.css` + `brand.ts`, note the styleguide
+  sections are adjustable, flip `VITE_STYLEGUIDE_READY` / `VITE_BRAND_READY`, and
+  close with the preview reminder + the optional permission-prompt tip.
+
+(The **export** prompts P15–P17 have no command file — their locked copy lives in
+"Exporting to Figma — ask which scope FIRST" above.)

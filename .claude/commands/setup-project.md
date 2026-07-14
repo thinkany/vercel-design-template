@@ -194,27 +194,64 @@ Follow these steps:
    > fonts for the client design in a few moments, and your company fonts will not
    > affect that design.
 
-   Options: **"Yes — set custom fonts"** / **"No — use system fonts"**.
-   - If **No**, remove the external `<link>` lines and leave the system stack;
-     skip the rest of this step and finish.
+   Options — exactly two:
+   - **"Use default fonts"** — keeps the template's default admin typefaces:
+     **DM Sans (700)** for the brand name / headings and **Inter (300)** for body
+     text (these are the default admin font families). Put those names/weights on
+     the option itself so the designer sees what they'd get.
+   - **"Use my company or custom fonts"** — set your own.
+   - If **"Use default fonts"**, make **no** font changes: the template already
+     ships DM Sans / Inter for both the gate and the interior admin chrome. Skip
+     the rest of this step and finish.
 
    **6b. Gather the values.** If **Yes**, ask these in a single `AskUserQuestion`
    call (three questions in one panel):
-   1. Header "Stylesheet". Question: "Where are your webfonts hosted? Choose
-      **Other** to paste the exact CSS `<link>` URL." Options: **Google Fonts /
-      Adobe Fonts (Typekit) / Typography.com / None (already installed)**.
-      Show the current `<link rel="stylesheet">` href if one is set. If the user
-      picks a provider name rather than pasting a URL, follow up for the exact URL.
-   2. Header "Primary font". Question: "Your **primary / wordmark** font — used
-      for the brand name and headings. Choose **Other** to type the family and
-      weight, e.g. `'Vitesse A', 'Vitesse B', sans-serif` at 700." Give 1–2
-      example families as options plus the free-text "Other".
-   3. Header "Body font". Question: "Your **secondary / body** font — used for
-      all body copy: the subtitle, the 'Preview Access' label, the password
-      input, the Enter button, and the footer. Choose **Other** to type the
-      family and weight, e.g. `"Forza A", "Forza B", sans-serif` at 400."
+   1. Header **"Font Location"**. Question: "Where are your fonts located?"
+      Three options:
+      - **Google Fonts** — paste the share / `<link>` URL.
+      - **URL** — paste any other CSS `<link>` stylesheet URL (Adobe Fonts,
+        Typography.com, or any host).
+      - **Import my own fonts** — place font files in the project (exact location
+        handled below).
+      (`AskUserQuestion` still auto-appends an "Other → type your own" field; these
+      three cover the real cases.) For a Google / URL choice, follow up for the
+      exact URL if the user didn't paste one, and show the current
+      `<link rel="stylesheet">` href if one is set.
+   2. Header "Primary font". `question` (blank line before the example — a real
+      `\n\n` in the string):
 
-   Then edit `middleware.js`:
+      > Your **primary / wordmark** font — used for the brand name and headings,
+      > across the login screen and the interior Styleguide + dashboard.
+      >
+      > Enter the family and weight, e.g. `'Vitesse A', 'Vitesse B', sans-serif` at 700.
+
+      Give 1–2 example families as preset options; the designer types their own in
+      the free-text field.
+   3. Header "Body font". `question` (blank line before the example):
+
+      > Your **secondary / body** font — used for all other admin text: on the
+      > login screen (the subtitle, the "Preview Access" label, the password field,
+      > the Enter button, and the footer) and throughout the Styleguide + dashboard
+      > body copy.
+      >
+      > Enter the family and weight, e.g. `"Forza A", "Forza B", sans-serif` at 400.
+
+   **If the designer chose "Import my own fonts":** have them place the font files
+   in **`public/fonts/`** (create the folder if missing) — e.g.
+   `public/fonts/Acme-Bold.woff2` and `public/fonts/Acme-Regular.woff2` (prefer
+   `.woff2`). Files in `public/` are served at the site root, so reference them as
+   `url('/fonts/Acme-Bold.woff2')`. Then:
+   - Add an `@font-face` block per weight to **`src/styles/fonts.css`** (for the
+     app + interior admin chrome).
+   - Add the same `@font-face` blocks to the gate's inline `<style>` in
+     **`middleware.js`**, AND **allowlist the folder** so the login page can fetch
+     the files *before* the user is authenticated: change the matcher from
+     `'/((?!_vercel).*)'` to `'/((?!_vercel|fonts).*)'`. (Font files aren't
+     sensitive — this just lets `/fonts/*` pass through the gate.)
+   - There is no external stylesheet URL in this case, so **skip the `<link>` edits
+     below** and go straight to the `font-family` swaps + the admin-chrome tokens.
+
+   Then edit `middleware.js` (for a Google Fonts / URL choice):
    - If a stylesheet URL was given, set the `<link rel="stylesheet">` href to it,
      and set the `<link rel="preconnect">` href to that URL's origin (scheme +
      host). If the user wants no external font, remove both `<link>` lines.

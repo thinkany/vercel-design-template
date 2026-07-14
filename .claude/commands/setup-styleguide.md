@@ -19,8 +19,8 @@ options plus an "Other → type your own" field and behaves identically in the I
 and Claude Desktop. Batch related questions into one call (max 4 per panel).
 Every question includes a free-text "Other", so open values (font-family
 strings, hex codes, stylesheet URLs) are typed there while presets stay one
-click away. For each generic example section in step 2, offer a
-**Keep & restyle / Replace / Remove** question so the designer decides per level.
+click away. Step 2 (the example sections) is the exception — it's a short
+**informational** heads-up, not a question.
 
 Walk the designer through these steps:
 
@@ -67,10 +67,19 @@ scope's components for `var(--ta-…)` references to any token name you removed 
 remap or update them so nothing falls back to unstyled.
 
 **First, ask how the designer wants to supply the palette** — one
-`AskUserQuestion`, header **"Palette source"**, three options:
-- **Enter manually** — you'll prompt for each color one at a time.
+`AskUserQuestion`, header **"Client Palette"**, `question` text below (blank
+line before the parenthetical — a real `\n\n` in the string):
+
+> How would you like to supply the client's color palette?
+>
+> (You will have the opportunity to create multiple palettes, this is for the
+> initial design variation)
+
+Three options, **in this order** (first = default):
 - **From a website** — paste a URL; you'll extract its palette from the live CSS.
-- **From one primary color** — give a single brand hex; you'll derive a full system.
+- **Enter all colors manually** — you'll prompt for each color one at a time.
+- **Let Claude create from a single primary color** — give a single brand hex;
+  you'll derive a full system.
 
 Then, per method:
 
@@ -139,17 +148,20 @@ Confirm the changes show up in the styleguide's **Primitives → Colors / Type
 Scale** sections — those swatches read the live token values, so they should
 reflect your edits immediately.
 
-## 2. Adapt the example sections
+## 2. The example sections are flexible — just inform (no question)
 
-Go level by level in the styleguide (Atoms → Molecules → Organisms → Templates
-→ Pages). For each generic example:
+Do **not** walk the designer through a per-section Keep/Replace/Remove decision
+during setup. Give one short, **informational** heads-up (no `AskUserQuestion`, no
+options) — verbatim or close to it:
 
-- **Keep & restyle** it if the pattern applies to this project, or
-- **Replace** it with this project's real component as you build it, or
-- **Remove** it if the project doesn't need it.
+> The Styleguide's sections can be adjusted/renamed etc. at any time. The default
+> layout is for example purposes only. Ask Claude to adjust to your preference or
+> simply re-work the template.
 
-Keep the universal Primitives and generic Atoms (buttons, badges, form controls,
-icons) unless there's a strong reason not to.
+Then leave the sections as they are — they get shaped later, as the project's real
+components get built (Atoms → Molecules → Organisms → Templates → Pages). Keep the
+universal Primitives and generic Atoms (buttons, badges, form controls, icons)
+unless there's a strong reason not to.
 
 ## 3. Mark it done
 
@@ -162,32 +174,52 @@ for that scope:
 
 (Vite reloads on `.env` changes.)
 
-## 4. Offer to smooth out permission prompts (closing hint)
-
-Onboarding is done and the designer is about to start building pages — the phase
-with the most repetitive edit/command approvals. As the **final step**, surface
-(don't silently skip) that they can cut down the prompting. You can't switch the
-mode for them — it's a user-controlled keyboard toggle — so present it as a tip:
-
-- **Auto-accept edits** — press **`Shift+Tab`** to cycle the permission mode until
-  it reads *"auto-accept edits on"*. File edits/writes then apply without asking
-  (commands still prompt). This is the closest analog to Desktop's "auto" and the
-  best default for iterating on designs.
-- **`/fewer-permission-prompts`** — offer to run this skill; it scans recent
-  activity and writes a tailored allowlist into `.claude/settings.json` so the
-  common Bash approvals stop recurring. Ask before running it.
-
-Keep it to a one-or-two-line nudge, not a lecture — a designer who's happy with
-the prompts can ignore it.
-
-## 5. Sign off — onboarding complete
+## 4. Sign off — onboarding complete
 
 Both phases are now done (brand + company fonts in Phase I, client colors + fonts
-and the styleguide here in Phase II). Give the local-preview reminder that
-`/setup-project` deferred to this point (its step 0d): they can preview anytime
-with **`npm run dev`** (opens at http://localhost:5173) for instant, hot-reloading
-feedback — separate from the Vercel preview deploy — and they're now ready to start
-designing pages.
+and the styleguide here in Phase II). Give the warm wrap and the local-preview
+reminder that `/setup-project` deferred to this point (its step 0d): they can
+preview anytime with **`npm run dev`** (http://localhost:5173) for instant,
+hot-reloading feedback — separate from the Vercel preview deploy — and they're now
+ready to start designing pages.
+
+## 5. One last comfort tip — smoother iterating (friendly, never pushy)
+
+As the designer heads into building pages — the phase with the most repetitive
+edit approvals — **lead with a warm recommendation first** (this is the standard
+message), and only *then* offer the concrete ways to act on it. A designer who's
+happy approving each change should feel completely fine waving this off.
+
+Present the recommendation roughly like this — friendly, low-pressure, clearly
+optional (adapt the wording, keep the spirit):
+
+> One quick comfort tip before you dive in — totally optional.
+>
+> Designing is hands-on: I'll be making lots of small edits as we shape your pages
+> together, and by default I pause to ask before each one. That's perfect when you
+> want to eyeball every change — but it can interrupt the flow when you're moving
+> quickly.
+>
+> **What I'd gently suggest:** let me apply edits as we go, so you can watch the
+> design take shape instead of confirming every step. You stay in charge of the
+> direction — I just stop interrupting for the small stuff, and you can switch it
+> back whenever you like.
+>
+> If you'd rather approve each change, that's completely fine too — there's no
+> wrong answer here.
+>
+> You'll still be asked before I run any commands or send anything out — this only
+> smooths the small file edits.
+
+Only **after** that recommendation, offer the two concrete ways to do it (a line or
+two each, not a lecture — you can't flip these for them; they're user-controlled):
+- **Auto-accept edits** — press **`Shift+Tab`** to cycle the permission mode until
+  it reads *"auto-accept edits on"*. File edits/writes then apply without asking
+  (commands still prompt). Closest analog to Desktop's "auto," and the best default
+  for iterating on designs.
+- **`/fewer-permission-prompts`** — offer to run this skill; it scans recent
+  activity and writes a tailored allowlist into `.claude/settings.json` so the
+  common Bash command approvals stop recurring. Ask before running it.
 
 ## Variations carry their own styleguide — fully siloed
 
