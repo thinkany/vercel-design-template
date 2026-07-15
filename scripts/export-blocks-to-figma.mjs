@@ -104,11 +104,14 @@ async function readEnvVar(name) {
   } catch { return ""; }
 }
 
-// The --ta-* brand colors the blocks bind to (Header uses cream/ink/gray-dark).
+// The --ta-* brand colors the blocks bind to (Header: cream/ink/gray-dark;
+// Footer adds gray-mid; Hero adds gray-mid + amber).
 const BRAND_TOKENS = [
   { name: "cream", token: "--ta-cream" },
   { name: "ink", token: "--ta-ink" },
   { name: "gray-dark", token: "--ta-gray-dark" },
+  { name: "gray-mid", token: "--ta-gray-mid" },
+  { name: "amber", token: "--ta-amber" },
 ];
 
 async function buildManifest(variationId) {
@@ -117,6 +120,7 @@ async function buildManifest(variationId) {
   const { blocks } = await loadTsModule(join(ROOT, "src", "app", "blocks.ts"));
   const { designPages } = await loadTsModule(join(ROOT, "src", "app", "pages.ts"));
   const clientName = (await readEnvVar("VITE_CLIENT_NAME")) || "Client Name";
+  const projectName = await readEnvVar("VITE_PROJECT_NAME");
 
   const brandColors = BRAND_TOKENS
     .filter((b) => tokens[b.token])
@@ -137,8 +141,10 @@ async function buildManifest(variationId) {
     brandCollectionName: "Brand",
     blockPageName: "Block Library",
     logoText: clientName,
+    projectName,
     fonts: {
       display: { stack: tokens["--ta-font-display"] || "", family: firstFamily(tokens["--ta-font-display"]) },
+      serif: { stack: tokens["--ta-font-serif"] || "", family: firstFamily(tokens["--ta-font-serif"]) },
       sans: { stack: tokens["--ta-font-sans"] || "", family: firstFamily(tokens["--ta-font-sans"]) },
     },
     brandColors,
@@ -151,8 +157,8 @@ async function buildManifest(variationId) {
 function printSummary(m) {
   console.log(`\nBlock-library manifest — variation ${m.variationId}  (source: ${m._styleDir})`);
   console.log(`  Figma page: "${m.blockPageName}"   ·   variable collection: "${m.brandCollectionName}"`);
-  console.log(`  Logo text: "${m.logoText}"`);
-  console.log(`  Fonts: display=${m.fonts.display.family || "(proxy)"}  sans=${m.fonts.sans.family || "(proxy)"}`);
+  console.log(`  Logo text: "${m.logoText}"   Project: "${m.projectName}"`);
+  console.log(`  Fonts: display=${m.fonts.display.family || "(proxy)"}  serif=${m.fonts.serif.family || "(proxy)"}  sans=${m.fonts.sans.family || "(proxy)"}`);
   console.log(`  ${m.brandColors.length} brand variables → collection "${m.brandCollectionName}":`);
   for (const c of m.brandColors) console.log(`    · ${c.name.padEnd(11)} ${c.hex.padEnd(9)} ${c.token}`);
   console.log(`\n  ${m.blocks.length} blocks:`);

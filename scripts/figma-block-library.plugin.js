@@ -35,8 +35,25 @@ async function getOrCreateCollection(name) {
   return { col, modeId };
 }
 
+// Shared styling for a block's component set (the framed grid on the page).
+function styleSet(set, name) {
+  set.name = name;
+  set.clipsContent = false;
+  set.layoutMode = "VERTICAL";
+  set.counterAxisAlignItems = "MIN";
+  set.itemSpacing = 48;
+  set.paddingLeft = set.paddingRight = set.paddingTop = set.paddingBottom = 48;
+  set.cornerRadius = 12;
+  set.fills = [{ type: "SOLID", color: { r: 0.97, g: 0.965, b: 0.955 } }];
+  set.strokes = [{ type: "SOLID", color: { r: 0.886, g: 0.878, b: 0.855 } }];
+  set.strokeWeight = 1;
+  set.primaryAxisSizingMode = "AUTO";
+  set.counterAxisSizingMode = "AUTO";
+  return set;
+}
+
 // Role-based proxy faces when the project's real family isn't in Figma.
-const ROLE_PROXY = { display: "Playfair Display", sans: "Inter" };
+const ROLE_PROXY = { display: "Playfair Display", serif: "Lora", sans: "Inter" };
 
 if (PHASE === "blocks") {
   // ── 1. Brand variable collection (find-by-name/update) ──────────────────────
@@ -66,18 +83,21 @@ if (PHASE === "blocks") {
   // ── 3. Fonts: project family if Figma has it, else a role proxy ─────────────
   const avail = await figma.listAvailableFontsAsync();
   const hasFamily = (fam) => !!fam && avail.some((a) => a.fontName.family === fam);
+  const styleOr = (fam, want, fallback) => (avail.some((a) => a.fontName.family === fam && a.fontName.style === want) ? want : fallback);
   const resolveFamily = (role, wanted) => (hasFamily(wanted) ? wanted : (hasFamily(ROLE_PROXY[role]) ? ROLE_PROXY[role] : "Inter"));
   const displayFam = resolveFamily("display", MANIFEST.fonts.display.family);
+  const serifFam = resolveFamily("serif", MANIFEST.fonts.serif ? MANIFEST.fonts.serif.family : null);
   const sansFam = resolveFamily("sans", MANIFEST.fonts.sans.family);
   const displayFont = { family: displayFam, style: "Regular" };
-  const sansFont = { family: sansFam, style: hasFamily(sansFam) && avail.some((a) => a.fontName.family === sansFam && a.fontName.style === "Medium") ? "Medium" : "Regular" };
-  await figma.loadFontAsync(displayFont);
-  await figma.loadFontAsync(sansFont);
+  const serifFont = { family: serifFam, style: "Regular" };
+  const sansFont = { family: sansFam, style: styleOr(sansFam, "Medium", "Regular") };
+  const sansSemibold = { family: sansFam, style: styleOr(sansFam, "Semi Bold", sansFont.style) };
+  for (const f of [displayFont, serifFont, sansFont, sansSemibold]) await figma.loadFontAsync(f);
 
-  const ctx = { bfill, blackA, displayFont, sansFont, logoText: MANIFEST.logoText };
+  const ctx = { bfill, blackA, displayFont, serifFont, sansFont, sansSemibold, logoText: MANIFEST.logoText, projectName: MANIFEST.projectName };
 
   // ── 4. Build each implemented block ─────────────────────────────────────────
-  const builders = { header: buildHeader };
+  const builders = { header: buildHeader, footer: buildFooter, hero: buildHero };
   const built = [];
   const skipped = [];
   for (const block of MANIFEST.blocks) {
@@ -161,18 +181,114 @@ function buildHeader(block, ctx, page) {
     }));
   }
 
-  const set = figma.combineAsVariants(nodes, page);
-  set.name = block.name;
-  set.clipsContent = false;
-  set.layoutMode = "VERTICAL";
-  set.counterAxisAlignItems = "MIN";
-  set.itemSpacing = 48;
-  set.paddingLeft = set.paddingRight = set.paddingTop = set.paddingBottom = 48;
-  set.cornerRadius = 12;
-  set.fills = [{ type: "SOLID", color: { r: 0.97, g: 0.965, b: 0.955 } }];
-  set.strokes = [{ type: "SOLID", color: { r: 0.886, g: 0.878, b: 0.855 } }];
-  set.strokeWeight = 1;
-  set.primaryAxisSizingMode = "AUTO";
-  set.counterAxisSizingMode = "AUTO";
-  return set;
+  return styleSet(figma.combineAsVariants(nodes, page), block.name);
+}
+
+// ── Footer block builder (Desktop row / Mobile stacked) ────────────────────────
+function buildFooter(block, ctx, page) {
+  const { bfill, blackA, sansFont, logoText } = ctx;
+  const navNames = block.navItems;
+  const year = new Date().getFullYear();
+  const stateByName = Object.fromEntries(block.states.map((s) => [s.name, s]));
+
+  const metaText = (chars, colorName) => { const t = figma.createText(); t.fontName = sansFont; t.characters = chars; t.fontSize = 11; t.letterSpacing = { unit: "PIXELS", value: 0.88 }; t.fills = [bfill(colorName)]; return t; };
+  const divider = (w) => { const r = figma.createRectangle(); r.resize(w, 1); r.fills = [blackA(0.1)]; return r; };
+  const navRow = () => {
+    const nav = figma.createAutoLayout("HORIZONTAL", { itemSpacing: 24 });
+    nav.layoutWrap = "WRAP"; nav.counterAxisSpacing = 8;
+    for (const n of navNames) nav.appendChild(metaText(n.toUpperCase(), "gray-dark"));
+    return nav;
+  };
+
+  function buildState(stateName) {
+    const s = stateByName[stateName];
+    const isRow = stateName === "Desktop";
+    const c = figma.createComponent();
+    c.name = `state=${stateName}`;
+    c.layoutMode = "VERTICAL";
+    c.fills = [bfill("cream")];
+    c.resize(s.width, 10);
+    const topd = divider(s.width); c.appendChild(topd); topd.layoutSizingHorizontal = "FILL";
+    const content = figma.createAutoLayout(isRow ? "HORIZONTAL" : "VERTICAL", { itemSpacing: 16 });
+    content.paddingLeft = content.paddingRight = s.padX; content.paddingTop = content.paddingBottom = 32;
+    content.fills = [];
+    if (isRow) { content.primaryAxisAlignItems = "SPACE_BETWEEN"; content.counterAxisAlignItems = "CENTER"; }
+    c.appendChild(content); content.layoutSizingHorizontal = "FILL";
+    content.appendChild(metaText(`© ${year} ${logoText}`, "gray-mid"));
+    content.appendChild(navRow());
+    c.primaryAxisSizingMode = "AUTO";
+    return c;
+  }
+
+  const nodes = [];
+  if (stateByName["Desktop"]) nodes.push(buildState("Desktop"));
+  if (stateByName["Mobile"]) nodes.push(buildState("Mobile"));
+  return styleSet(figma.combineAsVariants(nodes, page), block.name);
+}
+
+// ── Hero block builder (Desktop / Mobile) ──────────────────────────────────────
+function buildHero(block, ctx, page) {
+  const { bfill, blackA, displayFont, serifFont, sansFont, sansSemibold, logoText, projectName } = ctx;
+  const stateByName = Object.fromEntries(block.states.map((s) => [s.name, s]));
+
+  const cta = (label, primary) => {
+    const b = figma.createAutoLayout("HORIZONTAL");
+    b.paddingLeft = b.paddingRight = 22; b.paddingTop = b.paddingBottom = 11;
+    b.cornerRadius = 3;
+    b.fills = primary ? [bfill("amber")] : [];
+    if (!primary) { b.strokes = [blackA(0.2)]; b.strokeWeight = 1; }
+    const t = figma.createText();
+    t.fontName = sansFont; t.characters = label.toUpperCase(); t.fontSize = 12; t.letterSpacing = { unit: "PIXELS", value: 1.2 };
+    t.fills = primary ? [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }] : [bfill("gray-dark")];
+    b.appendChild(t);
+    return b;
+  };
+
+  function buildState(stateName, h1Size) {
+    const s = stateByName[stateName];
+    const c = figma.createComponent();
+    c.name = `state=${stateName}`;
+    c.layoutMode = "VERTICAL";
+    c.counterAxisAlignItems = "CENTER";
+    c.itemSpacing = 20;
+    c.fills = [bfill("cream")];
+    c.paddingLeft = c.paddingRight = s.padX; c.paddingTop = c.paddingBottom = 80;
+    c.resize(s.width, 400);
+
+    if (projectName) {
+      const eb = figma.createText();
+      eb.fontName = sansSemibold; eb.characters = projectName.toUpperCase(); eb.fontSize = 11; eb.letterSpacing = { unit: "PIXELS", value: 1.98 };
+      eb.fills = [bfill("gray-mid")]; eb.textAlignHorizontal = "CENTER";
+      c.appendChild(eb);
+    }
+    const h1 = figma.createText();
+    h1.fontName = displayFont; h1.characters = logoText; h1.fontSize = h1Size;
+    h1.letterSpacing = { unit: "PERCENT", value: -2 }; h1.lineHeight = { unit: "PERCENT", value: 105 };
+    h1.fills = [bfill("ink")]; h1.textAlignHorizontal = "CENTER";
+    c.appendChild(h1);
+
+    const p = figma.createText();
+    p.fontName = serifFont;
+    p.characters = "This is your starting point. Build your home page here, and reference the styleguide for tokens, type, and components.";
+    p.fontSize = 17; p.lineHeight = { unit: "PERCENT", value: 160 };
+    p.fills = [bfill("gray-dark")]; p.textAlignHorizontal = "CENTER";
+    c.appendChild(p);
+    p.layoutSizingHorizontal = "FIXED";
+    p.resize(Math.min(440, s.width - 2 * s.padX), p.height);
+    p.textAutoResize = "HEIGHT";
+
+    const btns = figma.createAutoLayout("HORIZONTAL", { itemSpacing: 12 });
+    btns.layoutWrap = "WRAP"; btns.counterAxisSpacing = 12; btns.primaryAxisAlignItems = "CENTER"; btns.counterAxisAlignItems = "CENTER";
+    btns.appendChild(cta("Open styleguide", true));
+    btns.appendChild(cta("Dashboard", false));
+    c.appendChild(btns);
+
+    c.primaryAxisSizingMode = "AUTO"; // hug height; width stays FIXED
+    return c;
+  }
+
+  const nodes = [];
+  if (stateByName["Desktop"]) nodes.push(buildState("Desktop", 64));
+  if (stateByName["Mobile"]) nodes.push(buildState("Mobile", 36));
+  return styleSet(figma.combineAsVariants(nodes, page), block.name);
 }

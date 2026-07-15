@@ -74,7 +74,7 @@ export const blocks: Block[] = [
       { id: "desktop", name: "Desktop", width: 1280, padX: 40 },
       { id: "mobile", name: "Mobile", width: 390, padX: 24 },
     ],
-    implemented: false, // scaffold — build buildFooter() next
+    implemented: true,
   },
   {
     id: "hero",
@@ -85,6 +85,6 @@ export const blocks: Block[] = [
       { id: "desktop", name: "Desktop", width: 1280, padX: 40 },
       { id: "mobile", name: "Mobile", width: 390, padX: 24 },
     ],
-    implemented: false, // scaffold — build buildHero() next
+    implemented: true,
   },
 ];
