@@ -59,17 +59,27 @@ if (PHASE === "blocks") {
   // ── 1. Brand variable collection (find-by-name/update) ──────────────────────
   const { col, modeId } = await getOrCreateCollection(MANIFEST.brandCollectionName);
   const existing = (await figma.variables.getLocalVariablesAsync("COLOR")).filter((v) => v.variableCollectionId === col.id);
+  const codeMatch = (x, token) => { try { return x.codeSyntax && x.codeSyntax.WEB === `var(${token})`; } catch { return false; } };
   const bv = {};
   const varResult = [];
   for (const c of MANIFEST.brandColors) {
-    let v = existing.find((x) => x.name === c.name);
+    // In the COHESIVE flow the brand `variables` phase already created the
+    // canonical --ta-* vars under human names (e.g. "Brand Palette/Warm Cream").
+    // Bind to that one (matched by var(--ta-*) code syntax) so the merged file has
+    // no duplicate brand colors — and DON'T overwrite its value/scopes (that phase
+    // owns them). Only when running STANDALONE (no canonical var) do we own a
+    // short-named var and keep its value in sync with tokens.css.
+    const canonical = existing.find((x) => codeMatch(x, c.token) && x.name !== c.name);
+    let v = canonical || existing.find((x) => x.name === c.name);
     const created = !v;
-    if (!v) v = figma.variables.createVariable(c.name, col, "COLOR");
-    v.setValueForMode(modeId, { r: c.rgb.r, g: c.rgb.g, b: c.rgb.b });
-    v.scopes = ["FRAME_FILL", "SHAPE_FILL", "TEXT_FILL", "STROKE_COLOR"];
-    v.setVariableCodeSyntax("WEB", `var(${c.token})`);
+    if (!canonical) {
+      if (!v) v = figma.variables.createVariable(c.name, col, "COLOR");
+      v.setValueForMode(modeId, { r: c.rgb.r, g: c.rgb.g, b: c.rgb.b });
+      v.scopes = ["FRAME_FILL", "SHAPE_FILL", "TEXT_FILL", "STROKE_COLOR"];
+      v.setVariableCodeSyntax("WEB", `var(${c.token})`);
+    }
     bv[c.name] = v;
-    varResult.push({ name: c.name, id: v.id, created });
+    varResult.push({ name: v.name, id: v.id, created, boundCanonical: !!canonical });
   }
   const bfill = (name) => figma.variables.setBoundVariableForPaint({ type: "SOLID", color: { r: 0, g: 0, b: 0 } }, "color", bv[name]);
   const blackA = (a) => ({ type: "SOLID", color: { r: 0, g: 0, b: 0 }, opacity: a });

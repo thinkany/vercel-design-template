@@ -243,11 +243,14 @@ function requestedFamily(stack) {
 // Order: design pages → separator → Styleguide → scaffolded sections.
 const STYLEGUIDE_PAGE = "Styleguide";
 const SEPARATOR = "———";
-// Sections we scaffold as titled cover Pages for now (built out in a later
-// iteration). Keep in sync with the CLAUDE.md export-flow docs.
+// Titled cover Pages the scaffold phase creates to fix the Pages-panel order;
+// the dedicated export phases then FILL them (removing the cover):
+//   Block Library ← export-blocks-to-figma.mjs + figma-block-library.plugin.js
+//   Components    ← export-library-to-figma.mjs + figma-component-library.plugin.js
+// Keep in sync with the CLAUDE.md export-flow docs.
 const SCAFFOLD_SECTIONS = [
-  { name: "Block Library", blurb: "Reusable page sections (Header, Footer, hero, cards…). Scaffold — captured from the app's shared blocks in a later iteration." },
-  { name: "Components", blurb: "UI components mapped from the shadcn/ui + cva code. Scaffold — generated as Figma component sets in a later iteration." },
+  { name: "Block Library", blurb: "Reusable page sections (Header, Footer, hero…) as editable component sets with per-state variants. Filled by the `blocks` export phase." },
+  { name: "Components", blurb: "shadcn/ui atoms (Button, Badge, Toggle…) as component sets with variant properties from their cva config. Filled by the `components` export phase." },
 ];
 
 // ── Build the manifest ────────────────────────────────────────────────────────
