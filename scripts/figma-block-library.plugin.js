@@ -245,7 +245,7 @@ function buildHero(block, ctx, page) {
     const b = figma.createAutoLayout("HORIZONTAL");
     b.paddingLeft = b.paddingRight = 22; b.paddingTop = b.paddingBottom = 11;
     b.cornerRadius = 3;
-    b.fills = primary ? [bfill("amber")] : [];
+    b.fills = primary ? [bfill("accent")] : [];
     if (!primary) { b.strokes = [blackA(0.2)]; b.strokeWeight = 1; }
     const t = figma.createText();
     t.fontName = sansFont; t.characters = label.toUpperCase(); t.fontSize = 12; t.letterSpacing = { unit: "PIXELS", value: 1.2 };

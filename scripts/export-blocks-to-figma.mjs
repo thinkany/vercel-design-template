@@ -105,13 +105,15 @@ async function readEnvVar(name) {
 }
 
 // The --ta-* brand colors the blocks bind to (Header: cream/ink/gray-dark;
-// Footer adds gray-mid; Hero adds gray-mid + amber).
-const BRAND_TOKENS = [
+// Footer adds gray-mid; Hero adds the accent). The NEUTRALS use the template's
+// stable --ta-* token names; the ACCENT is resolved dynamically from brand.ts
+// (below) since projects name it differently (--ta-blue by default; a rebrand may
+// rename it, e.g. --ta-amber). The Figma variable is always named "accent".
+const BRAND_NEUTRALS = [
   { name: "cream", token: "--ta-cream" },
   { name: "ink", token: "--ta-ink" },
   { name: "gray-dark", token: "--ta-gray-dark" },
   { name: "gray-mid", token: "--ta-gray-mid" },
-  { name: "amber", token: "--ta-amber" },
 ];
 
 async function buildManifest(variationId) {
@@ -122,7 +124,16 @@ async function buildManifest(variationId) {
   const clientName = (await readEnvVar("VITE_CLIENT_NAME")) || "Client Name";
   const projectName = await readEnvVar("VITE_PROJECT_NAME");
 
-  const brandColors = BRAND_TOKENS
+  // Accent = the FIRST brand-palette color (convention), read from brand.ts so it
+  // works whatever the project names its accent token. Falls back to --ta-blue.
+  let accentToken = "--ta-blue";
+  try {
+    const { brand } = await loadTsModule(join(styleDir, "brand.ts"));
+    accentToken = brand?.paletteGroups?.[0]?.colors?.[0]?.token || accentToken;
+  } catch { /* keep the template-default accent */ }
+
+  const brandTokenList = [{ name: "accent", token: accentToken }, ...BRAND_NEUTRALS];
+  const brandColors = brandTokenList
     .filter((b) => tokens[b.token])
     .map((b) => ({ name: b.name, token: b.token, hex: tokens[b.token], rgb: hexRgb(tokens[b.token]) }));
 
