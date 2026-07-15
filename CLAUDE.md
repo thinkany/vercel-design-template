@@ -216,9 +216,9 @@ The full first-time export produces **one Figma file per variation** whose **Pag
 panel** mirrors the project: a **Page per design page** (Home, About, …) holding
 that page's per-breakpoint frames, a `———` separator, a **Styleguide** Page (real
 color **variables** + text **styles** + a specimen), a **Components** Page (shadcn
-atoms — Button/Badge/Toggle — as component sets with variant properties), and a
-**Block Library** Page (section blocks — Header/Footer/Hero — as component sets with
-per-state variants). This weaves the design **page capture** (screenshots, above)
+components — atoms Button/Badge/Toggle + the slotted Alert — as component sets with
+variant properties), and a **Block Library** Page (section blocks — Header/Footer/
+Hero — as component sets with per-state variants). This weaves the design **page capture** (screenshots, above)
 and the **design-system objects** (tokens, atoms, blocks — all editable, all bound
 to Figma variables) into a single organized file.
 
@@ -229,11 +229,14 @@ pattern) drive the design-system half. Load the `figma-use` +
 - **Brand tokens** → the Styleguide Page. `scripts/export-brand-to-figma.mjs` +
   `scripts/figma-brand-library.plugin.js` (phases `scaffold`/`variables`/
   `textstyles`/`specimen`). Detailed below.
-- **Atoms** → the Components Page. `scripts/export-library-to-figma.mjs` +
+- **Components** → the Components Page. `scripts/export-library-to-figma.mjs` +
   `scripts/figma-component-library.plugin.js` (PHASE `components`). Reads each
-  shadcn `ui/*.tsx` cva config (Button/Badge/Toggle) into a variant-property
-  component set; fills bound to a **System** variable collection. `npm run
-  export:library`.
+  shadcn `ui/*.tsx` cva config into a variant-property component set; fills bound to
+  a **System** variable collection. Two `kind`s, dispatched by the manifest's
+  `builder`: **atoms** (Button/Badge/Toggle — single label/icon child) and
+  **slotted** (Alert — a fixed multi-child icon|title+description grid). Only
+  variant-driven cva components belong here; behavioral/composite ones
+  (navigation-menu, sidebar) are excluded. `npm run export:library`.
 - **Blocks** → the Block Library Page. `scripts/export-blocks-to-figma.mjs` +
   `scripts/figma-block-library.plugin.js` (PHASE `blocks`). Reads the declared
   section blocks (`src/app/blocks.ts`) + brand colors/fonts into component sets

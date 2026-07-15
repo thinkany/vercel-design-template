@@ -9,13 +9,17 @@
 //     const MANIFEST = { ...library-{id}.json... };  // from export-library-to-figma.mjs
 //     const PHASE = "components";
 //
-// WHAT IT BUILDS  (prototype scope: the Button)
-//   A real Figma **component set** on the "Components" Page, with variant
-//   properties (variant × size) parsed from each child's `variant=…, size=…`
-//   name via figma.combineAsVariants. Fills/text/strokes are BOUND to a "System"
-//   variable collection (shadcn primitives), so the designer has TWO cascade
-//   levels: edit the master component → every instance updates; edit a variable
-//   → every component that binds it updates.
+// WHAT IT BUILDS
+//   Real Figma **component sets** on the "Components" Page, fills/text/strokes
+//   BOUND to a "System" variable collection (shadcn primitives) — two cascade
+//   levels: edit the master → instances update; edit a variable → every binder
+//   updates. Two kinds of component, dispatched by the manifest's `builder`:
+//   - ATOMS (Button/Badge/Toggle): a variant matrix, each variant a single
+//     label/icon child (buildAtomSet).
+//   - SLOTTED (Alert): a fixed multi-child structure — a 2-column grid,
+//     icon | (title + description) — one COMPONENT per variant (buildAlertSet).
+//   Variant properties are parsed from each child's `prop=value, …` name via
+//   figma.combineAsVariants.
 //
 // IDEMPOTENT: the System variables are find-by-name/update. The component set is
 //   a generated artifact — deleted by name + rebuilt each run (this DETACHES any
@@ -26,6 +30,27 @@
 // ── shared helpers ────────────────────────────────────────────────────────────
 function rgb(c) { return { r: c.r, g: c.g, b: c.b }; }
 function solid(c, opacity) { return { type: "SOLID", color: rgb(c), opacity: opacity == null ? 1 : opacity }; }
+
+// Frame a finished component set into the tidy grid on the page. `wrap` lets an
+// atom set (many variants) reflow; slotted sets (few, wide) sit in one row.
+function styleComponentSet(set, name, wrap) {
+  set.name = name;
+  set.clipsContent = false;
+  set.layoutMode = "HORIZONTAL";
+  set.layoutWrap = wrap ? "WRAP" : "NO_WRAP";
+  set.counterAxisAlignItems = wrap ? "CENTER" : "MIN";
+  set.itemSpacing = 24;
+  set.counterAxisSpacing = 24;
+  set.paddingLeft = set.paddingRight = set.paddingTop = set.paddingBottom = 40;
+  set.cornerRadius = 12;
+  set.fills = [solid({ r: 0.973, g: 0.969, b: 0.953 }, 1)]; // #f8f7f3 wash
+  set.strokes = [solid({ r: 0.886, g: 0.878, b: 0.855 }, 1)];
+  set.strokeWeight = 1;
+  set.resize(1040, Math.max(set.height, 1)); // fixed width; hug height (modes AFTER resize)
+  set.primaryAxisSizingMode = "FIXED";
+  set.counterAxisSizingMode = "AUTO";
+  return set;
+}
 
 async function getOrCreateCollection(name) {
   const cols = await figma.variables.getLocalVariableCollectionsAsync();
@@ -77,26 +102,26 @@ if (PHASE === "components") {
   // Remove the scaffold "Cover" (this page graduates from scaffold to real).
   for (const n of [...page.children]) if (n.name === "Cover") n.remove();
 
-  // ── 3. Fonts (Inter Medium for labels; fall back to Regular) ────────────────
+  // ── 3. Fonts (Inter Medium for labels/titles, Regular for descriptions) ─────
   const available = await figma.listAvailableFontsAsync();
   const hasInterMedium = available.some((a) => a.fontName.family === "Inter" && a.fontName.style === "Medium");
   const labelFont = hasInterMedium ? { family: "Inter", style: "Medium" } : { family: "Inter", style: "Regular" };
+  const regularFont = { family: "Inter", style: "Regular" };
   await figma.loadFontAsync(labelFont);
+  await figma.loadFontAsync(regularFont);
 
-  const built = [];
+  // Position a finished set clear of existing content on the page.
+  function placeSet(set) {
+    const rightEdge = page.children.reduce((mx, n) => (n.id === set.id ? mx : Math.max(mx, n.x + n.width)), 0);
+    set.x = rightEdge + 120; set.y = 0;
+  }
 
-  for (const comp of MANIFEST.components) {
-    // Idempotent: drop a prior set (or stray components) with this name.
-    const removed = [];
-    for (const n of [...page.children]) {
-      if (n.name === comp.name && (n.type === "COMPONENT_SET" || n.type === "COMPONENT")) { removed.push(n.id); n.remove(); }
-    }
-
-    // Build one COMPONENT per variant combination.
+  // ATOM set — variant matrix, a single label/icon child per variant.
+  function buildAtomSet(comp) {
     const nodes = [];
     for (const v of comp.variants) {
       const node = figma.createComponent();
-      node.name = v.name; // "variant=default, size=default" → parsed by combineAsVariants
+      node.name = v.name; // "variant=…, size=…" → parsed by combineAsVariants
       node.layoutMode = "HORIZONTAL";
       node.primaryAxisAlignItems = "CENTER";
       node.counterAxisAlignItems = "CENTER";
@@ -112,7 +137,6 @@ if (PHASE === "components") {
 
       // Child FIRST (so the auto-layout parent can hug it), then size.
       if (v.iconOnly) {
-        // Icon placeholder: a 16×16 rounded square tinted with the text color.
         const box = figma.createRectangle();
         box.resize(16, 16); box.cornerRadius = 3;
         const t = paintFor(v.text);
@@ -131,44 +155,70 @@ if (PHASE === "components") {
       }
 
       // Size LAST: resize() resets sizing modes to FIXED, so set modes AFTER it.
-      // Fixed height; hug width for text buttons, fixed square for icon.
       node.resize(v.iconOnly ? (v.width || v.height) : Math.max(v.height, 1), v.height);
       node.counterAxisSizingMode = "FIXED";
       node.primaryAxisSizingMode = v.iconOnly ? "FIXED" : "AUTO";
       nodes.push(node);
     }
+    return styleComponentSet(figma.combineAsVariants(nodes, page), comp.name, true);
+  }
 
-    // Combine into a variant set; combineAsVariants reads the property axes from
-    // the "prop=value, prop=value" names.
-    const set = figma.combineAsVariants(nodes, page);
-    set.name = comp.name;
-    set.clipsContent = false;
-    // Tidy grid: auto-layout the set with wrapping, padding, and a light frame.
-    set.layoutMode = "HORIZONTAL";
-    set.layoutWrap = "WRAP";
-    set.counterAxisAlignItems = "CENTER";
-    set.itemSpacing = 24;
-    set.counterAxisSpacing = 24;
-    set.paddingLeft = set.paddingRight = set.paddingTop = set.paddingBottom = 40;
-    set.cornerRadius = 12;
-    set.fills = [solid({ r: 0.973, g: 0.969, b: 0.953 }, 1)]; // #f8f7f3 wash
-    set.strokes = [solid({ r: 0.886, g: 0.878, b: 0.855 }, 1)];
-    set.strokeWeight = 1;
-    // Fixed width forces the wrap; hug height. Modes AFTER resize (see above).
-    set.resize(1040, Math.max(set.height, 1));
-    set.primaryAxisSizingMode = "FIXED";
-    set.counterAxisSizingMode = "AUTO";
+  // SLOTTED set — Alert: [ icon | (title + description) ] per variant.
+  function buildAlertSet(comp) {
+    const g = comp.geometry;
+    const nodes = [];
+    for (const v of comp.variants) {
+      const c = figma.createComponent();
+      c.name = v.name;
+      c.layoutMode = "HORIZONTAL";
+      c.counterAxisAlignItems = "MIN"; // items-start (icon aligns to title top)
+      c.itemSpacing = g.gap;
+      c.paddingLeft = c.paddingRight = g.padX;
+      c.paddingTop = c.paddingBottom = g.padY;
+      c.cornerRadius = g.radius;
+      const bg = paintFor(v.bg); c.fills = bg ? [bg] : [];
+      const bd = paintFor(v.border); if (bd) { c.strokes = [bd]; c.strokeWeight = 1; } else { c.strokes = []; }
+      // Width fixed FIRST so the content column can FILL the remaining space.
+      c.resize(g.width, 10);
+      c.primaryAxisSizingMode = "FIXED";
 
-    // Position clear of existing content on the page.
-    const rightEdge = page.children.reduce((mx, n) => (n.id === set.id ? mx : Math.max(mx, n.x + n.width)), 0);
-    set.x = rightEdge + 120; set.y = 0;
+      const icon = figma.createRectangle();
+      icon.resize(g.iconSize, g.iconSize); icon.cornerRadius = 2;
+      const ic = paintFor(v.icon); icon.fills = ic ? [ic] : [solid({ r: 0, g: 0, b: 0 }, 1)];
+      c.appendChild(icon);
 
-    built.push({
-      component: comp.name,
-      componentSetId: set.id,
-      variants: comp.variants.length,
-      removedPrior: removed,
-    });
+      const content = figma.createAutoLayout("VERTICAL", { itemSpacing: g.contentGap });
+      content.fills = [];
+      c.appendChild(content); content.layoutSizingHorizontal = "FILL";
+
+      const title = figma.createText();
+      title.fontName = labelFont; title.characters = comp.content.title; title.fontSize = g.titleSize;
+      title.letterSpacing = { unit: "PERCENT", value: -2.5 };
+      const tp = paintFor(v.title); title.fills = tp ? [tp] : [solid({ r: 0, g: 0, b: 0 }, 1)];
+      content.appendChild(title); title.layoutSizingHorizontal = "FILL"; title.textAutoResize = "HEIGHT";
+
+      const desc = figma.createText();
+      desc.fontName = regularFont; desc.characters = comp.content.description; desc.fontSize = g.descSize;
+      desc.lineHeight = { unit: "PERCENT", value: 145 };
+      const dp = paintFor(v.desc); desc.fills = dp ? [dp] : [solid({ r: 0, g: 0, b: 0 }, 1)];
+      content.appendChild(desc); desc.layoutSizingHorizontal = "FILL"; desc.textAutoResize = "HEIGHT";
+
+      c.counterAxisSizingMode = "AUTO"; // hug height (width stays FIXED)
+      nodes.push(c);
+    }
+    return styleComponentSet(figma.combineAsVariants(nodes, page), comp.name, false);
+  }
+
+  const built = [];
+  for (const comp of MANIFEST.components) {
+    // Idempotent: drop a prior set (or stray components) with this name.
+    const removed = [];
+    for (const n of [...page.children]) {
+      if (n.name === comp.name && (n.type === "COMPONENT_SET" || n.type === "COMPONENT")) { removed.push(n.id); n.remove(); }
+    }
+    const set = comp.builder === "alert" ? buildAlertSet(comp) : buildAtomSet(comp);
+    placeSet(set);
+    built.push({ component: comp.name, componentSetId: set.id, variants: comp.variants.length, removedPrior: removed });
   }
 
   return {

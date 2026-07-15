@@ -234,6 +234,22 @@ const COMPONENTS = [
       outline: { fill: "transparent", text: "--foreground", border: "--border" },
     },
   },
+  {
+    // ui/alert.tsx — a SLOTTED component (not a single-child atom): a 2-column
+    // grid, icon | (title + description). kind:"slotted" routes it to the
+    // dedicated buildAlert() builder instead of the variant-matrix atom path.
+    name: "Alert", label: "Alert", kind: "slotted", builder: "alert",
+    properties: { variant: ["default", "destructive"] },
+    variantAxis: "variant",
+    content: { title: "Heads up!", description: "You can add supporting detail here to give the alert some context." },
+    // Geometry from the cva (rounded-lg=8, px-4=16, py-3=12, gap-x-3=12, svg size-4=16, text-sm=14).
+    geometry: { radius: 8, padX: 16, padY: 12, gap: 12, iconSize: 16, contentGap: 2, titleSize: 14, descSize: 14, width: 380 },
+    // Per-variant slot colors: bg / title / description / icon / border.
+    slots: {
+      default: { bg: "--card", title: "--card-foreground", desc: "--muted-foreground", icon: "--card-foreground", border: "--border" },
+      destructive: { bg: "--card", title: "--destructive", desc: "--destructive", icon: "--destructive", border: "--border" },
+    },
+  },
 ];
 
 // ── Build the manifest ────────────────────────────────────────────────────────
@@ -303,13 +319,41 @@ function buildComponent(spec, tokens) {
   };
 }
 
+// Slotted components (Alert): fixed multi-child structure, one COLOR set per
+// slot (bg/title/description/icon/border) per variant. The Figma builder holds
+// the node structure; this resolves the slot colors + collects bound variables.
+function buildSlotted(spec, tokens) {
+  const usedTokens = new Map();
+  const note = (paint) => { if (paint.kind === "var") usedTokens.set(paint.token, paint.figmaName); };
+  const variantEntries = [];
+  for (const variant of spec.properties.variant) {
+    const sl = spec.slots[variant];
+    const bg = resolvePaint(sl.bg, tokens);
+    const title = resolvePaint(sl.title, tokens);
+    const desc = resolvePaint(sl.desc, tokens);
+    const icon = resolvePaint(sl.icon, tokens);
+    const border = resolvePaint(sl.border, tokens);
+    [bg, title, desc, icon, border].forEach(note);
+    variantEntries.push({ props: { variant }, name: `variant=${variant}`, bg, title, desc, icon, border });
+  }
+  const variables = [...usedTokens.entries()].map(([token, figmaName]) => {
+    const rgb = parseColor(tokens[token]);
+    return { figmaName, token, rgb: rgb ? { r: rgb.r, g: rgb.g, b: rgb.b } : { r: 0, g: 0, b: 0 }, a: rgb ? rgb.a : 1 };
+  }).sort((x, y) => x.figmaName.localeCompare(y.figmaName));
+  return {
+    name: spec.name, label: spec.label, builder: spec.builder, kind: "slotted",
+    properties: spec.properties, defaultVariant: { variant: spec.properties.variant[0] },
+    content: spec.content, geometry: spec.geometry, variants: variantEntries, variables,
+  };
+}
+
 function buildManifest(variationId, tokens) {
   return {
     variationId,
     collectionName: "System",     // Figma variable collection for shadcn primitives
     componentsPageName: "Components",
     generatedAt: new Date().toISOString(),
-    components: COMPONENTS.map((spec) => buildComponent(spec, tokens)),
+    components: COMPONENTS.map((spec) => (spec.kind === "slotted" ? buildSlotted(spec, tokens) : buildComponent(spec, tokens))),
   };
 }
 
