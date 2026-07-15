@@ -144,12 +144,14 @@ verbatim** (adapt only the `{Pages|App}` label):
 **P15 · header "Export scope"** — *"What would you like to send to Figma?"*
 - **Both Styleguide and {Pages|App}** → the cohesive one-file flow ("Exporting to
   Figma as ONE cohesive file" below): `scaffold` → capture Pages onto their Figma
-  Pages → `variables` → `textstyles` → `specimen`.
-- **Styleguide only** → the brand builder phases only (`scaffold` for the
-  Styleguide Page if needed → `variables` → `textstyles` → `specimen`); skip page
-  captures.
+  Pages → `variables` → `textstyles` → `specimen` → `components` (shadcn atoms) →
+  `blocks` (section blocks).
+- **Styleguide only** → the design-system phases only, no page captures (`scaffold`
+  for the panel if needed → `variables` → `textstyles` → `specimen` → `components`
+  → `blocks`). "Styleguide" is the whole brand library here — tokens **plus** the
+  Components + Block Library pages.
 - **{Pages|App} only** → the page-capture flow only ("Exporting designs to Figma"
-  below); skip variables/styles/specimen.
+  below); skip the design-system phases (variables/styles/specimen/components/blocks).
 
 Use **"App"** for `projectType === "app"`, else **"Pages"**. Brand-guideline
 projects (`projectType === "brand"`) have no design pages — run **Styleguide only**
@@ -213,12 +215,36 @@ usage is in [README.md](README.md) → "Exporting designs to Figma".
 The full first-time export produces **one Figma file per variation** whose **Pages
 panel** mirrors the project: a **Page per design page** (Home, About, …) holding
 that page's per-breakpoint frames, a `———` separator, a **Styleguide** Page (real
-color **variables** + text **styles** + a specimen), then scaffolded **Block
-Library** / **Components** Pages (titled covers, built out later). This weaves the
-two export paths — the design **page capture** (screenshots, above) and the
-**brand library** (design-system objects) — into a single organized file.
+color **variables** + text **styles** + a specimen), a **Components** Page (shadcn
+components — atoms Button/Badge/Toggle + the slotted Alert — as component sets with
+variant properties), and a **Block Library** Page (section blocks — Header/Footer/
+Hero — as component sets with per-state variants). This weaves the design **page capture** (screenshots, above)
+and the **design-system objects** (tokens, atoms, blocks — all editable, all bound
+to Figma variables) into a single organized file.
 
-Two pieces drive the brand/structure half:
+Three script pairs (each an offline manifest + a `use_figma` builder body, same
+pattern) drive the design-system half. Load the `figma-use` +
+`figma-generate-library` skills before any builder call:
+
+- **Brand tokens** → the Styleguide Page. `scripts/export-brand-to-figma.mjs` +
+  `scripts/figma-brand-library.plugin.js` (phases `scaffold`/`variables`/
+  `textstyles`/`specimen`). Detailed below.
+- **Components** → the Components Page. `scripts/export-library-to-figma.mjs` +
+  `scripts/figma-component-library.plugin.js` (PHASE `components`). Reads each
+  shadcn `ui/*.tsx` cva config into a variant-property component set; fills bound to
+  a **System** variable collection. Two `kind`s, dispatched by the manifest's
+  `builder`: **atoms** (Button/Badge/Toggle — single label/icon child) and
+  **slotted** (Alert — a fixed multi-child icon|title+description grid). Only
+  variant-driven cva components belong here; behavioral/composite ones
+  (navigation-menu, sidebar) are excluded. `npm run export:library`.
+- **Blocks** → the Block Library Page. `scripts/export-blocks-to-figma.mjs` +
+  `scripts/figma-block-library.plugin.js` (PHASE `blocks`). Reads the declared
+  section blocks (`src/app/blocks.ts`) + brand colors/fonts into component sets
+  with per-state variants (Header Desktop/Mobile/Mobile-open, …); fills bound to a
+  **Brand** variable collection. `npm run export:blocks`. Add a block by adding a
+  `blocks.ts` row **and** a `build<Name>()` in the builder.
+
+The brand-tokens pair in detail:
 
 - **[scripts/export-brand-to-figma.mjs](scripts/export-brand-to-figma.mjs)** — the
   deterministic, offline manifest. Reads a variation's `brand.ts` (names/roles, via
@@ -278,8 +304,25 @@ Two pieces drive the brand/structure half:
      `npm run export:figma -- --captures …` and poll. Arrange the breakpoint frames
      on the page.
   5. Run **`variables`** → **`textstyles`** → **`specimen`** (sequential, never
-     parallel), each embedding `MANIFEST` + the matching `PHASE` + the builder body.
-  6. Screenshot the Styleguide frame + a scaffold cover to verify.
+     parallel), each embedding the brand `MANIFEST` + the matching `PHASE` + the
+     brand builder body.
+  6. **Fill the Components Page (atoms):** `npm run export:library -- -v {id}`, then
+     run the component builder (PHASE `components`) embedding that manifest + the
+     `figma-component-library.plugin.js` body. It finds the "Components" Page by name
+     (dropping the scaffold cover) and builds the atom component sets + a `System`
+     variable collection.
+  7. **Fill the Block Library Page (blocks):** `npm run export:blocks -- -v {id}`,
+     then run the block builder (PHASE `blocks`) embedding that manifest + the
+     `figma-block-library.plugin.js` body. Same find-by-name fill on "Block Library".
+     Its blocks bind to the **`Brand`** collection — and because step 5's `variables`
+     phase already populated `Brand`, the builder **binds to those canonical
+     `var(--ta-*)` variables** (matched by code syntax) rather than duplicating them.
+     Run standalone (blocks without the brand phase) and it creates its own instead.
+  8. Screenshot the Styleguide, Components, and Block Library frames to verify.
+
+All builder calls stay **sequential, never parallel** (Figma state mutations must
+serialize). The `components`/`blocks` phases are self-contained — safe to re-run to
+update after a token or `cva`/`blocks.ts` change (idempotent find-by-name).
 
 **Fonts:** the builder uses the project's real `--ta-font-*` family when Figma has
 it, else a role-based **proxy** (Display→Playfair Display, Serif→Lora, Sans→Inter,

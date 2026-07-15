@@ -61,13 +61,15 @@ const C = {
 };
 
 // ADMIN UI colors — the styleguide's structural chrome (dividers, rules, nav,
-// header, labels). Separate from the project palette above so the tooling keeps
-// its colors even if a project renames or removes its --ta-* brand tokens; a
-// designer retints the admin UI by editing --admin-* in tokens.css.
+// header, labels). Deliberately NEUTRAL (black / grays / white) and separate
+// from the project palette above so the tooling reads as foundation, not brand,
+// and stays constant across every project. `accent` is a near-black for primary
+// actions; `danger` is the one semantic color (destructive/error). Edit the
+// values in --admin-* in tokens.css.
 const CA = {
-  blue: "var(--admin-blue)",
-  red: "var(--admin-red)",
-  cream: "var(--admin-cream)",
+  accent: "var(--admin-accent)",
+  danger: "var(--admin-danger)",
+  surface: "var(--admin-surface)",
   ink: "var(--admin-ink)",
   dark: "var(--admin-gray-dark)",
   mid: "var(--admin-gray-mid)",
@@ -174,13 +176,13 @@ const NAV_SECTIONS = [
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 function Divider() {
-  return <div style={{ borderTop: `3px solid ${CA.blue}`, margin: "64px 0 0" }} />;
+  return <div style={{ borderTop: `3px solid ${CA.accent}`, margin: "64px 0 0" }} />;
 }
 
 function SectionTitle({ eyebrow, title, desc }: { eyebrow: string; title: string; desc: string }) {
   return (
     <div style={{ marginBottom: 40 }}>
-      <div style={{ fontFamily: A.body, fontSize: 11, fontWeight: 500, letterSpacing: "0.15em", color: CA.blue, textTransform: "uppercase", marginBottom: 8 }}>
+      <div style={{ fontFamily: A.body, fontSize: 11, fontWeight: 500, letterSpacing: "0.15em", color: CA.accent, textTransform: "uppercase", marginBottom: 8 }}>
         {eyebrow}
       </div>
       <h2 style={{ fontFamily: A.heading, fontSize: 28, fontWeight: 700, color: CA.ink, margin: "0 0 12px", lineHeight: 1.2 }}>
@@ -201,7 +203,7 @@ function SubHead({ children }: { children: React.ReactNode }) {
   );
 }
 
-function DemoBox({ children, bg = CA.cream, pad = 32 }: { children: React.ReactNode; bg?: string; pad?: number }) {
+function DemoBox({ children, bg = CA.surface, pad = 32 }: { children: React.ReactNode; bg?: string; pad?: number }) {
   return (
     <div style={{ background: bg, padding: pad, borderRadius: 2, border: `1px solid rgba(0,0,0,0.06)`, marginBottom: 8 }}>
       {children}
@@ -211,7 +213,7 @@ function DemoBox({ children, bg = CA.cream, pad = 32 }: { children: React.ReactN
 
 function Token({ children }: { children: React.ReactNode }) {
   return (
-    <code style={{ fontFamily: A.mono, fontSize: 11, background: "#f0f0f0", color: CA.blue, padding: "2px 6px", borderRadius: 2 }}>
+    <code style={{ fontFamily: A.mono, fontSize: 11, background: "#f0f0f0", color: CA.accent, padding: "2px 6px", borderRadius: 2 }}>
       {children}
     </code>
   );
@@ -220,11 +222,11 @@ function Token({ children }: { children: React.ReactNode }) {
 function LevelBadge({ level }: { level: "primitive" | "atom" | "molecule" | "organism" | "template" | "page" }) {
   const map: Record<string, { bg: string; text: string }> = {
     primitive: { bg: "#6b46c1", text: "#fff" },
-    atom:      { bg: CA.blue,   text: "#fff" },
+    atom:      { bg: CA.accent,   text: "#fff" },
     molecule:  { bg: "#0d7a55", text: "#fff" },
     organism:  { bg: CA.ink,    text: "#fff" },
     template:  { bg: "#a16207", text: "#fff" },
-    page:      { bg: CA.red,    text: "#fff" },
+    page:      { bg: CA.danger,    text: "#fff" },
   };
   const s = map[level];
   return (
@@ -327,14 +329,14 @@ function ColorsSection({ groups, brandNeedsSetup, onMarkBrandEstablished }: {
         />
 
         {brandNeedsSetup && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", border: `1px solid ${CA.light}`, background: CA.cream, borderRadius: 3, padding: "12px 16px", marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", border: `1px solid ${CA.light}`, background: CA.surface, borderRadius: 3, padding: "12px 16px", marginBottom: 24 }}>
             <div style={{ fontFamily: A.body, fontSize: 13, color: CA.dark, lineHeight: 1.5 }}>
               <strong style={{ fontWeight: 600 }}>Template default palette.</strong> This scope's brand hasn't been established yet — run <Token>/setup-styleguide</Token> to set its <Token>--ta-*</Token> colors.
             </div>
             {onMarkBrandEstablished && (
               <button
                 onClick={onMarkBrandEstablished}
-                style={{ flexShrink: 0, background: CA.blue, color: "#fff", border: "none", borderRadius: 3, padding: "7px 14px", fontFamily: A.body, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", cursor: "pointer", whiteSpace: "nowrap" }}
+                style={{ flexShrink: 0, background: CA.accent, color: "#fff", border: "none", borderRadius: 3, padding: "7px 14px", fontFamily: A.body, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", cursor: "pointer", whiteSpace: "nowrap" }}
               >
                 Mark brand established
               </button>
@@ -396,8 +398,8 @@ function SpacingSection() {
           {SPACING_SCALE.map((s) => (
             <div key={s.px} style={{ display: "flex", alignItems: "center", gap: 16 }}>
               <div style={{ fontFamily: A.mono, fontSize: 11, color: CA.mid, width: 28, textAlign: "right", flexShrink: 0 }}>{s.px}px</div>
-              <div style={{ background: CA.blue, height: 20, width: s.px * 4, minWidth: 2, borderRadius: 1, flexShrink: 0 }} />
-              <div style={{ fontFamily: A.mono, fontSize: 11, color: CA.blue, width: 120, flexShrink: 0 }}>{s.tw}</div>
+              <div style={{ background: CA.accent, height: 20, width: s.px * 4, minWidth: 2, borderRadius: 1, flexShrink: 0 }} />
+              <div style={{ fontFamily: A.mono, fontSize: 11, color: CA.accent, width: 120, flexShrink: 0 }}>{s.tw}</div>
               <div style={{ fontFamily: A.body, fontSize: 13, color: CA.mid }}>{s.use}</div>
             </div>
           ))}
@@ -444,7 +446,7 @@ function TypographySection({ fonts, needsSetup }: { fonts: BrandFont[]; needsSet
                 <DemoBox key={ff.name} bg={C.white} pad={28}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 12, marginBottom: 18 }}>
                     <div>
-                      <div style={{ fontFamily: A.body, fontSize: 11, fontWeight: 600, letterSpacing: "0.14em", color: CA.blue, textTransform: "uppercase", marginBottom: 6 }}>{ff.name} · {ff.role}</div>
+                      <div style={{ fontFamily: A.body, fontSize: 11, fontWeight: 600, letterSpacing: "0.14em", color: CA.accent, textTransform: "uppercase", marginBottom: 6 }}>{ff.name} · {ff.role}</div>
                       <Token>{ff.token}</Token>
                     </div>
                     <div style={{ fontFamily: ff.stack, fontSize: 34, color: C.ink, lineHeight: 1 }}>{fontName(stack)}</div>
@@ -461,7 +463,7 @@ function TypographySection({ fonts, needsSetup }: { fonts: BrandFont[]; needsSet
             })}
           </div>
         ) : (
-          <div style={{ border: `1px dashed ${CA.light}`, borderRadius: 2, padding: "56px 32px", textAlign: "center", background: CA.cream }}>
+          <div style={{ border: `1px dashed ${CA.light}`, borderRadius: 2, padding: "56px 32px", textAlign: "center", background: CA.surface }}>
             <div style={{ fontFamily: A.heading, fontSize: 24, fontWeight: 700, color: CA.mid, marginBottom: 10 }}>No typeface selected yet</div>
             <div style={{ fontFamily: A.body, fontSize: 14, color: CA.mid, lineHeight: 1.6, maxWidth: 440, margin: "0 auto" }}>
               Choose the project's fonts in <Token>tokens.css</Token> — or run <Token>/setup-styleguide</Token> — and their specimens will appear here.
@@ -517,7 +519,7 @@ function LineHeightSection() {
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           {LINE_HEIGHTS.map((lh) => (
             <div key={lh.value} style={{ display: "grid", gridTemplateColumns: "80px 1fr 220px", gap: 24, padding: "20px 0", borderBottom: "1px solid rgba(0,0,0,0.06)", alignItems: "start" }}>
-              <div style={{ fontFamily: A.mono, fontSize: 13, color: CA.blue, fontWeight: 500 }}>{lh.label}</div>
+              <div style={{ fontFamily: A.mono, fontSize: 13, color: CA.accent, fontWeight: 500 }}>{lh.label}</div>
               <div style={{ fontFamily: F.serif, fontSize: 15, color: C.ink, lineHeight: lh.value }}>
                 Line height sets the vertical rhythm of running text. Tighter values suit large headings; looser values give long-form body copy room to breathe and stay comfortable to read across a full measure.
               </div>
@@ -924,7 +926,7 @@ export function StyleGuide({ onNavigate, variationId, needsSetup, onMarkUpdated,
       )}
 
       {/* PAGE HEADER */}
-      <div style={{ background: CA.ink, borderBottom: `3px solid ${CA.blue}` }}>
+      <div style={{ background: CA.ink, borderBottom: `3px solid ${CA.accent}` }}>
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "28px 48px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <div style={{ fontFamily: A.body, fontSize: 10, fontWeight: 600, letterSpacing: "0.18em", color: "#fff", marginBottom: 6, textTransform: "uppercase" }}>{siteConfig.clientName}</div>
@@ -954,7 +956,7 @@ export function StyleGuide({ onNavigate, variationId, needsSetup, onMarkUpdated,
       <div style={{ display: "flex", maxWidth: 1280, margin: "0 auto" }}>
 
         {/* LEFT NAV */}
-        <nav style={{ width: 220, flexShrink: 0, position: "sticky", top: 0, height: "100vh", overflowY: "auto", background: CA.cream, borderRight: "1px solid rgba(0,0,0,0.06)", padding: "32px 0 80px" }}>
+        <nav style={{ width: 220, flexShrink: 0, position: "sticky", top: 0, height: "100vh", overflowY: "auto", background: CA.surface, borderRight: "1px solid rgba(0,0,0,0.06)", padding: "32px 0 80px" }}>
           {NAV_SECTIONS.map((item, i) => {
             if (item.isHeader) {
               return (
@@ -972,9 +974,9 @@ export function StyleGuide({ onNavigate, variationId, needsSetup, onMarkUpdated,
                   display: "block", width: "100%", textAlign: "left",
                   padding: "7px 24px 7px 28px",
                   fontFamily: A.body, fontSize: 13, fontWeight: isActive ? 500 : 400,
-                  color: isActive ? CA.blue : CA.dark,
+                  color: isActive ? CA.accent : CA.dark,
                   background: isActive ? "rgba(30,75,150,0.06)" : "transparent",
-                  border: "none", borderLeft: `2px solid ${isActive ? CA.blue : "transparent"}`,
+                  border: "none", borderLeft: `2px solid ${isActive ? CA.accent : "transparent"}`,
                   cursor: "pointer", letterSpacing: "0.01em",
                 }}
               >
@@ -990,7 +992,7 @@ export function StyleGuide({ onNavigate, variationId, needsSetup, onMarkUpdated,
           {/* INTRO */}
           <section id="intro" data-sg-section="intro">
             <div style={{ maxWidth: 680 }}>
-              <div style={{ fontFamily: A.body, fontSize: 10, fontWeight: 600, letterSpacing: "0.18em", color: CA.blue, marginBottom: 12 }}>INTRODUCTION</div>
+              <div style={{ fontFamily: A.body, fontSize: 10, fontWeight: 600, letterSpacing: "0.18em", color: CA.accent, marginBottom: 12 }}>INTRODUCTION</div>
               <h1 style={{ fontFamily: A.heading, fontSize: 40, fontWeight: 700, color: CA.ink, lineHeight: 1.1, margin: "0 0 20px" }}>
                 The {siteConfig.clientName} Design System
               </h1>
@@ -1003,13 +1005,13 @@ export function StyleGuide({ onNavigate, variationId, needsSetup, onMarkUpdated,
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
                 {[
                   { level: "Primitives", badge: "#6b46c1", desc: "Raw design tokens: colors, spacing, type scale, line heights. The sub-atomic layer." },
-                  { level: "Atoms",      badge: CA.blue,    desc: "Single-purpose UI units: buttons, badges, form inputs, icons." },
+                  { level: "Atoms",      badge: CA.accent,    desc: "Single-purpose UI units: buttons, badges, form inputs, icons." },
                   { level: "Molecules",  badge: "#0d7a55", desc: "Purposeful combinations of atoms, e.g. a content card." },
                   { level: "Organisms",  badge: CA.ink,     desc: "Standalone page sections, e.g. a site header, hero, or footer." },
                   { level: "Templates",  badge: "#a16207", desc: "Page layout wireframes: column structure and organism sequencing, no real content." },
-                  { level: "Pages",      badge: CA.red,     desc: "Specific instances of templates populated with real content." },
+                  { level: "Pages",      badge: CA.danger,     desc: "Specific instances of templates populated with real content." },
                 ].map(({ level, badge, desc }) => (
-                  <div key={level} style={{ background: CA.cream, padding: "16px", borderRadius: 2, borderTop: `3px solid ${badge}` }}>
+                  <div key={level} style={{ background: CA.surface, padding: "16px", borderRadius: 2, borderTop: `3px solid ${badge}` }}>
                     <div style={{ fontFamily: A.body, fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: badge, marginBottom: 6 }}>{level.toUpperCase()}</div>
                     <div style={{ fontFamily: A.body, fontSize: 13, color: CA.dark, lineHeight: 1.5 }}>{desc}</div>
                   </div>

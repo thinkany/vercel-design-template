@@ -163,12 +163,28 @@ async function main() {
           }
           await page.addScriptTag({ url: CAPTURE_JS });
           await page.waitForFunction(() => typeof window.figma?.captureForDesign === "function", { timeout: 15000 });
-          await page.evaluate(
-            async ({ captureId, endpoint }) =>
-              window.figma.captureForDesign({ captureId, endpoint, selector: "[data-capture-ready]" }),
-            entry
-          );
-          console.log(`  ✓ ${label}: submitted capture ${entry.captureId} — poll it to finish`);
+          // captureForDesign fires the submit request, but its returned promise can
+          // hang after the capture actually lands (a known flakiness). Awaiting it
+          // directly would stall the next view and teardown, so race it against a
+          // bounded timeout — the capture still submits; poll the ID to confirm.
+          const outcome = await Promise.race([
+            page
+              .evaluate(
+                async ({ captureId, endpoint }) =>
+                  window.figma.captureForDesign({ captureId, endpoint, selector: "[data-capture-ready]" }),
+                entry
+              )
+              .then(() => "returned")
+              .catch((e) => `error: ${e?.message || e}`),
+            new Promise((r) => setTimeout(() => r("timeout"), 45000)),
+          ]);
+          if (outcome === "timeout") {
+            console.log(`  ✓ ${label}: capture ${entry.captureId} submitted (serialize didn't return in 45s — poll to confirm)`);
+          } else if (String(outcome).startsWith("error")) {
+            console.warn(`  ! ${label}: capture ${entry.captureId} ${outcome} (poll to confirm it landed)`);
+          } else {
+            console.log(`  ✓ ${label}: submitted capture ${entry.captureId} — poll it to finish`);
+          }
         } else {
           const file = join(args.out, `${args.variation}-${pg.id}-${view}-${width}w.png`);
           const png = await page.screenshot({ fullPage: true });
@@ -184,11 +200,15 @@ async function main() {
       console.log(`\nDone. Review the PNGs in ./${args.out} to confirm each page/breakpoint reflows correctly.`);
     }
   } finally {
-    await browser.close();
+    // Swallow teardown errors: a dangling capture evaluate can make close() emit a
+    // ProtocolError even though every capture already submitted.
+    try { await browser.close(); } catch { /* ignore teardown noise */ }
   }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Force an explicit exit — puppeteer can leave a lingering handle after a raced
+// capture evaluate, which would otherwise keep the process alive indefinitely.
+main().then(
+  () => process.exit(0),
+  (err) => { console.error(err); process.exit(1); }
+);

@@ -33,14 +33,19 @@
   --admin-font-mono: 'DM Mono', ui-monospace, monospace;
 
   /* ── Admin UI colors ────────────────────────────────────────────
-     For the styleguide's structural chrome, the dashboard, and the gated
-     page. Kept SEPARATE from the project's --ta-* brand palette below so the
-     tooling keeps its colors even if a project renames or removes its brand
-     tokens. A designer can retint the admin UI by editing these hexes.     */
-  --admin-blue: #1e4b96;
-  --admin-red: #c41230;
-  --admin-cream: #f8f7f3;
-  --admin-ink: #111111;
+     The tooling chrome — the styleguide's structural chrome, the dashboard,
+     and the gated login page. Deliberately NEUTRAL (black / grays / white)
+     and fully SEPARATE from the project's --ta-* client palette below, so the
+     admin experience reads as foundation, not brand: it never borrows or
+     influences the client's colors, and stays constant across every project.
+     Only one semantic accent — --admin-danger — carries color, reserved for
+     destructive/error states (delete, invalid input) where a signal is needed.
+     The gated page (middleware.js) can't read these tokens (edge runtime), so
+     it mirrors the same hexes inline — keep the two in sync.               */
+  --admin-accent: #1a1a1a;    /* primary actions, active/selection states */
+  --admin-danger: #b3261e;    /* destructive + error only (semantic, not brand) */
+  --admin-surface: #fafafa;   /* neutral app background (was warm cream) */
+  --admin-ink: #111111;       /* primary text */
   --admin-gray-dark: #333333;
   --admin-gray-mid: #777777;
   --admin-gray-light: #cccccc;

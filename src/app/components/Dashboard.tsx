@@ -42,7 +42,7 @@ export function Dashboard() {
   return (
     <div style={{
       minHeight: "100vh",
-      background: "var(--admin-cream)",
+      background: "var(--admin-surface)",
       fontFamily: "var(--admin-font-body)",
       fontWeight: 300,
     }}>
@@ -108,7 +108,7 @@ export function Dashboard() {
           <button
             onClick={() => setShowMakeModal(true)}
             style={{
-              background: "var(--admin-blue)",
+              background: "var(--admin-accent)",
               color: "#fff",
               border: "none",
               borderRadius: 3,
@@ -197,7 +197,7 @@ export function Dashboard() {
                 padding: "10px 22px",
                 border: "none",
                 borderRadius: 3,
-                background: "var(--admin-blue)",
+                background: "var(--admin-accent)",
                 color: "#fff",
                 cursor: "pointer",
                 fontSize: 13,
@@ -244,7 +244,7 @@ export function Dashboard() {
                 padding: "9px 18px",
                 border: "none",
                 borderRadius: 3,
-                background: "var(--admin-red)",
+                background: "var(--admin-danger)",
                 color: "#fff",
                 cursor: "pointer",
                 fontSize: 13,
