@@ -72,31 +72,24 @@ Follow these steps:
    blank on a fresh template pull).
 
 2. **Ask for the company name FIRST.** This is the first question the user sees.
-   `VITE_COMPANY_NAME` fills the dashboard header wordmark. Use `AskUserQuestion`
-   with a single question whose `question` text is the two lines below, with a
-   **blank line between them** (put a real `\n\n` in the string so it renders as
-   two lines, not one run-on sentence):
+   `VITE_COMPANY_NAME` fills the dashboard header wordmark. A company name has no
+   reasonable presets, so **use a plain text prompt** (not `AskUserQuestion`) —
+   just ask for the value directly:
 
    > What is your company name?
    >
    > This name will appear on the login screen and throughout your client-facing
    > dashboard.
 
-   Its `header` (the short chip label) is **"Your Company Name"**. Provide exactly
-   two preset options — the tool auto-adds a free-text "Other → type your own"
-   field, so do NOT add a redundant "enter your own" preset:
-   - **"Design Template For"** — the default (list it first).
-   - **"A thinkany.design Template"** — the second preset.
-   The user types their real company name via the automatic "Other" field.
-   Show the current `VITE_COMPANY_NAME` if one is already set.
+   Show the current `VITE_COMPANY_NAME` if one is already set. If the user leaves
+   it blank, keep the existing value (or re-ask if none is set).
 
 3. **Determine the remaining brand values.**
    - If the user passed arguments in `$ARGUMENTS`, parse them as
      `client name | project name` (project name optional).
-   - Otherwise, **prompt the user**. Each `AskUserQuestion` text below puts a
-     **blank line between the two sentences** (a real `\n\n` in the `question`
-     string) so it reads as two lines, not one run-on sentence:
-     - **Client name** (required). `header` "Client Name", `question`:
+   - Otherwise, **prompt the user**:
+     - **Client name** (required). A client name has no reasonable presets, so
+       **use a plain text prompt** (not `AskUserQuestion`) — just ask directly:
 
        > What is your client's name?
        >
@@ -104,7 +97,10 @@ Follow these steps:
 
        Show the current value if one is set. If the user leaves it blank, ask
        again — the template stays unbranded without it.
-     - **Project name** (optional). `header` "Project Name", `question`:
+     - **Project name** (optional). Use `AskUserQuestion`; its `question` text
+       puts a **blank line between the two sentences** (a real `\n\n` in the
+       string) so it reads as two lines, not one run-on sentence. `header`
+       "Project Name", `question`:
 
        > What do you want to call this project?
        >

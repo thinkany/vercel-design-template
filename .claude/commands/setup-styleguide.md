@@ -19,7 +19,7 @@ options plus an "Other → type your own" field and behaves identically in the I
 and Claude Desktop. Batch related questions into one call (max 4 per panel).
 Every question includes a free-text "Other", so open values (font-family
 strings, hex codes, stylesheet URLs) are typed there while presets stay one
-click away. Step 2 (the example sections) is the exception — it's a short
+click away. Step 3 (the example sections) is the exception — it's a short
 **informational** heads-up, not a question.
 
 Walk the designer through these steps:
@@ -148,7 +148,50 @@ Confirm the changes show up in the styleguide's **Primitives → Colors / Type
 Scale** sections — those swatches read the live token values, so they should
 reflect your edits immediately.
 
-## 2. The example sections are flexible — just inform (no question)
+## 2. Name the default variation (base v00 only)
+
+The dashboard lists each design as a **variation**, and the base one (`v00`) is
+what the designer lands on first. Its **Title** and **Description** currently show
+the template defaults (**"Base"** / **"Base version."**) — give the designer the
+chance to rename it to something meaningful for *this* project.
+
+**Scope:** this step applies to the **base (v00)** scope only. `v00`'s title and
+description live in `INITIAL_VARIATIONS` in **`src/data/variations.ts`**, and
+`loadVariations` refreshes them from that seed on every load — so editing that seed
+is the authoritative place to set them. If you're configuring a **variation
+(`{id}`)**, skip this step: a variation's title/description are set when it's
+created (the "Make Variation" modal) and live only in its localStorage record, which
+a file edit can't reach.
+
+Ask both in a single `AskUserQuestion` panel (two questions):
+1. Header **"Variation Title"**. `question`:
+
+   > What should the default variation be called?
+   >
+   > This is the title shown on the dashboard card. Leave it as-is to keep the
+   > current value.
+
+   Offer the **current title** as the first preset (the default) — e.g. **"Base"** —
+   so one click keeps it. The client/project name from `/setup-project` makes a good
+   suggested alternative preset. The designer types their own via the "Other" field.
+2. Header **"Variation Description"**. `question`:
+
+   > How would you like to describe it?
+   >
+   > This is the short description under the title on the dashboard card. Leave it
+   > as-is to keep the current value.
+
+   Offer the **current description** as the first preset (the default) — e.g.
+   **"Base version."**.
+
+**Defaults:** if the designer leaves either blank (or picks the current-value
+preset), keep the existing value — do not blank it out.
+
+**Write** the confirmed values into `INITIAL_VARIATIONS[0]` in
+`src/data/variations.ts` (`title` and `description`), leaving every other field on
+that record untouched. The dashboard card reflects the change on reload.
+
+## 3. The example sections are flexible — just inform (no question)
 
 Do **not** walk the designer through a per-section Keep/Replace/Remove decision
 during setup. Give one short, **informational** heads-up (no `AskUserQuestion`, no
@@ -163,7 +206,7 @@ components get built (Atoms → Molecules → Organisms → Templates → Pages)
 universal Primitives and generic Atoms (buttons, badges, form controls, icons)
 unless there's a strong reason not to.
 
-## 3. Mark it done
+## 4. Mark it done
 
 Once the scope's tokens and sections reflect its foundation, clear the two markers
 for that scope:
@@ -174,7 +217,7 @@ for that scope:
 
 (Vite reloads on `.env` changes.)
 
-## 4. Sign off — onboarding complete
+## 5. Sign off — onboarding complete
 
 Both phases are now done (brand + company fonts in Phase I, client colors + fonts
 and the styleguide here in Phase II). Give the warm wrap and the local-preview
@@ -183,7 +226,7 @@ preview anytime with **`npm run dev`** (http://localhost:5173) for instant,
 hot-reloading feedback — separate from the Vercel preview deploy — and they're now
 ready to start designing pages.
 
-## 5. One last comfort tip — smoother iterating (friendly, never pushy)
+## 6. One last comfort tip — smoother iterating (friendly, never pushy)
 
 As the designer heads into building pages — the phase with the most repetitive
 edit approvals — **lead with a warm recommendation first** (this is the standard

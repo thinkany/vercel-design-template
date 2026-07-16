@@ -98,7 +98,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
           width: 160,
           height: 160,
           borderRadius: "50%",
-          background: "linear-gradient(to top, rgba(30,75,150,0.88) 0%, rgba(30,75,150,0.28) 100%)",
+          background: "#000",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
