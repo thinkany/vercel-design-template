@@ -46,13 +46,13 @@ Or run the setup command yourself at any time:
 /setup-project
 ```
 
-Claude prompts you for a **client name** and an optional **project name**, writes
-them into `.env`, and the dev server reloads with your branding applied. You can
-also pass them inline:
+Claude prompts you for your **company name**, **brand fonts** before moving on to ask you for a **client name** and an optional **project name**. Once entered, Claude writes them into `.env`, and the dev server will ultimately reload with your branding applied (once your initial project is completely configured). You can also pass them inline as `company name | client name | project name` (all three optional, in that order):
 
 ```
-/setup-project ACME ltd | Case Studies
+/setup-project Your Company Inc | Your Client ltd | Project Web Design
 ```
+
+Any part you leave out, Claude will still prompt for. To skip just the company name, start with an empty first segment — `/setup-project | ACME ltd | Case Studies`. You can also change any of these settings later by prompting Claude directly "Change my project name to X".
 
 ### By hand
 
@@ -142,7 +142,9 @@ The password screen (`middleware.js`) runs on Vercel's **edge runtime**, which
 - `SITE_NAME` / `SITE_SUBTITLE` are **separate** from the app's `VITE_SITE_*`. For a
   fully branded deploy, set the name in **both** places — `.env` for the app, the
   Vercel dashboard for the gate.
-- A logo on the login screen can be added later via an optional `SITE_LOGO` var.
+- A logo on the login screen can be added during `/setup-project` (or anytime):
+  drop an image in `public/brand/` and it renders centered above the name, capped
+  at 360px wide, in black & white.
 - After changing dashboard env vars, **redeploy** for them to take effect.
 
 ## Exporting designs to Figma

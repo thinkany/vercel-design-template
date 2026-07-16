@@ -1,6 +1,6 @@
 ---
 description: Brand this template — set the client/project name in .env and the preview-gate fonts
-argument-hint: "[client name] | [project name]  (optional; you'll be prompted if omitted)"
+argument-hint: "[company name] | [client name] | [project name]  (optional; you'll be prompted if omitted)"
 ---
 
 You are branding this scaffold for a specific project. The public brand values
@@ -71,10 +71,79 @@ Follow these steps:
    `VITE_COMPANY_NAME`, `VITE_CLIENT_NAME`, and `VITE_PROJECT_NAME` (they may be
    blank on a fresh template pull).
 
-2. **Ask for the company name FIRST.** This is the first question the user sees.
-   `VITE_COMPANY_NAME` fills the dashboard header wordmark. A company name has no
-   reasonable presets, so **use a plain text prompt** (not `AskUserQuestion`) —
-   just ask for the value directly:
+2. **Ask the opening brand questions — the logo FIRST, then the company name.**
+   These are the very first things the user sees. Ask the logo question (2a)
+   **before** the company name (2b).
+
+   ### 2a. Logo on the login screen (the very first question)
+
+   Ask this with `AskUserQuestion`. Header (the short chip label) is **"Your
+   Logo"**. Provide exactly two options — **"Yes — add my logo"** (list it first)
+   and **"No — skip for now"**. `question` text (blank line between the two
+   sentences — a real `\n\n` in the string):
+
+   > Would you like to include your logo on the login screen for the client to see?
+   >
+   > For now it appears only on the login (preview-gate) screen, centered above
+   > your company name, and is shown in black & white.
+
+   - **On "No"** → make no changes; continue to 2b.
+   - **On "Yes"** → the logo is a real image file, and **images can't be pasted
+     into the Claude prompt**, so the designer must drop the file into the project
+     themselves. Walk them through it:
+
+     1. **Where to put the file.** Have them place the logo in **`public/brand/`**
+        (create the folder if it doesn't exist). Prefer a **transparent-background
+        PNG** or an **SVG**; a horizontal lockup reads best under the 360px width
+        cap. Files in `public/` are served at the site root, so it'll be referenced
+        as **`/brand/<filename>`** (e.g. `public/brand/logo.png` → `/brand/logo.png`).
+        **Ask the designer for the exact filename** they saved, and confirm the file
+        is actually in place before editing anything.
+
+     2. **Wire it into the gate — edit `middleware.js`:**
+        - Add a `.brand-logo` rule to the inline `<style>` block:
+          ```css
+          .brand-logo {
+            display: block;
+            width: 100%;
+            max-width: 360px;   /* keeps the logo from dominating */
+            height: auto;
+            margin: 0 auto 24px; /* centered, matching the centered text */
+            filter: grayscale(100%); /* enforce black & white regardless of source */
+          }
+          ```
+        - Insert the image as the **first child of the `.brand` div**, directly
+          above `.brand-name`, using the real filename:
+          ```html
+          <img class="brand-logo" src="/brand/logo.png" alt="${CLIENT_NAME} logo" />
+          ```
+        - **Allowlist the folder** so the gate can load the image *before* the user
+          authenticates (self-hosted assets need this, same as fonts): change the
+          matcher on line 2 from `'/((?!_vercel).*)'` to `'/((?!_vercel|brand).*)'`.
+          If other allowlist entries already exist (e.g. `fonts`), **merge** them
+          into one group rather than adding a second — e.g.
+          `'/((?!_vercel|brand|fonts).*)'`.
+
+     3. **⚠️ Flag the logo file to the designer.** This introduces a **committed
+        image asset** into a scaffold that ships unbranded — call it out and
+        confirm before proceeding: (a) the file is committed to git and **travels
+        with the repo**, deploying to Vercel; (b) it currently appears **only** on
+        the login gate, nowhere else in the app yet; and (c) it's forced to
+        black & white at ≤360px wide by the CSS above. If the designer would rather
+        not commit their logo into this project, skip the wiring.
+
+   ### 2b. Company name
+
+   `VITE_COMPANY_NAME` fills the dashboard header wordmark.
+
+   Inline args are parsed as `company name | client name | project name` (all
+   three optional, pipe-separated, in that order — the same order as the
+   interactive prompts below). **If a company name was passed** as the first
+   `|`-separated segment of `$ARGUMENTS`, use it (confirm it back) and skip this
+   prompt.
+
+   Otherwise, a company name has no reasonable presets, so **use a plain text
+   prompt** (not `AskUserQuestion`) — just ask for the value directly:
 
    > What is your company name?
    >
@@ -86,7 +155,11 @@ Follow these steps:
 
 3. **Determine the remaining brand values.**
    - If the user passed arguments in `$ARGUMENTS`, parse them as
-     `client name | project name` (project name optional).
+     `company name | client name | project name` (the company segment was already
+     consumed in step 2; client and project are the 2nd and 3rd segments, both
+     optional). A leading `|` with an empty first segment means "company omitted,
+     client next" — e.g. `| ACME ltd | Case Studies` sets client + project but
+     leaves company to the prompt.
    - Otherwise, **prompt the user**:
      - **Client name** (required). A client name has no reasonable presets, so
        **use a plain text prompt** (not `AskUserQuestion`) — just ask directly:
@@ -243,7 +316,9 @@ Follow these steps:
      **`middleware.js`**, AND **allowlist the folder** so the login page can fetch
      the files *before* the user is authenticated: change the matcher from
      `'/((?!_vercel).*)'` to `'/((?!_vercel|fonts).*)'`. (Font files aren't
-     sensitive — this just lets `/fonts/*` pass through the gate.)
+     sensitive — this just lets `/fonts/*` pass through the gate.) If a logo
+     allowlist entry already exists from step 2a (`brand`), **merge** into one
+     group rather than adding a second — e.g. `'/((?!_vercel|brand|fonts).*)'`.
    - There is no external stylesheet URL in this case, so **skip the `<link>` edits
      below** and go straight to the `font-family` swaps + the admin-chrome tokens.
 
