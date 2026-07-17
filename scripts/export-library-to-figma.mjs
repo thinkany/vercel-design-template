@@ -44,19 +44,22 @@
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, dirname, resolve as resolvePath } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { tmpdir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
+const SRC = join(ROOT, "src");
 
 function parseArgs(argv) {
-  const args = { variation: "v00", out: "figma-export", print: false };
+  const args = { variation: "v00", out: "figma-export", print: false, all: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--variation" || a === "-v") args.variation = argv[++i];
     else if (a === "--out") args.out = argv[++i];
     else if (a === "--print") args.print = true;
+    else if (a === "--all") args.all = true; // ignore usage scan → export the whole catalog
     else if (a === "--help" || a === "-h") args.help = true;
   }
   return args;
@@ -69,6 +72,97 @@ function resolveStyleDir(variationId) {
     if (existsSync(join(varDir, "tokens.css"))) return varDir;
   }
   return join(ROOT, "src", "styles");
+}
+
+// ── USAGE SCAN — which ui/* components does THIS design variant actually pull in? ──
+// The Components page mirrors what the design uses, not a fixed default set. We
+// statically walk the variation's design-surface source files — the pages.ts
+// components + the global Header/Footer, with variation overrides resolved like
+// src/app/variationRegistry.ts — following their local imports until we hit
+// `components/ui/{name}` leaves. Deterministic + offline; no dev server, matching
+// this script's role as the offline half. (Pass --all to skip the scan and export
+// the whole catalog.)
+
+// esbuild transpile of a TS module (pages.ts imports nothing at runtime — types
+// only — so the transpiled module is self-contained). Mirrors export-brand-to-figma.mjs.
+async function loadTsModule(tsPath) {
+  const src = await readFile(tsPath, "utf8");
+  const esbuild = await import("esbuild");
+  const { code } = await esbuild.transform(src, { loader: "ts", format: "esm" });
+  const tmp = join(tmpdir(), `ta-lib-${Date.now()}-${Math.random().toString(36).slice(2)}.mjs`);
+  await writeFile(tmp, code, "utf8");
+  return import(pathToFileURL(tmp).href);
+}
+
+async function loadDesignPages() {
+  const mod = await loadTsModule(join(SRC, "app", "pages.ts"));
+  return (mod.designPages || []).map((p) => ({ id: p.id, name: p.name, component: p.component }));
+}
+
+// name → file, variation override first (src/variations/{id}/components/{Name}.tsx),
+// else base (src/app/components/{Name}.tsx). Mirrors resolveComponent's fallback.
+function resolveComponentFile(variationId, componentName) {
+  if (variationId !== "v00") {
+    const over = join(SRC, "variations", variationId, "components", `${componentName}.tsx`);
+    if (existsSync(over)) return over;
+  }
+  const base = join(SRC, "app", "components", `${componentName}.tsx`);
+  return existsSync(base) ? base : null;
+}
+
+// The design-surface entry files for a variation: every design page's component
+// (pages.ts) + the global Header/Footer chrome. Header/Footer render once globally
+// via DesignSurface, so a ui component either file uses counts for the whole design.
+async function collectDesignEntryFiles(variationId) {
+  const pages = await loadDesignPages();
+  const names = [...pages.map((p) => p.component), "Header", "Footer"];
+  const files = names.map((n) => resolveComponentFile(variationId, n)).filter(Boolean);
+  return { files, pages };
+}
+
+// Resolve a relative/@-alias import specifier to an on-disk .tsx/.ts file (or null
+// for bare package imports and unresolvable paths). `@` → src/ (vite.config.ts alias).
+function resolveLocalImport(spec, fromFile) {
+  let base;
+  if (spec.startsWith("@/")) base = join(SRC, spec.slice(2));
+  else if (spec.startsWith("./") || spec.startsWith("../")) base = resolvePath(dirname(fromFile), spec);
+  else return null; // bare package import (react, lucide-react, …) — not ours to follow
+  const cands = base.endsWith(".tsx") || base.endsWith(".ts")
+    ? [base]
+    : [`${base}.tsx`, `${base}.ts`, join(base, "index.tsx"), join(base, "index.ts")];
+  for (const cand of cands) if (existsSync(cand)) return cand;
+  return null;
+}
+
+// Does an import specifier point at a shadcn ui atom? Returns its kebab name.
+function uiComponentName(spec) {
+  const m = spec.match(/(?:^|\/)ui\/([a-z0-9-]+)$/);
+  return m ? m[1] : null;
+}
+
+// BFS the design surface: from each entry file, follow local imports, recording
+// every `components/ui/{name}` leaf reached. Returns a Set of kebab ui names.
+async function scanUsedUiComponents(entryFiles) {
+  const importRe = /import\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/g;
+  const seen = new Set();
+  const used = new Set();
+  const queue = [...entryFiles];
+  while (queue.length) {
+    const file = queue.shift();
+    if (!file || seen.has(file)) continue;
+    seen.add(file);
+    let src;
+    try { src = await readFile(file, "utf8"); } catch { continue; }
+    let m;
+    while ((m = importRe.exec(src))) {
+      const spec = m[1];
+      const ui = uiComponentName(spec);
+      if (ui) { used.add(ui); continue; } // leaf — modeled separately, don't recurse
+      const next = resolveLocalImport(spec, file);
+      if (next && !next.includes("/components/ui/")) queue.push(next);
+    }
+  }
+  return used;
 }
 
 // ── tokens.css → { "--name": "value" } (ALL custom props, not just --ta-*) ────
@@ -185,10 +279,15 @@ function resolvePaint(spec, tokens) {
   return { kind: "literal", rgb: { r: rgb.r, g: rgb.g, b: rgb.b }, a: rgb.a };
 }
 
-// ── The component registry — each entry mirrors one ui/*.tsx cva() ────────────
-// Only variant-driven "atom" components (single label/icon child) belong here;
-// slotted panels (alert) and composite/behavioral components (dialog, table,
-// sidebar, navigation-menu) need a richer model and are intentionally excluded.
+// ── The component registry — each entry models one ui/*.tsx component ─────────
+// The CATALOG of what we know how to build. What actually ships to Figma is the
+// SUBSET this design imports (the usage scan above) — unless --all. Four kinds:
+//   atom     (button/badge/toggle) — cva variant matrix, single label/icon child
+//   field    (input)               — non-cva; "variants" are STATES; placeholder field
+//   slotted  (alert/switch/checkbox/card) — fixed multi-child structure, per-state
+//                                    slot colors (buildAlert/Switch/Checkbox/Card)
+// Composite/behavioral components (dialog, table, sidebar, navigation-menu) need a
+// richer model and are intentionally excluded (see EXCLUDED_UI).
 //
 // A spec declares:
 //   properties   — the cva variant axes, in order (the Figma variant properties)
@@ -200,9 +299,14 @@ function resolvePaint(spec, tokens) {
 // fill/text/border name a --token, a literal hex, or "transparent"/null.
 // Geometry follows Tailwind (1 unit = 4px; rounded-md = 6px; text-sm = 14px;
 // text-xs = 12px; font-medium = 500).
+// Behavioral/composite cva components that deliberately have NO spec — they need
+// a richer model than a variant matrix, so the exporter reports them as excluded
+// (never as "unsupported") when a design uses them.
+const EXCLUDED_UI = new Set(["navigation-menu", "sidebar"]);
+
 const COMPONENTS = [
   {
-    name: "Button", label: "Button",           // ui/button.tsx
+    name: "Button", label: "Button", ui: "button", // ui/button.tsx
     properties: {
       variant: ["default", "destructive", "outline", "secondary", "ghost", "link"],
       size: ["default", "sm", "lg", "icon"],
@@ -225,7 +329,7 @@ const COMPONENTS = [
     },
   },
   {
-    name: "Badge", label: "Badge",             // ui/badge.tsx — single axis, no size
+    name: "Badge", label: "Badge", ui: "badge", // ui/badge.tsx — single axis, no size
     properties: { variant: ["default", "secondary", "destructive", "outline"] },
     variantAxis: "variant", sizeAxis: null,
     // text-xs pill: rounded-md, px-2, py-0.5 → ~20px tall. border always present.
@@ -238,7 +342,7 @@ const COMPONENTS = [
     },
   },
   {
-    name: "Toggle", label: "Toggle",           // ui/toggle.tsx — icon control
+    name: "Toggle", label: "Toggle", ui: "toggle", // ui/toggle.tsx — icon control
     properties: { variant: ["default", "outline"], size: ["default", "sm", "lg"] },
     variantAxis: "variant", sizeAxis: "size",
     base: { fontSize: 14, fontWeight: 500, radius: 6, gap: 8 },
@@ -259,7 +363,7 @@ const COMPONENTS = [
     // ui/alert.tsx — a SLOTTED component (not a single-child atom): a 2-column
     // grid, icon | (title + description). kind:"slotted" routes it to the
     // dedicated buildAlert() builder instead of the variant-matrix atom path.
-    name: "Alert", label: "Alert", kind: "slotted", builder: "alert",
+    name: "Alert", label: "Alert", ui: "alert", kind: "slotted", builder: "alert",
     properties: { variant: ["default", "destructive"] },
     variantAxis: "variant",
     content: { title: "Heads up!", description: "You can add supporting detail here to give the alert some context." },
@@ -269,6 +373,55 @@ const COMPONENTS = [
     slots: {
       default: { bg: "--card", title: "--card-foreground", desc: "--muted-foreground", icon: "--card-foreground", border: "--border" },
       destructive: { bg: "--card", title: "--destructive", desc: "--destructive", icon: "--destructive", border: "--border" },
+    },
+  },
+  {
+    // ui/input.tsx — NOT cva: its "variants" are interaction STATES. kind:"field"
+    // routes to buildFieldSet (left-aligned placeholder, fixed-width field).
+    name: "Input", label: "Input", ui: "input", kind: "field", builder: "field",
+    align: "left", placeholder: "Placeholder",
+    properties: { state: ["default", "focus", "invalid", "disabled"] },
+    variantAxis: "state", sizeAxis: null,
+    // h-9=36, rounded-md=6, px-3=12, text-sm=14; representative fixed field width.
+    base: { fontSize: 14, fontWeight: 400, radius: 6, gap: 8, height: 36, paddingX: 12, width: 260 },
+    variants: {
+      default:  { fill: "--input-background", text: "--muted-foreground", border: "--input" },
+      focus:    { fill: "--input-background", text: "--muted-foreground", border: "--ring" },        // focus ring ≈ --ring
+      invalid:  { fill: "--input-background", text: "--muted-foreground", border: "--destructive" },
+      disabled: { fill: "--input-background", text: "--muted-foreground", border: "--input", opacity: 0.5 },
+    },
+  },
+  {
+    // ui/switch.tsx — track + thumb; STATE axis (off/on). kind:"slotted".
+    name: "Switch", label: "Switch", ui: "switch", kind: "slotted", builder: "switch",
+    properties: { state: ["off", "on"] },
+    // w-8=32, h≈18 (1.15rem), thumb size-4=16, 2px inset.
+    geometry: { trackW: 32, trackH: 18, thumb: 16, pad: 2 },
+    slots: {
+      off: { track: "--switch-background", thumb: "--card" },
+      on:  { track: "--primary", thumb: "--card" },
+    },
+  },
+  {
+    // ui/checkbox.tsx — box + check mark; STATE axis (unchecked/checked). kind:"slotted".
+    name: "Checkbox", label: "Checkbox", ui: "checkbox", kind: "slotted", builder: "checkbox",
+    properties: { state: ["unchecked", "checked"] },
+    geometry: { size: 16, radius: 4 }, // size-4=16, rounded-[4px]
+    slots: {
+      unchecked: { box: "--input-background", border: "--input", mark: "transparent" },
+      checked:   { box: "--primary", border: "--primary", mark: "--primary-foreground" },
+    },
+  },
+  {
+    // ui/card.tsx — a COMPOSITIONAL container, not variant-driven. Represented as a
+    // single specimen (title + description) so the design system has a Card object.
+    name: "Card", label: "Card", ui: "card", kind: "slotted", builder: "card",
+    properties: { variant: ["default"] },
+    content: { title: "Card title", description: "A short supporting description for this card." },
+    // rounded-xl=12, p-6=24, gap-6=24 (tightened between title/desc), fixed specimen width.
+    geometry: { radius: 12, pad: 24, gap: 8, width: 320, titleSize: 16, descSize: 14, contentGap: 4 },
+    slots: {
+      default: { bg: "--card", title: "--card-foreground", desc: "--muted-foreground", border: "--border" },
     },
   },
 ];
@@ -313,6 +466,7 @@ function buildComponent(spec, tokens) {
       fontSize: spec.base.fontSize,
       fontWeight: spec.base.fontWeight,
       underline: !!vSpec.underline,
+      opacity: vSpec.opacity == null ? 1 : vSpec.opacity, // e.g. Input disabled = 0.5
       fill, text, border,
     });
   }
@@ -333,6 +487,11 @@ function buildComponent(spec, tokens) {
   return {
     name: spec.name,
     label: spec.label,
+    ui: spec.ui,
+    kind: spec.kind || "atom",
+    builder: spec.builder || null,   // plugin dispatch (null → default atom layout)
+    placeholder: spec.placeholder,   // field kind: the placeholder text to render
+    align: spec.align || "center",   // "left" for fields, "center" for buttons/badges
     properties: spec.properties,
     defaultVariant,
     variants: variantEntries,
@@ -340,48 +499,79 @@ function buildComponent(spec, tokens) {
   };
 }
 
-// Slotted components (Alert): fixed multi-child structure, one COLOR set per
-// slot (bg/title/description/icon/border) per variant. The Figma builder holds
-// the node structure; this resolves the slot colors + collects bound variables.
+// Slotted components: a fixed multi-child structure whose colors are a per-state
+// map of arbitrary slot names (Alert: bg/title/desc/icon/border; Switch:
+// track/thumb; Checkbox: box/mark/border; Card: bg/title/desc/border). The Figma
+// builder holds the node geometry; this just resolves each slot's paint + collects
+// the bound variables. The state axis can be named anything (`variant`, `state`).
 function buildSlotted(spec, tokens) {
   const usedTokens = new Map();
   const note = (paint) => { if (paint.kind === "var") usedTokens.set(paint.token, paint.figmaName); };
   const variantEntries = [];
-  for (const variant of spec.properties.variant) {
-    const sl = spec.slots[variant];
-    const bg = resolvePaint(sl.bg, tokens);
-    const title = resolvePaint(sl.title, tokens);
-    const desc = resolvePaint(sl.desc, tokens);
-    const icon = resolvePaint(sl.icon, tokens);
-    const border = resolvePaint(sl.border, tokens);
-    [bg, title, desc, icon, border].forEach(note);
-    variantEntries.push({ props: { variant }, name: `variant=${variant}`, bg, title, desc, icon, border });
+  const axisName = Object.keys(spec.properties)[0]; // "variant" (Alert) | "state" (Switch/Checkbox)
+  for (const value of spec.properties[axisName]) {
+    const sl = spec.slots[value];
+    const paints = {};
+    for (const [slotName, ref] of Object.entries(sl)) { const p = resolvePaint(ref, tokens); paints[slotName] = p; note(p); }
+    variantEntries.push({ props: { [axisName]: value }, name: `${axisName}=${value}`, ...paints });
   }
   const variables = [...usedTokens.entries()].map(([token, figmaName]) => {
     const rgb = parseColor(tokens[token]);
     return { figmaName, token, rgb: rgb ? { r: rgb.r, g: rgb.g, b: rgb.b } : { r: 0, g: 0, b: 0 }, a: rgb ? rgb.a : 1 };
   }).sort((x, y) => x.figmaName.localeCompare(y.figmaName));
   return {
-    name: spec.name, label: spec.label, builder: spec.builder, kind: "slotted",
-    properties: spec.properties, defaultVariant: { variant: spec.properties.variant[0] },
+    name: spec.name, label: spec.label, ui: spec.ui, builder: spec.builder, kind: "slotted",
+    properties: spec.properties, defaultVariant: { [axisName]: spec.properties[axisName][0] },
     content: spec.content, geometry: spec.geometry, variants: variantEntries, variables,
   };
 }
 
-function buildManifest(variationId, tokens) {
+// From a set of used ui kebab-names, decide which catalog specs to build and
+// produce the coverage report (what the design uses vs. what we can model).
+function computeCoverage(used) {
+  const catalogUi = COMPONENTS.map((c) => c.ui);
+  const catalogSet = new Set(catalogUi);
+  const selected = COMPONENTS.filter((c) => used.has(c.ui));
+  const excluded = [...used].filter((u) => EXCLUDED_UI.has(u)).sort();          // known, but no spec by design
+  const unsupported = [...used].filter((u) => !catalogSet.has(u) && !EXCLUDED_UI.has(u)).sort(); // no spec yet
+  const catalogUnused = catalogUi.filter((u) => !used.has(u)).sort();           // modelable but this design skips
+  return {
+    selected,
+    report: { used: [...used].sort(), supported: selected.map((c) => c.ui).sort(), unsupported, excluded, catalogUnused },
+  };
+}
+
+function buildManifest(variationId, tokens, specs, coverage, mode) {
   return {
     variationId,
     collectionName: "System",     // Figma variable collection for shadcn primitives
     componentsPageName: "Components",
+    selectionMode: mode,          // "usage" (scanned) | "all" (--all, whole catalog)
+    coverage,                     // { used, supported, unsupported, excluded, catalogUnused }
+    catalogComponentNames: COMPONENTS.map((c) => c.name), // full known set → plugin prunes stale sets
     generatedAt: new Date().toISOString(),
-    components: COMPONENTS.map((spec) => (spec.kind === "slotted" ? buildSlotted(spec, tokens) : buildComponent(spec, tokens))),
+    components: specs.map((spec) => (spec.kind === "slotted" ? buildSlotted(spec, tokens) : buildComponent(spec, tokens))),
   };
 }
 
 function printSummary(m, styleDir) {
   const rel = styleDir.replace(ROOT + "/", "");
+  const r = m.coverage;
   console.log(`\nComponent-library manifest — variation ${m.variationId}  (source: ${rel})`);
   console.log(`  Figma page: "${m.componentsPageName}"   ·   variable collection: "${m.collectionName}"`);
+  console.log(`  Selection: ${m.selectionMode === "all" ? "--all (whole catalog)" : "usage scan of the design surface"}`);
+
+  // Coverage — what the design uses vs. what we build.
+  if (m.selectionMode === "usage") {
+    console.log(`  Design uses ${r.used.length} ui component${r.used.length === 1 ? "" : "s"}: ${r.used.length ? r.used.join(", ") : "(none)"}`);
+    if (r.unsupported.length) console.log(`  ⚠ used but NO spec yet (skipped): ${r.unsupported.join(", ")}  — add a spec to COMPONENTS to include them`);
+    if (r.excluded.length) console.log(`  · used but excluded by design (behavioral/composite): ${r.excluded.join(", ")}`);
+    if (!m.components.length) {
+      console.log(`\n  → 0 components to build. This design imports no modeled shadcn ui atoms;`);
+      console.log(`    the Components page will be pruned to empty. (Use --all to export the whole catalog.)`);
+    }
+  }
+
   for (const c of m.components) {
     const axes = Object.entries(c.properties).map(([k, vs]) => `${k}×${vs.length}`).join("  ");
     console.log(`\n  ▸ ${c.name}  (component set — ${c.variants.length} variants: ${axes})`);
@@ -403,16 +593,32 @@ async function main() {
 
   -v, --variation <id>   Variation to export (default: v00)
   --out <dir>            Output dir (default: figma-export)
+  --all                  Export the whole catalog (skip the usage scan)
   --print                Print the manifest instead of writing it
 
-Emits figma-export/library-{id}.json — the component-set manifest Claude feeds
-to the Figma builder (scripts/figma-component-library.plugin.js) via use_figma.`);
+By default the component set mirrors what the design VARIATION actually uses:
+the pages.ts components + global Header/Footer are scanned for ui/* imports, and
+only those (that have a spec) are built. Emits figma-export/library-{id}.json —
+the manifest Claude feeds to the Figma builder
+(scripts/figma-component-library.plugin.js) via use_figma.`);
     return;
   }
 
   const styleDir = resolveStyleDir(args.variation);
   const tokens = await loadTokens(styleDir);
-  const manifest = buildManifest(args.variation, tokens);
+
+  // Which ui atoms does this design pull in? (--all skips the scan.)
+  let used, mode;
+  if (args.all) {
+    used = new Set(COMPONENTS.map((c) => c.ui));
+    mode = "all";
+  } else {
+    const { files } = await collectDesignEntryFiles(args.variation);
+    used = await scanUsedUiComponents(files);
+    mode = "usage";
+  }
+  const { selected, report } = computeCoverage(used);
+  const manifest = buildManifest(args.variation, tokens, selected, report, mode);
 
   printSummary(manifest, styleDir);
 

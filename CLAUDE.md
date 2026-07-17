@@ -152,8 +152,8 @@ verbatim** (adapt only the `{Pages|App}` label):
 **P15 · header "Export scope"** — *"What would you like to send to Figma?"*
 - **Both Styleguide and {Pages|App}** → the cohesive one-file flow ("Exporting to
   Figma as ONE cohesive file" below): `scaffold` → capture Pages onto their Figma
-  Pages → `variables` → `textstyles` → `specimen` → `components` (shadcn atoms) →
-  `blocks` (section blocks).
+  Pages → `variables` → `textstyles` → `specimen` → `components` (the design's
+  shadcn components) → `blocks` (section blocks).
 - **Styleguide only** → the design-system phases only, no page captures (`scaffold`
   for the panel if needed → `variables` → `textstyles` → `specimen` → `components`
   → `blocks`). "Styleguide" is the whole brand library here — tokens **plus** the
@@ -223,9 +223,9 @@ usage is in [README.md](README.md) → "Exporting designs to Figma".
 The full first-time export produces **one Figma file per variation** whose **Pages
 panel** mirrors the project: a **Page per design page** (Home, About, …) holding
 that page's per-breakpoint frames, a `———` separator, a **Styleguide** Page (real
-color **variables** + text **styles** + a specimen), a **Components** Page (shadcn
-components — atoms Button/Badge/Toggle + the slotted Alert — as component sets with
-variant properties), and a **Block Library** Page (section blocks **derived from the
+color **variables** + text **styles** + a specimen), a **Components** Page (the
+shadcn components **this design actually uses** — see the usage scan below — as
+component sets with variant properties), and a **Block Library** Page (section blocks **derived from the
 real page** — every `[data-block]` section, at each breakpoint, as `View=…`
 component sets). This weaves the design **page capture** (screenshots, above) and
 the **design-system objects** (tokens, atoms, blocks — all editable, all bound to
@@ -239,13 +239,24 @@ pattern) drive the design-system half. Load the `figma-use` +
   `scripts/figma-brand-library.plugin.js` (phases `scaffold`/`variables`/
   `textstyles`/`specimen`). Detailed below.
 - **Components** → the Components Page. `scripts/export-library-to-figma.mjs` +
-  `scripts/figma-component-library.plugin.js` (PHASE `components`). Reads each
-  shadcn `ui/*.tsx` cva config into a variant-property component set; fills bound to
-  a **System** variable collection. Two `kind`s, dispatched by the manifest's
-  `builder`: **atoms** (Button/Badge/Toggle — single label/icon child) and
-  **slotted** (Alert — a fixed multi-child icon|title+description grid). Only
-  variant-driven cva components belong here; behavioral/composite ones
-  (navigation-menu, sidebar) are excluded. `npm run export:library`.
+  `scripts/figma-component-library.plugin.js` (PHASE `components`). **Usage-driven,
+  not a default set:** the manifest step **statically scans the variation's design
+  surface** — the [pages.ts](src/app/pages.ts) page components + the global
+  Header/Footer, variation overrides resolved like
+  [variationRegistry.ts](src/app/variationRegistry.ts) — follows their local imports
+  and collects every `components/ui/{name}` used, then builds **only the catalog
+  specs the design actually imports**. (A `coverage` report rides along: `used`,
+  `supported`, `unsupported` — used but no spec yet, warned + skipped — and
+  `excluded`. `--all` skips the scan to emit the whole catalog.) Each spec maps a
+  `ui/*.tsx` component to a variant-property set; fills bound to a **System**
+  variable collection. Four `kind`s, dispatched by the manifest's `builder`:
+  **atom** (Button/Badge/Toggle — single label/icon child), **field** (Input — a
+  fixed-width field whose variants are interaction *states*), and **slotted**
+  (Alert, Switch, Checkbox, Card — fixed multi-child structures). The builder also
+  **prunes** any known-catalog set the design no longer uses, so re-exports leave
+  nothing stale. Composite/behavioral components (navigation-menu, sidebar, dialog,
+  table) need a richer model and are excluded. `npm run export:library`
+  (`-- -v {id}`, `-- --all`).
 - **Blocks** → the Block Library Page. `scripts/export-blocks-to-figma.mjs` +
   `scripts/figma-block-library.plugin.js` (PHASE `blocks`). **DERIVE-EVERYTHING:
   blocks are not declared or hand-built — each is derived from the real page.** A
@@ -337,11 +348,15 @@ The brand-tokens pair in detail:
   4. Run **`variables`** → **`textstyles`** → **`specimen`** (sequential, never
      parallel), each embedding the brand `MANIFEST` + the matching `PHASE` + the
      brand builder body. This populates the **`Brand`** collection everything binds to.
-  5. **Fill the Components Page (atoms):** `npm run export:library -- -v {id}`, then
-     run the component builder (PHASE `components`) embedding that manifest + the
-     `figma-component-library.plugin.js` body. It finds the "Components" Page by name
-     (dropping the scaffold cover) and builds the atom component sets + a `System`
-     variable collection.
+  5. **Fill the Components Page (design's components):** `npm run export:library -- -v {id}`,
+     which scans the design surface and emits a manifest of **only the ui components
+     this design uses** (check its `coverage` report — a warned `unsupported` entry
+     means the design uses a ui atom with no spec yet). Then run the component builder
+     (PHASE `components`) embedding that manifest + the `figma-component-library.plugin.js`
+     body. It finds the "Components" Page by name (dropping the scaffold cover), builds
+     the used component sets + a `System` variable collection, and prunes any stale
+     catalog set. If the design uses no shadcn components the page is (correctly) left
+     empty — pass `--all` to force the whole catalog instead.
   6. **Fill the Block Library Page (blocks) — derive from the real page:**
      a. `npm run export:blocks -- -v {id}` → the offline brand manifest
         (palette + font roles; `captures: []`).
