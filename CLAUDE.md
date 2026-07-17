@@ -106,6 +106,14 @@ to base v00; to diverge a variation's version, drop `About.tsx` into
 Same rules as everywhere: Tailwind utilities + `--ta-*` tokens, never hardcoded
 hex/fonts, edit `src/variations/{id}/` (not the base) when working on a variation.
 
+**Mark each section for the Block Library.** Put `data-block="{id}"` +
+`data-block-name="{Name}"` on the root element of every major section you build
+(hero, feature grid, CTA, …). That marker is the **only** declaration the Figma
+**Block Library** export needs — it derives each block from the real rendered
+section (binds its colors to `--ta-*` variables, componentizes per breakpoint). No
+`blocks.ts`, no hand-built builders. Header/Footer carry markers too. See
+"Exporting to Figma as ONE cohesive file" for the derive pipeline.
+
 ### Global elements (Header / Footer)
 
 Shared site chrome lives in **[Header.tsx](src/app/components/Header.tsx)** +
@@ -217,10 +225,11 @@ panel** mirrors the project: a **Page per design page** (Home, About, …) holdi
 that page's per-breakpoint frames, a `———` separator, a **Styleguide** Page (real
 color **variables** + text **styles** + a specimen), a **Components** Page (shadcn
 components — atoms Button/Badge/Toggle + the slotted Alert — as component sets with
-variant properties), and a **Block Library** Page (section blocks — Header/Footer/
-Hero — as component sets with per-state variants). This weaves the design **page capture** (screenshots, above)
-and the **design-system objects** (tokens, atoms, blocks — all editable, all bound
-to Figma variables) into a single organized file.
+variant properties), and a **Block Library** Page (section blocks **derived from the
+real page** — every `[data-block]` section, at each breakpoint, as `View=…`
+component sets). This weaves the design **page capture** (screenshots, above) and
+the **design-system objects** (tokens, atoms, blocks — all editable, all bound to
+Figma variables) into a single organized file.
 
 Three script pairs (each an offline manifest + a `use_figma` builder body, same
 pattern) drive the design-system half. Load the `figma-use` +
@@ -238,11 +247,38 @@ pattern) drive the design-system half. Load the `figma-use` +
   variant-driven cva components belong here; behavioral/composite ones
   (navigation-menu, sidebar) are excluded. `npm run export:library`.
 - **Blocks** → the Block Library Page. `scripts/export-blocks-to-figma.mjs` +
-  `scripts/figma-block-library.plugin.js` (PHASE `blocks`). Reads the declared
-  section blocks (`src/app/blocks.ts`) + brand colors/fonts into component sets
-  with per-state variants (Header Desktop/Mobile/Mobile-open, …); fills bound to a
-  **Brand** variable collection. `npm run export:blocks`. Add a block by adding a
-  `blocks.ts` row **and** a `build<Name>()` in the builder.
+  `scripts/figma-block-library.plugin.js` (PHASE `blocks`). **DERIVE-EVERYTHING:
+  blocks are not declared or hand-built — each is derived from the real page.** A
+  designer marks a section with `data-block="{id}"` + `data-block-name="{Name}"`
+  (Header/Footer are marked too); the capture driver
+  (`export-to-figma.mjs --blocks`) discovers those markers live and screenshots
+  each `[data-block]` at each breakpoint into Figma as an editable
+  html.to.design layer tree; the builder POST-PASS then **binds** each captured
+  fill to the nearest **Brand** `--ta-*` variable, **normalizes** fonts Figma lacks
+  to the project face/role proxy, **flattens** html.to.design's passthrough wrapper
+  frames, **repairs layout** from DOM hints (see next paragraph), and
+  **componentizes** each block into a `View=…` set. So the block LIST is
+  the union of `[data-block]` markers (no `blocks.ts`); the offline manifest only
+  supplies the brand palette + font roles. `npm run export:blocks` builds that
+  manifest. Add a block by marking a new `[data-block]` section — nothing else.
+  (Interaction states like an open mobile menu aren't auto-captured yet — default
+  rendered state per breakpoint.)
+
+  **Layout repair (html.to.design fidelity).** html.to.design's DOM→auto-layout
+  conversion drops two things the builder can't otherwise recover: it bakes each
+  section's rendered pixel height as a **FIXED** frame height (so a content-sized
+  section pins its content to the top with a void below, and self-stretch columns
+  collapse — e.g. an `object-cover` fill image), and it defaults centered content
+  (`mx-auto` / `text-center`) to **left**. So the **discover** step
+  (`export-to-figma.mjs` `extractLayoutHints`) reads the real intent from each
+  section's live DOM into a per-block `layout` hint — a root-level `hugHeight` flag
+  (skipped for sections that deliberately reserve height, e.g. a `min-h-screen`
+  hero) and a `textAlign` list keyed by the text's own content (links/buttons and
+  horizontal-row items filtered out to avoid nav false-positives). That hint rides
+  along into each `captures[]` entry, and the builder's `repairLayout` pass applies
+  it: hugs the root height, and re-centers matched TEXT nodes + their constrained
+  (`mx-auto`) wrapper ancestors **without** disturbing left-aligned siblings like
+  card captions.
 
 The brand-tokens pair in detail:
 
@@ -298,31 +334,58 @@ The brand-tokens pair in detail:
       resets). Reused files (`existingFile`) keep their own home — destination
       only governs newly-created files.
   3. Run **`scaffold`** → note the returned `anchors` (`{pageId}` per design page).
-  4. **Fill the design Pages:** for each design page × active breakpoint, mint
-     `generate_figma_design(fileKey, pageId)` with that page's anchor id so the
-     frame lands on the **named Page** (not a new one), then run
-     `npm run export:figma -- --captures …` and poll. Arrange the breakpoint frames
-     on the page.
-  5. Run **`variables`** → **`textstyles`** → **`specimen`** (sequential, never
+  4. Run **`variables`** → **`textstyles`** → **`specimen`** (sequential, never
      parallel), each embedding the brand `MANIFEST` + the matching `PHASE` + the
-     brand builder body.
-  6. **Fill the Components Page (atoms):** `npm run export:library -- -v {id}`, then
+     brand builder body. This populates the **`Brand`** collection everything binds to.
+  5. **Fill the Components Page (atoms):** `npm run export:library -- -v {id}`, then
      run the component builder (PHASE `components`) embedding that manifest + the
      `figma-component-library.plugin.js` body. It finds the "Components" Page by name
      (dropping the scaffold cover) and builds the atom component sets + a `System`
      variable collection.
-  7. **Fill the Block Library Page (blocks):** `npm run export:blocks -- -v {id}`,
-     then run the block builder (PHASE `blocks`) embedding that manifest + the
-     `figma-block-library.plugin.js` body. Same find-by-name fill on "Block Library".
-     Its blocks bind to the **`Brand`** collection — and because step 5's `variables`
-     phase already populated `Brand`, the builder **binds to those canonical
-     `var(--ta-*)` variables** (matched by code syntax) rather than duplicating them.
-     Run standalone (blocks without the brand phase) and it creates its own instead.
-  8. Screenshot the Styleguide, Components, and Block Library frames to verify.
+  6. **Fill the Block Library Page (blocks) — derive from the real page:**
+     a. `npm run export:blocks -- -v {id}` → the offline brand manifest
+        (palette + font roles; `captures: []`).
+     b. `node scripts/export-to-figma.mjs --blocks --discover -v {id}` → live JSON
+        `{ blocks, pages, views, widths }`: `blocks` = each unique section to capture
+        once (each carries a `layout` hint — `hugHeight` + `textAlign` — read from
+        its live DOM; see "Layout repair" above); `pages` = per-page block ORDER
+        (used to compose in step 7); `views`/`widths`.
+     c. For **each unique block × active breakpoint**, mint
+        `generate_figma_design(fileKey)` and write a `captures.json` keyed
+        `"{blockId}-{view}"` → `{ captureId, endpoint, route, blockId, view }`.
+     d. `node scripts/export-to-figma.mjs --blocks --captures captures.json -v {id}`
+        submits each via html.to.design `figmaselector`; **poll** each captureId
+        until `completed` and record its resulting **node id** into the manifest's
+        `captures[]` (`{ blockId, name, view, nodeId, layout }` — carry the block's
+        `layout` hint from step b so `repairLayout` can apply it).
+     e. Run the block builder (PHASE `blocks`) embedding that filled manifest + the
+        `figma-block-library.plugin.js` body. The POST-PASS binds/normalizes/flattens/
+        componentizes each capture onto "Block Library" and **returns
+        `built[].componentId` per `blockId`**. It binds to the **`Brand`** collection —
+        because step 4's `variables` phase already populated it, the builder binds to
+        those canonical `var(--ta-*)` variables (matched by code syntax) rather than
+        duplicating; standalone it creates its own.
+  7. **Compose the design Pages from block INSTANCES** (top of the cascade
+     variables → components → blocks → **pages**; this REPLACES any raw page-capture).
+     For **each** page in the discovery `pages`, assemble
+     `MANIFEST.page = { id, name, route, blocks: [{ blockId, name, componentId }] }`
+     (componentId from step 6e) + `views` + `widths`, and run the **`compose`**
+     builder (PHASE `compose`, same plugin body) — **one call per page, fanned out in
+     parallel** (each does a single `setCurrentPageAsync`). It stacks a block INSTANCE
+     per section (right `View=` variant per breakpoint) onto that design's Figma Page,
+     so the page is variable-bound and editing a block master cascades to every page.
+     Designers never edit a Page except the copy inside a block.
+  8. Screenshot the Styleguide, Components, Block Library, and composed design Pages
+     to verify.
 
 All builder calls stay **sequential, never parallel** (Figma state mutations must
-serialize). The `components`/`blocks` phases are self-contained — safe to re-run to
-update after a token or `cva`/`blocks.ts` change (idempotent find-by-name).
+serialize) — except the per-page `compose` calls in step 7, which target different
+Figma Pages and so fan out in parallel. The `components` phase is self-contained —
+safe to re-run after a `cva`/token change (idempotent find-by-name). The `blocks`
+phase is idempotent per block name too, but a re-run needs **fresh captures** (a
+capture id is single-use), so re-derive from step 6b when the page design changes.
+`compose` is idempotent per page (it clears its prior `{Page} — {View}` frames) and
+cheap to re-run after blocks change — no capture needed.
 
 **Fonts:** the builder uses the project's real `--ta-font-*` family when Figma has
 it, else a role-based **proxy** (Display→Playfair Display, Serif→Lora, Sans→Inter,
@@ -339,7 +402,7 @@ CSS entry [src/styles/index.css](src/styles/index.css) imports, in order:
 Per-variation `tokens.css` is lazy-loaded *after* base tokens so `:root` values
 win (a variation can diverge its own fonts/colors).
 
-**Two token namespaces — keep them separate:**
+**Three token namespaces — keep them separate:**
 - **`--ta-*` / `--ta-font-*`** = the **project** palette & type. Designer-owned;
   configured by `/setup-styleguide`. This is what designed pages consume.
 - **`--admin-*`** = the **tooling** chrome (Dashboard, styleguide's own chrome,
@@ -351,6 +414,17 @@ win (a variation can diverge its own fonts/colors).
   inline fonts, so the login gate + Styleguide + dashboard chrome share one
   typographic identity. `/setup-styleguide` still never touches `--admin-*` — it
   owns the *client* design fonts (`--ta-font-*`).
+- **shadcn primitives** (`--primary`, `--secondary`, `--destructive`,
+  `--foreground`, …) = the namespace the 40 **`ui/*.tsx`** components read. They
+  ship at stock shadcn defaults, so shadcn components render **off-brand** (and the
+  Figma **Components** export faithfully mirrors that) until bridged. **`/setup-styleguide`
+  step 1c** bridges the brand-carrying ones to `--ta-*` via `var()` **references**
+  (single-source, `:root`/light only) — so branding cascades to shadcn components
+  in the live app *and* the export. The component exporter
+  ([export-library-to-figma.mjs](scripts/export-library-to-figma.mjs)) follows one
+  level of `var()` indirection to resolve the real color; the block exporter binds
+  `--ta-*` directly and is unaffected. Leave `--destructive`, surfaces, and
+  `--chart-*`/`--sidebar-*` stock unless the brand deliberately maps them.
 
 [src/styles/brand.ts](src/styles/brand.ts) is the human-facing manifest
 (names/roles/order) the styleguide renders; [tokens.css](src/styles/tokens.css)

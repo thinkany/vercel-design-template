@@ -9,21 +9,35 @@
 //     const MANIFEST = { ...blocks-{id}.json... };  // from export-blocks-to-figma.mjs
 //     const PHASE = "blocks";
 //
-// WHAT IT BUILDS
-//   For each IMPLEMENTED block in the manifest, a real, editable Figma component
-//   SET on the "Block Library" Page, one variant per `state` (e.g. a Header's
-//   Desktop / Mobile / Mobile-open). Fills are BOUND to a "Brand" variable
-//   collection (--ta-* colors), so editing a brand variable cascades to every
-//   block, and editing a block master cascades to its instances.
+// DERIVE-EVERYTHING MODEL
+//   Blocks are NOT hand-built here. Each block is DERIVED from the real page: the
+//   capture pipeline (generate_figma_design via export-to-figma.mjs --blocks)
+//   screenshots each `[data-block]` section at each active breakpoint into Figma
+//   as an editable, html.to.design-converted layer tree (real auto-layout, real
+//   text, literal fills). Claude records each capture's resulting node id into
+//   MANIFEST.captures. THIS builder is the POST-PASS that turns those raw captures
+//   into a clean, on-brand Block Library:
+//     1. bind      — match each captured literal fill/stroke to the nearest Brand
+//                    variable (--ta-*) and bind it (whites / off-brand colors stay
+//                    literal). Editing a brand variable then cascades to every block.
+//     2. normalize — remap any font family Figma lacks (e.g. a system "Georgia")
+//                    to the project's real face, else a role proxy. REQUIRED before
+//                    any structural edit — an unloaded font blocks reparenting.
+//     3. flatten   — unwrap pure passthrough wrapper frames (single child, no fill/
+//                    stroke/padding/effects) that html.to.design emits; keep padded
+//                    ":margin" spacers (Figma auto-layout can't do non-uniform gaps).
+//     4. componentize — convert each cleaned per-breakpoint capture into a COMPONENT
+//                    and combine a block's breakpoints into a `View=…` COMPONENT_SET.
 //
-//   Blocks are STRUCTURAL (not a data-driven variant matrix like atoms), so each
-//   block has a dedicated build<Name>() function here. The manifest supplies the
-//   data (colors, fonts, nav items, per-state width/padding). Add a block by
-//   adding a row to src/app/blocks.ts AND a builder function below.
+// MANIFEST shape:
+//   { brandCollectionName, blockPageName, brandColors:[{name,token,rgb}],
+//     fonts:{ display:{family,role}, serif, sans, mono },
+//     captures:[{ blockId, name, view, nodeId }] }   // nodeId filled post-capture
 //
-// IDEMPOTENT: Brand variables are find-by-name/update; each block's component set
-//   is removed by name and rebuilt. Follows figma-use rules (colors 0–1, fonts
-//   loaded before text writes, one setCurrentPageAsync per call, returns ids).
+// IDEMPOTENT: Brand variables are find-by-name/update (bind to the canonical
+//   var(--ta-*) from the brand `variables` phase when present). Each block's set is
+//   removed by name and rebuilt. Follows figma-use rules (colors 0–1, fonts loaded
+//   before text/reparent, one setCurrentPageAsync per call, returns ids).
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 async function getOrCreateCollection(name) {
@@ -35,40 +49,36 @@ async function getOrCreateCollection(name) {
   return { col, modeId };
 }
 
-// Shared styling for a block's component set (the framed grid on the page).
-function styleSet(set, name) {
-  set.name = name;
-  set.clipsContent = false;
-  set.layoutMode = "VERTICAL";
-  set.counterAxisAlignItems = "MIN";
-  set.itemSpacing = 48;
-  set.paddingLeft = set.paddingRight = set.paddingTop = set.paddingBottom = 48;
-  set.cornerRadius = 12;
-  set.fills = [{ type: "SOLID", color: { r: 0.97, g: 0.965, b: 0.955 } }];
-  set.strokes = [{ type: "SOLID", color: { r: 0.886, g: 0.878, b: 0.855 } }];
-  set.strokeWeight = 1;
-  set.primaryAxisSizingMode = "AUTO";
-  set.counterAxisSizingMode = "AUTO";
-  return set;
+// Frame a finished block component set into the tidy grid on the page.
+function styleSet(node, name) {
+  node.name = name;
+  node.clipsContent = false;
+  if (node.type === "COMPONENT_SET") {
+    node.layoutMode = "HORIZONTAL";
+    node.counterAxisAlignItems = "MIN";
+    node.itemSpacing = 48;
+    node.paddingLeft = node.paddingRight = node.paddingTop = node.paddingBottom = 48;
+    node.cornerRadius = 12;
+    node.fills = [{ type: "SOLID", color: { r: 0.97, g: 0.965, b: 0.955 } }];
+    node.strokes = [{ type: "SOLID", color: { r: 0.886, g: 0.878, b: 0.855 } }];
+    node.strokeWeight = 1;
+    node.primaryAxisSizingMode = "AUTO";
+    node.counterAxisSizingMode = "AUTO";
+  }
+  return node;
 }
 
-// Role-based proxy faces when the project's real family isn't in Figma.
-const ROLE_PROXY = { display: "Playfair Display", serif: "Lora", sans: "Inter" };
+// Role → proxy face when the project's real family isn't installed in Figma.
+const ROLE_PROXY = { display: "Playfair Display", serif: "Lora", sans: "Inter", mono: "JetBrains Mono" };
 
 if (PHASE === "blocks") {
-  // ── 1. Brand variable collection (find-by-name/update) ──────────────────────
+  // ── 1. Brand variable collection + variables (bind canonical when present) ───
   const { col, modeId } = await getOrCreateCollection(MANIFEST.brandCollectionName);
   const existing = (await figma.variables.getLocalVariablesAsync("COLOR")).filter((v) => v.variableCollectionId === col.id);
   const codeMatch = (x, token) => { try { return x.codeSyntax && x.codeSyntax.WEB === `var(${token})`; } catch { return false; } };
-  const bv = {};
+  const brandVars = []; // { name, token, rgb, variable }
   const varResult = [];
   for (const c of MANIFEST.brandColors) {
-    // In the COHESIVE flow the brand `variables` phase already created the
-    // canonical --ta-* vars under human names (e.g. "Brand Palette/Warm Cream").
-    // Bind to that one (matched by var(--ta-*) code syntax) so the merged file has
-    // no duplicate brand colors — and DON'T overwrite its value/scopes (that phase
-    // owns them). Only when running STANDALONE (no canonical var) do we own a
-    // short-named var and keep its value in sync with tokens.css.
     const canonical = existing.find((x) => codeMatch(x, c.token) && x.name !== c.name);
     let v = canonical || existing.find((x) => x.name === c.name);
     const created = !v;
@@ -78,11 +88,29 @@ if (PHASE === "blocks") {
       v.scopes = ["FRAME_FILL", "SHAPE_FILL", "TEXT_FILL", "STROKE_COLOR"];
       v.setVariableCodeSyntax("WEB", `var(${c.token})`);
     }
-    bv[c.name] = v;
+    brandVars.push({ name: c.name, token: c.token, rgb: c.rgb, variable: v });
     varResult.push({ name: v.name, id: v.id, created, boundCanonical: !!canonical });
   }
-  const bfill = (name) => figma.variables.setBoundVariableForPaint({ type: "SOLID", color: { r: 0, g: 0, b: 0 } }, "color", bv[name]);
-  const blackA = (a) => ({ type: "SOLID", color: { r: 0, g: 0, b: 0 }, opacity: a });
+  // Nearest brand variable within a per-channel tolerance (else null → stay literal).
+  const TOL = 0.02; // ≈ sum of |Δ| over r,g,b; ~1.7/255 avg per channel
+  const nearestVar = (color) => {
+    let best = null, bd = 1e9;
+    for (const b of brandVars) { const d = Math.abs(color.r - b.rgb.r) + Math.abs(color.g - b.rgb.g) + Math.abs(color.b - b.rgb.b); if (d < bd) { bd = d; best = b; } }
+    return bd < TOL ? best : null;
+  };
+  const bindPaints = (node, key, log) => {
+    const arr = node[key];
+    if (!Array.isArray(arr) || !arr.length) return;
+    let changed = false;
+    const next = arr.map((p) => {
+      if (p.type !== "SOLID") return p;
+      const m = nearestVar(p.color);
+      if (!m) return p;
+      changed = true; log.bound++;
+      return figma.variables.setBoundVariableForPaint(p, "color", m.variable);
+    });
+    if (changed) node[key] = next;
+  };
 
   // ── 2. Block Library page (find-by-name/create) ─────────────────────────────
   let page = figma.root.children.find((p) => p.name === MANIFEST.blockPageName);
@@ -90,215 +118,248 @@ if (PHASE === "blocks") {
   await figma.setCurrentPageAsync(page);
   for (const n of [...page.children]) if (n.name === "Cover") n.remove();
 
-  // ── 3. Fonts: project family if Figma has it, else a role proxy ─────────────
+  // ── 3. Fonts: available set + a role-aware resolver (project family → proxy) ──
   const avail = await figma.listAvailableFontsAsync();
-  const hasFamily = (fam) => !!fam && avail.some((a) => a.fontName.family === fam);
-  const styleOr = (fam, want, fallback) => (avail.some((a) => a.fontName.family === fam && a.fontName.style === want) ? want : fallback);
-  const resolveFamily = (role, wanted) => (hasFamily(wanted) ? wanted : (hasFamily(ROLE_PROXY[role]) ? ROLE_PROXY[role] : "Inter"));
-  const displayFam = resolveFamily("display", MANIFEST.fonts.display.family);
-  const serifFam = resolveFamily("serif", MANIFEST.fonts.serif ? MANIFEST.fonts.serif.family : null);
-  const sansFam = resolveFamily("sans", MANIFEST.fonts.sans.family);
-  const displayFont = { family: displayFam, style: "Regular" };
-  const serifFont = { family: serifFam, style: "Regular" };
-  const sansFont = { family: sansFam, style: styleOr(sansFam, "Medium", "Regular") };
-  const sansSemibold = { family: sansFam, style: styleOr(sansFam, "Semi Bold", sansFont.style) };
-  for (const f of [displayFont, serifFont, sansFont, sansSemibold]) await figma.loadFontAsync(f);
+  const famSet = new Set(avail.map((a) => a.fontName.family));
+  const stylesOf = (fam) => avail.filter((a) => a.fontName.family === fam).map((a) => a.fontName.style);
+  const F = MANIFEST.fonts || {};
+  // Map a real family (as captured) → its declared role, so we proxy by role.
+  const familyRole = {};
+  for (const role of ["display", "serif", "sans", "mono"]) if (F[role] && F[role].family) familyRole[F[role].family] = role;
+  const roleFromFamily = (fam) => {
+    if (familyRole[fam]) return familyRole[fam];
+    const f = (fam || "").toLowerCase();
+    if (/mono|courier|consol/.test(f)) return "mono";
+    if (/times|georgia|serif|garamond|playfair|lora|merri|book/.test(f)) return "serif";
+    return "sans";
+  };
+  const pickStyle = (fam, want) => {
+    const styles = stylesOf(fam);
+    if (styles.includes(want)) return want;
+    const alt = { "Semi Bold": "SemiBold", "SemiBold": "Semi Bold" }[want];
+    if (alt && styles.includes(alt)) return alt;
+    return styles.includes("Regular") ? "Regular" : styles[0];
+  };
+  const resolveFont = (fam, style) => {
+    if (famSet.has(fam) && stylesOf(fam).includes(style)) return { family: fam, style };
+    const role = roleFromFamily(fam);
+    const proxy = ROLE_PROXY[role];
+    const useFam = famSet.has(proxy) ? proxy : (famSet.has("Inter") ? "Inter" : (avail[0] && avail[0].fontName.family));
+    return { family: useFam, style: pickStyle(useFam, style) };
+  };
+  const normalizeFonts = async (root, log) => {
+    for (const t of root.findAll((n) => n.type === "TEXT")) {
+      if (t.fontName !== figma.mixed) {
+        const tf = resolveFont(t.fontName.family, t.fontName.style);
+        await figma.loadFontAsync(tf);
+        if (tf.family !== t.fontName.family || tf.style !== t.fontName.style) { t.fontName = tf; log.remapped++; }
+      } else {
+        for (const s of t.getStyledTextSegments(["fontName"])) {
+          const tf = resolveFont(s.fontName.family, s.fontName.style);
+          await figma.loadFontAsync(tf);
+          t.setRangeFontName(s.start, s.end, tf); log.remapped++;
+        }
+      }
+    }
+  };
 
-  const ctx = { bfill, blackA, displayFont, serifFont, sansFont, sansSemibold, logoText: MANIFEST.logoText, projectName: MANIFEST.projectName };
+  // ── flatten: unwrap pure passthrough wrappers (keep padded spacers) ─────────
+  const hasFill = (n) => Array.isArray(n.fills) && n.fills.some((f) => f.visible !== false);
+  const hasStroke = (n) => Array.isArray(n.strokes) && n.strokes.length > 0;
+  const hasPad = (n) => (n.paddingTop || 0) || (n.paddingRight || 0) || (n.paddingBottom || 0) || (n.paddingLeft || 0);
+  const hasEffects = (n) => Array.isArray(n.effects) && n.effects.length > 0;
+  // No fill AND no stroke → any cornerRadius is invisible, so it's ignored here
+  // (this is what unwraps the single-text Button wrappers html.to.design emits).
+  const isPassthrough = (n, root) => n.type === "FRAME" && n !== root && "children" in n && n.children.length === 1 &&
+    !hasFill(n) && !hasStroke(n) && !hasEffects(n) && !hasPad(n);
+  const flatten = (root, log) => {
+    const unwrap = (n) => {
+      const parent = n.parent, child = n.children[0], idx = parent.children.indexOf(n);
+      const hS = n.layoutSizingHorizontal, vS = n.layoutSizingVertical;
+      parent.insertChild(idx, child);
+      try { child.layoutSizingHorizontal = hS; } catch (e) { /* structural context may reject */ }
+      try { child.layoutSizingVertical = vS; } catch (e) { /* structural context may reject */ }
+      n.remove(); log.unwrapped++;
+    };
+    for (let pass = 0; pass < 8; pass++) {
+      const targets = root.findAll((n) => isPassthrough(n, root));
+      if (!targets.length) break;
+      for (const n of targets) if (n.parent) unwrap(n);
+    }
+    for (const n of root.findAll((n) => n.name.includes(":margin"))) n.name = n.name.replace(/:margin$/, "").trim();
+  };
 
-  // ── 4. Build each implemented block ─────────────────────────────────────────
-  const builders = { header: buildHeader, footer: buildFooter, hero: buildHero };
+  // ── repairLayout: undo html.to.design's two conversion losses using the DOM ──
+  // hints carried from the discover step (see export-to-figma.mjs extractLayoutHints):
+  //   • hugHeight — the section is content-sized, but h2d bakes its rendered pixel
+  //     height as a FIXED frame height → content pins to the top with a void below
+  //     (and self-stretch columns collapse). Hug the root so it sizes to content.
+  //   • textAlign — centered/right header text (mx-auto/text-center) came across
+  //     left. Matched back to TEXT nodes by their own characters (case-insensitive),
+  //     then the centering is restored WITHOUT disturbing left-aligned siblings
+  //     (e.g. card captions): the text is set to fill+center, wrappers whose every
+  //     text is centered get counter-axis center, and any constrained (max-width)
+  //     ancestor on the centered path is re-centered within its parent (mx-auto).
+  const normTxt = (s) => (s || "").replace(/\s+/g, " ").trim().toLowerCase();
+  const repairLayout = (root, hint, log) => {
+    if (!hint) return;
+    if (hint.hugHeight && root.layoutMode && root.layoutMode !== "NONE") {
+      try {
+        if (root.layoutMode === "VERTICAL") root.primaryAxisSizingMode = "AUTO";
+        else root.counterAxisSizingMode = "AUTO";
+        log.hugged++;
+      } catch (e) { /* not resizable in this context */ }
+    }
+    const wants = new Map(); // normalized text → "CENTER" | "RIGHT"
+    for (const t of hint.textAlign || []) wants.set(normTxt(t.text), t.align === "right" ? "RIGHT" : "CENTER");
+    if (!wants.size) return;
+    const matched = new Map(); // TEXT node → alignment
+    for (const tn of root.findAll((n) => n.type === "TEXT")) {
+      const chars = normTxt(tn.characters);
+      if (!chars) continue;
+      let hit = null;
+      for (const [k, v] of wants) { const a = chars.slice(0, 40), b = k.slice(0, 40); if (a === b || chars.startsWith(b) || k.startsWith(a)) { hit = v; break; } }
+      if (!hit) continue;
+      try { tn.textAlignHorizontal = hit; } catch (e) {}
+      try { if (tn.parent && tn.parent.layoutMode && tn.parent.layoutMode !== "NONE") tn.layoutSizingHorizontal = "FILL"; } catch (e) {}
+      matched.set(tn, hit);
+      log.aligned++;
+    }
+    if (!matched.size) return;
+    for (const f of root.findAll((n) => n.type === "FRAME" && n.layoutMode && n.layoutMode !== "NONE")) {
+      const texts = f.findAll((n) => n.type === "TEXT");
+      const hasCentered = texts.some((t) => matched.get(t) === "CENTER");
+      if (!hasCentered) continue;
+      // Set counter-axis CENTER when EITHER: the frame holds nothing but centered
+      // text (a pure header wrapper → centers the lines), OR every direct child is
+      // FILL-width. The latter recovers a dropped mx-auto: a FILL+maxWidth child (the
+      // header box, the max-width container) centers within its parent, while true
+      // full-width siblings (the card grid) are unaffected — and a non-FILL left
+      // sibling makes allChildrenFill false, so it's never wrongly centered. NOTE:
+      // layoutAlign=CENTER does NOT work here — Figma ignores it on FILL children,
+      // which these wrappers are; counter-axis alignment on the PARENT is the lever.
+      const pureCentered = texts.length && texts.every((t) => matched.get(t) === "CENTER");
+      const allChildrenFill = f.children.length && f.children.every((k) => k.layoutSizingHorizontal === "FILL");
+      if (pureCentered || allChildrenFill) { try { f.counterAxisAlignItems = "CENTER"; } catch (e) {} }
+    }
+  };
+
+  // ── 4. Post-process each capture, then componentize per block ───────────────
+  const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  // group captures by block, preserving first-seen order
+  const order = [];
+  const byBlock = new Map();
+  for (const c of MANIFEST.captures || []) {
+    if (!byBlock.has(c.blockId)) { byBlock.set(c.blockId, { name: c.name, views: [] }); order.push(c.blockId); }
+    byBlock.get(c.blockId).views.push(c);
+  }
+
   const built = [];
   const skipped = [];
-  for (const block of MANIFEST.blocks) {
-    if (!block.implemented || !builders[block.id]) { skipped.push(block.name); continue; }
-    // Idempotent: drop a prior set/component with this name.
-    for (const n of [...page.children]) if (n.name === block.name && (n.type === "COMPONENT_SET" || n.type === "COMPONENT")) n.remove();
-    const set = builders[block.id](block, ctx, page);
-    built.push({ block: block.name, componentSetId: set.id, states: block.states.map((s) => s.name) });
-  }
+  const log = { bound: 0, remapped: 0, unwrapped: 0, hugged: 0, aligned: 0 };
+  for (const blockId of order) {
+    const blk = byBlock.get(blockId);
+    // Idempotent: drop a prior set/component with this block name.
+    for (const n of [...page.children]) if (n.name === blk.name && (n.type === "COMPONENT_SET" || n.type === "COMPONENT")) n.remove();
 
-  // Lay the sets out down the page.
-  let y = 80;
-  for (const p of page.children.filter((n) => n.type === "COMPONENT_SET")) { p.x = 80; p.y = y; y += p.height + 64; }
-
-  return { phase: "blocks", page: MANIFEST.blockPageName, brandCollection: MANIFEST.brandCollectionName, variables: varResult, built, skipped };
-}
-
-// ── Header block builder (Desktop / Mobile / Mobile-open state variants) ───────
-function buildHeader(block, ctx, page) {
-  const { bfill, blackA, displayFont, sansFont, logoText } = ctx;
-  const navNames = block.navItems;
-
-  const logo = () => { const t = figma.createText(); t.fontName = displayFont; t.characters = logoText; t.fontSize = 18; t.fills = [bfill("ink")]; return t; };
-  const navText = (s) => { const t = figma.createText(); t.fontName = sansFont; t.characters = s.toUpperCase(); t.fontSize = 12; t.letterSpacing = { unit: "PIXELS", value: 1.2 }; t.fills = [bfill("gray-dark")]; return t; };
-  const hamburger = () => { const h = figma.createAutoLayout("VERTICAL", { itemSpacing: 4 }); for (let i = 0; i < 3; i++) { const r = figma.createRectangle(); r.resize(20, 2); r.cornerRadius = 1; r.fills = [bfill("ink")]; h.appendChild(r); } return h; };
-  const closeX = () => { const t = figma.createText(); t.fontName = sansFont; t.characters = "×"; t.fontSize = 26; t.fills = [bfill("ink")]; return t; };
-  const divider = (w) => { const r = figma.createRectangle(); r.resize(w, 1); r.fills = [blackA(0.1)]; return r; };
-
-  const stateByName = Object.fromEntries(block.states.map((s) => [s.name, s]));
-
-  function buildState(stateName, rightEl, extraFn) {
-    const s = stateByName[stateName];
-    const c = figma.createComponent();
-    c.name = `state=${stateName}`;
-    c.layoutMode = "VERTICAL";
-    c.fills = [bfill("cream")];
-    c.resize(s.width, 10);
-    const row = figma.createAutoLayout("HORIZONTAL");
-    row.primaryAxisAlignItems = "SPACE_BETWEEN";
-    row.counterAxisAlignItems = "CENTER";
-    row.paddingLeft = row.paddingRight = s.padX;
-    row.paddingTop = row.paddingBottom = 16;
-    row.fills = [];
-    c.appendChild(row); row.layoutSizingHorizontal = "FILL";
-    row.appendChild(logo());
-    row.appendChild(rightEl);
-    if (extraFn) extraFn(c, s.width);
-    else { const d = divider(s.width); c.appendChild(d); d.layoutSizingHorizontal = "FILL"; }
-    c.primaryAxisSizingMode = "AUTO"; // hug height; width stays FIXED
-    return c;
-  }
-
-  const nodes = [];
-
-  if (stateByName["Desktop"]) {
-    const deskNav = figma.createAutoLayout("HORIZONTAL", { itemSpacing: 32 });
-    deskNav.counterAxisAlignItems = "CENTER";
-    for (const n of navNames) deskNav.appendChild(navText(n));
-    nodes.push(buildState("Desktop", deskNav));
-  }
-  if (stateByName["Mobile"]) nodes.push(buildState("Mobile", hamburger()));
-  if (stateByName["Mobile-open"]) {
-    nodes.push(buildState("Mobile-open", closeX(), (c, width) => {
-      const topd = divider(width); c.appendChild(topd); topd.layoutSizingHorizontal = "FILL";
-      const panel = figma.createAutoLayout("VERTICAL");
-      panel.fills = [bfill("cream")];
-      panel.effects = [{ type: "DROP_SHADOW", color: { r: 0, g: 0, b: 0, a: 0.12 }, offset: { x: 0, y: 6 }, radius: 16, spread: 0, visible: true, blendMode: "NORMAL" }];
-      c.appendChild(panel); panel.layoutSizingHorizontal = "FILL";
-      navNames.forEach((n, i) => {
-        const item = figma.createAutoLayout("VERTICAL");
-        item.fills = [];
-        panel.appendChild(item); item.layoutSizingHorizontal = "FILL";
-        if (i > 0) { const sep = divider(width); item.appendChild(sep); sep.layoutSizingHorizontal = "FILL"; }
-        const inner = figma.createAutoLayout("HORIZONTAL");
-        inner.paddingLeft = inner.paddingRight = 24; inner.paddingTop = inner.paddingBottom = 16;
-        inner.fills = [];
-        item.appendChild(inner); inner.layoutSizingHorizontal = "FILL";
-        inner.appendChild(navText(n));
-      });
-      const botd = divider(width); c.appendChild(botd); botd.layoutSizingHorizontal = "FILL";
-    }));
-  }
-
-  return styleSet(figma.combineAsVariants(nodes, page), block.name);
-}
-
-// ── Footer block builder (Desktop row / Mobile stacked) ────────────────────────
-function buildFooter(block, ctx, page) {
-  const { bfill, blackA, sansFont, logoText } = ctx;
-  const navNames = block.navItems;
-  const year = new Date().getFullYear();
-  const stateByName = Object.fromEntries(block.states.map((s) => [s.name, s]));
-
-  const metaText = (chars, colorName) => { const t = figma.createText(); t.fontName = sansFont; t.characters = chars; t.fontSize = 11; t.letterSpacing = { unit: "PIXELS", value: 0.88 }; t.fills = [bfill(colorName)]; return t; };
-  const divider = (w) => { const r = figma.createRectangle(); r.resize(w, 1); r.fills = [blackA(0.1)]; return r; };
-  const navRow = () => {
-    const nav = figma.createAutoLayout("HORIZONTAL", { itemSpacing: 24 });
-    nav.layoutWrap = "WRAP"; nav.counterAxisSpacing = 8;
-    for (const n of navNames) nav.appendChild(metaText(n.toUpperCase(), "gray-dark"));
-    return nav;
-  };
-
-  function buildState(stateName) {
-    const s = stateByName[stateName];
-    const isRow = stateName === "Desktop";
-    const c = figma.createComponent();
-    c.name = `state=${stateName}`;
-    c.layoutMode = "VERTICAL";
-    c.fills = [bfill("cream")];
-    c.resize(s.width, 10);
-    const topd = divider(s.width); c.appendChild(topd); topd.layoutSizingHorizontal = "FILL";
-    const content = figma.createAutoLayout(isRow ? "HORIZONTAL" : "VERTICAL", { itemSpacing: 16 });
-    content.paddingLeft = content.paddingRight = s.padX; content.paddingTop = content.paddingBottom = 32;
-    content.fills = [];
-    if (isRow) { content.primaryAxisAlignItems = "SPACE_BETWEEN"; content.counterAxisAlignItems = "CENTER"; }
-    c.appendChild(content); content.layoutSizingHorizontal = "FILL";
-    content.appendChild(metaText(`© ${year} ${logoText}`, "gray-mid"));
-    content.appendChild(navRow());
-    c.primaryAxisSizingMode = "AUTO";
-    return c;
-  }
-
-  const nodes = [];
-  if (stateByName["Desktop"]) nodes.push(buildState("Desktop"));
-  if (stateByName["Mobile"]) nodes.push(buildState("Mobile"));
-  return styleSet(figma.combineAsVariants(nodes, page), block.name);
-}
-
-// ── Hero block builder (Desktop / Mobile) ──────────────────────────────────────
-function buildHero(block, ctx, page) {
-  const { bfill, blackA, displayFont, serifFont, sansFont, sansSemibold, logoText, projectName } = ctx;
-  const stateByName = Object.fromEntries(block.states.map((s) => [s.name, s]));
-
-  const cta = (label, primary) => {
-    const b = figma.createAutoLayout("HORIZONTAL");
-    b.paddingLeft = b.paddingRight = 22; b.paddingTop = b.paddingBottom = 11;
-    b.cornerRadius = 3;
-    b.fills = primary ? [bfill("accent")] : [];
-    if (!primary) { b.strokes = [blackA(0.2)]; b.strokeWeight = 1; }
-    const t = figma.createText();
-    t.fontName = sansFont; t.characters = label.toUpperCase(); t.fontSize = 12; t.letterSpacing = { unit: "PIXELS", value: 1.2 };
-    t.fills = primary ? [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }] : [bfill("gray-dark")];
-    b.appendChild(t);
-    return b;
-  };
-
-  function buildState(stateName, h1Size) {
-    const s = stateByName[stateName];
-    const c = figma.createComponent();
-    c.name = `state=${stateName}`;
-    c.layoutMode = "VERTICAL";
-    c.counterAxisAlignItems = "CENTER";
-    c.itemSpacing = 20;
-    c.fills = [bfill("cream")];
-    c.paddingLeft = c.paddingRight = s.padX; c.paddingTop = c.paddingBottom = 80;
-    c.resize(s.width, 400);
-
-    if (projectName) {
-      const eb = figma.createText();
-      eb.fontName = sansSemibold; eb.characters = projectName.toUpperCase(); eb.fontSize = 11; eb.letterSpacing = { unit: "PIXELS", value: 1.98 };
-      eb.fills = [bfill("gray-mid")]; eb.textAlignHorizontal = "CENTER";
-      c.appendChild(eb);
+    const variants = [];
+    for (const entry of blk.views) {
+      const node = entry.nodeId ? await figma.getNodeByIdAsync(entry.nodeId) : null;
+      if (!node) { skipped.push(`${blk.name}/${entry.view} (no node)`); continue; }
+      // Move the capture onto this page if it isn't already.
+      if (node.parent && node.parent.id !== page.id) page.appendChild(node);
+      await normalizeFonts(node, log); // BEFORE any structural edit (font-load gate)
+      const all = [node, ...node.findAll(() => true)];
+      for (const n of all) { if ("fills" in n) bindPaints(n, "fills", log); if ("strokes" in n) bindPaints(n, "strokes", log); }
+      flatten(node, log);
+      repairLayout(node, entry.layout || (MANIFEST.layout && MANIFEST.layout[blockId]), log);
+      node.name = `View=${cap(entry.view)}`;
+      variants.push(figma.createComponentFromNode(node));
     }
-    const h1 = figma.createText();
-    h1.fontName = displayFont; h1.characters = logoText; h1.fontSize = h1Size;
-    h1.letterSpacing = { unit: "PERCENT", value: -2 }; h1.lineHeight = { unit: "PERCENT", value: 105 };
-    h1.fills = [bfill("ink")]; h1.textAlignHorizontal = "CENTER";
-    c.appendChild(h1);
-
-    const p = figma.createText();
-    p.fontName = serifFont;
-    p.characters = "This is your starting point. Build your home page here, and reference the styleguide for tokens, type, and components.";
-    p.fontSize = 17; p.lineHeight = { unit: "PERCENT", value: 160 };
-    p.fills = [bfill("gray-dark")]; p.textAlignHorizontal = "CENTER";
-    c.appendChild(p);
-    p.layoutSizingHorizontal = "FIXED";
-    p.resize(Math.min(440, s.width - 2 * s.padX), p.height);
-    p.textAutoResize = "HEIGHT";
-
-    const btns = figma.createAutoLayout("HORIZONTAL", { itemSpacing: 12 });
-    btns.layoutWrap = "WRAP"; btns.counterAxisSpacing = 12; btns.primaryAxisAlignItems = "CENTER"; btns.counterAxisAlignItems = "CENTER";
-    btns.appendChild(cta("Open styleguide", true));
-    btns.appendChild(cta("Dashboard", false));
-    c.appendChild(btns);
-
-    c.primaryAxisSizingMode = "AUTO"; // hug height; width stays FIXED
-    return c;
+    if (!variants.length) { skipped.push(`${blk.name} (0 variants)`); continue; }
+    let result;
+    if (variants.length === 1) { result = variants[0]; result.name = blk.name; }
+    else { result = styleSet(figma.combineAsVariants(variants, page), blk.name); }
+    // blockId + componentId are what the "compose" phase needs to instance this
+    // block onto each design page (variables → components → blocks → PAGES).
+    built.push({ blockId, block: blk.name, componentId: result.id, type: result.type, views: blk.views.map((v) => v.view) });
   }
 
-  const nodes = [];
-  if (stateByName["Desktop"]) nodes.push(buildState("Desktop", 64));
-  if (stateByName["Mobile"]) nodes.push(buildState("Mobile", 36));
-  return styleSet(figma.combineAsVariants(nodes, page), block.name);
+  // Lay the blocks out down the page.
+  let y = 80;
+  for (const p of page.children.filter((n) => n.type === "COMPONENT_SET" || n.type === "COMPONENT")) { p.x = 80; p.y = y; y += p.height + 64; }
+
+  return { phase: "blocks", page: MANIFEST.blockPageName, brandCollection: MANIFEST.brandCollectionName, variables: varResult, built, skipped, stats: log };
+}
+
+// ── PHASE "compose" — build ONE design Page from block INSTANCES ───────────────
+//
+// The top of the cascade: variables → components → blocks → PAGES. A design page
+// is just its blocks stacked, so this composes each Figma design Page from
+// INSTANCES of the Block Library component sets (right `View=` variant per
+// breakpoint) — variable-bound (inherited from the blocks) and edit-cascading
+// (edit a block master → every page updates). A designer never edits a Page except
+// the copy inside a block. This REPLACES the old raw page-capture for design pages.
+//
+// ONE PAGE PER CALL: use_figma allows a single setCurrentPageAsync per call, so
+// blocks are referenced by componentId (getNodeByIdAsync, no page switch) and the
+// caller fans pages out in parallel — one compose call per design page.
+//
+// CONTRACT (prepend ABOVE this body):
+//   const MANIFEST = { blockPageName, page: { id, name, route, blocks: [{ blockId,
+//     name, componentId }] }, views: ["desktop","mobile"], widths: { desktop:1440,
+//     mobile:390 } };
+//   const PHASE = "compose";
+// The block componentIds come from the PHASE "blocks" result (built[].componentId).
+if (PHASE === "compose") {
+  const pg = MANIFEST.page;
+  const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  const views = MANIFEST.views && MANIFEST.views.length ? MANIFEST.views : ["desktop"];
+  const widths = MANIFEST.widths || {};
+  const fallbackW = { desktop: 1440, tablet: 664, mobile: 390 };
+
+  // Preload block master components by id (cross-page, no setCurrentPageAsync).
+  const comps = {};
+  for (const b of pg.blocks) comps[b.blockId] = b.componentId ? await figma.getNodeByIdAsync(b.componentId) : null;
+
+  // Pick the component to instance for a given breakpoint (a set → its View variant;
+  // a lone COMPONENT → itself).
+  const pickVariant = (comp, view) => {
+    if (!comp) return null;
+    if (comp.type === "COMPONENT") return comp;
+    if (comp.type === "COMPONENT_SET") return comp.children.find((c) => c.name === `View=${cap(view)}`) || comp.defaultVariant || comp.children[0];
+    return null;
+  };
+
+  // Find-or-create this design Page, then switch to it (the one allowed switch).
+  let dpage = figma.root.children.find((p) => p.name === pg.name);
+  if (!dpage) { dpage = figma.createPage(); dpage.name = pg.name; }
+  await figma.setCurrentPageAsync(dpage);
+  // Idempotent: drop previously-composed frames for this page.
+  for (const n of [...dpage.children]) if (n.name.startsWith(`${pg.name} — `)) n.remove();
+
+  const frames = [];
+  const missing = [];
+  let x = 80;
+  for (const view of views) {
+    const w = widths[view] || fallbackW[view] || 1440;
+    const frame = figma.createAutoLayout("VERTICAL");
+    frame.name = `${pg.name} — ${cap(view)}`;
+    frame.itemSpacing = 0; // sections stack flush; internal spacing lives in blocks
+    frame.fills = [];
+    frame.resize(w, 10);
+    frame.layoutSizingHorizontal = "FIXED";
+    frame.x = x; frame.y = 80;
+    for (const b of pg.blocks) {
+      const variant = pickVariant(comps[b.blockId], view);
+      if (!variant) { missing.push(`${b.name || b.blockId}/${view}`); continue; }
+      const inst = variant.createInstance();
+      frame.appendChild(inst);
+      inst.layoutSizingHorizontal = "FILL"; // full-width sections
+    }
+    frame.primaryAxisSizingMode = "AUTO"; // hug height
+    frames.push({ view, id: frame.id, blocks: frame.children.length });
+    x += w + 120;
+  }
+  return { phase: "compose", page: pg.name, frames, missing };
 }

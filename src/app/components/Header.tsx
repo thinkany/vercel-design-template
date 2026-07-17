@@ -23,7 +23,7 @@ export function Header({ onNavigate }: { onNavigate: (page: string) => void }) {
   const pages = designPages;
 
   return (
-    <header className="relative w-full border-b border-black/10 bg-ta-cream">
+    <header data-block="header" data-block-name="Header" className="relative w-full border-b border-black/10 bg-ta-cream">
       <div className="flex items-center justify-between px-6 py-4 @lg:px-10">
         {/* Logo lockup */}
         <button

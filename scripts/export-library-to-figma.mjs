@@ -84,7 +84,28 @@ async function loadTokens(styleDir) {
   const re = /(--[\w-]+)\s*:\s*([^;]+);/g;
   let m;
   while ((m = re.exec(scope))) map[m[1].trim()] = m[2].trim();
-  return map;
+  return resolveVarRefs(map);
+}
+
+// Follow `var(--x)` / `var(--x, fallback)` indirection to a concrete value.
+// The component-branding bridge (/setup-styleguide) points shadcn primitives at
+// brand tokens — e.g. `--primary: var(--ta-copper)` — so a raw read yields the
+// string "var(--ta-copper)", which parseColor can't parse. Resolve each token
+// against the same :root map (following chains like --ring → --primary → --ta-*),
+// leaving plain hex/oklch/rgb values and any unresolved var() untouched.
+function resolveVarRefs(map) {
+  const varRe = /^var\(\s*(--[\w-]+)\s*(?:,\s*([^)]+))?\)$/;
+  const resolve = (value, depth) => {
+    if (depth > 16) return value; // cycle guard
+    const mm = String(value).trim().match(varRe);
+    if (!mm) return value;
+    if (map[mm[1]] != null) return resolve(map[mm[1]], depth + 1); // referenced token
+    if (mm[2] != null) return resolve(mm[2].trim(), depth + 1);    // var() fallback arg
+    return value; // dangling reference — leave as-is (parseColor will yield null)
+  };
+  const out = {};
+  for (const [k, v] of Object.entries(map)) out[k] = resolve(v, 0);
+  return out;
 }
 
 // ── Color parsing → linear {r,g,b} in 0..1 + alpha (the Figma paint shape) ────

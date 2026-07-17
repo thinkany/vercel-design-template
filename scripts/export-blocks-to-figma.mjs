@@ -1,33 +1,39 @@
 #!/usr/bin/env node
 // ©2026 thinkany llc. All rights reserved.
 /**
- * export-blocks-to-figma.mjs — build the BLOCK-LIBRARY MANIFEST for the Figma
- * "Block Library" page export.
+ * export-blocks-to-figma.mjs — build the "brand half" of the BLOCK-LIBRARY
+ * post-pass manifest.
  *
- * WHAT IT DOES
- *   Reads the blocks declared in src/app/blocks.ts + the brand colors/fonts they
- *   consume (from tokens.css) + the client name (from .env), resolves each into a
- *   normalized JSON manifest, and emits figma-export/blocks-{id}.json. That
- *   manifest is what the Figma builder (scripts/figma-block-library.plugin.js)
- *   turns into real, editable Figma component SETS (one variant per block state),
- *   with fills bound to a "Brand" variable collection.
+ * DERIVE-EVERYTHING MODEL (no hand-declared blocks)
+ *   Blocks are NOT declared or hand-built anymore. Each block is DERIVED from the
+ *   real page: the designer marks a section with `data-block="{id}"` +
+ *   `data-block-name="{Name}"`, the capture driver (export-to-figma.mjs --blocks)
+ *   discovers those markers live and screenshots each into Figma as an editable
+ *   html.to.design layer tree, and the post-pass builder
+ *   (figma-block-library.plugin.js, PHASE "blocks") cleans + binds + componentizes
+ *   them. See CLAUDE.md → "Exporting to Figma as ONE cohesive file".
  *
- *   This is the DETERMINISTIC, offline half — it touches no Figma account. It is
- *   the SECTION-level sibling of export-library-to-figma.mjs (atoms): that reads
- *   cva variant matrices; this reads declared section blocks. Blocks are
- *   structural, so the builder holds the per-block construction; this manifest
- *   supplies the data (colors, fonts, nav items, per-state geometry).
+ *   So the block LIST is discovered live (from the DOM), not here. THIS script is
+ *   the deterministic, offline half that supplies the two brand inputs the
+ *   post-pass needs:
+ *     • brandColors — the FULL --ta-* palette (name/token/rgb). The builder binds
+ *       each captured literal fill to the NEAREST of these, so include every brand
+ *       color, not just a curated few.
+ *     • fonts       — the --ta-font-* families by role, so the builder can remap a
+ *       captured family Figma lacks (a system "Georgia") to the project's real
+ *       face, else a role proxy.
+ *   It emits figma-export/blocks-{id}.json. Touches no Figma account.
  *
  * VARIATION-AWARE (siloed, like the other exporters)
- *   v00 → src/styles/tokens.css ; vNN → src/variations/{id}/styles/tokens.css.
+ *   v00 → src/styles/ ; vNN → src/variations/{id}/styles/ (falls back to base).
  *
  * USAGE
  *   node scripts/export-blocks-to-figma.mjs                 # v00 → figma-export/blocks-v00.json
  *   node scripts/export-blocks-to-figma.mjs -v v01
  *   node scripts/export-blocks-to-figma.mjs --print
  *
- * PREREQUISITE: none beyond the repo (esbuild, a Vite dep, transpiles the TS
- *   manifests). Never added to package.json; never runs on Vercel.
+ * PREREQUISITE: none beyond the repo (esbuild transpiles brand.ts). Never added to
+ *   package.json; never runs on Vercel.
  */
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
@@ -95,89 +101,60 @@ function firstFamily(stack) {
   return first;
 }
 
-// Read a VITE_ var straight from .env (public brand config; no secrets there).
-async function readEnvVar(name) {
-  try {
-    const env = await readFile(join(ROOT, ".env"), "utf8");
-    const m = env.match(new RegExp(`^${name}\\s*=\\s*"?([^"\\n]*)"?`, "m"));
-    return m ? m[1].trim() : "";
-  } catch { return ""; }
-}
-
-// The --ta-* brand colors the blocks bind to (Header: cream/ink/gray-dark;
-// Footer adds gray-mid; Hero adds the accent). The NEUTRALS use the template's
-// stable --ta-* token names; the ACCENT is resolved dynamically from brand.ts
-// (below) since projects name it differently (--ta-blue by default; a rebrand may
-// rename it, e.g. --ta-amber). The Figma variable is always named "accent".
-const BRAND_NEUTRALS = [
-  { name: "cream", token: "--ta-cream" },
-  { name: "ink", token: "--ta-ink" },
-  { name: "gray-dark", token: "--ta-gray-dark" },
-  { name: "gray-mid", token: "--ta-gray-mid" },
-];
+// The four --ta-font-* roles, keyed by token so the builder can proxy by role.
+const FONT_ROLES = { "--ta-font-display": "display", "--ta-font-serif": "serif", "--ta-font-sans": "sans", "--ta-font-mono": "mono" };
 
 async function buildManifest(variationId) {
   const styleDir = resolveStyleDir(variationId);
   const tokens = await loadTokens(styleDir);
-  const { blocks } = await loadTsModule(join(ROOT, "src", "app", "blocks.ts"));
-  const { designPages } = await loadTsModule(join(ROOT, "src", "app", "pages.ts"));
-  const clientName = (await readEnvVar("VITE_CLIENT_NAME")) || "Client Name";
-  const projectName = await readEnvVar("VITE_PROJECT_NAME");
 
-  // Accent = the FIRST brand-palette color (convention), read from brand.ts so it
-  // works whatever the project names its accent token. Falls back to --ta-blue.
-  let accentToken = "--ta-blue";
+  // FULL brand palette from brand.ts (every group), rgb resolved from tokens.css.
+  // The builder binds each captured fill to the nearest of these, so completeness
+  // matters more than curation. Falls back to the token's documented value.
+  let paletteColors = [];
   try {
     const { brand } = await loadTsModule(join(styleDir, "brand.ts"));
-    accentToken = brand?.paletteGroups?.[0]?.colors?.[0]?.token || accentToken;
-  } catch { /* keep the template-default accent */ }
+    paletteColors = (brand?.paletteGroups || []).flatMap((g) => g.colors || []);
+  } catch { /* no brand.ts in scope → empty palette (builder still runs, binds nothing) */ }
 
-  const brandTokenList = [{ name: "accent", token: accentToken }, ...BRAND_NEUTRALS];
-  const brandColors = brandTokenList
-    .filter((b) => tokens[b.token])
-    .map((b) => ({ name: b.name, token: b.token, hex: tokens[b.token], rgb: hexRgb(tokens[b.token]) }));
+  const seen = new Set();
+  const brandColors = [];
+  for (const c of paletteColors) {
+    if (!c?.token || seen.has(c.token)) continue;
+    const hex = tokens[c.token] || c.value;
+    if (!hex || !/^#?[0-9a-f]{3,8}$/i.test(String(hex).trim())) continue;
+    seen.add(c.token);
+    brandColors.push({ name: c.name || c.token.replace(/^--ta-/, ""), token: c.token, hex, rgb: hexRgb(hex) });
+  }
 
-  const pageNavNames = designPages.map((p) => p.name);
-  const outBlocks = blocks.map((b) => ({
-    id: b.id,
-    name: b.name,
-    component: b.component,
-    implemented: b.implemented,
-    navItems: b.navSource === "pages" ? pageNavNames : b.navSource,
-    states: b.states,
-  }));
+  // Font families by role (concrete family or null → builder uses a role proxy).
+  const fonts = {};
+  for (const [token, role] of Object.entries(FONT_ROLES)) {
+    fonts[role] = { family: firstFamily(tokens[token]), role, stack: tokens[token] || "" };
+  }
 
   return {
     variationId,
     brandCollectionName: "Brand",
     blockPageName: "Block Library",
-    logoText: clientName,
-    projectName,
-    fonts: {
-      display: { stack: tokens["--ta-font-display"] || "", family: firstFamily(tokens["--ta-font-display"]) },
-      serif: { stack: tokens["--ta-font-serif"] || "", family: firstFamily(tokens["--ta-font-serif"]) },
-      sans: { stack: tokens["--ta-font-sans"] || "", family: firstFamily(tokens["--ta-font-sans"]) },
-    },
     brandColors,
-    blocks: outBlocks,
+    fonts,
+    // Filled by Claude after the capture step: [{ blockId, name, view, nodeId }].
+    // Discover the blocks with: node scripts/export-to-figma.mjs --blocks --discover -v {id}
+    captures: [],
     generatedAt: new Date().toISOString(),
     _styleDir: styleDir.replace(ROOT + "/", ""),
   };
 }
 
 function printSummary(m) {
-  console.log(`\nBlock-library manifest — variation ${m.variationId}  (source: ${m._styleDir})`);
+  console.log(`\nBlock-library brand manifest — variation ${m.variationId}  (source: ${m._styleDir})`);
   console.log(`  Figma page: "${m.blockPageName}"   ·   variable collection: "${m.brandCollectionName}"`);
-  console.log(`  Logo text: "${m.logoText}"   Project: "${m.projectName}"`);
-  console.log(`  Fonts: display=${m.fonts.display.family || "(proxy)"}  serif=${m.fonts.serif.family || "(proxy)"}  sans=${m.fonts.sans.family || "(proxy)"}`);
-  console.log(`  ${m.brandColors.length} brand variables → collection "${m.brandCollectionName}":`);
-  for (const c of m.brandColors) console.log(`    · ${c.name.padEnd(11)} ${c.hex.padEnd(9)} ${c.token}`);
-  console.log(`\n  ${m.blocks.length} blocks:`);
-  for (const b of m.blocks) {
-    const flag = b.implemented ? "✓ implemented" : "· scaffold";
-    console.log(`    ▸ ${b.name.padEnd(10)} ${flag}   states: ${b.states.map((s) => s.name).join(", ")}`);
-    console.log(`      nav: ${b.navItems.join(", ") || "(none)"}`);
-  }
+  console.log(`  Fonts: ${["display", "serif", "sans", "mono"].map((r) => `${r}=${m.fonts[r]?.family || "(proxy)"}`).join("  ")}`);
+  console.log(`  ${m.brandColors.length} brand colors (nearest-match binding targets):`);
+  for (const c of m.brandColors) console.log(`    · ${c.name.padEnd(16)} ${c.hex.padEnd(9)} ${c.token}`);
+  console.log(`\n  Blocks are DERIVED live from [data-block] markers — none are declared here.`);
+  console.log(`  Next: node scripts/export-to-figma.mjs --blocks --discover -v ${m.variationId}`);
 }
 
 async function main() {
@@ -189,8 +166,11 @@ async function main() {
   --out <dir>            Output dir (default: figma-export)
   --print                Print the manifest instead of writing it
 
-Emits figma-export/blocks-{id}.json — the block manifest Claude feeds to the
-Figma builder (scripts/figma-block-library.plugin.js, PHASE "blocks") via use_figma.`);
+Emits figma-export/blocks-{id}.json — the BRAND HALF (colors + fonts) of the
+block-library post-pass manifest. Blocks themselves are derived live from
+[data-block] markers by export-to-figma.mjs --blocks; Claude records each
+capture's node id into the manifest's "captures" before running the builder
+(scripts/figma-block-library.plugin.js, PHASE "blocks") via use_figma.`);
     return;
   }
 
@@ -205,8 +185,6 @@ Figma builder (scripts/figma-block-library.plugin.js, PHASE "blocks") via use_fi
   const outPath = join(ROOT, args.out, `blocks-${args.variation}.json`);
   await writeFile(outPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
   console.log(`\n→ wrote ${args.out}/blocks-${args.variation}.json`);
-  console.log("  Next (live): Claude reads this manifest and runs the Figma builder");
-  console.log("  (scripts/figma-block-library.plugin.js, PHASE \"blocks\") via use_figma.");
 }
 
 main().catch((e) => {

@@ -13,7 +13,7 @@ export function Footer({ onNavigate }: { onNavigate: (page: string) => void }) {
   const pages = designPages;
 
   return (
-    <footer className="w-full border-t border-black/10 bg-ta-cream px-6 py-8 @lg:px-10">
+    <footer data-block="footer" data-block-name="Footer" className="w-full border-t border-black/10 bg-ta-cream px-6 py-8 @lg:px-10">
       <div className="flex flex-col gap-4 @lg:flex-row @lg:items-center @lg:justify-between">
         <div className="font-ta-sans text-[11px] tracking-[0.08em] uppercase text-ta-gray-mid">
           © {year} {siteConfig.clientName}

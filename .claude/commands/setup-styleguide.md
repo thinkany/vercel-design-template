@@ -148,6 +148,64 @@ Confirm the changes show up in the styleguide's **Primitives → Colors / Type
 Scale** sections — those swatches read the live token values, so they should
 reflect your edits immediately.
 
+### 1c. Bridge the shadcn primitives to the brand
+
+The `--ta-*` tokens above style the *designed pages*. But the 40 shadcn/ui
+components in `src/app/components/ui/` (Button, Badge, Alert, form controls…) read
+a **separate** namespace — `--primary`, `--secondary`, `--destructive`,
+`--foreground`, … — which ships at stock shadcn defaults (near-black navy, red).
+Until they're bridged, every shadcn component renders **off-brand** in the live app
+*and* in the Figma **Components** export (which faithfully mirrors whatever those
+primitives currently are). This step points the brand-carrying primitives at the
+palette you just set, so the components inherit the brand everywhere.
+
+> **Scope.** This bridges the **client** palette (`--ta-*`) into the **shadcn**
+> primitives only. Do **not** touch `--admin-*` (tooling chrome) — those stay
+> neutral and constant. Write the mappings as `var(--ta-*)` **references** (not
+> copied hex) so there's still one source of truth, and only in the `:root` block —
+> leave the `.dark` overrides alone (the palette + the Figma export are single
+> light mode).
+
+Offer the designer one `AskUserQuestion`, header **"Component palette"**:
+
+> Your shadcn UI components (buttons, badges, alerts…) still use stock colors.
+> Map them to your brand palette now?
+
+- **Yes — auto-map (recommended)** → apply the default mapping below, then show it
+  back for confirmation.
+- **Review each mapping** → propose the table and let them adjust per row before
+  writing.
+- **Skip for now** → leave stock; note they can ask to bridge later.
+
+**Default mapping** (write into the scope's `tokens.css`, `:root` only — replace
+each primitive's value with the `var()` reference; `<accent>` = the first palette
+color, the same convention the block export uses, and `<accent-contrast>` = that
+color's `text` field from `brand.ts`):
+
+| shadcn primitive | ← maps to |
+|---|---|
+| `--primary` | `var(--<accent>)` |
+| `--primary-foreground` | `var(--<accent-contrast>)` or its literal hex |
+| `--secondary` | a light neutral brand token (background/cream) |
+| `--secondary-foreground` | the brand ink token |
+| `--accent` | same light neutral (or a subtle brand tint) |
+| `--accent-foreground` | the brand ink token |
+| `--muted-foreground` | a mid-grey brand token |
+| `--ring` | `var(--primary)` |
+| `--destructive` / `-foreground` | **keep stock** unless the brand defines a semantic red — then map it |
+| surfaces (`--background`, `--card`, `--popover`, `--foreground`, `--border`, `--input`) | **leave neutral** unless the brand deliberately wants tinted surfaces / non-black ink (then map `--foreground` → the brand ink) |
+| `--chart-*`, `--sidebar-*` | **leave alone** (data-viz has its own palette; sidebar is tooling) |
+
+Pick the neutral/ink/grey tokens by role from the palette the designer just
+defined (e.g. a cream/sand for the light neutral, a near-black for ink). If the
+palette has no obvious fit for a row, keep that primitive stock rather than forcing
+a poor match.
+
+After writing, confirm the shadcn components in the styleguide's **Atoms** section
+(buttons/badges) now render in the brand palette. The Figma **Components** export
+reads these same primitives — the exporter follows the `var()` references to the
+resolved brand color — so a later component export is on-brand automatically.
+
 ## 2. Name the default variation (base v00 only)
 
 The dashboard lists each design as a **variation**, and the base one (`v00`) is

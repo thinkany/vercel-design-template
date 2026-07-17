@@ -214,8 +214,8 @@ Home            ← Page: your design, one frame per screen size
 About           ← Page (once you add it)
 ———
 Styleguide      ← Page: color variables + text styles + a specimen
-Block Library   ← Page: scaffold (built out later)
-Components      ← Page: scaffold (built out later)
+Block Library   ← Page: your page's sections, derived from the real design
+Components      ← Page: shadcn components as editable, on-brand sets
 ```
 
 Each **design page becomes its own Figma Page** (named for the page), and the
