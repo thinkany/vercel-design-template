@@ -77,7 +77,7 @@ const FALLBACK_WIDTHS = { desktop: 1440, tablet: 664, mobile: 370 };
 const VIEWPORT_HEIGHT = 900; // starting height; full-page capture grabs the rest
 
 function parseArgs(argv) {
-  const args = { url: "http://localhost:5173", variation: "v00", out: "figma-export", captures: null, views: null, pages: null, blocks: false, discover: false, timing: false, fast: false };
+  const args = { url: "http://localhost:5173", variation: "v00", out: "figma-export", captures: null, views: null, pages: null, only: null, blocks: false, discover: false, timing: false, fast: false };
   const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -87,6 +87,7 @@ function parseArgs(argv) {
     else if (a === "--captures") args.captures = argv[++i];
     else if (a === "--views") args.views = list(argv[++i]);
     else if (a === "--pages") args.pages = list(argv[++i]);
+    else if (a === "--only") args.only = list(argv[++i]);
     else if (a === "--blocks") args.blocks = true;
     else if (a === "--discover") args.discover = true;
     else if (a === "--timing") args.timing = true;
@@ -105,6 +106,9 @@ export-to-figma — capture each active breakpoint of a design into Figma (or PN
   -v, --variation <id>   Variation to export (default: v00)
       --url <url>        Dev server base URL (default: http://localhost:5173)
       --pages <list>     Comma list to limit pages (default: all in the manifest)
+      --only <list>      Block mode: re-derive ONLY these block ids (e.g. hero,footer).
+                         Scopes captures to the sections you changed; compose still
+                         stacks all sections (unchanged ones keep their masters).
       --views <list>     Comma list to override the active set (e.g. desktop,mobile)
       --fast             Capture only the PRIMARY (first active) breakpoint — for
                          fast design iteration (~Nx fewer captures). Final export
@@ -243,7 +247,15 @@ async function discoverBlocks(page, args, { views, widths, pages }) {
     pagesOut.push({ id: pg.id, name: pg.name, route: pg.route, blocks: pageBlocks.map((f) => ({ blockId: f.blockId, name: f.name })) });
   }
   // blocks → what to capture (once each); pages → how to compose (order per page).
-  return { blocks: [...seen.values()], pages: pagesOut, views, widths };
+  let blocks = [...seen.values()];
+  if (args.only && args.only.length) {
+    const before = blocks.length;
+    blocks = blocks.filter((b) => args.only.includes(b.blockId));
+    // stderr: keep stdout pure JSON. compose still uses the full `pages` order —
+    // only the CAPTURE set is scoped; unchanged blocks keep their existing masters.
+    console.error(`  --only: re-deriving ${blocks.length}/${before} block(s) [${blocks.map((b) => b.blockId).join(", ")}] — compose still stacks all sections`);
+  }
+  return { blocks, pages: pagesOut, views, widths };
 }
 
 // Fire html.to.design's captureForDesign and return as soon as the /submit POST
@@ -286,9 +298,11 @@ async function captureBlocks(page, args, { widths }, capturesMap) {
     if (!entry.captureId || !entry.endpoint) { console.warn(`  · ${key}: missing captureId/endpoint — skipped`); continue; }
     const view = entry.view || key.slice(key.lastIndexOf("-") + 1);
     const route = entry.route || "";
-    const gk = `${route} ${view}`;
+    const blockId = entry.blockId || key.replace(/-[^-]+$/, "");
+    if (args.only && args.only.length && !args.only.includes(blockId)) continue; // scoped re-derive
+    const gk = `${route} ${view}`;
     if (!groups.has(gk)) groups.set(gk, { route, view, items: [] });
-    groups.get(gk).items.push({ key, entry, blockId: entry.blockId || key.replace(/-[^-]+$/, "") });
+    groups.get(gk).items.push({ key, entry, blockId });
   }
 
   for (const { route, view, items } of groups.values()) {

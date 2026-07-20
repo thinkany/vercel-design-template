@@ -215,6 +215,17 @@ what keeps Vercel green. Two modes:
   5. Poll each `captureId` via `generate_figma_design(fileKey, captureId)` until
      `completed`.
 
+**Performance — batch the MCP calls (applies to blocks too).** The mint (step 3)
+and poll (step 5) `generate_figma_design` calls are **independent**, so issue them
+**in parallel — all in one assistant message** (N tool-use blocks), never one at a
+time. This cuts wall-clock and round-trips; it also matters because each
+`generate_figma_design` response is large (~1.5k tokens), so serial minting bloats
+context. The capture script itself is already fast — it groups captures by page-load
+(one navigation per route×breakpoint) and returns on the actual `/submit` POST rather
+than waiting on html.to.design's hanging promise. While **iterating** on a design, add
+`--fast` (primary breakpoint only) and, for blocks, `--only {blockIds}` (re-derive just
+the sections you changed); drop both for the final full export.
+
 Captures are pixel-accurate frames, not linked component instances. Human-facing
 usage is in [README.md](README.md) → "Exporting designs to Figma".
 
