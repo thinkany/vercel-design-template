@@ -44,6 +44,31 @@
 
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { performance } from "node:perf_hooks";
+
+// ── Lightweight profiling (opt-in via --timing) ───────────────────────────────
+// Prints per-step + phase timings to STDERR so stdout stays clean (the block/page
+// flows emit parseable output there). A stopwatch: `const done = mark(); …; done()`
+// returns elapsed ms. `TIMING` is a module flag set from args in main().
+let TIMING = false;
+const nowMs = () => performance.now();
+const mark = () => { const s = nowMs(); return () => nowMs() - s; };
+const r0 = (n) => Math.round(n);
+const terr = (...a) => { if (TIMING) console.error(...a); };
+// Sum a list of {step: ms} rows into a per-step total + share, print a table.
+function printTimingSummary(title, rows) {
+  if (!TIMING || !rows.length) return;
+  const steps = rows.reduce((acc, row) => {
+    for (const [k, v] of Object.entries(row)) if (typeof v === "number") acc[k] = (acc[k] || 0) + v;
+    return acc;
+  }, {});
+  const grand = Object.values(steps).reduce((a, b) => a + b, 0) || 1;
+  console.error(`\n⏱ ${title} — ${rows.length} capture(s), ${r0(grand)}ms total (${(grand / 1000).toFixed(1)}s), avg ${r0(grand / rows.length)}ms/capture`);
+  for (const [k, v] of Object.entries(steps).sort((a, b) => b[1] - a[1])) {
+    const bar = "█".repeat(Math.max(1, Math.round((v / grand) * 30)));
+    console.error(`   ${k.padEnd(10)} ${String(r0(v)).padStart(7)}ms  ${String(Math.round((v / grand) * 100)).padStart(3)}%  ${bar}`);
+  }
+}
 
 const CAPTURE_JS = "https://mcp.figma.com/mcp/html-to-design/capture.js";
 // Fallback widths if the app doesn't expose __PREVIEW_CONFIG__ (kept in sync
@@ -52,7 +77,7 @@ const FALLBACK_WIDTHS = { desktop: 1440, tablet: 664, mobile: 370 };
 const VIEWPORT_HEIGHT = 900; // starting height; full-page capture grabs the rest
 
 function parseArgs(argv) {
-  const args = { url: "http://localhost:5173", variation: "v00", out: "figma-export", captures: null, views: null, pages: null, blocks: false, discover: false };
+  const args = { url: "http://localhost:5173", variation: "v00", out: "figma-export", captures: null, views: null, pages: null, blocks: false, discover: false, timing: false, fast: false };
   const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -64,6 +89,8 @@ function parseArgs(argv) {
     else if (a === "--pages") args.pages = list(argv[++i]);
     else if (a === "--blocks") args.blocks = true;
     else if (a === "--discover") args.discover = true;
+    else if (a === "--timing") args.timing = true;
+    else if (a === "--fast") args.fast = true;
     else if (a === "--help" || a === "-h") args.help = true;
   }
   return args;
@@ -79,10 +106,14 @@ export-to-figma — capture each active breakpoint of a design into Figma (or PN
       --url <url>        Dev server base URL (default: http://localhost:5173)
       --pages <list>     Comma list to limit pages (default: all in the manifest)
       --views <list>     Comma list to override the active set (e.g. desktop,mobile)
+      --fast             Capture only the PRIMARY (first active) breakpoint — for
+                         fast design iteration (~Nx fewer captures). Final export
+                         omits it to get every breakpoint.
       --out <dir>        Dry-run screenshot dir (default: figma-export)
       --captures <file>  Live mode: JSON of { "{page}-{view}": { captureId, endpoint } }
       --blocks           Block-library mode (derive from [data-block] sections)
       --discover         With --blocks: print discovered blocks as JSON (no capture)
+      --timing           Print per-step + phase timings to stderr (profiling)
   -h, --help             Show this help
 
   PAGE mode (default): dry-run writes one PNG per breakpoint; --captures does a
@@ -215,55 +246,126 @@ async function discoverBlocks(page, args, { views, widths, pages }) {
   return { blocks: [...seen.values()], pages: pagesOut, views, widths };
 }
 
+// Fire html.to.design's captureForDesign and return as soon as the /submit POST
+// actually completes on the network — DON'T await captureForDesign's own promise,
+// which hangs indefinitely after the capture lands (measured: 45s+ every time, the
+// dominant cost of the whole export). The capture processes server-side once the
+// POST fires; we poll the captureId afterward to collect the node. A bounded
+// fallback guards against a missed event (correctness still holds — polling
+// confirms), but we wait long enough that we never navigate away mid-submit.
+async function submitCapture(page, entry, selector) {
+  const submitPath = `/capture/${entry.captureId}/submit`;
+  let settle;
+  const posted = new Promise((res) => { settle = res; });
+  const onResp = (resp) => { if (resp.url().includes(submitPath)) settle(`posted ${resp.status()}`); };
+  page.on("response", onResp);
+  // Fire-and-forget: the inner promise never settles, so we don't await it here.
+  page
+    .evaluate(({ captureId, endpoint, sel }) => { window.figma.captureForDesign({ captureId, endpoint, selector: sel }); },
+      { captureId: entry.captureId, endpoint: entry.endpoint, sel: selector })
+    .catch(() => {});
+  const outcome = await Promise.race([
+    posted,
+    new Promise((r) => setTimeout(() => r("no-post-15s"), 15000)),
+  ]);
+  page.off("response", onResp);
+  return outcome;
+}
+
 // ── Block mode: capture each block × breakpoint via html.to.design figmaselector ─
 // capturesMap is keyed "{blockId}-{view}" → { captureId, endpoint, route, blockId, view }.
 async function captureBlocks(page, args, { widths }, capturesMap) {
+  const timings = [];
+  // Group captures by (route, view): the navigation + script-inject cost is per
+  // PAGE-LOAD, not per block. Many blocks live on the same route (Header/Footer on
+  // every page, all of Home's sections on one route), so we load once per
+  // (route,view) and capture each block on it without re-navigating — turning
+  // N gotos into (#routes × #views).
+  const groups = new Map();
   for (const [key, entry] of Object.entries(capturesMap)) {
-    const blockId = entry.blockId || key.replace(/-[^-]+$/, "");
-    const view = entry.view || key.slice(key.lastIndexOf("-") + 1);
     if (!entry.captureId || !entry.endpoint) { console.warn(`  · ${key}: missing captureId/endpoint — skipped`); continue; }
-    const width = widths[view] ?? FALLBACK_WIDTHS[view] ?? 1440;
-    const routeFlag = entry.route ? `&${entry.route}` : "";
-    const selector = `[data-block="${blockId}"]`;
-    await page.setViewport({ width, height: VIEWPORT_HEIGHT, deviceScaleFactor: 2 });
-    await page.goto(`${args.url}/?v=${args.variation}${routeFlag}&capture=${view}`, { waitUntil: "networkidle0" });
-    await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
-    await page.waitForSelector(selector, { timeout: 15000 });
-    await page.addScriptTag({ url: CAPTURE_JS });
-    await page.waitForFunction(() => typeof window.figma?.captureForDesign === "function", { timeout: 15000 });
-    // Same raced submit as the page flow: captureForDesign can hang after the
-    // capture lands, so bound it and rely on polling the ID to confirm.
-    const outcome = await Promise.race([
-      page.evaluate(async ({ captureId, endpoint, sel }) => window.figma.captureForDesign({ captureId, endpoint, selector: sel }), { captureId: entry.captureId, endpoint: entry.endpoint, sel: selector })
-        .then(() => "returned").catch((e) => `error: ${e?.message || e}`),
-      new Promise((r) => setTimeout(() => r("timeout"), 45000)),
-    ]);
-    const ok = outcome === "timeout" || outcome === "returned";
-    console.log(`  ${ok ? "✓" : "!"} ${key} (${width}px, selector ${selector}): capture ${entry.captureId} ${outcome} — poll to confirm`);
+    const view = entry.view || key.slice(key.lastIndexOf("-") + 1);
+    const route = entry.route || "";
+    const gk = `${route} ${view}`;
+    if (!groups.has(gk)) groups.set(gk, { route, view, items: [] });
+    groups.get(gk).items.push({ key, entry, blockId: entry.blockId || key.replace(/-[^-]+$/, "") });
   }
+
+  for (const { route, view, items } of groups.values()) {
+    const width = widths[view] ?? FALLBACK_WIDTHS[view] ?? 1440;
+    const routeFlag = route ? `&${route}` : "";
+    // ── one navigation + script inject per page-load (shared by its blocks) ──
+    const G = {};
+    let d = mark();
+    await page.setViewport({ width, height: VIEWPORT_HEIGHT, deviceScaleFactor: 2 }); G.viewport = d();
+    d = mark();
+    await page.goto(`${args.url}/?v=${args.variation}${routeFlag}&capture=${view}`, { waitUntil: "networkidle0" }); G.goto = d();
+    d = mark();
+    await page.waitForSelector("[data-capture-ready]", { timeout: 15000 }); G.waitReady = d();
+    d = mark();
+    await page.addScriptTag({ url: CAPTURE_JS }); G.addScript = d();
+    d = mark();
+    await page.waitForFunction(() => typeof window.figma?.captureForDesign === "function", { timeout: 15000 }); G.waitFn = d();
+    timings.push(G); // nav row (once per page-load) → summary sees the true goto count
+    terr(`  ⏱ [load ${route || "home"}/${view} ${width}px · ${items.length} block(s)]: goto ${r0(G.goto)} · ready ${r0(G.waitReady)} · script ${r0(G.addScript)} · waitFn ${r0(G.waitFn)}`);
+
+    // ── capture each block on this loaded page (sequential; each fully submits
+    // before the next fires, so no cross-capture interference) ──
+    for (const { key, entry, blockId } of items) {
+      const selector = `[data-block="${blockId}"]`;
+      const T = {};
+      d = mark();
+      await page.waitForSelector(selector, { timeout: 15000 }); T.waitSel = d();
+      d = mark();
+      const outcome = await submitCapture(page, entry, selector); T.submit = d();
+      timings.push(T);
+      const ok = String(outcome).startsWith("posted");
+      console.log(`  ${ok ? "✓" : "!"} ${key} (${width}px, selector ${selector}): capture ${entry.captureId} ${outcome} — poll to confirm`);
+      terr(`  ⏱ ${key}: sel ${r0(T.waitSel)} · submit ${r0(T.submit)} [${outcome}] = ${r0(T.waitSel + T.submit)}ms`);
+    }
+  }
+  printTimingSummary("captureBlocks (grouped by page-load)", timings);
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) return help();
+  TIMING = args.timing;
 
+  let d = mark();
   const puppeteer = await loadPuppeteer();
+  terr(`⏱ puppeteer load: ${r0(d())}ms`);
   const live = Boolean(args.captures);
   let capturesMap = {};
   if (live) {
     capturesMap = JSON.parse(await readFile(args.captures, "utf8"));
   }
 
+  d = mark();
   const browser = await puppeteer.launch({ headless: "new", protocolTimeout: 600000 });
+  terr(`⏱ browser launch: ${r0(d())}ms`);
   try {
     const page = await browser.newPage();
-    const { views, widths, pages: allPages } = await readManifest(page, args.url, args.views);
+    d = mark();
+    let { views, widths, pages: allPages } = await readManifest(page, args.url, args.views);
+    terr(`⏱ readManifest (initial app load): ${r0(d())}ms`);
+    // Fast-iterate: capture only the primary breakpoint (the first active view),
+    // whatever it is for this project type (desktop for websites, the first app
+    // view for apps). Robust across project types, unlike hardcoding "desktop".
+    if (args.fast && views.length > 1) {
+      const kept = views.slice(0, 1);
+      // stderr, not stdout: discover mode's stdout must stay pure JSON.
+      console.error(`--fast: capturing only the primary breakpoint [${kept.join(",")}] of [${views.join(", ")}]`);
+      views = kept;
+    }
     const pages = args.pages ? allPages.filter((p) => args.pages.includes(p.id)) : allPages;
     if (!pages.length) throw new Error(`No pages matched --pages ${args.pages?.join(",")}`);
 
     // ── Block mode (derive-everything block library) — short-circuits page flow ──
     if (args.blocks && args.discover) {
+      d = mark();
       const result = await discoverBlocks(page, args, { views, widths, pages });
+      terr(`⏱ discoverBlocks: ${r0(d())}ms (${result.blocks.length} blocks × ${pages.length} page(s))`);
       // Summary → stderr so stdout stays clean, parseable JSON for Claude.
       console.error(`Discovered ${result.blocks.length} unique block(s) across ${result.pages.length} page(s): [${result.blocks.map((b) => b.blockId).join(", ")}] × [${views.join(", ")}]`);
       console.error(`  { blocks: capture each once · pages: per-page order for compose · views/widths }`);
@@ -304,28 +406,12 @@ async function main() {
           }
           await page.addScriptTag({ url: CAPTURE_JS });
           await page.waitForFunction(() => typeof window.figma?.captureForDesign === "function", { timeout: 15000 });
-          // captureForDesign fires the submit request, but its returned promise can
-          // hang after the capture actually lands (a known flakiness). Awaiting it
-          // directly would stall the next view and teardown, so race it against a
-          // bounded timeout — the capture still submits; poll the ID to confirm.
-          const outcome = await Promise.race([
-            page
-              .evaluate(
-                async ({ captureId, endpoint }) =>
-                  window.figma.captureForDesign({ captureId, endpoint, selector: "[data-capture-ready]" }),
-                entry
-              )
-              .then(() => "returned")
-              .catch((e) => `error: ${e?.message || e}`),
-            new Promise((r) => setTimeout(() => r("timeout"), 45000)),
-          ]);
-          if (outcome === "timeout") {
-            console.log(`  ✓ ${label}: capture ${entry.captureId} submitted (serialize didn't return in 45s — poll to confirm)`);
-          } else if (String(outcome).startsWith("error")) {
-            console.warn(`  ! ${label}: capture ${entry.captureId} ${outcome} (poll to confirm it landed)`);
-          } else {
-            console.log(`  ✓ ${label}: submitted capture ${entry.captureId} — poll it to finish`);
-          }
+          // Resolve on the actual /submit POST, not captureForDesign's hanging
+          // promise (see submitCapture). The capture lands server-side; poll to finish.
+          const dsub = mark();
+          const outcome = await submitCapture(page, entry, "[data-capture-ready]");
+          terr(`  ⏱ ${label}: submit ${r0(dsub())}ms [${outcome}]`);
+          console.log(`  ✓ ${label}: submitted capture ${entry.captureId} (${outcome}) — poll it to finish`);
         } else {
           const file = join(args.out, `${args.variation}-${pg.id}-${view}-${width}w.png`);
           const png = await page.screenshot({ fullPage: true });
