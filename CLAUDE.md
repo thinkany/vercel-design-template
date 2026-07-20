@@ -71,6 +71,20 @@ complete copy under **`src/variations/{id}/`** (`components/` + `styles/`).
   in [src/data/variations.ts](src/data/variations.ts). Base v00 is seeded from
   `INITIAL_VARIATIONS`.
 
+### Building a design (the post-setup design phase)
+
+When a designer asks to **build, design, create, or edit a page/section/hero/
+landing** (the freeform phase after `/setup-project` + `/setup-styleguide`),
+**invoke [`/design`](.claude/commands/design.md) first.** It inlines the
+authoring contract (the `<DesignSurface>` shape, the paste-ready page skeleton,
+the five rules, the one live token read) so you go straight to designing instead
+of re-deriving the rules from this file — and it sets the design-phase
+**communication protocol**: suppress technical chatter, drive progress with a
+TodoWrite list phrased in designer language (`Creating top navigation`,
+`Building hero`, …), and give one plain-language line per milestone. The fast
+path for **design #1 is editing `Home.tsx` in place** (base v00) — a variation is
+a deliberate later act, not the first move.
+
 ### Adding a page (beyond Home)
 
 The scaffold ships three pages — Dashboard, Home, StyleGuide — and has no router.
@@ -541,6 +555,11 @@ one continuous flow.
   the **client** fonts/colors in `tokens.css` + `brand.ts`, note the styleguide
   sections are adjustable, flip `VITE_STYLEGUIDE_READY` / `VITE_BRAND_READY`, and
   close with the preview reminder + the optional permission-prompt tip.
+- **[`/design`](.claude/commands/design.md)** — the post-setup **design phase**:
+  the condensed authoring contract (`<DesignSurface>` shape + page skeleton + the
+  five rules + one live token read) plus the low-chatter, TodoWrite-driven
+  progress protocol. Invoke it when the designer asks to build/edit a page (see
+  "Building a design" above).
 
 (The **export** prompts P15–P17 have no command file — their locked copy lives in
 "Exporting to Figma — ask which scope FIRST" above.)
