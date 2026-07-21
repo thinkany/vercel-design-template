@@ -145,6 +145,11 @@ The password screen (`middleware.js`) runs on Vercel's **edge runtime**, which
 - A logo on the login screen can be added during `/setup-project` (or anytime):
   drop an image in `public/brand/` and it renders centered above the name, capped
   at 360px wide, in black & white.
+- A **design-page logo** (the header on your actual pages, separate from the login
+  screen) can be added during `/setup-styleguide` (or anytime): drop an image in
+  `public/brand/` — SVG or transparent PNG — and Claude wires it into the header
+  in place of the text wordmark. It can be the same file as the login logo or a
+  different one.
 - After changing dashboard env vars, **redeploy** for them to take effect.
 
 ## Exporting designs to Figma

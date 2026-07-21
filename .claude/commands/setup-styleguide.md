@@ -206,6 +206,81 @@ After writing, confirm the shadcn components in the styleguide's **Atoms** secti
 reads these same primitives — the exporter follows the `var()` references to the
 resolved brand color — so a later component export is on-brand automatically.
 
+### 1d. Client logo — the design-page header
+
+The global site header (`src/app/components/Header.tsx`, rendered on every design
+page by `DesignSurface`) has a **logo lockup**. Out of the box it shows the client
+name as a **text wordmark** (`{siteConfig.clientName}` in the display font). This
+step offers to swap in a real logo image for the first design pass.
+
+> **Scope.** This is the **design** logo (the pages' header) — distinct from the
+> **login-screen** logo `/setup-project` sets in `middleware.js`. They're often the
+> same file; they don't have to be. Edit the **base** `Header.tsx` (v00); a
+> variation with its own `Header.tsx` under `src/variations/{id}/components/` edits
+> that copy instead.
+
+**First, read the current state** so you ask the right question:
+- Open `src/app/components/Header.tsx` and look at the logo lockup (the button that
+  calls `onNavigate("home")`).
+  - Renders **only the text wordmark** (`siteConfig.clientName`, no `<img>`) → the
+    logo is **BLANK**.
+  - Renders an **`<img src="/brand/…">`** → a logo is **IN PLACE**.
+- Also list **`public/brand/`** — a file may already sit there from the login-logo
+  step (`/setup-project` 2a); if so, note its name so you can offer to reuse it.
+
+**Then branch with one `AskUserQuestion`, header "Design logo":**
+
+**If BLANK** — *"Your design pages currently show **{clientName}** as a text
+wordmark in the header. Add a logo image for this first design pass?"*
+- **Yes — add a logo** (first) → give the copy-in instructions below.
+- **Reuse my login logo (`/brand/{file}`)** → *offer this option only if a logo
+  already exists in `public/brand/`* — wire that same file in, no new copy needed.
+- **Not now — keep the wordmark** → leave `Header.tsx` as-is; note they can add one
+  anytime.
+
+**If IN PLACE** — *"Your header already uses a logo (`/brand/{file}`). Use this one
+for the design, or swap in a different file?"*
+- **Use this one** (first) → nothing to do; confirm and move on.
+- **Add a different file** → give the copy-in instructions below, then rewire.
+
+**Copy-in instructions (when they choose to add/replace a file).** Images can't be
+pasted into chat, so the designer places the file themselves. Give these **exact**
+steps:
+1. **Where.** Copy the logo into the project's **`public/brand/`** folder — full
+   path **`<project-root>/public/brand/`**. **Create the `brand` folder if it isn't
+   there yet** (it won't be on a fresh copy).
+2. **What.** Prefer an **SVG** (crisp at any size) or a **transparent PNG**. Give it
+   a simple name, e.g. **`logo.svg`**.
+3. **Tell me the filename** once it's in place. Anything under `public/` is served
+   from the site root, so `public/brand/logo.svg` is referenced as **`/brand/logo.svg`**
+   (the `public/` prefix is dropped from the URL).
+
+**Wire it in.** Replace the text lockup in `Header.tsx` with the image, keeping the
+home-nav button wrapper:
+
+```tsx
+{/* Logo lockup */}
+<button
+  onClick={() => onNavigate("home")}
+  className="cursor-pointer leading-none"
+>
+  <img
+    src="/brand/logo.svg"
+    alt={`${siteConfig.clientName} logo`}
+    className="h-7 @lg:h-8 w-auto"
+  />
+</button>
+```
+
+Tune the height to the logo's aspect (keep `w-auto` so it never distorts); a very
+wide wordmark logo may want a smaller height. Confirm it renders in the live
+preview's header (and in the phone frame, where it should scale down cleanly).
+
+> **Heads-up — a committed asset.** Files in `public/` are committed to the repo and
+> deployed, so the logo ships in git and is publicly reachable on the Vercel preview
+> at `/brand/<file>`. If the client would rather it not live in this project, keep
+> the wordmark instead.
+
 ## 2. Name the default variation (base v00 only)
 
 The dashboard lists each design as a **variation**, and the base one (`v00`) is
@@ -283,6 +358,11 @@ reminder that `/setup-project` deferred to this point (its step 0d): they can
 preview anytime with **`npm run dev`** (http://localhost:5173) for instant,
 hot-reloading feedback — separate from the Vercel preview deploy — and they're now
 ready to start designing pages.
+
+Point them to **`/guide`** as well: they can type it at any time to see every
+command this project offers (setup, design, preview controls). The quickest next
+step is simply to describe the page they want — that kicks off `/design`, which
+will also offer to start the preview server if it isn't already running.
 
 ## 6. One last comfort tip — smoother iterating (friendly, never pushy)
 

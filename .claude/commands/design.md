@@ -32,6 +32,27 @@ Keep technical detail for when the designer explicitly asks "how did you…". If
 something genuinely blocks you (a missing token, an ambiguous request), say so
 plainly and briefly.
 
+## Preview server — make sure it's live (do this on the FIRST build of a session)
+
+The design only appears if the Vite dev server is running. On the **first** build
+request of a session, check before diving in:
+
+- **Is it up?** `curl -s -o /dev/null -w "%{http_code}" http://localhost:5173` —
+  `200` means live; anything else means it isn't.
+- **If it's not running, OFFER to start it** (it's a command — ask first, don't
+  silently launch): run **`npm run dev`** in the background. This project needs
+  **Node ≥ 20.19** (`.nvmrc` pins 22); if the shell's active node is older, select
+  the pinned version first (e.g. `nvm use`) then `npm run dev`.
+- Once it's up (or already was), point the designer at **http://localhost:5173**
+  and build.
+
+**Stopping it — tell the designer how.** They can stop the preview whenever: just
+say "stop the server" / "free port 5173" and you'll shut it down, or press
+**Ctrl+C** in the terminal that's running it.
+
+**Remind them of `/guide`.** Mention they can type **`/guide`** at any time to see
+every command this project offers (setup, design, this guide, preview controls).
+
 ## 1. Fastest path — where the design goes
 
 - **Design #1 = edit the base in place.** Replace the placeholder content in

@@ -559,7 +559,12 @@ one continuous flow.
   the condensed authoring contract (`<DesignSurface>` shape + page skeleton + the
   five rules + one live token read) plus the low-chatter, TodoWrite-driven
   progress protocol. Invoke it when the designer asks to build/edit a page (see
-  "Building a design" above).
+  "Building a design" above). It also offers to start the dev server on the first
+  build and re-points them at `/guide`.
+- **[`/guide`](.claude/commands/guide.md)** — the user-facing **command list**:
+  prints this project's commands (setup, design, guide) + how to run/stop the
+  preview. Designers can type `/guide` at any time; it's introduced at the setup
+  sign-off and re-offered by `/design`.
 
 (The **export** prompts P15–P17 have no command file — their locked copy lives in
 "Exporting to Figma — ask which scope FIRST" above.)
