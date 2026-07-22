@@ -197,6 +197,11 @@ if (PHASE === "reconstruct") {
     // Per-corner radii (`radii`) when the DOM corners differ, else uniform `radius`.
     if (node.radii) { frame.topLeftRadius = node.radii.tl; frame.topRightRadius = node.radii.tr; frame.bottomRightRadius = node.radii.br; frame.bottomLeftRadius = node.radii.bl; }
     else if (node.radius) frame.cornerRadius = node.radius;
+    // Effects: box-shadows → DROP/INNER_SHADOW, filter/backdrop blur → LAYER/BACKGROUND_BLUR.
+    const effects = [];
+    for (const s of node.shadows || []) effects.push({ type: s.inset ? "INNER_SHADOW" : "DROP_SHADOW", color: { r: s.color.r, g: s.color.g, b: s.color.b, a: s.color.a == null ? 1 : s.color.a }, offset: { x: s.x || 0, y: s.y || 0 }, radius: Math.max(0, s.blur || 0), spread: s.spread || 0, visible: true, blendMode: "NORMAL" });
+    if (node.blur) effects.push({ type: node.blur.type === "background" ? "BACKGROUND_BLUR" : "LAYER_BLUR", radius: Math.max(0, node.blur.radius || 0), visible: true });
+    if (effects.length) frame.effects = effects;
     const nodeOpacity = wash != null ? wash : node.opacity;
     if (nodeOpacity != null && nodeOpacity !== 1) frame.opacity = nodeOpacity;
     parent.appendChild(frame);
@@ -229,14 +234,21 @@ if (PHASE === "reconstruct") {
       // there's no need to hug height (an earlier pass did, which squashed those boxes).
       else frame.resize(Math.max(1, node.w), Math.max(1, node.h));
     } else { frame.layoutMode = "NONE"; frame.resize(Math.max(1, node.w), Math.max(1, node.h)); }
+    // Place a child by x/y, or by a rotation transform about its centre when `rotate`
+    // is set (the spec's x/y/w/h are the UN-rotated box; CSS rotate is CW = Figma's
+    // y-down matrix with +angle).
+    const placeChild = (child, c) => {
+      if (c.rotate) { const a = c.rotate * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a), hx = c.w / 2, hy = c.h / 2, cx = c.x + hx, cy = c.y + hy; child.relativeTransform = [[cos, -sin, cx - (cos * hx - sin * hy)], [sin, cos, cy - (sin * hx + cos * hy)]]; }
+      else { child.x = c.x; child.y = c.y; }
+    };
     for (const c of node.children || []) {
       // Skip display:none / zero-box elements: they carry no pixels but, as flex
       // items, corrupt justification (a hidden 0-w nav turns a 2-item space-between
       // into a 3-item one that centers the nav) and leave stray hidden-menu text.
       if ((c.w || 0) <= 0 && (c.h || 0) <= 0) continue;
       const child = await build(c, frame, false, photos);
-      if (auto) { if (c.position === "absolute") { child.layoutPositioning = "ABSOLUTE"; child.x = c.x; child.y = c.y; } }
-      else { child.x = c.x; child.y = c.y; }
+      if (auto) { if (c.position === "absolute") { child.layoutPositioning = "ABSOLUTE"; placeChild(child, c); } }
+      else { placeChild(child, c); }
     }
     return frame;
   }

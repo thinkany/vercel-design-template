@@ -239,6 +239,19 @@ function extractSpec(blockSel) {
   // position→"flow", opacity→1, radius→0, no fills/stroke/layout/children, z
   // unused). Emitting only non-defaults cuts spec size ~40–50% — the difference
   // between a heavy block fitting in one use_figma call and not.
+  // box-shadow → [{x,y,blur,spread,color,inset}]. Computed style lists the colour first
+  // (rgb/rgba), then 2–4 lengths, optional `inset`; multiple shadows are comma-separated.
+  const parseShadows = (v) => {
+    if (!v || v === "none") return [];
+    return splitTop(v).map((raw) => {
+      let s = raw.trim(); const inset = /\binset\b/.test(s); s = s.replace(/\binset\b/, " ");
+      const cm = s.match(/rgba?\([^)]+\)|#[0-9a-fA-F]{3,8}/);
+      const color = cm ? toRGBA(cm[0]) : { r: 0, g: 0, b: 0, a: 1 };
+      const nums = (cm ? s.replace(cm[0], " ") : s).trim().split(/\s+/).filter(Boolean).map(px);
+      const [x = 0, y = 0, blur = 0, spread = 0] = nums;
+      return { x, y, blur, spread, color, inset };
+    }).filter((sh) => sh.color && sh.color.a > 0);
+  };
   const walk = (el, pr) => {
     const cs = getComputedStyle(el); const rect = el.getBoundingClientRect(); const tag = el.tagName.toLowerCase();
     if (tag === "svg") return { kind: "svg", ...relRect(rect, pr), svg: el.outerHTML, color: toRGBA(cs.color) };
@@ -246,6 +259,16 @@ function extractSpec(blockSel) {
     const node = { tag, ...relRect(rect, pr) };
     if (cs.position === "absolute") node.position = "absolute";
     const op = cs.opacity !== "1" ? parseFloat(cs.opacity) : 1; if (op !== 1) node.opacity = op;
+    // Rotation from the 2D transform matrix. getBoundingClientRect returns the rotated
+    // AABB, so swap in the UN-rotated layout box (offsetW/H) recentred on the AABB centre;
+    // the builder rotates the node about that centre. (Rotated CONTAINERS with children
+    // aren't fully handled — this targets decorative leaves like a `rotate-45` square.)
+    let deg = 0;
+    // Tailwind v4 uses the individual `rotate` CSS property (`rotate: 45deg`); older/other
+    // rotations show up in the transform matrix. Check both.
+    if (cs.rotate && cs.rotate !== "none") { const m = cs.rotate.match(/(-?[\d.]+)deg/); if (m) deg = Math.round(parseFloat(m[1])); }
+    if (!deg && cs.transform && cs.transform.startsWith("matrix(")) { const p = cs.transform.slice(7).split(",").map(parseFloat); deg = Math.round(Math.atan2(p[1], p[0]) * 180 / Math.PI); }
+    if (deg) { const ow = el.offsetWidth, oh = el.offsetHeight; const cx = (rect.left - pr.left) + rect.width / 2, cy = (rect.top - pr.top) + rect.height / 2; node.rotate = deg; node.w = ow; node.h = oh; node.x = Math.round(cx - ow / 2); node.y = Math.round(cy - oh / 2); }
     // Capture ALL FOUR corner radii (not just top-left) so mixed corners — e.g. a
     // `rounded-t-2xl` card top — survive. Compact to a single `radius` when uniform,
     // else emit `radii:{tl,tr,br,bl}`. Clamp per corner to half the box (pill cap).
@@ -276,6 +299,14 @@ function extractSpec(blockSel) {
       if (W.t === W.r && W.r === W.b && W.b === W.l) node.stroke = { color: scol, weight: W.t };
       else node.stroke = { color: scol, weights: W };
     }
+    // Shadows + blur → Figma effects (previously all dropped → flat cards, sharp glows).
+    // box-shadow (comma-list, optional `inset`) → DROP/INNER_SHADOW; `filter: blur()` →
+    // LAYER_BLUR; `backdrop-filter: blur()` (glass cards) → BACKGROUND_BLUR.
+    const shadows = parseShadows(cs.boxShadow); if (shadows.length) node.shadows = shadows;
+    const fb = (cs.filter || "").match(/blur\(([\d.]+)px\)/);
+    const bb = (cs.backdropFilter || cs.webkitBackdropFilter || "").match(/blur\(([\d.]+)px\)/);
+    if (fb) node.blur = { type: "layer", radius: parseFloat(fb[1]) };
+    else if (bb) node.blur = { type: "background", radius: parseFloat(bb[1]) };
     if (isFlex || isGrid) {
       const L = { mode: isGrid ? "grid" : (cs.flexDirection.startsWith("column") ? "column" : "row"), justify: cs.justifyContent, align: cs.alignItems };
       const gap = px(cs.gap === "normal" ? "0" : cs.gap.split(" ")[0]); if (gap) L.gap = gap;
