@@ -245,7 +245,7 @@ const STYLEGUIDE_PAGE = "Styleguide";
 const SEPARATOR = "———";
 // Titled cover Pages the scaffold phase creates to fix the Pages-panel order;
 // the dedicated export phases then FILL them (removing the cover):
-//   Block Library ← export-blocks-to-figma.mjs + figma-block-library.plugin.js
+//   Block Library ← export-reconstruct-to-figma.mjs + figma-reconstruct-library.plugin.js
 //   Components    ← export-library-to-figma.mjs + figma-component-library.plugin.js
 // Keep in sync with the CLAUDE.md export-flow docs.
 const SCAFFOLD_SECTIONS = [

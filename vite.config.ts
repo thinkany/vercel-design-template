@@ -10,6 +10,41 @@ function variationApiPlugin() {
     apply: 'serve' as const,
     configureServer(server: any) {
       server.middlewares.use(async (req: any, res: any, next: any) => {
+        // GET /api/variation/mtimes — latest design-file mtime per variation, so
+        // the Dashboard shows a real "Modified" date that tracks actual edits
+        // (edits happen by changing files, which the app otherwise can't observe).
+        // Dev-only; on the Vercel static deploy this 404s and the stored date shows.
+        if (req.url === '/api/variation/mtimes' && req.method === 'GET') {
+          try {
+            const { readdir, stat } = await import('fs/promises')
+            const root = path.resolve(__dirname, 'src')
+            const pad = (n: number) => String(n).padStart(2, '0')
+            const fmt = (ms: number) => { const d = new Date(ms); return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}` }
+            const latest = async (dir: string): Promise<number> => {
+              let max = 0, entries
+              try { entries = await readdir(dir, { withFileTypes: true }) } catch { return 0 }
+              for (const e of entries) {
+                const full = path.resolve(dir, e.name)
+                if (e.isDirectory()) max = Math.max(max, await latest(full))
+                else { try { max = Math.max(max, (await stat(full)).mtimeMs) } catch {} }
+              }
+              return max
+            }
+            const result: Record<string, string> = {}
+            const base = Math.max(await latest(path.resolve(root, 'app/components')), await latest(path.resolve(root, 'styles')))
+            if (base) result['v00'] = fmt(base)
+            let ids: string[] = []
+            try { ids = (await readdir(path.resolve(root, 'variations'), { withFileTypes: true })).filter((e: any) => e.isDirectory()).map((e: any) => e.name) } catch {}
+            for (const id of ids) { const m = await latest(path.resolve(root, 'variations', id)); if (m) result[id] = fmt(m) }
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err: any) {
+            res.statusCode = 500
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: err.message }))
+          }
+          return
+        }
         if (req.url !== '/api/variation/create' || req.method !== 'POST') {
           return next()
         }

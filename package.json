@@ -10,7 +10,7 @@
     "export:figma": "node scripts/export-to-figma.mjs",
     "export:brand": "node scripts/export-brand-to-figma.mjs",
     "export:library": "node scripts/export-library-to-figma.mjs",
-    "export:blocks": "node scripts/export-blocks-to-figma.mjs"
+    "export:reconstruct": "node scripts/export-reconstruct-to-figma.mjs"
   },
   "engines": {
     "node": ">=20.19.0"

@@ -77,7 +77,7 @@ const FALLBACK_WIDTHS = { desktop: 1440, tablet: 664, mobile: 370 };
 const VIEWPORT_HEIGHT = 900; // starting height; full-page capture grabs the rest
 
 function parseArgs(argv) {
-  const args = { url: "http://localhost:5173", variation: "v00", out: "figma-export", captures: null, views: null, pages: null, only: null, blocks: false, discover: false, timing: false, fast: false };
+  const args = { url: "http://localhost:5173", variation: "v00", out: "figma-export", captures: null, views: null, pages: null, blocks: false, timing: false, fast: false };
   const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -87,9 +87,7 @@ function parseArgs(argv) {
     else if (a === "--captures") args.captures = argv[++i];
     else if (a === "--views") args.views = list(argv[++i]);
     else if (a === "--pages") args.pages = list(argv[++i]);
-    else if (a === "--only") args.only = list(argv[++i]);
-    else if (a === "--blocks") args.blocks = true;
-    else if (a === "--discover") args.discover = true;
+    else if (a === "--blocks") args.blocks = true; // removed path — errors with a pointer to export:reconstruct
     else if (a === "--timing") args.timing = true;
     else if (a === "--fast") args.fast = true;
     else if (a === "--help" || a === "-h") args.help = true;
@@ -106,30 +104,20 @@ export-to-figma — capture each active breakpoint of a design into Figma (or PN
   -v, --variation <id>   Variation to export (default: v00)
       --url <url>        Dev server base URL (default: http://localhost:5173)
       --pages <list>     Comma list to limit pages (default: all in the manifest)
-      --only <list>      Block mode: re-derive ONLY these block ids (e.g. hero,footer).
-                         Scopes captures to the sections you changed; compose still
-                         stacks all sections (unchanged ones keep their masters).
       --views <list>     Comma list to override the active set (e.g. desktop,mobile)
       --fast             Capture only the PRIMARY (first active) breakpoint — for
                          fast design iteration (~Nx fewer captures). Final export
                          omits it to get every breakpoint.
       --out <dir>        Dry-run screenshot dir (default: figma-export)
       --captures <file>  Live mode: JSON of { "{page}-{view}": { captureId, endpoint } }
-      --blocks           Block-library mode (derive from [data-block] sections)
-      --discover         With --blocks: print discovered blocks as JSON (no capture)
       --timing           Print per-step + phase timings to stderr (profiling)
   -h, --help             Show this help
 
-  PAGE mode (default): dry-run writes one PNG per breakpoint; --captures does a
-  live per-page capture. Requires a running dev server.
+  This script now does PAGE captures only: dry-run writes one PNG per breakpoint;
+  --captures does a live per-page capture. Requires a running dev server.
 
-  BLOCK mode (--blocks): derive the Block Library from [data-block] markers.
-    1. node scripts/export-to-figma.mjs --blocks --discover -v {id}
-         → prints [{ blockId, name, page, route, views }] (dedup'd across pages)
-    2. Claude mints a Figma captureId per block×view, writes a captures.json keyed
-       "{blockId}-{view}" → { captureId, endpoint, route, blockId, view }
-    3. node scripts/export-to-figma.mjs --blocks --captures captures.json -v {id}
-         → captures each section via html.to.design figmaselector; poll to finish.
+  BLOCKS are no longer captured here — they are RECONSTRUCTED offline:
+    npm run export:reconstruct -- -v {id}   (+ figma-reconstruct-library.plugin.js)
 
   One-time setup: puppeteer auto-installs on first run (npm i -D puppeteer).
 `);
@@ -169,95 +157,6 @@ async function readManifest(page, url, viewsOverride) {
   return { views, widths, pages };
 }
 
-// ── Block mode: read generic layout INTENT from the live DOM ───────────────────
-// html.to.design's DOM→auto-layout conversion drops two things the builder can't
-// otherwise recover: (1) it bakes each section's rendered pixel height as a FIXED
-// frame height, so a content-sized section ends up with a top-pinned block and a
-// void below; (2) it defaults centered content (`mx-auto` / `text-center`) to
-// left. We can't change what html.to.design emits, but we CAN read the real
-// intent here and hand the builder anchored hints: a root-level `hugHeight` flag
-// (unambiguous — the capture root) and a list of `textAlign` entries keyed by the
-// text's own content (matched back to Figma TEXT nodes by their characters).
-// Runs in the page context; `blockSel` is the section's [data-block] selector.
-function extractLayoutHints(blockSel) {
-  const root = document.querySelector(blockSel);
-  if (!root) return { hugHeight: true, textAlign: [] };
-  const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
-  // hugHeight: the section is content-sized (the common case) UNLESS it deliberately
-  // reserves height beyond its content (e.g. a min-h-screen hero) — those should
-  // keep html.to.design's fixed height rather than collapse to content.
-  const cs = getComputedStyle(root);
-  const minH = parseFloat(cs.minHeight) || 0;
-  const wantsFixedHeight = minH > 1 && minH >= root.scrollHeight - 2;
-  // textAlign: elements that directly own text and render centered/right — matched
-  // later by content, so only non-default (non-left) alignments are worth emitting.
-  // Guard against false positives: a nav link or wordmark can compute text-align
-  // center incidentally, but its centering is controlled by flex (or is a no-op in
-  // a hug-width box) — applying block-centering there would break the row. So skip
-  // links/buttons, and skip items whose parent lays out as a horizontal row.
-  const textAlign = [];
-  const seen = new Set();
-  for (const el of root.querySelectorAll("*")) {
-    if (el.closest("a, button, [role=button], [role=link]")) continue;
-    const direct = norm([...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(" "));
-    if (!direct) continue;
-    const a = getComputedStyle(el).textAlign;
-    const align = a === "center" ? "center" : (a === "right" || a === "end") ? "right" : null;
-    if (!align) continue;
-    const pcs = el.parentElement ? getComputedStyle(el.parentElement) : null;
-    const parentRow = pcs && (pcs.display === "flex" || pcs.display === "inline-flex") && pcs.flexDirection.startsWith("row");
-    if (parentRow) continue; // alignment here is flex-driven, not text-align
-    const text = direct.slice(0, 120);
-    if (seen.has(text)) continue;
-    seen.add(text);
-    textAlign.push({ text, align });
-  }
-  return { hugHeight: !wantsFixedHeight, textAlign };
-}
-
-// ── Block mode: discover [data-block] sections live from the rendered DOM ──────
-// Blocks are DERIVED, not declared: each section marked `data-block="{id}"` +
-// `data-block-name="{Name}"` becomes a block. Dedupe by id across pages (global
-// chrome like Header/Footer appears on every page → first page wins).
-async function discoverBlocks(page, args, { views, widths, pages }) {
-  const width = widths[views[0]] ?? FALLBACK_WIDTHS[views[0]] ?? 1440;
-  const seen = new Map();          // unique blocks (each captured once)
-  const pagesOut = [];             // per-page ordered block list (for compose)
-  for (const pg of pages) {
-    const routeFlag = pg.route ? `&${pg.route}` : "";
-    await page.setViewport({ width, height: VIEWPORT_HEIGHT, deviceScaleFactor: 2 });
-    await page.goto(`${args.url}/?v=${args.variation}${routeFlag}&capture=${views[0]}`, { waitUntil: "networkidle0" });
-    await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
-    // DOM order = the section stacking order (what the composed page will use).
-    const found = await page.evaluate(() =>
-      [...document.querySelectorAll("[data-block]")].map((el) => ({
-        blockId: el.getAttribute("data-block"),
-        name: el.getAttribute("data-block-name") || el.getAttribute("data-block"),
-      }))
-    );
-    const pageBlocks = found.filter((f) => f.blockId);
-    for (const f of pageBlocks) {
-      if (seen.has(f.blockId)) continue;
-      // Read layout intent from this section's live DOM (hugHeight + centered text)
-      // so the builder can repair html.to.design's conversion losses. Computed at
-      // views[0]; alignment/height intent is stable across breakpoints here.
-      const layout = await page.evaluate(extractLayoutHints, `[data-block="${f.blockId}"]`);
-      seen.set(f.blockId, { blockId: f.blockId, name: f.name, page: pg.id, route: pg.route, views, layout });
-    }
-    pagesOut.push({ id: pg.id, name: pg.name, route: pg.route, blocks: pageBlocks.map((f) => ({ blockId: f.blockId, name: f.name })) });
-  }
-  // blocks → what to capture (once each); pages → how to compose (order per page).
-  let blocks = [...seen.values()];
-  if (args.only && args.only.length) {
-    const before = blocks.length;
-    blocks = blocks.filter((b) => args.only.includes(b.blockId));
-    // stderr: keep stdout pure JSON. compose still uses the full `pages` order —
-    // only the CAPTURE set is scoped; unchanged blocks keep their existing masters.
-    console.error(`  --only: re-deriving ${blocks.length}/${before} block(s) [${blocks.map((b) => b.blockId).join(", ")}] — compose still stacks all sections`);
-  }
-  return { blocks, pages: pagesOut, views, widths };
-}
-
 // Fire html.to.design's captureForDesign and return as soon as the /submit POST
 // actually completes on the network — DON'T await captureForDesign's own promise,
 // which hangs indefinitely after the capture lands (measured: 45s+ every time, the
@@ -282,63 +181,6 @@ async function submitCapture(page, entry, selector) {
   ]);
   page.off("response", onResp);
   return outcome;
-}
-
-// ── Block mode: capture each block × breakpoint via html.to.design figmaselector ─
-// capturesMap is keyed "{blockId}-{view}" → { captureId, endpoint, route, blockId, view }.
-async function captureBlocks(page, args, { widths }, capturesMap) {
-  const timings = [];
-  // Group captures by (route, view): the navigation + script-inject cost is per
-  // PAGE-LOAD, not per block. Many blocks live on the same route (Header/Footer on
-  // every page, all of Home's sections on one route), so we load once per
-  // (route,view) and capture each block on it without re-navigating — turning
-  // N gotos into (#routes × #views).
-  const groups = new Map();
-  for (const [key, entry] of Object.entries(capturesMap)) {
-    if (!entry.captureId || !entry.endpoint) { console.warn(`  · ${key}: missing captureId/endpoint — skipped`); continue; }
-    const view = entry.view || key.slice(key.lastIndexOf("-") + 1);
-    const route = entry.route || "";
-    const blockId = entry.blockId || key.replace(/-[^-]+$/, "");
-    if (args.only && args.only.length && !args.only.includes(blockId)) continue; // scoped re-derive
-    const gk = `${route} ${view}`;
-    if (!groups.has(gk)) groups.set(gk, { route, view, items: [] });
-    groups.get(gk).items.push({ key, entry, blockId });
-  }
-
-  for (const { route, view, items } of groups.values()) {
-    const width = widths[view] ?? FALLBACK_WIDTHS[view] ?? 1440;
-    const routeFlag = route ? `&${route}` : "";
-    // ── one navigation + script inject per page-load (shared by its blocks) ──
-    const G = {};
-    let d = mark();
-    await page.setViewport({ width, height: VIEWPORT_HEIGHT, deviceScaleFactor: 2 }); G.viewport = d();
-    d = mark();
-    await page.goto(`${args.url}/?v=${args.variation}${routeFlag}&capture=${view}`, { waitUntil: "networkidle0" }); G.goto = d();
-    d = mark();
-    await page.waitForSelector("[data-capture-ready]", { timeout: 15000 }); G.waitReady = d();
-    d = mark();
-    await page.addScriptTag({ url: CAPTURE_JS }); G.addScript = d();
-    d = mark();
-    await page.waitForFunction(() => typeof window.figma?.captureForDesign === "function", { timeout: 15000 }); G.waitFn = d();
-    timings.push(G); // nav row (once per page-load) → summary sees the true goto count
-    terr(`  ⏱ [load ${route || "home"}/${view} ${width}px · ${items.length} block(s)]: goto ${r0(G.goto)} · ready ${r0(G.waitReady)} · script ${r0(G.addScript)} · waitFn ${r0(G.waitFn)}`);
-
-    // ── capture each block on this loaded page (sequential; each fully submits
-    // before the next fires, so no cross-capture interference) ──
-    for (const { key, entry, blockId } of items) {
-      const selector = `[data-block="${blockId}"]`;
-      const T = {};
-      d = mark();
-      await page.waitForSelector(selector, { timeout: 15000 }); T.waitSel = d();
-      d = mark();
-      const outcome = await submitCapture(page, entry, selector); T.submit = d();
-      timings.push(T);
-      const ok = String(outcome).startsWith("posted");
-      console.log(`  ${ok ? "✓" : "!"} ${key} (${width}px, selector ${selector}): capture ${entry.captureId} ${outcome} — poll to confirm`);
-      terr(`  ⏱ ${key}: sel ${r0(T.waitSel)} · submit ${r0(T.submit)} [${outcome}] = ${r0(T.waitSel + T.submit)}ms`);
-    }
-  }
-  printTimingSummary("captureBlocks (grouped by page-load)", timings);
 }
 
 async function main() {
@@ -375,23 +217,11 @@ async function main() {
     const pages = args.pages ? allPages.filter((p) => args.pages.includes(p.id)) : allPages;
     if (!pages.length) throw new Error(`No pages matched --pages ${args.pages?.join(",")}`);
 
-    // ── Block mode (derive-everything block library) — short-circuits page flow ──
-    if (args.blocks && args.discover) {
-      d = mark();
-      const result = await discoverBlocks(page, args, { views, widths, pages });
-      terr(`⏱ discoverBlocks: ${r0(d())}ms (${result.blocks.length} blocks × ${pages.length} page(s))`);
-      // Summary → stderr so stdout stays clean, parseable JSON for Claude.
-      console.error(`Discovered ${result.blocks.length} unique block(s) across ${result.pages.length} page(s): [${result.blocks.map((b) => b.blockId).join(", ")}] × [${views.join(", ")}]`);
-      console.error(`  { blocks: capture each once · pages: per-page order for compose · views/widths }`);
-      console.log(JSON.stringify(result, null, 2));
-      return;
-    }
+    // ── Block mode REMOVED — blocks are now RECONSTRUCTED (not captured). Use
+    // `npm run export:reconstruct` + figma-reconstruct-library.plugin.js instead
+    // (no html.to.design, no mint/poll). This script now only does PAGE captures. ──
     if (args.blocks) {
-      if (!live) throw new Error('--blocks capture needs --captures <file.json> (keyed "{blockId}-{view}"). Discover first with --blocks --discover.');
-      console.error(`Capturing ${Object.keys(capturesMap).length} block×breakpoint capture(s) (variation ${args.variation})`);
-      await captureBlocks(page, args, { widths }, capturesMap);
-      console.log("\nAll block captures submitted. Poll each capture ID via the Figma MCP until 'completed', then record each resulting node id into the manifest's captures[] before running the builder.");
-      return;
+      throw new Error("--blocks is removed. Blocks are reconstructed offline now: run `npm run export:reconstruct -- -v {id}` and the figma-reconstruct-library.plugin.js builder. See CLAUDE.md → 'Exporting to Figma as ONE cohesive file'.");
     }
 
     console.log(

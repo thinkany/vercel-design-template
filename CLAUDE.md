@@ -229,16 +229,17 @@ what keeps Vercel green. Two modes:
   5. Poll each `captureId` via `generate_figma_design(fileKey, captureId)` until
      `completed`.
 
-**Performance — batch the MCP calls (applies to blocks too).** The mint (step 3)
-and poll (step 5) `generate_figma_design` calls are **independent**, so issue them
-**in parallel — all in one assistant message** (N tool-use blocks), never one at a
-time. This cuts wall-clock and round-trips; it also matters because each
-`generate_figma_design` response is large (~1.5k tokens), so serial minting bloats
-context. The capture script itself is already fast — it groups captures by page-load
-(one navigation per route×breakpoint) and returns on the actual `/submit` POST rather
-than waiting on html.to.design's hanging promise. While **iterating** on a design, add
-`--fast` (primary breakpoint only) and, for blocks, `--only {blockIds}` (re-derive just
-the sections you changed); drop both for the final full export.
+**Performance — batch the MCP calls.** This page-capture path still uses
+`generate_figma_design`; the mint (step 3) and poll (step 5) calls are
+**independent**, so issue them **in parallel — all in one assistant message** (N
+tool-use blocks), never one at a time. This cuts wall-clock and round-trips; it also
+matters because each `generate_figma_design` response is large (~1.5k tokens), so
+serial minting bloats context. The capture script itself is already fast — it groups
+captures by page-load (one navigation per route×breakpoint) and returns on the actual
+`/submit` POST rather than waiting on html.to.design's hanging promise. While
+**iterating**, add `--fast` (primary breakpoint only); drop it for the final export.
+(**Blocks no longer use this path at all** — the cohesive export reconstructs them
+offline with no mint/poll; see "Exporting to Figma as ONE cohesive file".)
 
 Captures are pixel-accurate frames, not linked component instances. Human-facing
 usage is in [README.md](README.md) → "Exporting designs to Figma".
@@ -247,14 +248,15 @@ usage is in [README.md](README.md) → "Exporting designs to Figma".
 
 The full first-time export produces **one Figma file per variation** whose **Pages
 panel** mirrors the project: a **Page per design page** (Home, About, …) holding
-that page's per-breakpoint frames, a `———` separator, a **Styleguide** Page (real
-color **variables** + text **styles** + a specimen), a **Components** Page (the
-shadcn components **this design actually uses** — see the usage scan below — as
-component sets with variant properties), and a **Block Library** Page (section blocks **derived from the
-real page** — every `[data-block]` section, at each breakpoint, as `View=…`
-component sets). This weaves the design **page capture** (screenshots, above) and
-the **design-system objects** (tokens, atoms, blocks — all editable, all bound to
-Figma variables) into a single organized file.
+that page's per-breakpoint frames **composed from block instances**, a `———`
+separator, a **Styleguide** Page (real color **variables** + text **styles** + a
+specimen), a **Components** Page (the shadcn components **this design actually uses**
+— see the usage scan below — as component sets with variant properties), and a
+**Block Library** Page (section blocks **reconstructed from the real page** — every
+`[data-block]` section, at each breakpoint, as `View=…` component sets). Everything
+is **real editable Figma nodes bound to variables** — the design pages, the blocks,
+the atoms, and the tokens — woven into a single organized file. (No screenshots:
+blocks are reconstructed from the DOM, and pages are stacks of block instances.)
 
 Three script pairs (each an offline manifest + a `use_figma` builder body, same
 pattern) drive the design-system half. Load the `figma-use` +
@@ -282,39 +284,40 @@ pattern) drive the design-system half. Load the `figma-use` +
   nothing stale. Composite/behavioral components (navigation-menu, sidebar, dialog,
   table) need a richer model and are excluded. `npm run export:library`
   (`-- -v {id}`, `-- --all`).
-- **Blocks** → the Block Library Page. `scripts/export-blocks-to-figma.mjs` +
-  `scripts/figma-block-library.plugin.js` (PHASE `blocks`). **DERIVE-EVERYTHING:
-  blocks are not declared or hand-built — each is derived from the real page.** A
-  designer marks a section with `data-block="{id}"` + `data-block-name="{Name}"`
-  (Header/Footer are marked too); the capture driver
-  (`export-to-figma.mjs --blocks`) discovers those markers live and screenshots
-  each `[data-block]` at each breakpoint into Figma as an editable
-  html.to.design layer tree; the builder POST-PASS then **binds** each captured
-  fill to the nearest **Brand** `--ta-*` variable, **normalizes** fonts Figma lacks
-  to the project face/role proxy, **flattens** html.to.design's passthrough wrapper
-  frames, **repairs layout** from DOM hints (see next paragraph), and
-  **componentizes** each block into a `View=…` set. So the block LIST is
-  the union of `[data-block]` markers (no `blocks.ts`); the offline manifest only
-  supplies the brand palette + font roles. `npm run export:blocks` builds that
-  manifest. Add a block by marking a new `[data-block]` section — nothing else.
-  (Interaction states like an open mobile menu aren't auto-captured yet — default
-  rendered state per breakpoint.)
+- **Blocks** → the Block Library Page. `scripts/export-reconstruct-to-figma.mjs` +
+  `scripts/figma-reconstruct-library.plugin.js` (PHASE `reconstruct`).
+  **RECONSTRUCT, not capture — NO html.to.design, NO `generate_figma_design`
+  mint/poll.** A designer marks a section with `data-block="{id}"` +
+  `data-block-name="{Name}"` (Header/Footer too); the extractor walks each
+  `[data-block]` at each breakpoint into a **deterministic build spec** of uniform
+  ordered nodes (box / text / svg) — reading layout (flex/grid), fills (solid /
+  gradient / image, colors resolved to sRGB from oklab via canvas), text
+  (font/size/weight/align/color), svg markup, and downloaded image assets — plus
+  the brand palette + font roles read **live** from `:root` (`--ta-*` /
+  `--ta-font-*`). The builder then makes **real Figma nodes**: flex → auto-layout,
+  grid → wrap, block-flow + absolute overlays → absolute; text runs → real text
+  (project family, else role proxy); svg → real vectors (recolored); gradients →
+  `GRADIENT_LINEAR`; image fills → a placeholder rect whose `{ nodeId, asset }` it
+  **returns** so Claude sets the photo via `upload_assets(nodeId)`. It **binds**
+  each fill to the nearest **Brand** `--ta-*` variable (opacity-preserving) and
+  **componentizes** each block into a `View=…` set. So the block LIST is the union
+  of `[data-block]` markers (no `blocks.ts`); `npm run export:reconstruct` builds
+  the whole manifest (specs + palette + assets) offline in one pass. Add a block by
+  marking a new `[data-block]` section — nothing else. (Interaction states like an
+  open mobile menu aren't captured yet — default rendered state per breakpoint.)
 
-  **Layout repair (html.to.design fidelity).** html.to.design's DOM→auto-layout
-  conversion drops two things the builder can't otherwise recover: it bakes each
-  section's rendered pixel height as a **FIXED** frame height (so a content-sized
-  section pins its content to the top with a void below, and self-stretch columns
-  collapse — e.g. an `object-cover` fill image), and it defaults centered content
-  (`mx-auto` / `text-center`) to **left**. So the **discover** step
-  (`export-to-figma.mjs` `extractLayoutHints`) reads the real intent from each
-  section's live DOM into a per-block `layout` hint — a root-level `hugHeight` flag
-  (skipped for sections that deliberately reserve height, e.g. a `min-h-screen`
-  hero) and a `textAlign` list keyed by the text's own content (links/buttons and
-  horizontal-row items filtered out to avoid nav false-positives). That hint rides
-  along into each `captures[]` entry, and the builder's `repairLayout` pass applies
-  it: hugs the root height, and re-centers matched TEXT nodes + their constrained
-  (`mx-auto`) wrapper ancestors **without** disturbing left-aligned siblings like
-  card captions.
+  **Why reconstruct beats capture.** The old path screenshotted each section into
+  Figma via html.to.design, which was both the slowest stage (serial mint → submit
+  → poll per section, seconds–minutes each, plus doomed captures) and the least
+  faithful (it dropped background-image photos, SVG icons, gradients, and
+  alpha-tint fills, and choked on heavy sections like a big accordion). Reconstruct
+  builds the exact same sections as real editable nodes from the DOM — faithful to
+  photos/icons/gradients/emoji, no external service, no polling. Two gotchas the
+  builder handles: a **childless semi-transparent SOLID overlay** (a `bg-ta-*/70`
+  wash) must carry its alpha on **node** opacity, not paint opacity — paint opacity
+  is stripped by `setBoundVariableForPaint` and by instancing; and `background`
+  photos map to an image fill set post-build via `upload_assets`. A `cover`/center
+  background maps to `FILL`; non-center `background-position` is a known refinement.
 
 The brand-tokens pair in detail:
 
@@ -382,35 +385,46 @@ The brand-tokens pair in detail:
      the used component sets + a `System` variable collection, and prunes any stale
      catalog set. If the design uses no shadcn components the page is (correctly) left
      empty — pass `--all` to force the whole catalog instead.
-  6. **Fill the Block Library Page (blocks) — derive from the real page:**
-     a. `npm run export:blocks -- -v {id}` → the offline brand manifest
-        (palette + font roles; `captures: []`).
-     b. `node scripts/export-to-figma.mjs --blocks --discover -v {id}` → live JSON
-        `{ blocks, pages, views, widths }`: `blocks` = each unique section to capture
-        once (each carries a `layout` hint — `hugHeight` + `textAlign` — read from
-        its live DOM; see "Layout repair" above); `pages` = per-page block ORDER
-        (used to compose in step 7); `views`/`widths`.
-     c. For **each unique block × active breakpoint**, mint
-        `generate_figma_design(fileKey)` and write a `captures.json` keyed
-        `"{blockId}-{view}"` → `{ captureId, endpoint, route, blockId, view }`.
-     d. `node scripts/export-to-figma.mjs --blocks --captures captures.json -v {id}`
-        submits each via html.to.design `figmaselector`; **poll** each captureId
-        until `completed` and record its resulting **node id** into the manifest's
-        `captures[]` (`{ blockId, name, view, nodeId, layout }` — carry the block's
-        `layout` hint from step b so `repairLayout` can apply it).
-     e. Run the block builder (PHASE `blocks`) embedding that filled manifest + the
-        `figma-block-library.plugin.js` body. The POST-PASS binds/normalizes/flattens/
-        componentizes each capture onto "Block Library" and **returns
-        `built[].componentId` per `blockId`**. It binds to the **`Brand`** collection —
-        because step 4's `variables` phase already populated it, the builder binds to
-        those canonical `var(--ta-*)` variables (matched by code syntax) rather than
-        duplicating; standalone it creates its own.
+  6. **Fill the Block Library Page (blocks) — reconstruct from the real page:**
+     a. `npm run export:reconstruct -- -v {id}` → `figma-export/reconstruct-{id}.json`
+        in one offline pass: for **every** `[data-block]` × active breakpoint, the
+        full build spec (uniform ordered nodes), plus the brand palette + font roles
+        (read live from `:root`), `pages` (per-page block ORDER for step 7),
+        `views`/`widths`, and `assets` (image files downloaded to
+        `figma-export/reconstruct-assets/`). No minting, no `generate_figma_design`,
+        no polling — this is the whole discover+extract, done offline. (Iterate with
+        `--fast` for the primary breakpoint, `--only {ids}` to re-extract some blocks.)
+        Specs OMIT default-valued fields (≈40–50% smaller) so heavy blocks fit a call.
+     b. **Add `--emit-calls`** and the script also writes, per block, a **ready-to-
+        submit `use_figma` payload** to `figma-export/reconstruct-calls/` — assembled
+        (spec + builder body) and **sized to the 50K `code` limit**, plus `_plan.json`.
+        This is the robust way to run the builder: **size is known offline, so route
+        without failed "try-then-discover-it's-too-big" attempts.** A block whose two
+        breakpoints fit one call → `{blockId}.js` (builds the `View=` set directly). A
+        block that doesn't → per-view `{blockId}-{view}.js` **temp** builds
+        (`MANIFEST.temp` → standalone `__tmp:{blockId}:{view}` components, no combine,
+        no cross-call deletion) **+** a shared `_combine.js` (PHASE `combine`) that
+        merges the temps into the `View=` set (photos set on temp nodes survive the
+        combine). Submit each `calls[].file` verbatim as the `code` param (with your
+        fileKey), collect `photos[]` from each return, then submit `_combine.js`.
+        `_plan.json.oversized` flags any single view STILL over the limit even shrunk
+        (needs a node-tree split — rare). Builder calls stay **sequential**; the
+        `upload_assets` POSTs and per-page `compose` calls parallelize.
+        The builder **returns** `built[].componentId` per `blockId` **and** a
+        `photos[]` list of `{ blockId, view, asset, nodeId }`, binding fills to the
+        **`Brand`** collection (canonical `var(--ta-*)` from step 4).
+     c. For **each** `photos[]` entry, `upload_assets(fileKey, count:1, nodeId,
+        scaleMode:"FILL")` and POST the asset bytes from
+        `figma-export/reconstruct-assets/{asset}` to the returned `submitUrl`. These
+        uploads **can run in parallel**. This sets the real photos on the placeholder
+        rects.
   7. **Compose the design Pages from block INSTANCES** (top of the cascade
      variables → components → blocks → **pages**; this REPLACES any raw page-capture).
      For **each** page in the discovery `pages`, assemble
      `MANIFEST.page = { id, name, route, blocks: [{ blockId, name, componentId }] }`
-     (componentId from step 6e) + `views` + `widths`, and run the **`compose`**
-     builder (PHASE `compose`, same plugin body) — **one call per page, fanned out in
+     (componentId from step 6b) + `views` + `widths`, and run the **`compose`**
+     builder (PHASE `compose`, same `figma-reconstruct-library.plugin.js` body) —
+     **one call per page, fanned out in
      parallel** (each does a single `setCurrentPageAsync`). It stacks a block INSTANCE
      per section (right `View=` variant per breakpoint) onto that design's Figma Page,
      so the page is variable-bound and editing a block master cascades to every page.
@@ -420,12 +434,13 @@ The brand-tokens pair in detail:
 
 All builder calls stay **sequential, never parallel** (Figma state mutations must
 serialize) — except the per-page `compose` calls in step 7, which target different
-Figma Pages and so fan out in parallel. The `components` phase is self-contained —
-safe to re-run after a `cva`/token change (idempotent find-by-name). The `blocks`
-phase is idempotent per block name too, but a re-run needs **fresh captures** (a
-capture id is single-use), so re-derive from step 6b when the page design changes.
-`compose` is idempotent per page (it clears its prior `{Page} — {View}` frames) and
-cheap to re-run after blocks change — no capture needed.
+Figma Pages and so fan out in parallel, and the `upload_assets` POSTs in step 6c.
+The `components` phase is self-contained — safe to re-run after a `cva`/token change
+(idempotent find-by-name). The `reconstruct` phase is idempotent per block name (it
+removes + rebuilds each block's set and prunes stale ones); re-run
+`npm run export:reconstruct` (offline, cheap — no minting) whenever the page design
+changes, then re-run the builder. `compose` is idempotent per page (it clears its
+prior `{Page} — {View}` frames) and cheap to re-run after blocks change.
 
 **Fonts:** the builder uses the project's real `--ta-font-*` family when Figma has
 it, else a role-based **proxy** (Display→Playfair Display, Serif→Lora, Sans→Inter,

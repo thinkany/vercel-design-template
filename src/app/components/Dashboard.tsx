@@ -1,5 +1,5 @@
 // ©2026 thinkany llc. All rights reserved.
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { loadVariations, saveVariations, type Variation } from "@/data/variations";
 import { siteConfig } from "@/config/site";
 import { getRole } from "@/data/role";
@@ -16,6 +16,22 @@ export function Dashboard() {
   const [variations, setVariations] = useState<Variation[]>(() => loadVariations());
   const [showMakeModal, setShowMakeModal] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
+
+  // Show a real "Modified" date driven by each variation's design-file mtimes.
+  // The dev server reports them (edits happen by changing files, which the app
+  // can't otherwise observe); on the Vercel static deploy this fetch 404s and the
+  // stored modifiedAt shows instead. Display-only — not persisted to localStorage.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/variation/mtimes")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((mtimes: Record<string, string> | null) => {
+        if (!mtimes || cancelled) return;
+        setVariations((prev) => prev.map((v) => (mtimes[v.id] ? { ...v, modifiedAt: mtimes[v.id] } : v)));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   function handleRemoveClick(variation: Variation) {
     if (variation.isBase) {
