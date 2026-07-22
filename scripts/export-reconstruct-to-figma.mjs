@@ -362,6 +362,16 @@ async function main() {
         await page.setViewport({ width, height: VIEWPORT_HEIGHT, deviceScaleFactor: 2 });
         await page.goto(`${args.url}/?v=${args.variation}${routeFlag}&capture=${view}`, { waitUntil: "networkidle0" });
         await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
+        // B1 settle: before walking the DOM, wait for webfonts to swap in, images to
+        // decode, and two paint frames — so every measured box (text wrap width, inline
+        // icon offset, image dimensions) is FINAL. Cheap insurance against capture-timing
+        // flake: a block walked mid-font-swap or pre-image-decode measures wrong geometry,
+        // which then bakes into the Figma nodes.
+        await page.evaluate(async () => {
+          try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
+          try { await Promise.all([...document.images].filter((i) => !i.complete).map((i) => i.decode().catch(() => {}))); } catch (e) {}
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        });
         const markers = await page.evaluate(() => [...document.querySelectorAll("[data-block]")].map((el) => ({ blockId: el.getAttribute("data-block"), name: el.getAttribute("data-block-name") || el.getAttribute("data-block") })));
         for (const m of markers) {
           if (!m.blockId) continue;
