@@ -54,7 +54,7 @@ async function emitCalls(manifest, out, limit) {
   const assemble = (m, phase) => `const MANIFEST=${JSON.stringify(m)};\nconst PHASE=${JSON.stringify(phase)};\n${body}`;
   const dir = join(out, "reconstruct-calls");
   await mkdir(dir, { recursive: true });
-  const plan = { note: "submit each calls[].file as the use_figma `code` param (with your fileKey), collect photos[] from each return + upload_assets, then submit _combine.js, then compose.", calls: [], combine: [], oversized: [] };
+  const plan = { note: "PART 1 (Styleguide+Blocks): submit each calls[].file as the use_figma `code` param (with your fileKey), collect photos[] from each return + upload_assets, then submit _combine.js. PART 2 (Pages from blocks): once blocks exist, submit each compose[].file — one per page, fan out in parallel — to compose design Pages from block instances (resolved BY NAME off the Block Library page).", calls: [], combine: [], compose: [], oversized: [] };
   for (const blk of manifest.blocks) {
     const views = Object.keys(blk.views);
     const full = assemble({ ...base, blocks: [blk] }, "reconstruct");
@@ -72,10 +72,20 @@ async function emitCalls(manifest, out, limit) {
     }
   }
   if (plan.combine.length) { const code = assemble({ blockPageName: manifest.blockPageName, combine: plan.combine }, "combine"); await writeFile(join(dir, "_combine.js"), code); plan.combineCall = { file: "_combine.js", bytes: code.length }; }
+  // PART 2 — one compose call per page. Blocks carry NO componentId, so the builder
+  // resolves each BY NAME off the Block Library page (Part 1's output). Tiny payloads
+  // (body + page-order manifest), never near the limit; fan out in parallel per page.
+  for (const pg of manifest.pages || []) {
+    if (!pg.blocks || !pg.blocks.length) continue;
+    const m = { page: { id: pg.id, name: pg.name, route: pg.route, blocks: pg.blocks.map((b) => ({ blockId: b.blockId, name: b.name })) }, views: manifest.views, widths: manifest.widths, blockPageName: manifest.blockPageName };
+    const code = assemble(m, "compose");
+    const f = `_compose-${pg.id}.js`; await writeFile(join(dir, f), code);
+    plan.compose.push({ file: f, page: pg.id, name: pg.name, blocks: pg.blocks.length, bytes: code.length });
+  }
   await writeFile(join(dir, "_plan.json"), JSON.stringify(plan, null, 2));
   const singles = plan.calls.filter((c) => !c.temp).length;
-  console.error(`✓ emitted ${plan.calls.length} call file(s)${plan.combine.length ? " + _combine.js" : ""} + _plan.json → ${dir}`);
-  console.error(`  ${singles} block(s) fit one call; ${plan.combine.length} split into per-view temp+combine`);
+  console.error(`✓ emitted ${plan.calls.length} block call(s)${plan.combine.length ? " + _combine.js" : ""} + ${plan.compose.length} compose call(s) + _plan.json → ${dir}`);
+  console.error(`  Part 1: ${singles} block(s) fit one call, ${plan.combine.length} split into per-view temp+combine. Part 2: ${plan.compose.length} page(s) to compose.`);
   if (plan.oversized.length) console.error(`  ⚠ ${plan.oversized.length} single view(s) STILL exceed ${limit}B even shrunk — will fail the 50K limit; node-tree split needed: ${plan.oversized.map((o) => `${o.blockId}/${o.view} (${o.bytes}B)`).join(", ")}`);
   return plan;
 }
@@ -421,7 +431,7 @@ async function main() {
     console.error(`  ${((performance.now() - t0) / 1000).toFixed(1)}s. Next: upload assets, run the reconstruct builder (PHASE reconstruct), then compose.`);
     let plan = null;
     if (args.emitCalls) plan = await emitCalls(manifest, args.out, args.limit);
-    console.log(JSON.stringify({ outPath, blocks: blocks.size, views, assets: assets.length, brandColors: brand.brandColors.length, ...(plan ? { calls: plan.calls.length, splitBlocks: plan.combine.length, oversized: plan.oversized.length } : {}) }, null, 2));
+    console.log(JSON.stringify({ outPath, blocks: blocks.size, views, assets: assets.length, brandColors: brand.brandColors.length, ...(plan ? { calls: plan.calls.length, splitBlocks: plan.combine.length, composePages: plan.compose.length, oversized: plan.oversized.length } : {}) }, null, 2));
   } finally {
     try { await browser.close(); } catch {}
   }

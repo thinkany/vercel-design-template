@@ -155,30 +155,45 @@ breakpoint, and every variation** (a variation diverges by dropping its own
   export agree**. Portal-based overlays (shadcn `Sheet`/`Dialog`/`Drawer`) escape
   the frame to `document.body`; use inline positioning for in-frame menus.
 
-### Exporting to Figma — ask which scope FIRST
+### Exporting to Figma — TWO parts, ask scope FIRST
 
-Two export surfaces (both detailed below): the **design Pages/App** (frame
-captures) and the **Styleguide** (design-system objects). When the user says
-"export to Figma" **without naming a scope, do NOT guess** — ask first with
-**AskUserQuestion**. The three export prompts are **locked copy — use them
-verbatim** (adapt only the `{Pages|App}` label):
+The cohesive export runs as **two independently-runnable parts.** Splitting them is
+what keeps each run short and iterable — the blocks are the slow, high-fidelity half;
+the pages are cheap:
+
+- **Part 1 — Styleguide + Blocks:** the design-system objects **plus** the section
+  blocks — `scaffold` → `variables` → `textstyles` → `specimen` → `components` (the
+  design's shadcn components) → `blocks` (the reconstructed `[data-block]` section sets
+  on the Block Library page). This is the expensive half (the block builder loop).
+- **Part 2 — {Pages|App} from blocks:** the STANDALONE `compose` — stacks block
+  INSTANCES into each design Page, resolving each block's component **BY NAME** off the
+  Block Library page (no in-memory ids needed). Cheap, idempotent, and re-runnable on
+  its own whenever page order or a block master changes. **Requires Part 1 first:** the
+  builder throws `Block Library page … not found — run Part 1` if the blocks aren't there.
+
+When the user says "export to Figma" **without naming a scope, do NOT guess** — ask
+first with **AskUserQuestion**. Use these prompts verbatim (adapt only `{Pages|App}`):
 
 **P15 · header "Export scope"** — *"What would you like to send to Figma?"*
-- **Both Styleguide and {Pages|App}** → the cohesive one-file flow ("Exporting to
-  Figma as ONE cohesive file" below): `scaffold` → capture Pages onto their Figma
-  Pages → `variables` → `textstyles` → `specimen` → `components` (the design's
-  shadcn components) → `blocks` (section blocks).
-- **Styleguide only** → the design-system phases only, no page captures (`scaffold`
-  for the panel if needed → `variables` → `textstyles` → `specimen` → `components`
-  → `blocks`). "Styleguide" is the whole brand library here — tokens **plus** the
-  Components + Block Library pages.
-- **{Pages|App} only** → the page-capture flow only ("Exporting designs to Figma"
-  below); skip the design-system phases (variables/styles/specimen/components/blocks).
+- **Styleguide + Blocks (Part 1)** → the Part-1 phases above; builds the Styleguide,
+  Components, and Block Library pages. No page composition.
+- **{Pages|App} from blocks (Part 2)** → the standalone `compose` only; assumes Part 1
+  already built the blocks (errors if the Block Library page is missing — run Part 1
+  first).
+- **Both — Part 1 then Part 2** → run Part 1, then Part 2 back-to-back for the full
+  cohesive one-file result (same file). Same total work as before; the value of the
+  split is checkpointing + cheap Part-2 re-runs, not a shorter first pass.
+
+(A raw **pixel snapshot** of pages — the old html.to.design page-CAPTURE via
+[export-to-figma.mjs](scripts/export-to-figma.mjs), "Exporting designs to Figma" below —
+is still available but is NOT what "Pages" means here; reach for it only when the user
+explicitly wants flat screenshots instead of editable, variable-bound block instances.)
 
 Use **"App"** for `projectType === "app"`, else **"Pages"**. Brand-guideline
-projects (`projectType === "brand"`) have no design pages — run **Styleguide only**
-and skip the prompt. **If the request already names a scope** ("export the
-styleguide", "send the pages") skip the prompt and run that path.
+projects (`projectType === "brand"`) have no design pages — run **Part 1 (Styleguide +
+Blocks)** and skip the prompt. **If the request already names a scope** ("export the
+styleguide", "send the pages", "just recompose the pages") skip the prompt and run that
+path.
 
 Two follow-ups, only when a **new** file will be created (skip both when reusing a
 recorded file):
@@ -257,6 +272,15 @@ specimen), a **Components** Page (the shadcn components **this design actually u
 is **real editable Figma nodes bound to variables** — the design pages, the blocks,
 the atoms, and the tokens — woven into a single organized file. (No screenshots:
 blocks are reconstructed from the DOM, and pages are stacks of block instances.)
+
+**This is two runnable parts** (see P15): **Part 1 = Styleguide + Blocks** (the live
+flow's steps 1–6: scaffold → variables → textstyles → specimen → components → blocks)
+and **Part 2 = Pages from blocks** (step 7's `compose`). The "Both" scope just runs
+1→2 back-to-back. Part 2 is **standalone**: it resolves each block's component **by
+name** off the Block Library page, so it can run any time after Part 1 without re-doing
+the expensive block builds — `npm run export:reconstruct -- --emit-calls` writes a
+ready-to-submit **`_compose-{pageId}.js`** per page (in `reconstruct-calls/`, listed in
+`_plan.json`'s `compose[]`) alongside the block calls.
 
 Three script pairs (each an offline manifest + a `use_figma` builder body, same
 pattern) drive the design-system half. Load the `figma-use` +
@@ -418,16 +442,21 @@ The brand-tokens pair in detail:
         `figma-export/reconstruct-assets/{asset}` to the returned `submitUrl`. These
         uploads **can run in parallel**. This sets the real photos on the placeholder
         rects.
-  7. **Compose the design Pages from block INSTANCES** (top of the cascade
-     variables → components → blocks → **pages**; this REPLACES any raw page-capture).
-     For **each** page in the discovery `pages`, assemble
-     `MANIFEST.page = { id, name, route, blocks: [{ blockId, name, componentId }] }`
-     (componentId from step 6b) + `views` + `widths`, and run the **`compose`**
-     builder (PHASE `compose`, same `figma-reconstruct-library.plugin.js` body) —
-     **one call per page, fanned out in
-     parallel** (each does a single `setCurrentPageAsync`). It stacks a block INSTANCE
-     per section (right `View=` variant per breakpoint) onto that design's Figma Page,
-     so the page is variable-bound and editing a block master cascades to every page.
+  7. **Compose the design Pages from block INSTANCES — this is PART 2, runnable on its
+     own** (top of the cascade variables → components → blocks → **pages**; REPLACES any
+     raw page-capture). For **each** page in the discovery `pages`, assemble
+     `MANIFEST.page = { id, name, route, blocks: [{ blockId, name }] }` + `views` +
+     `widths` + `blockPageName`, and run the **`compose`** builder (PHASE `compose`, same
+     `figma-reconstruct-library.plugin.js` body) — **one call per page, fanned out in
+     parallel** (each does a single `setCurrentPageAsync`). **Block resolution:** compose
+     prefers an in-memory `componentId` (pass it from step 6b when running "Both"
+     back-to-back), else resolves each block **by NAME** off the Block Library page
+     (`figma.loadAllPagesAsync()` → find the set named `{block.name}`) — so Part 2 needs
+     nothing from Part 1's return and stands alone. Guard: no Block Library page ⇒ throws
+     "run Part 1 first". The `--emit-calls` **`_compose-{pageId}.js`** files are exactly
+     this call, ready to submit (blocks carry names, no ids). It stacks a block INSTANCE
+     per section (right `View=` variant per breakpoint) onto that design's Figma Page, so
+     the page is variable-bound and editing a block master cascades to every page.
      Designers never edit a Page except the copy inside a block.
   8. Screenshot the Styleguide, Components, Block Library, and composed design Pages
      to verify.

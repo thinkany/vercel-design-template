@@ -350,8 +350,24 @@ if (PHASE === "compose") {
   const widths = MANIFEST.widths || {};
   const fallbackW = { desktop: 1440, tablet: 664, mobile: 390 };
 
+  // Resolve each block to its component. Prefer an in-memory componentId (the bundled
+  // "Both" flow passes it straight from the reconstruct phase). When it's absent — the
+  // STANDALONE Part 2 "Pages from blocks" flow — look the component up BY NAME on the
+  // Block Library page. Load pages first so that page's children are readable (compose
+  // still switches currentPage exactly once, to the design page, below). Guard: if there
+  // is no Block Library page, Part 1 hasn't run — fail loudly, don't compose empty pages.
+  const blockPageName = MANIFEST.blockPageName || "Block Library";
+  let byName = null;
+  if (pg.blocks.some((b) => !b.componentId)) {
+    if (figma.loadAllPagesAsync) { try { await figma.loadAllPagesAsync(); } catch (e) {} }
+    const bp = figma.root.children.find((p) => p.name === blockPageName);
+    if (!bp) throw new Error(`Block Library page "${blockPageName}" not found — run Part 1 (Styleguide + Blocks) before composing Pages.`);
+    if (bp.loadAsync) { try { await bp.loadAsync(); } catch (e) {} }
+    byName = {};
+    for (const n of bp.children) if (n.type === "COMPONENT_SET" || n.type === "COMPONENT") byName[n.name] = n;
+  }
   const comps = {};
-  for (const b of pg.blocks) comps[b.blockId] = b.componentId ? await figma.getNodeByIdAsync(b.componentId) : null;
+  for (const b of pg.blocks) comps[b.blockId] = b.componentId ? await figma.getNodeByIdAsync(b.componentId) : (byName ? (byName[b.name] || null) : null);
 
   const pickVariant = (comp, view) => {
     if (!comp) return null;
@@ -388,5 +404,5 @@ if (PHASE === "compose") {
     frames.push({ view, id: frame.id, blocks: frame.children.length });
     x += w + 120;
   }
-  return { phase: "compose", page: pg.name, frames, missing };
+  return { phase: "compose", page: pg.name, resolvedBy: byName ? "name" : "id", frames, missing };
 }
