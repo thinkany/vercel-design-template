@@ -47,9 +47,38 @@ import { performance } from "node:perf_hooks";
 // `_plan.json` (ordered calls + combine list + any single view STILL too big). So
 // orchestration just reads a file and submits it verbatim — no manual assembly,
 // no size guessing, no failed "try then discover it's too big" round-trips.
+// Slim the builder body so it isn't re-shipped verbatim at full weight (~25K, heavily
+// commented) in EVERY use_figma call. The body is ferried through the orchestrator's
+// context and re-emitted as the `code` param, so it must stay RELIABLY REPRODUCIBLE —
+// which rules out identifier/whitespace minification (that collapses the ~20K body into
+// one dense unreproducible line and corrupts the submit step). Instead do a CONSERVATIVE
+// strip: drop only full-line `//` comments, blank lines, and trailing whitespace. This
+// keeps every statement on its own line (still readable + debuggable), never touches code
+// or string contents (a line with inline/trailing `//`, a URL, or a `//`-in-string is
+// kept whole), and still cuts ~27% (~6.7K/call) — enough to collapse the practice split
+// into one call and drop the roster/schedule temps under the 50K `code` limit. Syntax-
+// checked with a raw-body fallback so the pipeline can never break on it.
+function slimBody(body) {
+  try {
+    const slim = body
+      .split("\n")
+      .map((l) => l.replace(/\s+$/, ""))
+      .filter((l) => { const s = l.trim(); return s && !s.startsWith("//"); })
+      .join("\n");
+    Object.getPrototypeOf(async () => {}).constructor(slim); // parse as async body (top-level await/return OK)
+    if (!slim.includes("MANIFEST") || !slim.includes("PHASE")) throw new Error("MANIFEST/PHASE dropped");
+    return slim;
+  } catch (e) {
+    console.error(`  ⚠ builder-body slim skipped (${e.message}) — shipping raw body`);
+    return body;
+  }
+}
+
 async function emitCalls(manifest, out, limit) {
   const bodySrc = await readFile(new URL("./figma-reconstruct-library.plugin.js", import.meta.url), "utf8");
-  const body = bodySrc.slice(bodySrc.indexOf("async function getOrCreateCollection"));
+  const rawBody = bodySrc.slice(bodySrc.indexOf("async function getOrCreateCollection"));
+  const body = slimBody(rawBody);
+  if (body.length < rawBody.length) console.error(`  ✓ builder body slimmed ${rawBody.length}B → ${body.length}B (${Math.round(100 * (1 - body.length / rawBody.length))}% smaller, per call; multi-line preserved)`);
   const base = { blockPageName: manifest.blockPageName, brandCollectionName: manifest.brandCollectionName, brandColors: manifest.brandColors, fonts: manifest.fonts, views: manifest.views, widths: manifest.widths };
   const assemble = (m, phase) => `const MANIFEST=${JSON.stringify(m)};\nconst PHASE=${JSON.stringify(phase)};\n${body}`;
   const dir = join(out, "reconstruct-calls");

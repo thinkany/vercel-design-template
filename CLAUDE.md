@@ -174,6 +174,17 @@ the pages are cheap:
 When the user says "export to Figma" **without naming a scope, do NOT guess** — ask
 first with **AskUserQuestion**. Use these prompts verbatim (adapt only `{Pages|App}`):
 
+**Suggest `/clear` before Part 1.** Part 1 (the block-builder loop) is the single most
+context-heavy op in the pipeline — each of its ~11 `use_figma` calls ferries a ~19–43K
+payload through the conversation, so starting it on a long history inflates every turn and
+risks a mid-run context summarization. So when the run **will include Part 1** (the
+"Styleguide + Blocks" or "Both" scope, or a brand project) **and the conversation already
+carries a long history**, open with a one-line nudge before asking P15 — e.g. *"This is a
+long, context-heavy run — consider `/clear` first for a cleaner, cheaper pass. Ready when
+you are."* Keep it a nudge, not a blocker (the user may decline). **Skip it entirely for a
+standalone Part-2 "Pages/App from blocks" compose** — that's one cheap call and needs no
+clear. Don't otherwise touch the locked P15–P17 copy below.
+
 **P15 · header "Export scope"** — *"What would you like to send to Figma?"*
 - **Styleguide + Blocks (Part 1)** → the Part-1 phases above; builds the Styleguide,
   Components, and Block Library pages. No page composition.
