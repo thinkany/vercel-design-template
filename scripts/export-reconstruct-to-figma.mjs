@@ -74,7 +74,7 @@ function slimBody(body) {
   }
 }
 
-async function emitCalls(manifest, out, limit) {
+export async function emitCalls(manifest, out, limit) {
   const bodySrc = await readFile(new URL("./figma-reconstruct-library.plugin.js", import.meta.url), "utf8");
   const rawBody = bodySrc.slice(bodySrc.indexOf("async function getOrCreateCollection"));
   const body = slimBody(rawBody);
@@ -476,4 +476,9 @@ async function main() {
   }
 }
 
-main().then(() => process.exit(0), (err) => { console.error(err); process.exit(1); });
+// Run the extractor only when invoked directly. Importing this module (e.g. the
+// cloud bridge cloud-export/build-from-spec.mjs reusing emitCalls) must NOT launch
+// puppeteer — it only pulls emitCalls out.
+if (process.argv[1] && process.argv[1].endsWith("export-reconstruct-to-figma.mjs")) {
+  main().then(() => process.exit(0), (err) => { console.error(err); process.exit(1); });
+}
