@@ -53,7 +53,13 @@ const CAPTURED_STYLE_PROPS = [
 ];
 
 function parseArgs(argv) {
-  const args = { url: "http://localhost:5173", variation: "v00", out: null, views: null, pages: null, only: null, fast: false };
+  const args = {
+    url: "http://localhost:5173", variation: "v00", out: null, views: null, pages: null, only: null, fast: false,
+    // --post sends the bundle to the cloud derive and writes back the BuildSpec.
+    // Endpoint + key default to env; flags override. No key is required to WRITE
+    // the bundle to disk — only to POST it.
+    post: false, endpoint: process.env.DERIVE_ENDPOINT || "", key: process.env.DERIVE_LICENSE_KEY || "",
+  };
   const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -64,9 +70,29 @@ function parseArgs(argv) {
     else if (a === "--pages") args.pages = list(argv[++i]);
     else if (a === "--only") args.only = list(argv[++i]);
     else if (a === "--fast") args.fast = true;
+    else if (a === "--post") args.post = true;
+    else if (a === "--endpoint") args.endpoint = argv[++i];
+    else if (a === "--key") args.key = argv[++i];
     else if (a === "--help" || a === "-h") args.help = true;
   }
   return args;
+}
+
+// POST a CaptureBundle to the cloud derive; return the BuildSpec. Fails loudly on
+// a missing endpoint/key or any non-200 so the pipeline never silently proceeds
+// with a bad/absent spec.
+async function postBundle(bundle, endpoint, key) {
+  if (!endpoint) throw new Error("--post needs an endpoint (set DERIVE_ENDPOINT or pass --endpoint <url>)");
+  if (!key) throw new Error("--post needs a license key (set DERIVE_LICENSE_KEY or pass --key <k>)");
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-license-key": key },
+    body: JSON.stringify(bundle),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`derive endpoint ${res.status}: ${text.slice(0, 300)}`);
+  try { return JSON.parse(text); }
+  catch { throw new Error(`derive endpoint returned non-JSON: ${text.slice(0, 300)}`); }
 }
 
 function help() {
@@ -81,6 +107,9 @@ capture-client — serialize every [data-block] into a raw CaptureBundle.
       --only <list>      Only these block ids
       --fast             Primary (first active) breakpoint only
       --out <dir>        Output dir (default cloud-export/out)
+      --post             POST the bundle to the cloud derive → write BuildSpec
+      --endpoint <url>   Derive endpoint (default env DERIVE_ENDPOINT)
+      --key <k>          License key (default env DERIVE_LICENSE_KEY)
 `);
 }
 
@@ -276,8 +305,20 @@ async function main() {
     await writeFile(outPath, JSON.stringify(bundle));
     const uniqueBlocks = new Set(captured.map((b) => b.blockId)).size;
     console.error(`✓ CaptureBundle: ${uniqueBlocks} block(s) × [${views.join(", ")}] (${captured.length} captures), ${assets.length} asset(s), ${Object.keys(brand.colorVars).length} brand var(s) → ${outPath}`);
-    console.error(`  ${((performance.now() - t0) / 1000).toFixed(1)}s. Next: derive (cloud) → BuildSpec, then build via use_figma.`);
-    console.log(JSON.stringify({ outPath, blocks: uniqueBlocks, captures: captured.length, views, assets: assets.length, brandVars: Object.keys(brand.colorVars).length }, null, 2));
+
+    // --post: send to the cloud derive, write back the BuildSpec under the name
+    // the builder expects (reconstruct-{variation}.json). Bytes stay local: the
+    // BuildSpec references assets by name; assets/ holds the PNGs for upload_assets.
+    let specPath = null;
+    if (args.post) {
+      console.error(`  → POST ${(JSON.stringify(bundle).length / 1024).toFixed(0)}KB → ${args.endpoint}`);
+      const spec = await postBundle(bundle, args.endpoint, args.key);
+      specPath = join(outDir, `reconstruct-${args.variation}.json`);
+      await writeFile(specPath, JSON.stringify(spec));
+      console.error(`✓ BuildSpec ← cloud: ${spec.blocks?.length ?? 0} block(s), ${spec.brandColors?.length ?? 0} brand colors → ${specPath}`);
+    }
+    console.error(`  ${((performance.now() - t0) / 1000).toFixed(1)}s.${args.post ? " Next: build via use_figma." : " Next: derive (cloud/--post or offline) → BuildSpec, then build."}`);
+    console.log(JSON.stringify({ outPath, specPath, blocks: uniqueBlocks, captures: captured.length, views, assets: assets.length, brandVars: Object.keys(brand.colorVars).length }, null, 2));
   } finally {
     try { await browser.close(); } catch {}
   }
