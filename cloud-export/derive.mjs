@@ -221,19 +221,19 @@ export function derive(bundle) {
 /* ───────────────── Vercel-Function wrapper (API-key gated) ─────────── */
 
 export async function handler(req, res) {
-  const key = req.headers["x-license-key"] || req.headers["authorization"];
-  if (!process.env.DERIVE_LICENSE_KEY || key !== process.env.DERIVE_LICENSE_KEY) {
-    res.statusCode = 401; res.setHeader("content-type", "application/json");
-    return res.end(JSON.stringify({ error: "unauthorized" }));
-  }
+  const send = (code, obj) => { res.statusCode = code; res.setHeader("content-type", "application/json"); res.end(JSON.stringify(obj)); };
+  // Missing server key is a MISCONFIG (503), not a client auth failure (401) —
+  // keeps the two indistinguishable-from-outside cases apart for debugging.
+  const expected = process.env.DERIVE_LICENSE_KEY;
+  if (!expected) return send(503, { error: "service not configured: DERIVE_LICENSE_KEY unset (add it in Vercel env, then redeploy)" });
+  // Accept `x-license-key: <k>` or `authorization: [Bearer] <k>`; trim stray ws.
+  const provided = (req.headers["x-license-key"] || req.headers["authorization"] || "").replace(/^Bearer\s+/i, "").trim();
+  if (provided !== expected) return send(401, { error: "unauthorized" });
   try {
     const bundle = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-    const spec = derive(bundle);
-    res.statusCode = 200; res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify(spec));
+    return send(200, derive(bundle));
   } catch (e) {
-    res.statusCode = 400; res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify({ error: e.message }));
+    return send(400, { error: e.message });
   }
 }
 
