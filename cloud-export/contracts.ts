@@ -53,13 +53,21 @@ export type RawStyle = Partial<Record<CapturedStyleProp, string>>;
 
 /* ─────────────────────── 1. CaptureBundle (UP) ─────────────────────── */
 
-/** One measured inline text run (a text child node), boxed via Range locally. */
-export interface RawTextRun { chars: string; rect: Rect; }
+/**
+ * One measured inline text run (a text child node), boxed via Range locally.
+ * `kind:"text"` discriminates it from element nodes in a `children` array; it
+ * inherits its PARENT RawNode's `style` (the cloud applies textStyle to that).
+ */
+export interface RawTextRun { kind: "text"; chars: string; rect: Rect; }
+
+/** Ordered child: element or text run, interleaved in DOM order (order matters —
+ *  a label + inline icon must keep their sequence). Discriminate on `kind`. */
+export type RawChild = RawNode | RawTextRun;
 
 /**
- * A raw serialized DOM node — faithful, un-interpreted. Element nodes carry raw
- * style + geometry; the cloud turns this into a SpecNode. Text lives in
- * `textRuns` (inherits this node's `style`); svg carries markup; img carries src.
+ * A raw serialized DOM ELEMENT node — faithful, un-interpreted. Carries raw
+ * style + geometry; the cloud turns this into a SpecNode. svg carries markup;
+ * img carries src; text children live inline in `children` as RawTextRun.
  */
 export interface RawNode {
   tag: string;                 // lowercased tagName
@@ -68,8 +76,7 @@ export interface RawNode {
   style?: RawStyle;            // raw computed-style strings (whitelist above)
   svgMarkup?: string;          // set iff tag === "svg" (outerHTML)
   imgSrc?: string;             // set iff tag === "img" (currentSrc, may be http/data)
-  textRuns?: RawTextRun[];     // direct text children, in DOM order
-  children?: RawNode[];        // element children, in DOM order
+  children?: RawChild[];       // element + text children, interleaved in DOM order
 }
 
 /** Raw brand read from :root — RAW values; cloud resolves + titles + binds. */
