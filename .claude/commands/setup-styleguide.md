@@ -360,7 +360,7 @@ hot-reloading feedback — separate from the Vercel preview deploy — and they'
 ready to start designing pages.
 
 Point them to **`/guide`** as well: they can type it at any time to see every
-command this project offers (setup, design, preview controls). The quickest next
+command this project offers (setup, design, Figma export, preview controls). The quickest next
 step is simply to describe the page they want — that kicks off `/design`, which
 will also offer to start the preview server if it isn't already running.
 

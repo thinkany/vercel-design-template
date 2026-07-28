@@ -19,9 +19,10 @@ the preview/stop note. Use roughly this content, lightly adapted to the moment:
 
 **Not commands — just ask in plain language:**
 - **Export to Figma** — say "export to Figma" and I'll walk you through the scope
-  options.
+  options: the styleguide + blocks, the pages composed from those blocks, or both —
+  as one cohesive, editable Figma file.
 - **Run / stop the preview** — say "start the dev server" or "stop the server."
-  The live preview runs at http://localhost:5173 (`npm run dev`).
+  The live preview runs at http://localhost:5173 (`npm run dev`). If you have multiple projects open :5173 might be a different port (:5174, :5175) so it's always a good idea to stop the server when leaving a project.
 
 **Claude Code's own commands** (separate from this project — help, config, model,
 etc.) live under **/help**.

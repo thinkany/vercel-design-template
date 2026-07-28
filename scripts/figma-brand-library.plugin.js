@@ -16,7 +16,10 @@
 //                       target — mint generate_figma_design(fileKey, pageId) so
 //                       breakpoint frames land on that named Page).
 //     2. "variables"  → the Brand color variable collection (file-global)
-//     3. "textstyles" → the Type/* text styles (file-global)
+//     3. "textstyles" → the Type/* text styles + a "Type" collection of family
+//                       STRING variables (file-global), each text style's
+//                       fontFamily BOUND to its variable (the type analogue of
+//                       colors → bound COLOR variables).
 //     4. "specimen"   → the swatch + type specimen frame, built ON the Styleguide
 //                       Page (created/reused; other pages untouched).
 //   (Design-page frames themselves are captured between 1 and 4 via the page
@@ -123,11 +126,23 @@ if (PHASE === "variables") {
   return { phase: "variables", collectionId: col.id, collectionName: col.name, variables: result };
 }
 
-// ── PHASE 2: type text styles ─────────────────────────────────────────────────
+// ── PHASE 2: type — family STRING variables + text styles bound to them ───────
+// Font FAMILY becomes a first-class token (a STRING variable in the "Type"
+// collection), mirroring how colors are COLOR variables in "Brand". Each text
+// style keeps its size/line-height ramp but binds its `fontFamily` to the
+// variable, so flipping the variable re-faces every bound text style — the type
+// analogue of rebinding a color. (Figma typography variables: a STRING variable
+// scoped FONT_FAMILY, bound via textStyle.setBoundVariable("fontFamily", v).)
 if (PHASE === "textstyles") {
   const available = await figma.listAvailableFontsAsync();
   const families = new Set(available.map((f) => f.fontName.family));
   const styles = await figma.getLocalTextStylesAsync();
+
+  // The "Type" STRING-variable collection (sibling of the "Brand" color one).
+  const { col: typeCol, modeId: typeMode } = await getOrCreateCollection(MANIFEST.typeCollectionName || "Type");
+  const existingStr = (await figma.variables.getLocalVariablesAsync("STRING"))
+    .filter((v) => v.variableCollectionId === typeCol.id);
+
   const result = [];
   for (const f of MANIFEST.fonts) {
     // Prefer the project's real family if Figma actually has it; else the proxy.
@@ -139,6 +154,18 @@ if (PHASE === "textstyles") {
     if (!hasStyle) style = "Regular";
     await figma.loadFontAsync({ family, style });
 
+    // Family variable — value is the RESOLVED family (so the binding stays valid
+    // and loadable even when we fell back to a proxy), not the raw CSS stack.
+    const varName = f.familyVarName || f.name;
+    let fv = existingStr.find((x) => x.name === varName);
+    const varCreated = !fv;
+    if (!fv) { fv = figma.variables.createVariable(varName, typeCol, "STRING"); existingStr.push(fv); }
+    fv.setValueForMode(typeMode, family);
+    fv.scopes = ["FONT_FAMILY"];
+    fv.description = `${f.role} — token ${f.token}${f.isProxy ? " (proxy font)" : ""}`;
+    fv.setVariableCodeSyntax("WEB", `var(${f.token})`);
+
+    // Text style — same ramp as before, but its family is now BOUND to the var.
     let ts = styles.find((s) => s.name === f.figmaName);
     const created = !ts;
     if (!ts) ts = figma.createTextStyle();
@@ -147,9 +174,12 @@ if (PHASE === "textstyles") {
     ts.fontSize = f.size;
     ts.lineHeight = { unit: "PERCENT", value: Math.round((f.lineHeight || 1.4) * 100) };
     ts.description = `${f.role} — token ${f.token}${f.isProxy ? " (proxy font)" : ""}`;
-    result.push({ name: f.figmaName, id: ts.id, resolvedFont: `${family} ${style}`, proxy: f.isProxy, created });
+    // Bind AFTER setting fontName (family follows the variable from here on).
+    try { ts.setBoundVariable("fontFamily", fv); } catch (e) { /* older API — style keeps its literal family */ }
+
+    result.push({ name: f.figmaName, id: ts.id, resolvedFont: `${family} ${style}`, proxy: f.isProxy, created, familyVar: { name: varName, id: fv.id, created: varCreated } });
   }
-  return { phase: "textstyles", textStyles: result };
+  return { phase: "textstyles", typeCollectionId: typeCol.id, textStyles: result };
 }
 
 // ── PHASE 3: specimen frame (delete + rebuild, ON the Styleguide Page) ─────────
@@ -219,7 +249,7 @@ if (PHASE === "specimen") {
   const displayStyle = styleByName[(MANIFEST.fonts.find((f) => /display/i.test(f.name)) || {}).figmaName];
   if (displayStyle) { await figma.loadFontAsync(displayStyle.fontName); title.fontName = displayStyle.fontName; title.fontSize = 40; }
   header.appendChild(title);
-  const sub = label(`Design tokens for “${MANIFEST.variationId}”, exported from the project styleguide — colors as Figma variables, type as text styles.`, "regular", 15, darkVar, "#333333");
+  const sub = label(`Design tokens for “${MANIFEST.variationId}”, exported from the project styleguide — colors as Figma variables, type as text styles bound to family variables.`, "regular", 15, darkVar, "#333333");
   header.appendChild(sub); sub.layoutSizingHorizontal = "FILL"; sub.textAutoResize = "HEIGHT";
 
   // Colors

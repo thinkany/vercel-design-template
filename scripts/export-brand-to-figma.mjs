@@ -276,7 +276,8 @@ function buildManifest(variationId, brand, tokens, designPages) {
     const stack = (tokens[f.token] || f.stack || "").trim();
     const ramp = ROLE_RAMP[key];
     fonts.push({
-      figmaName: `Type/${f.name}`,
+      figmaName: `Type/${f.name}`,   // the text STYLE name
+      familyVarName: f.name,          // the family STRING variable name (in the "Type" collection)
       name: f.name,
       role: f.role || "",
       token: f.token,
@@ -292,7 +293,8 @@ function buildManifest(variationId, brand, tokens, designPages) {
   }
   return {
     variationId,
-    collectionName: "Brand",
+    collectionName: "Brand",       // COLOR variable collection
+    typeCollectionName: "Type",    // STRING (font-family) variable collection
     specimenFrameName: "Brand Library — Foundations",
     // Figma file structure (Pages panel), in order.
     styleguidePageName: STYLEGUIDE_PAGE,
@@ -331,7 +333,7 @@ function printSummary(m, styleDir) {
   for (const s of m.scaffoldSections) console.log(`    ▸ ${s.name}   (Page — scaffold)`);
   console.log(`\n  ${m.colors.length} colors → Figma variables (collection "${m.collectionName}")`);
   for (const c of m.colors) console.log(`    · ${c.figmaName.padEnd(28)} ${c.hex.padEnd(9)} ${c.token}`);
-  console.log(`  ${m.fonts.length} type roles → Figma text styles`);
+  console.log(`  ${m.fonts.length} type roles → Figma text styles (family bound to "${m.typeCollectionName}" string variables)`);
   for (const f of m.fonts) {
     const fam = f.requestedFamily || `${f.proxyFamily} (proxy)`;
     console.log(`    · ${f.figmaName.padEnd(16)} ${fam.padEnd(24)} ${f.token}`);
