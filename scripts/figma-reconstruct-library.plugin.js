@@ -275,6 +275,26 @@ if (PHASE === "reconstruct") {
       if (c.rotate) { const a = c.rotate * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a), hx = c.w / 2, hy = c.h / 2, cx = c.x + hx, cy = c.y + hy; child.relativeTransform = [[cos, -sin, cx - (cos * hx - sin * hy)], [sin, cos, cy - (sin * hx + cos * hy)]]; }
       else { child.x = c.x; child.y = c.y; }
     };
+    // <br>-split / multi-run text: the DOM splits "A<br>B" into TWO text runs (+ a <br>
+    // element). Rebuilt as separate fixed-position nodes, the first can reflow taller in
+    // Figma (font substitution/metrics) and COLLIDE with the second (the Hero <h1>
+    // "luxury / made for" overlap). Merge a text-ONLY container (children are just text
+    // runs + <br>, one uniform style) into a SINGLE text node — "\n" at each <br>, sized
+    // to the container width so it wraps like the DOM. One node can't overlap itself, and
+    // the stray 0-wide <br> frame is gone. Skipped when any non-text child is present
+    // (e.g. an inline icon), so styled/iconed inline content is left exactly as-is.
+    const kids = (node.children || []).filter((c) => (c.w || 0) > 0 || (c.h || 0) > 0 || c.tag === "br");
+    const textRuns = kids.filter((c) => c.kind === "text");
+    const isTextBox = kids.length > 0 && textRuns.length > 0 && kids.every((c) => c.kind === "text" || c.tag === "br");
+    const uniform = isTextBox && textRuns.every((r) => r.text.family === textRuns[0].text.family && r.text.size === textRuns[0].text.size && r.text.weight === textRuns[0].text.weight);
+    if (isTextBox && uniform && (textRuns.length > 1 || kids.some((c) => c.tag === "br"))) {
+      let chars = "";
+      for (const c of kids) { if (c.kind === "text") chars += c.text.chars; else if (c.tag === "br") chars += "\n"; }
+      const merged = { kind: "text", x: 0, y: 0, w: node.w, h: node.h, text: { ...textRuns[0].text, chars } };
+      const child = await build(merged, frame, false, photos);
+      if (!auto) placeChild(child, merged); // auto frames lay it out; non-auto place at 0,0
+      return frame;
+    }
     for (const c of node.children || []) {
       // Skip display:none / zero-box elements: they carry no pixels but, as flex
       // items, corrupt justification (a hidden 0-w nav turns a 2-item space-between
