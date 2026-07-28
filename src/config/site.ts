@@ -83,6 +83,17 @@ const rawProjectType = (import.meta.env.VITE_PROJECT_TYPE ?? "").trim().toLowerC
 export const projectType: ProjectType =
   rawProjectType === "app" || rawProjectType === "brand" ? rawProjectType : "website";
 
+/**
+ * Desktop nav menu style — the STARTING point chosen at setup (website projects).
+ * "traditional" = plain links, no open menu; "dropdown" = hover reveals a link
+ * list; "mega" = hover reveals a full content-width panel of sections. It only
+ * SEEDS the per-item menus in menu.ts — a designer diverges any item from there.
+ */
+export type MenuStyle = "traditional" | "dropdown" | "mega";
+const rawMenuStyle = (import.meta.env.VITE_MENU_STYLE ?? "").trim().toLowerCase();
+export const menuStyle: MenuStyle =
+  rawMenuStyle === "dropdown" || rawMenuStyle === "mega" ? rawMenuStyle : "traditional";
+
 // Whether the designer opted into a tablet preview (setup follow-up question).
 const enableTablet =
   (import.meta.env.VITE_ENABLE_TABLET ?? "").trim().toLowerCase() === "true";

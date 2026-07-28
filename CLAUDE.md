@@ -169,6 +169,16 @@ breakpoint, and every variation** (a variation diverges by dropping its own
   `?menu=open` capture pass (DesignSurface forces the drawer open) to snapshot it —
   a standalone component, deliberately **not** added to any page's compose order.
   Diverge per variation by dropping `MobileMenu.tsx` into `src/variations/{id}/`.
+- **Desktop nav menus.** Each nav item can reveal a **dropdown** or **mega** panel
+  on hover, configured in [menu.ts](src/app/menu.ts) — a per-item manifest
+  (`none` / `dropdown` / `mega`) **seeded from the setup `VITE_MENU_STYLE`** and
+  edited/mixed per item there. Panels are in-frame overlays in the Header (mega
+  spans the **content column** width), carrying `data-block="menu-{id}"` **only
+  while open**. The export discovers menu-bearing items (they carry
+  `data-menu-item`), opens each (`?menu=open&item={id}`), and captures it as its
+  own **"Menu — {Item}" Block** after the Header — one per menu-bearing item, so a
+  mix of mega + dropdown shows up as distinct blocks. Menu open/active state is
+  shared via [menuState.ts](src/app/menuState.ts) (same context as the mobile drawer).
 
 ### Exporting to Figma
 

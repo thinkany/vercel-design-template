@@ -314,6 +314,37 @@ async function main() {
       } catch (e) { console.error(`  ! mobile-menu capture skipped: ${e.message}`); }
     }
 
+    // ── Desktop open menus (dropdown/mega). Discover which nav items reveal a menu
+    // (they carry `data-menu-item`), then capture EACH one's open panel as its own
+    // block `menu-{id}` from a desktop pass with that item forced open — so varied
+    // states (one mega, one dropdown) each show up. Overlay chrome, so never added
+    // to page compose. Desktop only (tablet uses the hamburger/mobile drawer).
+    if ((!args.only || args.only.includes("menu") || args.only.some((o) => o.startsWith("menu-"))) && views.includes("desktop")) {
+      const dw = widths.desktop ?? FALLBACK_WIDTHS.desktop ?? 1440;
+      const settle = async () => page.evaluate(async () => {
+        try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
+        try { await Promise.all([...document.images].filter((i) => !i.complete).map((i) => i.decode().catch(() => {}))); } catch (e) {}
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      });
+      try {
+        await page.setViewport({ width: dw, height: VIEWPORT_HEIGHT, deviceScaleFactor: 2 });
+        await page.goto(`${args.url}/?v=${args.variation}&capture=desktop`, { waitUntil: "networkidle0" });
+        await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
+        const items = await page.evaluate(() => [...document.querySelectorAll("[data-menu-item]")].map((e) => e.getAttribute("data-menu-item")).filter(Boolean));
+        for (const id of items) {
+          const sel = `menu-${id}`;
+          await page.goto(`${args.url}/?v=${args.variation}&capture=desktop&menu=open&item=${encodeURIComponent(id)}`, { waitUntil: "networkidle0" });
+          await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
+          await settle();
+          const info = await page.evaluate((s) => { const el = document.querySelector(`[data-block="${s}"]`); return el ? { name: el.getAttribute("data-block-name") || s } : null; }, sel);
+          if (!info) { console.error(`  ! ${sel}: panel not open`); continue; }
+          const res = await page.evaluate(serializeRaw, sel, CAPTURED_STYLE_PROPS);
+          if (res.error) { console.error(`  ! ${sel}: ${res.error}`); continue; }
+          captured.push({ blockId: sel, name: info.name, page: pages[0]?.id || "home", route: "", view: "desktop", root: res.root });
+        }
+      } catch (e) { console.error(`  ! desktop menu capture skipped: ${e.message}`); }
+    }
+
     // Download + PNG-reencode every referenced image LOCALLY (bytes never sent to
     // cloud). Dedupe by url → one asset reused across blocks/views.
     const ASSETS = join(outDir, "assets");

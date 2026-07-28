@@ -2,7 +2,7 @@
 import { X } from "lucide-react";
 import { designPages } from "../pages";
 import { siteConfig } from "@/config/site";
-import { MENU_SIDE, useMobileMenu } from "../mobileMenu";
+import { MENU_SIDE, useMenuState } from "../menuState";
 
 /**
  * Default mobile menu — a slide-in drawer shown on the narrow breakpoints (below
@@ -21,7 +21,7 @@ import { MENU_SIDE, useMobileMenu } from "../mobileMenu";
  * Kept mounted (translated off-screen) so it slides both open and closed.
  */
 export function MobileMenu({ onNavigate }: { onNavigate: (page: string) => void }) {
-  const { open, setOpen } = useMobileMenu();
+  const { open, setOpen } = useMenuState();
   const pages = designPages;
   const off = MENU_SIDE === "left" ? "-translate-x-full" : "translate-x-full";
 

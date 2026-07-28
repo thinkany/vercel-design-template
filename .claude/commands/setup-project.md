@@ -213,11 +213,28 @@ Follow these steps:
    no desktop button; a **Web Site** opens on desktop; tablet appears only if
    they opted in.
 
+3c. **Ask the desktop menu style — websites only.** SKIP for `app`/`brand`
+   projects (no website nav). For a **Web Site**, ask with `AskUserQuestion`.
+   Header **"Menu style"**; `question`: "How should the desktop nav menus start?
+   You can change or mix these per item later in `src/app/menu.ts`." Options
+   (first = default):
+   - **"Traditional"** — plain links, no open menu. → leave `VITE_MENU_STYLE=""`.
+   - **"Hover dropdown"** — each item reveals a short link list on hover. →
+     `VITE_MENU_STYLE="dropdown"`.
+   - **"Mega menu"** — each item reveals a full content-width panel of sections. →
+     `VITE_MENU_STYLE="mega"`.
+   Explain the effect: this SEEDS every nav item's menu with a populated starter of
+   that style, which the designer edits or varies per item in
+   [menu.ts](src/app/menu.ts) (mix mega + dropdown + none). Each open menu — plus
+   the default mobile-menu drawer — exports to Figma as its own **"Menu — {Item}"
+   Block** after the Header.
+
 4. **Write the values back** into `.env`, preserving its comments and the rest
    of the file. Quote the values: `VITE_COMPANY_NAME="Acme Inc"`,
    `VITE_CLIENT_NAME="ACME ltd"`, `VITE_PROJECT_TYPE="app"`, and
    `VITE_ENABLE_TABLET="true"` (leave `VITE_ENABLE_TABLET=""` when tablet was
-   declined).
+   declined). For websites, also write `VITE_MENU_STYLE` from 3c (leave `""` for
+   traditional).
 
 5. **Confirm** what you set, and remind the user that these are Vite build-time
    vars: the dev server reloads automatically on `.env` change, but a running

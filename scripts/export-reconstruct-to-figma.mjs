@@ -455,6 +455,36 @@ async function main() {
       } catch (e) { console.error(`  ! mobile-menu capture skipped: ${e.message}`); }
     }
 
+    // Desktop open menus (dropdown/mega): capture each menu-bearing nav item's open
+    // panel as its own block menu-{id} from a desktop pass (item forced open). One
+    // block per item so varied states show; overlay chrome, not in page compose.
+    if ((!args.only || args.only.includes("menu") || args.only.some((o) => o.startsWith("menu-"))) && views.includes("desktop")) {
+      const dw = widths.desktop ?? FALLBACK_WIDTHS.desktop ?? 1440;
+      const settle = async () => page.evaluate(async () => {
+        try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
+        try { await Promise.all([...document.images].filter((i) => !i.complete).map((i) => i.decode().catch(() => {}))); } catch (e) {}
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      });
+      try {
+        await page.setViewport({ width: dw, height: VIEWPORT_HEIGHT, deviceScaleFactor: 2 });
+        await page.goto(`${args.url}/?v=${args.variation}&capture=desktop`, { waitUntil: "networkidle0" });
+        await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
+        const items = await page.evaluate(() => [...document.querySelectorAll("[data-menu-item]")].map((e) => e.getAttribute("data-menu-item")).filter(Boolean));
+        for (const id of items) {
+          const sel = `menu-${id}`;
+          if (blocks.has(sel)) continue;
+          await page.goto(`${args.url}/?v=${args.variation}&capture=desktop&menu=open&item=${encodeURIComponent(id)}`, { waitUntil: "networkidle0" });
+          await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
+          await settle();
+          const info = await page.evaluate((s) => { const el = document.querySelector(`[data-block="${s}"]`); return el ? { name: el.getAttribute("data-block-name") || s } : null; }, sel);
+          if (!info) { console.error(`  ! ${sel}: panel not open`); continue; }
+          const res = await page.evaluate(extractSpec, sel);
+          if (res.error) { console.error(`  ! ${sel}: ${res.error}`); continue; }
+          blocks.set(sel, { blockId: sel, name: info.name, page: pages[0]?.id || "home", route: "", views: { desktop: res.spec } });
+        }
+      } catch (e) { console.error(`  ! desktop menu capture skipped: ${e.message}`); }
+    }
+
     // Download image fills → local files for upload_assets.
     const ASSETS = join(args.out, "reconstruct-assets");
     await mkdir(ASSETS, { recursive: true });

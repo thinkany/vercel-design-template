@@ -4,7 +4,7 @@ import { PhoneFrame } from "./components/PhoneFrame";
 import { TabletFrame } from "./components/TabletFrame";
 import { ViewToggle } from "./components/ViewToggle";
 import { resolveComponent } from "./variationRegistry";
-import { MobileMenuContext } from "./mobileMenu";
+import { MenuStateContext } from "./menuState";
 import { previewConfig, projectType } from "@/config/site";
 
 type View = "desktop" | "tablet" | "mobile";
@@ -68,12 +68,16 @@ export function DesignSurface({
   const Footer = showChrome ? resolveComponent(getVariationId(), "Footer") : null;
   const MobileMenu = showChrome ? resolveComponent(getVariationId(), "MobileMenu") : null;
 
-  // Default mobile menu state. The Header's hamburger toggles it; the MobileMenu
-  // drawer reads it. In a `?menu=open` capture pass the drawer is FORCED open so
-  // the exporter can snapshot it as its own "Mobile Menu" block.
+  // Shared menu state. Interactively: the hamburger toggles the mobile drawer;
+  // hovering a desktop nav item sets the active item. For CAPTURE, a
+  // `?menu=open[&item={id}]` URL forces a menu open so the exporter can snapshot
+  // it — `&item={id}` opens that DESKTOP item's dropdown/mega (`menu-{id}` block);
+  // no item opens the MOBILE drawer (`mobile-menu` block).
   const [menuOpen, setMenuOpen] = useState(false);
-  const forceMenuOpen =
-    new URLSearchParams(window.location.search).get("menu") === "open";
+  const [activeItem, setActiveItem] = useState<string | null>(null);
+  const params = new URLSearchParams(window.location.search);
+  const forceMenu = params.get("menu") === "open";
+  const forceItem = forceMenu ? params.get("item") : null;
 
   // The design surface itself. `@container` makes it the responsive reference,
   // so page + Header/Footer `@sm:`/`@lg:` variants key off the DEVICE-FRAME
@@ -82,14 +86,23 @@ export function DesignSurface({
   // page content and are captured as part of the design; the MobileMenu drawer
   // overlays the surface (in-frame, no portal) and is captured only when open.
   const surface = (
-    <MobileMenuContext.Provider value={{ open: menuOpen || forceMenuOpen, setOpen: setMenuOpen }}>
+    <MenuStateContext.Provider
+      value={{
+        // Mobile drawer: forced open only when menu=open with NO specific item.
+        open: menuOpen || (forceMenu && !forceItem),
+        setOpen: setMenuOpen,
+        // Desktop: a forced item wins (capture), else the hovered item.
+        activeItem: forceItem ?? activeItem,
+        setActiveItem,
+      }}
+    >
       <div className="@container relative flex-1 flex flex-col min-h-full w-full">
         {Header && <Header onNavigate={onNavigate} />}
         <div className="flex-1 flex flex-col">{children}</div>
         {Footer && <Footer onNavigate={onNavigate} />}
         {MobileMenu && <MobileMenu onNavigate={onNavigate} />}
       </div>
-    </MobileMenuContext.Provider>
+    </MenuStateContext.Provider>
   );
 
   // Capture mode: bare design surface. The export tool sets the viewport width,
