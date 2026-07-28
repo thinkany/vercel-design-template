@@ -430,6 +430,31 @@ async function main() {
       pagesOut.push({ id: pg.id, name: pg.name, route: pg.route, blocks: pageBlockList });
     }
 
+    // Default mobile menu (slide-in drawer): global chrome overlaying the surface,
+    // not a page section, and only in the DOM when open — so it's captured in ONE
+    // extra pass on mobile with `&menu=open` (DesignSurface forces the drawer open).
+    // Standalone block; deliberately NOT added to any page's compose order.
+    if (!args.only || args.only.includes("mobile-menu")) {
+      const mv = views.includes("mobile") ? "mobile" : views[0];
+      const width = widths[mv] ?? FALLBACK_WIDTHS[mv] ?? 370;
+      try {
+        await page.setViewport({ width, height: VIEWPORT_HEIGHT, deviceScaleFactor: 2 });
+        await page.goto(`${args.url}/?v=${args.variation}&capture=${mv}&menu=open`, { waitUntil: "networkidle0" });
+        await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
+        await page.evaluate(async () => {
+          try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
+          try { await Promise.all([...document.images].filter((i) => !i.complete).map((i) => i.decode().catch(() => {}))); } catch (e) {}
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        });
+        const present = await page.evaluate(() => !!document.querySelector('[data-block="mobile-menu"]'));
+        if (present && !blocks.has("mobile-menu")) {
+          const res = await page.evaluate(extractSpec, "mobile-menu");
+          if (res.error) console.error(`  ! mobile-menu/${mv}: ${res.error}`);
+          else blocks.set("mobile-menu", { blockId: "mobile-menu", name: "Mobile Menu", page: pages[0]?.id || "home", route: "", views: { [mv]: res.spec } });
+        }
+      } catch (e) { console.error(`  ! mobile-menu capture skipped: ${e.message}`); }
+    }
+
     // Download image fills → local files for upload_assets.
     const ASSETS = join(args.out, "reconstruct-assets");
     await mkdir(ASSETS, { recursive: true });

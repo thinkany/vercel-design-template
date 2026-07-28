@@ -287,6 +287,33 @@ async function main() {
       pagesOut.push({ id: pg.id, name: pg.name, route: pg.route, blocks: pageBlockList });
     }
 
+    // ── Default mobile menu (slide-in drawer). It's global chrome overlaying the
+    // surface — not a page section — and only present in the DOM when open, so it's
+    // captured in ONE extra pass on the mobile breakpoint with `&menu=open` (which
+    // DesignSurface honors by forcing the drawer open). Captured as a standalone
+    // block; deliberately NOT added to any page's compose order. Absent for
+    // app/brand projects (no MobileMenu) or if a design removes it.
+    if (!args.only || args.only.includes("mobile-menu")) {
+      const mv = views.includes("mobile") ? "mobile" : views[0];
+      const width = widths[mv] ?? FALLBACK_WIDTHS[mv] ?? 370;
+      try {
+        await page.setViewport({ width, height: VIEWPORT_HEIGHT, deviceScaleFactor: 2 });
+        await page.goto(`${args.url}/?v=${args.variation}&capture=${mv}&menu=open`, { waitUntil: "networkidle0" });
+        await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
+        await page.evaluate(async () => {
+          try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
+          try { await Promise.all([...document.images].filter((i) => !i.complete).map((i) => i.decode().catch(() => {}))); } catch (e) {}
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        });
+        const present = await page.evaluate(() => !!document.querySelector('[data-block="mobile-menu"]'));
+        if (present) {
+          const res = await page.evaluate(serializeRaw, "mobile-menu", CAPTURED_STYLE_PROPS);
+          if (res.error) console.error(`  ! mobile-menu/${mv}: ${res.error}`);
+          else captured.push({ blockId: "mobile-menu", name: "Mobile Menu", page: pages[0]?.id || "home", route: "", view: mv, root: res.root });
+        }
+      } catch (e) { console.error(`  ! mobile-menu capture skipped: ${e.message}`); }
+    }
+
     // Download + PNG-reencode every referenced image LOCALLY (bytes never sent to
     // cloud). Dedupe by url → one asset reused across blocks/views.
     const ASSETS = join(outDir, "assets");

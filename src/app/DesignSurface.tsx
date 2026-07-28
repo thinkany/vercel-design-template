@@ -1,9 +1,10 @@
 // ©2026 thinkany llc. All rights reserved.
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { PhoneFrame } from "./components/PhoneFrame";
 import { TabletFrame } from "./components/TabletFrame";
 import { ViewToggle } from "./components/ViewToggle";
 import { resolveComponent } from "./variationRegistry";
+import { MobileMenuContext } from "./mobileMenu";
 import { previewConfig, projectType } from "@/config/site";
 
 type View = "desktop" | "tablet" | "mobile";
@@ -65,18 +66,30 @@ export function DesignSurface({
   const showChrome = chrome !== false && projectType === "website";
   const Header = showChrome ? resolveComponent(getVariationId(), "Header") : null;
   const Footer = showChrome ? resolveComponent(getVariationId(), "Footer") : null;
+  const MobileMenu = showChrome ? resolveComponent(getVariationId(), "MobileMenu") : null;
+
+  // Default mobile menu state. The Header's hamburger toggles it; the MobileMenu
+  // drawer reads it. In a `?menu=open` capture pass the drawer is FORCED open so
+  // the exporter can snapshot it as its own "Mobile Menu" block.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const forceMenuOpen =
+    new URLSearchParams(window.location.search).get("menu") === "open";
 
   // The design surface itself. `@container` makes it the responsive reference,
   // so page + Header/Footer `@sm:`/`@lg:` variants key off the DEVICE-FRAME
   // width (or, in capture mode, the viewport width the export tool sets) — the
   // live preview and the Figma export agree. Header/Footer stack above/below the
-  // page content and are captured as part of the design.
+  // page content and are captured as part of the design; the MobileMenu drawer
+  // overlays the surface (in-frame, no portal) and is captured only when open.
   const surface = (
-    <div className="@container relative flex-1 flex flex-col min-h-full w-full">
-      {Header && <Header onNavigate={onNavigate} />}
-      <div className="flex-1 flex flex-col">{children}</div>
-      {Footer && <Footer onNavigate={onNavigate} />}
-    </div>
+    <MobileMenuContext.Provider value={{ open: menuOpen || forceMenuOpen, setOpen: setMenuOpen }}>
+      <div className="@container relative flex-1 flex flex-col min-h-full w-full">
+        {Header && <Header onNavigate={onNavigate} />}
+        <div className="flex-1 flex flex-col">{children}</div>
+        {Footer && <Footer onNavigate={onNavigate} />}
+        {MobileMenu && <MobileMenu onNavigate={onNavigate} />}
+      </div>
+    </MobileMenuContext.Provider>
   );
 
   // Capture mode: bare design surface. The export tool sets the viewport width,

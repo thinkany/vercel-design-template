@@ -132,7 +132,7 @@ section (binds its colors to `--ta-*` variables, componentizes per breakpoint). 
 `blocks.ts`, no hand-built builders. Header/Footer carry markers too. See
 [`/export-figma`](.claude/commands/export-figma.md) for the derive pipeline.
 
-### Global elements (Header / Footer)
+### Global elements (Header / Footer / Mobile Menu)
 
 Shared site chrome lives in **[Header.tsx](src/app/components/Header.tsx)** +
 **[Footer.tsx](src/app/components/Footer.tsx)** and is rendered **once, globally,
@@ -158,6 +158,17 @@ breakpoint, and every variation** (a variation diverges by dropping its own
   viewport width the export tool sets per breakpoint, so **preview and Figma
   export agree**. Portal-based overlays (shadcn `Sheet`/`Dialog`/`Drawer`) escape
   the frame to `document.body`; use inline positioning for in-frame menus.
+- **Default mobile menu.** [MobileMenu.tsx](src/app/components/MobileMenu.tsx) is a
+  slide-in drawer shipped **by default** (a designer never has to ask for one).
+  DesignSurface renders it as an **in-frame overlay** (not a portal); the Header's
+  hamburger toggles it through shared state in
+  [mobileMenu.ts](src/app/mobileMenu.ts), and it slides from **`MENU_SIDE`** — the
+  *same edge the hamburger sits on*, since that one constant positions both. It
+  **exports as its own `mobile-menu` Block**: the drawer carries the
+  `data-block` marker only while open, and the export tools do one extra
+  `?menu=open` capture pass (DesignSurface forces the drawer open) to snapshot it —
+  a standalone component, deliberately **not** added to any page's compose order.
+  Diverge per variation by dropping `MobileMenu.tsx` into `src/variations/{id}/`.
 
 ### Exporting to Figma
 
