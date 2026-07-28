@@ -171,7 +171,31 @@ function serializeRaw(blockSel, PROPS) {
   const root = document.querySelector(`[data-block="${blockSel}"]`);
   if (!root) return { error: "not found" };
   const relRect = (rect, pr) => ({ x: Math.round(rect.left - pr.left), y: Math.round(rect.top - pr.top), w: Math.round(rect.width), h: Math.round(rect.height) });
-  const styleOf = (cs) => { const o = {}; for (const p of PROPS) { const v = cs[p]; if (v != null && v !== "") o[p] = v; } return o; };
+  // Resolve `line-height: normal` to an explicit px value. getComputedStyle keeps
+  // it as the literal "normal", and Figma's AUTO line-height computes font-natural
+  // leading differently than the browser — so a `normal` heading/paragraph would
+  // export with subtly-off vertical rhythm. Measure the browser's real normal
+  // leading with a hidden probe (font-natural height of one line), cached per
+  // font-family|size|weight|style. Baked into the raw style so the derive emits it.
+  const _lh = {};
+  const normalLH = (cs) => {
+    const key = cs.fontFamily + "|" + cs.fontSize + "|" + cs.fontWeight + "|" + cs.fontStyle;
+    if (_lh[key] != null) return _lh[key];
+    const s = document.createElement("span");
+    s.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;line-height:normal;padding:0;border:0;margin:0";
+    s.style.fontFamily = cs.fontFamily; s.style.fontSize = cs.fontSize; s.style.fontWeight = cs.fontWeight; s.style.fontStyle = cs.fontStyle;
+    s.textContent = "Mg";
+    document.body.appendChild(s);
+    const h = s.getBoundingClientRect().height;
+    document.body.removeChild(s);
+    return (_lh[key] = Math.round(h) + "px");
+  };
+  const styleOf = (cs) => {
+    const o = {};
+    for (const p of PROPS) { const v = cs[p]; if (v != null && v !== "") o[p] = v; }
+    if (o.lineHeight === "normal" && o.fontSize) o.lineHeight = normalLH(cs);
+    return o;
+  };
   const walk = (el, pr) => {
     const cs = getComputedStyle(el);
     const rect = el.getBoundingClientRect();

@@ -262,9 +262,24 @@ function extractSpec(blockSel) {
   // `align` carries the DOM's text-align so the builder can center/right wrapped
   // copy: a tight single-line box at a centered x LOOKS centered, but a wrapped
   // paragraph left-aligns within its box unless textAlignHorizontal is set.
+  // Resolve `line-height: normal` to explicit px (getComputedStyle keeps it literal,
+  // and Figma's AUTO leading differs from the browser's) via a cached hidden probe.
+  const _lh = {};
+  const normalLH = (cs) => {
+    const key = cs.fontFamily + "|" + cs.fontSize + "|" + cs.fontWeight + "|" + cs.fontStyle;
+    if (_lh[key] != null) return _lh[key];
+    const s = document.createElement("span");
+    s.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;line-height:normal;padding:0;border:0;margin:0";
+    s.style.fontFamily = cs.fontFamily; s.style.fontSize = cs.fontSize; s.style.fontWeight = cs.fontWeight; s.style.fontStyle = cs.fontStyle;
+    s.textContent = "Mg";
+    document.body.appendChild(s);
+    const h = s.getBoundingClientRect().height;
+    document.body.removeChild(s);
+    return (_lh[key] = Math.round(h));
+  };
   const textStyle = (cs) => {
     const t = { family: cs.fontFamily.split(",")[0].replace(/["']/g, "").trim(), size: px(cs.fontSize), weight: parseInt(cs.fontWeight, 10) || 400, color: toRGBA(cs.color) };
-    if (cs.lineHeight !== "normal") t.lineHeight = px(cs.lineHeight);
+    t.lineHeight = cs.lineHeight !== "normal" ? px(cs.lineHeight) : normalLH(cs);
     const letter = cs.letterSpacing === "normal" ? 0 : parseFloat(cs.letterSpacing); if (letter) t.letter = letter;
     if (cs.textTransform && cs.textTransform !== "none") t.transform = cs.textTransform;
     // start/left is the default (omitted); end→right for LTR copy.
