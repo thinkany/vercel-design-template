@@ -178,7 +178,18 @@ if (PHASE === "reconstruct") {
       // must KEEP that width and wrap; the default WIDTH_AND_HEIGHT re-lays them onto
       // one long line that overflows the frame and breaks the column's centering.
       const lh = t.lineHeight || t.size * 1.3;
-      if (node.w > 0 && node.h > lh * 1.4) { tn.textAutoResize = "HEIGHT"; tn.resize(Math.max(1, node.w), tn.height); }
+      if (node.w > 0 && node.h > lh * 1.4) {
+        tn.textAutoResize = "HEIGHT";
+        // Wrap at the AVAILABLE width (parent content box), not the tight measured
+        // content width (= widest line). Figma re-flows text, and at the narrower
+        // measured width — with slightly wider font metrics than the browser — a
+        // trailing word spills onto an extra line past the reserved height
+        // ("…lived by the / water."). Widen to the parent's inner width (never
+        // narrower than measured) so wrapping matches the DOM.
+        let wrapW = node.w;
+        try { const pw = parent.width - (parent.paddingLeft || 0) - (parent.paddingRight || 0) - (node.x || 0); if (pw > wrapW) wrapW = pw; } catch (e) {}
+        tn.resize(Math.max(1, wrapW), tn.height);
+      }
       return tn;
     }
     if (node.kind === "svg") {
