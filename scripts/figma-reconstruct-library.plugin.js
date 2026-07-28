@@ -131,6 +131,30 @@ if (PHASE === "reconstruct") {
   const isBox = (n) => n.kind !== "text" && n.kind !== "svg";
   const isAutoNode = (n) => isBox(n) && n.layout && (n.layout.mode === "row" || n.layout.mode === "column" || n.layout.mode === "grid");
   const overlayAlpha = (n) => (isBox(n) && (!n.children || !n.children.length) && (n.fills || []).length === 1 && n.fills[0].type === "solid" && n.fills[0].color.a != null && n.fills[0].color.a < 1) ? n.fills[0].color.a : null;
+  // Grid analysis from MEASURED geometry (not the ambiguous CSS `gap`, whose 2-value
+  // `row col` form and sub-pixel rounding mis-drove the old wrap). Classifies a grid as
+  // uniform "cards" (→ wrap auto-layout with the real col/row gaps) vs "positional" (→
+  // absolute placement from x/y, e.g. a header's nav|logo|actions column track that a
+  // 1-D flow can't reproduce), and derives the true gaps from sibling positions.
+  const median = (arr, fb) => arr.length ? arr.slice().sort((a, b) => a - b)[arr.length >> 1] : fb;
+  const gridInfo = (node) => {
+    const fl = (node.children || []).filter((c) => isBox(c) && c.position !== "absolute" && (c.w || 0) > 0);
+    if (fl.length < 2) return { kind: "positional", colGap: 0, rowGap: 0, flowN: fl.length };
+    const ws = fl.map((c) => c.w).sort((a, b) => a - b);
+    const uniform = (ws[ws.length - 1] - ws[0]) <= Math.max(2, 0.1 * ws[ws.length >> 1]);
+    if (!uniform) return { kind: "positional", colGap: 0, rowGap: 0, flowN: fl.length };
+    const rows = [];
+    for (const c of fl.slice().sort((a, b) => a.y - b.y || a.x - b.x)) {
+      const r = rows.find((r) => Math.abs(r.y - c.y) <= Math.max(4, c.h * 0.4));
+      if (r) r.items.push(c); else rows.push({ y: c.y, items: [c] });
+    }
+    const colGaps = [], rowGaps = [];
+    for (const r of rows) { r.items.sort((a, b) => a.x - b.x); for (let i = 1; i < r.items.length; i++) { const g = r.items[i].x - (r.items[i - 1].x + r.items[i - 1].w); if (g >= 0) colGaps.push(g); } r.maxB = Math.max(...r.items.map((c) => c.y + c.h)); }
+    rows.sort((a, b) => a.y - b.y);
+    for (let j = 1; j < rows.length; j++) { const g = rows[j].y - rows[j - 1].maxB; if (g >= 0) rowGaps.push(g); }
+    const fb = node.layout.gap || 0;
+    return { kind: "cards", colGap: Math.round(median(colGaps, fb)), rowGap: Math.round(median(rowGaps, fb)), flowN: fl.length };
+  };
 
   async function build(node, parent, isRoot, photos) {
     if (node.kind === "text") {
@@ -173,7 +197,11 @@ if (PHASE === "reconstruct") {
       }
       return g;
     }
-    const auto = isAutoNode(node); const isGrid = auto && node.layout.mode === "grid";
+    // Positional grids (non-uniform column tracks like a header) can't be a 1-D flow —
+    // drop them to a plain frame with absolutely-placed children (measured x/y = exact).
+    const gi = (isBox(node) && node.layout && node.layout.mode === "grid") ? gridInfo(node) : null;
+    const auto = isAutoNode(node) && !(gi && gi.kind === "positional");
+    const isGrid = auto && node.layout.mode === "grid";
     const frame = auto ? figma.createAutoLayout(node.layout.mode === "column" ? "VERTICAL" : "HORIZONTAL") : figma.createFrame();
     // Honor the DOM's overflow: an `overflow-hidden rounded-*` container must CLIP so
     // its rounded corners cut opaque children (else a square photo/gradient avatar
@@ -226,7 +254,13 @@ if (PHASE === "reconstruct") {
       // multiple rows, and HUG the counter axis so the block grows to fit every row.
       // (Fixing the counter axis instead left the width hugging → everything strung
       // into one overflowing row, e.g. the 4×2 roster grid became a single 8-wide row.)
-      if (isGrid) { frame.layoutWrap = "WRAP"; frame.counterAxisSpacing = L.gap || 0; frame.resize(Math.max(1, node.w), Math.max(1, node.h)); frame.primaryAxisSizingMode = "FIXED"; frame.counterAxisSizingMode = "AUTO"; }
+      // Card grid → wrap. Use the MEASURED column gap (horizontal itemSpacing) and row
+      // gap (counterAxisSpacing) from gridInfo, not the CSS `gap` (which conflates the two
+      // and mis-wrapped, e.g. `40px 24px` spacing cards 40 apart so a 4-up row overflowed).
+      // +flowN px of primary slack absorbs sub-pixel width rounding (each column rounds up
+      // ≤1px) so a row that fits in the browser isn't forced to wrap early; a genuine extra
+      // item overflows by hundreds of px and still wraps.
+      if (isGrid) { frame.layoutWrap = "WRAP"; frame.itemSpacing = gi.colGap; frame.counterAxisSpacing = gi.rowGap; frame.resize(Math.max(1, node.w + gi.flowN), Math.max(1, node.h)); frame.primaryAxisSizingMode = "FIXED"; frame.counterAxisSizingMode = "AUTO"; }
       // Non-grid: preserve the DOM's measured box on EVERY auto frame (not just root).
       // Keep BOTH axes FIXED — width so justify (space-between/center) has room, height
       // so fixed-aspect boxes (icon circles, date badges, card headers) don't collapse
