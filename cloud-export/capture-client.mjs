@@ -238,6 +238,21 @@ function collectImageUrls(node, urls) {
   for (const c of node.children || []) collectImageUrls(c, urls);
 }
 
+// Settle before serializing so every measured box is FINAL: wait for webfonts,
+// image decode, and two paint frames — but BOUND each wait. Headless Chrome
+// frequently never `complete`s external CDN images (rate-limited/blocked bots), and
+// an unbounded img.decode() would stall the whole capture to the 600s protocol
+// timeout and crash the run. Bounding lets a slow/blocked asset lapse (the box is
+// still measured; it just may be pre-decode) instead of hanging the export.
+async function settlePage(page) {
+  await page.evaluate(async () => {
+    const race = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(r, ms))]);
+    try { if (document.fonts && document.fonts.ready) await race(document.fonts.ready, 4000); } catch (e) {}
+    try { await race(Promise.all([...document.images].filter((i) => !i.complete).map((i) => i.decode().catch(() => {}))), 5000); } catch (e) {}
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  });
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) return help();
@@ -266,11 +281,7 @@ async function main() {
         await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
         // Settle: fonts swapped, images decoded, two paint frames — so every
         // measured box is FINAL before we serialize geometry.
-        await page.evaluate(async () => {
-          try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
-          try { await Promise.all([...document.images].filter((i) => !i.complete).map((i) => i.decode().catch(() => {}))); } catch (e) {}
-          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-        });
+        await settlePage(page);
         const markers = await page.evaluate(() => [...document.querySelectorAll("[data-block]")].map((el) => ({ blockId: el.getAttribute("data-block"), name: el.getAttribute("data-block-name") || el.getAttribute("data-block") })));
         for (const m of markers) {
           if (!m.blockId) continue;
@@ -300,11 +311,7 @@ async function main() {
         await page.setViewport({ width, height: VIEWPORT_HEIGHT, deviceScaleFactor: 2 });
         await page.goto(`${args.url}/?v=${args.variation}&capture=${mv}&menu=open`, { waitUntil: "networkidle0" });
         await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
-        await page.evaluate(async () => {
-          try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
-          try { await Promise.all([...document.images].filter((i) => !i.complete).map((i) => i.decode().catch(() => {}))); } catch (e) {}
-          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-        });
+        await settlePage(page);
         const present = await page.evaluate(() => !!document.querySelector('[data-block="mobile-menu"]'));
         if (present) {
           const res = await page.evaluate(serializeRaw, "mobile-menu", CAPTURED_STYLE_PROPS);
@@ -321,11 +328,6 @@ async function main() {
     // to page compose. Desktop only (tablet uses the hamburger/mobile drawer).
     if ((!args.only || args.only.includes("menu") || args.only.some((o) => o.startsWith("menu-"))) && views.includes("desktop")) {
       const dw = widths.desktop ?? FALLBACK_WIDTHS.desktop ?? 1440;
-      const settle = async () => page.evaluate(async () => {
-        try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
-        try { await Promise.all([...document.images].filter((i) => !i.complete).map((i) => i.decode().catch(() => {}))); } catch (e) {}
-        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      });
       try {
         await page.setViewport({ width: dw, height: VIEWPORT_HEIGHT, deviceScaleFactor: 2 });
         await page.goto(`${args.url}/?v=${args.variation}&capture=desktop`, { waitUntil: "networkidle0" });
@@ -335,7 +337,7 @@ async function main() {
           const sel = `menu-${id}`;
           await page.goto(`${args.url}/?v=${args.variation}&capture=desktop&menu=open&item=${encodeURIComponent(id)}`, { waitUntil: "networkidle0" });
           await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
-          await settle();
+          await settlePage(page);
           const info = await page.evaluate((s) => { const el = document.querySelector(`[data-block="${s}"]`); return el ? { name: el.getAttribute("data-block-name") || s } : null; }, sel);
           if (!info) { console.error(`  ! ${sel}: panel not open`); continue; }
           const res = await page.evaluate(serializeRaw, sel, CAPTURED_STYLE_PROPS);
@@ -359,7 +361,10 @@ async function main() {
         // Re-encode to PNG in-browser (canvas): Figma's upload renders webp alpha
         // as fully transparent, so normalize every image to PNG first.
         const dataUrl = await page.evaluate(async (url) => {
-          const blob = await (await fetch(url)).blob();
+          // Bound the fetch: a slow/blocked CDN image must not hang the download
+          // pass. On timeout the outer try/catch logs + skips this one asset.
+          const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("fetch timeout")), ms))]);
+          const blob = await withTimeout(fetch(url).then((r) => r.blob()), 15000);
           const bmp = await createImageBitmap(blob);
           const cv = document.createElement("canvas"); cv.width = bmp.width; cv.height = bmp.height;
           cv.getContext("2d").drawImage(bmp, 0, 0);
