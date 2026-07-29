@@ -27,10 +27,11 @@ export function MobileMenu({ onNavigate }: { onNavigate: (page: string) => void 
 
   return (
     <div className="@lg:hidden" aria-hidden={!open}>
-      {/* Scrim — dims the page behind the drawer; click to dismiss. */}
+      {/* Scrim — dims the page behind the drawer; click to dismiss. Above the
+          sticky header (z-[60]) so the drawer covers the whole surface. */}
       <div
         onClick={() => setOpen(false)}
-        className={`absolute inset-0 z-30 bg-black/40 transition-opacity duration-300 ${
+        className={`absolute inset-0 z-[70] bg-black/40 transition-opacity duration-300 ${
           open ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       />
@@ -39,7 +40,7 @@ export function MobileMenu({ onNavigate }: { onNavigate: (page: string) => void 
           the open drawer and ignores the closed off-screen one. */}
       <nav
         {...(open ? { "data-block": "mobile-menu", "data-block-name": "Mobile Menu" } : {})}
-        className={`absolute inset-y-0 ${MENU_SIDE === "left" ? "left-0" : "right-0"} z-40 flex w-[78%] max-w-[320px] flex-col bg-ta-cream shadow-2xl transition-transform duration-300 ${
+        className={`absolute inset-y-0 ${MENU_SIDE === "left" ? "left-0" : "right-0"} z-[80] flex w-[78%] max-w-[320px] flex-col bg-ta-cream shadow-2xl transition-transform duration-300 ${
           open ? "translate-x-0" : `${off} pointer-events-none`
         }`}
       >

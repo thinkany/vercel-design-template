@@ -100,7 +100,13 @@ export function Header({ onNavigate }: { onNavigate: (page: string) => void }) {
       data-block="header"
       data-block-name="Header"
       onMouseLeave={() => setActiveItem(null)}
-      className="relative w-full border-b border-black/10 bg-ta-cream"
+      // Sticky by DEFAULT so the nav never scrolls away (ask Claude to unstick —
+      // swap `sticky top-0` for `relative` — if a design wants it to scroll off).
+      // `sticky` + a high z establishes a stacking context ABOVE the page content,
+      // so the dropdown/mega panels that overflow below the header are never hidden
+      // behind a later content section (the classic "menu isn't showing" bug). The
+      // MobileMenu drawer sits ABOVE this (z-[70]/z-[80]) so it still covers the bar.
+      className="sticky top-0 z-[60] w-full border-b border-black/10 bg-ta-cream"
     >
       <div className="flex items-center justify-between px-6 py-4 @lg:px-10">
         {/* Logo lockup */}
