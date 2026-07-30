@@ -31,7 +31,7 @@ function HomeContent({ onNavigate }: { onNavigate: (page: string) => void }) {
           {siteConfig.projectName}
         </div>
       )}
-      <h1 className="font-ta-display text-[clamp(36px,6vw,64px)] font-normal text-ta-ink mb-5 leading-[1.05] tracking-[-0.02em]">
+      <h1 className="font-ta-display text-[clamp(36px,6cqi,64px)] font-normal text-ta-ink mb-5 leading-[1.05] tracking-[-0.02em]">
         {siteConfig.clientName}
       </h1>
       <p className="font-ta-serif text-[17px] text-ta-gray-dark leading-[1.6] max-w-[440px] mb-9">

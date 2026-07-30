@@ -156,8 +156,17 @@ breakpoint, and every variation** (a variation diverges by dropping its own
   **container-query variants (`@sm:`/`@lg:` …) and `cqw`/`cqi` units** for
   responsive design: they key off the frame width in the live preview *and* the
   viewport width the export tool sets per breakpoint, so **preview and Figma
-  export agree**. Portal-based overlays (shadcn `Sheet`/`Dialog`/`Drawer`) escape
-  the frame to `document.body`; use inline positioning for in-frame menus.
+  export agree**. **Height is the same trap:** `vh`/`min-h-screen`/`100dvh` read
+  the **window height**, so a "full-screen" section resizes as the *browser*
+  resizes and diverges from the fixed device frame. For device-relative height use
+  **`min-h-full`** — it keys off the frame (a definite-height ancestor), **not**
+  the window, so a full-height section stays put as the browser resizes; **never**
+  `vh`/`min-h-screen`/`100dvh` for in-frame content. The export captures each view
+  at its **frame height** (phone 780 / tablet 900 — see `VIEWPORT_HEIGHTS` in the
+  capture scripts) so height-relative content measures identically in preview and
+  Figma. Portal-based overlays
+  (shadcn `Sheet`/`Dialog`/`Drawer`) escape the frame to `document.body`; use
+  inline positioning for in-frame menus.
 - **Default mobile menu.** [MobileMenu.tsx](src/app/components/MobileMenu.tsx) is a
   slide-in drawer shipped **by default** (a designer never has to ask for one).
   DesignSurface renders it as an **in-frame overlay** (not a portal); the Header's

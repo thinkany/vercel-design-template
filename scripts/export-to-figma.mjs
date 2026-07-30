@@ -75,6 +75,13 @@ const CAPTURE_JS = "https://mcp.figma.com/mcp/html-to-design/capture.js";
 // with previewWidths in src/config/site.ts).
 const FALLBACK_WIDTHS = { desktop: 1440, tablet: 664, mobile: 370 };
 const VIEWPORT_HEIGHT = 900; // starting height; full-page capture grabs the rest
+// Per-view capture height, matched to the device-frame portrait heights in the
+// live preview (PhoneFrame 780, TabletFrame 900, desktop unframed). This keeps
+// `min-h-full` content resolving to the SAME device height in the export as in
+// the preview — otherwise a full-height mobile section would measure at the flat
+// 900 here but 780 in the phone frame, and preview↔Figma would diverge.
+const VIEWPORT_HEIGHTS = { desktop: 900, tablet: 900, mobile: 780 };
+const viewHeight = (view) => VIEWPORT_HEIGHTS[view] ?? VIEWPORT_HEIGHT;
 
 function parseArgs(argv) {
   const args = { url: "http://localhost:5173", variation: "v00", out: "figma-export", captures: null, views: null, pages: null, blocks: false, timing: false, fast: false };
@@ -236,7 +243,7 @@ async function main() {
       const routeFlag = pg.route ? `&${pg.route}` : "";
       for (const view of views) {
         const width = widths[view] ?? FALLBACK_WIDTHS[view] ?? 1440;
-        await page.setViewport({ width, height: VIEWPORT_HEIGHT, deviceScaleFactor: 2 });
+        await page.setViewport({ width, height: viewHeight(view), deviceScaleFactor: 2 });
         const target = `${args.url}/?v=${args.variation}${routeFlag}&capture=${view}`;
         await page.goto(target, { waitUntil: "networkidle0" });
         await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });

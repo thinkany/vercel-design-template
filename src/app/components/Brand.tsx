@@ -16,7 +16,7 @@ export function Brand({ onNavigate }: Props) {
       <div className="font-ta-sans text-[11px] font-semibold tracking-[0.18em] uppercase text-ta-gray-mid mb-5">
         Brand Guideline — Coming Soon
       </div>
-      <h1 className="font-ta-display text-[clamp(36px,6vw,64px)] font-normal text-ta-ink mb-5 leading-[1.05] tracking-[-0.02em]">
+      <h1 className="font-ta-display text-[clamp(36px,6cqi,64px)] font-normal text-ta-ink mb-5 leading-[1.05] tracking-[-0.02em]">
         {siteConfig.clientName}
       </h1>
       <p className="font-ta-serif text-[17px] text-ta-gray-dark leading-[1.6] max-w-[460px] mb-9">

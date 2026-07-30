@@ -33,6 +33,13 @@ import { performance } from "node:perf_hooks";
 
 const FALLBACK_WIDTHS = { desktop: 1440, tablet: 664, mobile: 370 };
 const VIEWPORT_HEIGHT = 900;
+// Per-view capture height, matched to the device-frame portrait heights in the
+// live preview (PhoneFrame 780, TabletFrame 900, desktop unframed). Keeps
+// `min-h-full` content resolving to the SAME device height in the derive as in
+// the preview — without this a full-height mobile section measures at 900 here
+// but 780 in the phone frame, so preview↔Figma diverge.
+const VIEWPORT_HEIGHTS = { desktop: 900, tablet: 900, mobile: 780 };
+const viewHeight = (view) => VIEWPORT_HEIGHTS[view] ?? VIEWPORT_HEIGHT;
 
 // The raw computed-style props the cloud derive reads. The client is the SOLE
 // producer of these, so this list is the runtime source of truth; contracts.ts
@@ -276,7 +283,7 @@ async function main() {
       const pageBlockList = [];
       for (const view of views) {
         const width = widths[view] ?? FALLBACK_WIDTHS[view] ?? 1440;
-        await page.setViewport({ width, height: VIEWPORT_HEIGHT, deviceScaleFactor: 2 });
+        await page.setViewport({ width, height: viewHeight(view), deviceScaleFactor: 2 });
         await page.goto(`${args.url}/?v=${args.variation}${routeFlag}&capture=${view}`, { waitUntil: "networkidle0" });
         await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
         // Settle: fonts swapped, images decoded, two paint frames — so every
@@ -308,7 +315,7 @@ async function main() {
       const mv = views.includes("mobile") ? "mobile" : views[0];
       const width = widths[mv] ?? FALLBACK_WIDTHS[mv] ?? 370;
       try {
-        await page.setViewport({ width, height: VIEWPORT_HEIGHT, deviceScaleFactor: 2 });
+        await page.setViewport({ width, height: viewHeight(mv), deviceScaleFactor: 2 });
         await page.goto(`${args.url}/?v=${args.variation}&capture=${mv}&menu=open`, { waitUntil: "networkidle0" });
         await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
         await settlePage(page);
@@ -340,7 +347,7 @@ async function main() {
     if ((!args.only || args.only.includes("menu") || args.only.some((o) => o.startsWith("menu-"))) && views.includes("desktop")) {
       const dw = widths.desktop ?? FALLBACK_WIDTHS.desktop ?? 1440;
       try {
-        await page.setViewport({ width: dw, height: VIEWPORT_HEIGHT, deviceScaleFactor: 2 });
+        await page.setViewport({ width: dw, height: viewHeight("desktop"), deviceScaleFactor: 2 });
         await page.goto(`${args.url}/?v=${args.variation}&capture=desktop`, { waitUntil: "networkidle0" });
         await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
         const items = await page.evaluate(() => [...document.querySelectorAll("[data-menu-item]")].map((e) => e.getAttribute("data-menu-item")).filter(Boolean));

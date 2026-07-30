@@ -133,7 +133,10 @@ routing (`?v={id}&about`), rendering, the nav link, and Figma export. No
 1. **Container queries, NOT viewport.** The design renders in a fixed-width device
    frame inside the real window, so `md:`/`lg:` and `vw`/`vh` read the *window*,
    not the frame. Use container variants **`@sm:` / `@lg:` …** and **`cqw`/`cqi`**
-   units so the preview and the Figma export agree.
+   units so the preview and the Figma export agree. For **device-relative height**,
+   use **`min-h-full`** — it keys off the frame, not the window — and **never
+   `vh`/`min-h-screen`/`100dvh`**, which read the browser window, so the section
+   resizes as the browser resizes and diverges from the frame + the export.
 2. **Tokens only, via utilities.** `bg-ta-*` / `text-ta-*` / `border-ta-*` for
    colors, `font-ta-display|serif|sans|mono` for type. Never raw hex/font stacks.
    Fall back to inline `style={{}}` only as a last resort.
