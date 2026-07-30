@@ -210,9 +210,24 @@ if (PHASE === "reconstruct") {
     }
     // Positional grids (non-uniform column tracks like a header) can't be a 1-D flow —
     // drop them to a plain frame with absolutely-placed children (measured x/y = exact).
-    const gi = (isBox(node) && node.layout && node.layout.mode === "grid") ? gridInfo(node) : null;
+    // A grid, OR a flex ROW whose children actually WRAP to multiple visual rows
+    // (measured y spans more than one line — e.g. two CTAs that fit side-by-side on
+    // desktop but stack on mobile), gets the same wrap/positional treatment as a grid.
+    // Without this, wrapped row items render side-by-side and overflow instead of
+    // stacking. Non-wrapping rows (all children on one line) are untouched.
+    const rowWraps = isBox(node) && node.layout && node.layout.mode === "row" && (() => {
+      const fl = (node.children || []).filter((c) => isBox(c) && c.position !== "absolute" && (c.w || 0) > 0);
+      if (fl.length < 2) return false;
+      // Real wrap = two items on DIFFERENT rows, i.e. they do NOT overlap vertically.
+      // (A single row of differently-sized, centre-aligned items has different y's but
+      // still overlaps — that must NOT count, or every icon+label row looks wrapped.)
+      const overlap = (a, b) => a.y < b.y + b.h && b.y < a.y + a.h;
+      for (let i = 0; i < fl.length; i++) for (let j = i + 1; j < fl.length; j++) if (!overlap(fl[i], fl[j])) return true;
+      return false;
+    })();
+    const gi = (isBox(node) && node.layout && (node.layout.mode === "grid" || rowWraps)) ? gridInfo(node) : null;
     const auto = isAutoNode(node) && !(gi && gi.kind === "positional");
-    const isGrid = auto && node.layout.mode === "grid";
+    const isWrap = auto && gi && gi.kind === "cards";
     const frame = auto ? figma.createAutoLayout(node.layout.mode === "column" ? "VERTICAL" : "HORIZONTAL") : figma.createFrame();
     // Honor the DOM's overflow: an `overflow-hidden rounded-*` container must CLIP so
     // its rounded corners cut opaque children (else a square photo/gradient avatar
@@ -251,7 +266,7 @@ if (PHASE === "reconstruct") {
       // alone misses them, collapsing icon↔number to 0. Grids keep their captured gap;
       // space-between distributes and ignores itemSpacing, so skip it there.
       let spacing = L.gap || 0;
-      if (!isGrid && !/space/.test(L.justify || "")) {
+      if (!isWrap && !/space/.test(L.justify || "")) {
         const flow = (node.children || []).filter((c) => c.position !== "absolute" && ((c.w || 0) > 0 || (c.h || 0) > 0));
         if (flow.length >= 2) {
           const vert = L.mode === "column"; const gaps = [];
@@ -271,7 +286,7 @@ if (PHASE === "reconstruct") {
       // +flowN px of primary slack absorbs sub-pixel width rounding (each column rounds up
       // ≤1px) so a row that fits in the browser isn't forced to wrap early; a genuine extra
       // item overflows by hundreds of px and still wraps.
-      if (isGrid) { frame.layoutWrap = "WRAP"; frame.itemSpacing = gi.colGap; frame.counterAxisSpacing = gi.rowGap; frame.resize(Math.max(1, node.w + gi.flowN), Math.max(1, node.h)); frame.primaryAxisSizingMode = "FIXED"; frame.counterAxisSizingMode = "AUTO"; }
+      if (isWrap) { frame.layoutWrap = "WRAP"; frame.itemSpacing = gi.colGap; frame.counterAxisSpacing = gi.rowGap; frame.resize(Math.max(1, node.w + gi.flowN), Math.max(1, node.h)); frame.primaryAxisSizingMode = "FIXED"; frame.counterAxisSizingMode = "AUTO"; }
       // Non-grid: preserve the DOM's measured box on EVERY auto frame (not just root).
       // Keep BOTH axes FIXED — width so justify (space-between/center) has room, height
       // so fixed-aspect boxes (icon circles, date badges, card headers) don't collapse
