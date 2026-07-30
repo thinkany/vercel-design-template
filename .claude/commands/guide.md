@@ -18,6 +18,10 @@ the preview/stop note. Use roughly this content, lightly adapted to the moment:
 - **/guide** — show this list.
 
 **Not commands — just ask in plain language:**
+- **Something looks wrong** — if a menu, section, or element isn't showing, is cut
+  off, or sits in the wrong place, just say so ("the mobile menu isn't showing").
+  I'll screenshot the design and fix the layering/positioning myself — you don't
+  need to open dev tools.
 - **Export to Figma** — say "export to Figma" and I'll walk you through the scope
   options: the styleguide + blocks, the pages composed from those blocks, or both —
   as one cohesive, editable Figma file.

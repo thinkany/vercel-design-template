@@ -194,6 +194,21 @@ guess), the offline script pairs (`export-brand`/`export-library`/`export-recons
 the Figma MCP. Load the `figma-use` + `figma-generate-library` skills before any
 builder call. The whole export is **offline + MCP only — it never runs on Vercel.**
 
+### Troubleshooting visuals
+
+When a designer reports a **visual symptom** — something **isn't showing, is cut
+off, mispositioned, overlapping, hidden behind something, or looks wrong** in the
+preview or the Figma export — **invoke
+[`/diagnose`](.claude/commands/diagnose.md) first.** Don't ask them to open dev
+tools and don't guess from the code alone. The reflex it enforces: **headlessly
+screenshot the isolated capture route** (`/?v={id}&capture={view}`, plus
+`&menu=open[&item={id}]` for menus) and **look at the image** — that's how you see
+what the designer sees. It carries the symptom→cause→fix table for this scaffold's
+gotchas (portal overlays escaping the device frame, container-query vs viewport
+units, `overflow-hidden` clipping, off-screen/collapsed elements, and the
+stacking-context rule behind most "hidden behind" bugs — fix the **ancestor's**
+context, never pile `z-index` on the child).
+
 ### Styling & tokens
 
 CSS entry [src/styles/index.css](src/styles/index.css) imports, in order:

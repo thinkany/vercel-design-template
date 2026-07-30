@@ -155,6 +155,12 @@ The dev server hot-reloads, so the change is live at http://localhost:5173 the
 moment you save — that's the verification surface (not Vercel, not a test suite).
 Glance at the preview, then invite the next adjustment.
 
+**Something not showing / cut off / mispositioned / hidden behind another
+element?** Don't spelunk the code blind or ask the designer to open dev tools —
+invoke [`/diagnose`](diagnose.md). It carries the reflex (headlessly screenshot
+the `?capture=` route and *look*) plus a symptom→cause→fix table for this
+scaffold's layering, clipping, and container-query gotchas.
+
 **Ignore IDE type noise.** Editing a `.tsx` here often lights up a wall of
 `JSX.IntrinsicElements` / `Cannot find module '@/config/site'` /
 `react/jsx-runtime` diagnostics — that's the editor's TS server failing to
