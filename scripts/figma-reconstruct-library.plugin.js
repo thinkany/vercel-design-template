@@ -186,8 +186,15 @@ if (PHASE === "reconstruct") {
         // trailing word spills onto an extra line past the reserved height
         // ("…lived by the / water."). Widen to the parent's inner width (never
         // narrower than measured) so wrapping matches the DOM.
+        // Only extend to the container's right edge for LEFT/justified copy, which
+        // fills from its x rightward. Centre/right-aligned text centres/right-aligns
+        // within its measured block — widening it to `parent.width - x` shifts it
+        // off-centre / reflows it to one line (a centred button label like
+        // "Shop the 5 Stripe" jumping off-centre). Those keep their measured width.
         let wrapW = node.w;
-        try { const pw = parent.width - (parent.paddingLeft || 0) - (parent.paddingRight || 0) - (node.x || 0); if (pw > wrapW) wrapW = pw; } catch (e) {}
+        if (!t.align || t.align === "justified") {
+          try { const pw = parent.width - (parent.paddingLeft || 0) - (parent.paddingRight || 0) - (node.x || 0); if (pw > wrapW) wrapW = pw; } catch (e) {}
+        }
         tn.resize(Math.max(1, wrapW), tn.height);
       }
       return tn;
