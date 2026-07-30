@@ -210,6 +210,19 @@ if (PHASE === "reconstruct") {
     }
     // Positional grids (non-uniform column tracks like a header) can't be a 1-D flow —
     // drop them to a plain frame with absolutely-placed children (measured x/y = exact).
+    // Collapse a BARE single-text wrapper (a box whose only in-flow child is one text
+    // run, with NO styling of its own — no fill/stroke/radius/shadow/blur/padding) into
+    // that text. The redundant frame otherwise mis-centres the text against siblings in
+    // an align-center row: a "→" glyph inside a line-height-tall <span> renders off from
+    // a shorter label (the "View all" arrow). The parent positions the returned text.
+    {
+      const w1 = (node.children || []).filter((c) => (c.w || 0) > 0 || (c.h || 0) > 0);
+      if (w1.length === 1 && w1[0].kind === "text"
+        && !node.fills && !node.stroke && !node.shadows && !node.blur && node.radius == null && !node.radii
+        && !(node.layout && node.layout.padding)) {
+        return build({ kind: "text", x: 0, y: 0, w: node.w, h: node.h, text: w1[0].text }, parent, false, photos);
+      }
+    }
     // A grid, OR a flex ROW whose children actually WRAP to multiple visual rows
     // (measured y spans more than one line — e.g. two CTAs that fit side-by-side on
     // desktop but stack on mobile), gets the same wrap/positional treatment as a grid.
