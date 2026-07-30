@@ -451,7 +451,17 @@ async function main() {
         await page.goto(`${args.url}/?v=${args.variation}&capture=${mv}&menu=open`, { waitUntil: "networkidle0" });
         await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
         await settlePage(page);
-        const present = await page.evaluate(() => !!document.querySelector('[data-block="mobile-menu"]'));
+        const present = await page.evaluate(() => {
+          const el = document.querySelector('[data-block="mobile-menu"]');
+          if (!el) return false;
+          // Full-height drawer is inset to the PAGE-tall surface → on a long page it
+          // measures at PAGE height, not the device viewport. Pin it to the viewport so
+          // it captures as a device-height drawer (content scrolls within, as it does
+          // live); taller-than-viewport menu content still clips to the drawer.
+          el.style.height = window.innerHeight + "px";
+          el.style.maxHeight = window.innerHeight + "px";
+          return true;
+        });
         if (present && !blocks.has("mobile-menu")) {
           const res = await page.evaluate(extractSpec, "mobile-menu");
           if (res.error) console.error(`  ! mobile-menu/${mv}: ${res.error}`);

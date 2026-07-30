@@ -312,7 +312,18 @@ async function main() {
         await page.goto(`${args.url}/?v=${args.variation}&capture=${mv}&menu=open`, { waitUntil: "networkidle0" });
         await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
         await settlePage(page);
-        const present = await page.evaluate(() => !!document.querySelector('[data-block="mobile-menu"]'));
+        const present = await page.evaluate(() => {
+          const el = document.querySelector('[data-block="mobile-menu"]');
+          if (!el) return false;
+          // A full-height drawer is inset to the PAGE-tall surface, so on a long page
+          // it measures at PAGE height, not the device viewport (e.g. 6674px on a long
+          // home page). Pin it to the viewport so it captures as a device-height drawer
+          // — its content scrolls within, exactly as it does live. Taller-than-viewport
+          // menu CONTENT still overflows and is clipped to the drawer like the real thing.
+          el.style.height = window.innerHeight + "px";
+          el.style.maxHeight = window.innerHeight + "px";
+          return true;
+        });
         if (present) {
           const res = await page.evaluate(serializeRaw, "mobile-menu", CAPTURED_STYLE_PROPS);
           if (res.error) console.error(`  ! mobile-menu/${mv}: ${res.error}`);
