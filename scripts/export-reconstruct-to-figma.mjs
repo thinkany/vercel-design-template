@@ -157,7 +157,7 @@ const VIEWPORT_HEIGHTS = { desktop: 900, tablet: 900, mobile: 780 };
 const viewHeight = (view) => VIEWPORT_HEIGHTS[view] ?? VIEWPORT_HEIGHT;
 
 function parseArgs(argv) {
-  const args = { url: "http://localhost:5173", variation: "v00", out: "figma-export", views: null, pages: null, only: null, fast: false, emitCalls: false, limit: 48000, print: false, menus: "first" };
+  const args = { url: "http://localhost:5173", variation: "v00", out: "figma-export", views: null, pages: null, only: null, fast: false, emitCalls: false, limit: 48000, print: false, block: null, menus: "first" };
   const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -171,6 +171,7 @@ function parseArgs(argv) {
     else if (a === "--emit-calls") args.emitCalls = true;
     else if (a === "--limit") args.limit = parseInt(argv[++i], 10) || 48000;
     else if (a === "--print") args.print = true;
+    else if (a === "--block") args.block = argv[++i];
     else if (a === "--menus") args.menus = argv[++i] === "all" ? "all" : "first";
     else if (a === "--help" || a === "-h") args.help = true;
   }
@@ -188,6 +189,39 @@ async function printManifest(args) {
   try { m = JSON.parse(await readFile(path, "utf8")); }
   catch { console.error(`No manifest at ${path}. Run the extractor first (without --print) to generate it.`); return; }
   const blocks = m.blocks || [];
+  // Drill into ONE block: node-type composition + heaviest sub-nodes. Replaces the
+  // ad-hoc `python3 -c` / `node -e` a designer's Claude would otherwise improvise to
+  // work out WHY a block is oversized (usually a few heavy inline SVGs). Read-only.
+  if (args.block) {
+    const b = blocks.find((x) => x.blockId === args.block);
+    if (!b) { console.error(`No block "${args.block}" in ${path}. Blocks present: ${blocks.map((x) => x.blockId).join(", ")}`); return; }
+    const selfBytes = (n) => JSON.stringify({ ...n, children: undefined }).length; // node minus its subtree
+    console.log(`\nblock "${b.blockId}" (${b.name}) — node composition\n`);
+    for (const [view, spec] of Object.entries(b.views || {})) {
+      const counts = {}; const bytesByKind = {}; const nodes = [];
+      const walk = (n) => {
+        const kind = n.kind || "element";
+        const sb = selfBytes(n);
+        counts[kind] = (counts[kind] || 0) + 1;
+        bytesByKind[kind] = (bytesByKind[kind] || 0) + sb;
+        nodes.push({ label: kind === "element" && n.tag ? `element <${n.tag}>` : kind, self: sb, svg: n.svg ? n.svg.length : 0 });
+        for (const c of n.children || []) walk(c);
+      };
+      walk(spec);
+      const specBytes = JSON.stringify(spec).length;
+      console.log(`  ${view}: ${nodes.length} nodes, ${kb(specBytes)} total`);
+      // Weight BY KIND (count · total self-bytes · % of block) — the "SVG is 63% of
+      // this block" signal that tells you what to trim on an oversized block.
+      for (const k of Object.keys(bytesByKind).sort((a, c) => bytesByKind[c] - bytesByKind[a])) {
+        console.log(`      ${k.padEnd(9)} ${String(counts[k]).padStart(3)} nodes  ${kb(bytesByKind[k]).padStart(8)}  ${Math.round(100 * bytesByKind[k] / specBytes)}%`);
+      }
+      nodes.sort((a, c) => c.self - a.self);
+      console.log(`    heaviest nodes (self size, subtree excluded):`);
+      for (const n of nodes.slice(0, 8)) console.log(`      ${n.label.padEnd(18)} ${kb(n.self).padStart(8)}${n.svg ? `  · svg markup ${kb(n.svg)}` : ""}`);
+      console.log("");
+    }
+    return;
+  }
   console.log(`\nreconstruct manifest — ${args.variation}  (${path})`);
   console.log(`  views: ${(m.views || []).join(", ")}   widths: ${JSON.stringify(m.widths || {})}`);
   console.log(`  ${blocks.length} block(s), ${(m.pages || []).length} page(s), ${(m.assets || []).length} asset(s)\n`);
@@ -236,6 +270,10 @@ export-reconstruct-to-figma — walk every [data-block] into a Figma build spec.
                          index, per-view sizes, compose order, batched calls.
                          Read-only — no capture, no dev server. Use this to
                          understand structure instead of ad-hoc node -e.
+      --block <id>       Drill into ONE block: node-type composition + the
+                         heaviest sub-nodes per view (e.g. which inline SVGs
+                         blow up an oversized block). Read-only. Use instead of
+                         improvising python3 -c / node -e.
 `);
 }
 
@@ -490,7 +528,7 @@ async function settlePage(page) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) return help();
-  if (args.print) return printManifest(args);
+  if (args.print || args.block) return printManifest(args);
   const t0 = performance.now();
   const puppeteer = await loadPuppeteer();
   const browser = await puppeteer.launch({ headless: "new", protocolTimeout: 600000 });
