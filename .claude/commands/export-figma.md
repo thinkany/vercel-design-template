@@ -362,7 +362,11 @@ The brand-tokens pair in detail:
         scaleMode:"FILL")` and POST the asset bytes from
         `figma-export/reconstruct-assets/{asset}` to the returned `submitUrl`. These
         uploads **can run in parallel**. This sets the real photos on the placeholder
-        rects.
+        rects. **Prefer uploading each call's `photos[]` right after that call**, so
+        there's nothing to accumulate. If you DO persist the running `{asset,nodeId}`
+        map across calls, write it with the **Write tool** to your scratchpad — **never
+        a bash `cat <<'EOF'` heredoc** (the JSON braces trip an "expansion obfuscation"
+        security heuristic and prompt every time).
   7. **Compose the design Pages from block INSTANCES — this is PART 2, runnable on its
      own** (top of the cascade variables → components → blocks → **pages**; REPLACES any
      raw page-capture). For **each** page in the discovery `pages`, assemble
