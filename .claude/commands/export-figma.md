@@ -300,18 +300,21 @@ The brand-tokens pair in detail:
         no polling — this is the whole discover+extract, done offline. (Iterate with
         `--fast` for the primary breakpoint, `--only {ids}` to re-extract some blocks.)
         Specs OMIT default-valued fields (≈40–50% smaller) so heavy blocks fit a call.
-     b. **Add `--emit-calls`** and the script also writes, per block, a **ready-to-
-        submit `use_figma` payload** to `figma-export/reconstruct-calls/` — assembled
+     b. **Add `--emit-calls`** and the script also writes **batched, ready-to-submit
+        `use_figma` payloads** to `figma-export/reconstruct-calls/` — assembled
         (spec + builder body) and **sized to the 50K `code` limit**, plus `_plan.json`.
         This is the robust way to run the builder: **size is known offline, so route
-        without failed "try-then-discover-it's-too-big" attempts.** A block whose two
-        breakpoints fit one call → `{blockId}.js` (builds the `View=` set directly). A
-        block that doesn't → per-view `{blockId}-{view}.js` **temp** builds
-        (`MANIFEST.temp` → standalone `__tmp:{blockId}:{view}` components, no combine,
-        no cross-call deletion) **+** a shared `_combine.js` (PHASE `combine`) that
-        merges the temps into the `View=` set (photos set on temp nodes survive the
-        combine). Submit each `calls[].file` verbatim as the `code` param (with your
-        fileKey), collect `photos[]` from each return, then submit `_combine.js`.
+        without failed "try-then-discover-it's-too-big" attempts.** **Blocks are
+        PACKED into batches**: as many as fit one call's limit go into a single
+        `blocks-NN.js` (the builder iterates `MANIFEST.blocks`, building each block's
+        `View=` set), so the export makes **far fewer sequential round-trips** — the
+        dominant cost — and amortizes the fixed builder body. A block too big even
+        alone → per-view `{blockId}-{view}.js` **temp** builds (`MANIFEST.temp` →
+        standalone `__tmp:{blockId}:{view}` components, no combine, no cross-call
+        deletion) **+** a shared `_combine.js` (PHASE `combine`) that merges the temps
+        into the `View=` set (photos set on temp nodes survive the combine). Submit
+        each `calls[].file` verbatim as the `code` param (with your fileKey), collect
+        `photos[]` from each return, then submit `_combine.js`.
         `_plan.json.oversized` flags any single view STILL over the limit even shrunk
         (needs a node-tree split — rare). Builder calls stay **sequential**; the
         `upload_assets` POSTs and per-page `compose` calls parallelize.

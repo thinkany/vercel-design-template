@@ -84,13 +84,33 @@ export async function emitCalls(manifest, out, limit) {
   const dir = join(out, "reconstruct-calls");
   await mkdir(dir, { recursive: true });
   const plan = { note: "PART 1 (Styleguide+Blocks): submit each calls[].file as the use_figma `code` param (with your fileKey), collect photos[] from each return + upload_assets, then submit _combine.js. PART 2 (Pages from blocks): once blocks exist, submit each compose[].file — one per page, fan out in parallel — to compose design Pages from block instances (resolved BY NAME off the Block Library page).", calls: [], combine: [], compose: [], oversized: [] };
+  // Greedily PACK blocks into batches that each fit one call's `limit`. The fixed
+  // builder body dominates every payload, so batching both amortizes it across
+  // several blocks AND — the real win — makes far fewer sequential use_figma
+  // round-trips (the export's dominant cost). The builder already iterates
+  // MANIFEST.blocks, so a batch is just `blocks: [b1, b2, …]`. A block too big even
+  // alone (`solo > limit`) falls to the per-view split path (temp builds+combine),
+  // unchanged. pruneStale stays off (batches are partial), so nothing clobbers
+  // sibling batches.
+  let batch = [];
+  let packed = 0; // total blocks folded into batch calls
+  const flush = async () => {
+    if (!batch.length) return;
+    const code = assemble({ ...base, blocks: batch }, "reconstruct");
+    const n = plan.calls.filter((c) => c.batch).length + 1;
+    const f = `blocks-${String(n).padStart(2, "0")}.js`;
+    await writeFile(join(dir, f), code);
+    plan.calls.push({ file: f, phase: "reconstruct", batch: true, blockIds: batch.map((b) => b.blockId), blocks: batch.length, bytes: code.length });
+    packed += batch.length;
+    batch = [];
+  };
   for (const blk of manifest.blocks) {
     const views = Object.keys(blk.views);
-    const full = assemble({ ...base, blocks: [blk] }, "reconstruct");
-    if (full.length <= limit) {
-      const f = `${blk.blockId}.js`; await writeFile(join(dir, f), full);
-      plan.calls.push({ file: f, blockId: blk.blockId, phase: "reconstruct", views, bytes: full.length });
-    } else {
+    const solo = assemble({ ...base, blocks: [blk] }, "reconstruct");
+    if (solo.length > limit) {
+      // Too big even alone → close the open batch first (preserve page order),
+      // then split this block per view into temp builds + a combine entry.
+      await flush();
       for (const view of views) {
         const code = assemble({ ...base, views: [view], blocks: [{ ...blk, views: { [view]: blk.views[view] } }], temp: true }, "reconstruct");
         const f = `${blk.blockId}-${view}.js`; await writeFile(join(dir, f), code);
@@ -98,8 +118,14 @@ export async function emitCalls(manifest, out, limit) {
         if (code.length > limit) plan.oversized.push({ blockId: blk.blockId, view, bytes: code.length });
       }
       plan.combine.push({ blockId: blk.blockId, name: blk.name, views });
+      continue;
     }
+    // Would adding this block overflow the open batch? Close it first, then start
+    // a fresh batch with this block (which fits alone, checked above).
+    if (batch.length && assemble({ ...base, blocks: [...batch, blk] }, "reconstruct").length > limit) await flush();
+    batch.push(blk);
   }
+  await flush();
   if (plan.combine.length) { const code = assemble({ blockPageName: manifest.blockPageName, combine: plan.combine }, "combine"); await writeFile(join(dir, "_combine.js"), code); plan.combineCall = { file: "_combine.js", bytes: code.length }; }
   // PART 2 — one compose call per page. Blocks carry NO componentId, so the builder
   // resolves each BY NAME off the Block Library page (Part 1's output). Tiny payloads
@@ -112,9 +138,9 @@ export async function emitCalls(manifest, out, limit) {
     plan.compose.push({ file: f, page: pg.id, name: pg.name, blocks: pg.blocks.length, bytes: code.length });
   }
   await writeFile(join(dir, "_plan.json"), JSON.stringify(plan, null, 2));
-  const singles = plan.calls.filter((c) => !c.temp).length;
+  const batchCalls = plan.calls.filter((c) => c.batch).length;
   console.error(`✓ emitted ${plan.calls.length} block call(s)${plan.combine.length ? " + _combine.js" : ""} + ${plan.compose.length} compose call(s) + _plan.json → ${dir}`);
-  console.error(`  Part 1: ${singles} block(s) fit one call, ${plan.combine.length} split into per-view temp+combine. Part 2: ${plan.compose.length} page(s) to compose.`);
+  console.error(`  Part 1: ${packed} block(s) packed into ${batchCalls} call(s), ${plan.combine.length} split into per-view temp+combine. Part 2: ${plan.compose.length} page(s) to compose.`);
   if (plan.oversized.length) console.error(`  ⚠ ${plan.oversized.length} single view(s) STILL exceed ${limit}B even shrunk — will fail the 50K limit; node-tree split needed: ${plan.oversized.map((o) => `${o.blockId}/${o.view} (${o.bytes}B)`).join(", ")}`);
   return plan;
 }
