@@ -120,6 +120,13 @@ if (PHASE === "reconstruct") {
     if (!hasFam(fam)) { const proxy = ROLE_PROXY[roleFromFamily(fam)]; useFam = hasFam(proxy) ? proxy : (hasFam("Inter") ? "Inter" : (avail[0] && avail[0].fontName.family)); proxies.add(fam); }
     return { family: useFam, style: styleForWeight(useFam, w) };
   };
+  // Font variant for an inline-styled range: bump weight for <strong>/<b>, swap to the
+  // Italic (or "<style> Italic") face for <em>/<i> when the family ships one.
+  const styledFont = (bt, it, bo) => {
+    const rf = resolveFont(bt.family, bo ? 700 : (bt.weight || 400));
+    if (it) { const st = famStyles[rf.family] || new Set(); const cand = rf.style === "Regular" ? "Italic" : rf.style + " Italic"; if (st.has(cand)) rf.style = cand; else { for (const s of st) if (/italic/i.test(s)) { rf.style = s; break; } } }
+    return rf;
+  };
 
   // ── 4. spec → nodes (see RECONSTRUCT MODEL). Collects photo rects per view. ──
   const solid = (c) => ({ type: "SOLID", color: { r: c.r, g: c.g, b: c.b }, opacity: c.a == null ? 1 : c.a });
@@ -131,6 +138,28 @@ if (PHASE === "reconstruct") {
   const isBox = (n) => n.kind !== "text" && n.kind !== "svg";
   const isAutoNode = (n) => isBox(n) && n.layout && (n.layout.mode === "row" || n.layout.mode === "column" || n.layout.mode === "grid");
   const overlayAlpha = (n) => (isBox(n) && (!n.children || !n.children.length) && (n.fills || []).length === 1 && n.fills[0].type === "solid" && n.fills[0].color.a != null && n.fills[0].color.a < 1) ? n.fills[0].color.a : null;
+  // Inline elements that only re-style a run of a paragraph's text. Flatten a NON-layout
+  // element's inline subtree into ordered styled segments ({chars,text,i,b} | {br}), so a
+  // paragraph split by <em>/<strong>/<a>/<span> becomes ONE text node (its runs otherwise
+  // reflow and overlap). Returns null on any non-inline descendant (block, image, svg, or a
+  // laid-out/painted inline box) so only genuine inline text is merged.
+  const INLINE_STYLE = { em: { i: 1 }, i: { i: 1 }, strong: { b: 1 }, b: { b: 1 }, a: {}, span: {}, mark: {}, small: {}, u: {}, sub: {}, sup: {} };
+  const flattenInline = (n, it, bo) => {
+    const out = [];
+    for (const c of (n.children || [])) {
+      if (c.tag === "br") { out.push({ br: 1 }); continue; }
+      if ((c.w || 0) <= 0 && (c.h || 0) <= 0) continue;
+      if (c.kind === "text") { out.push({ text: c.text, chars: c.text.chars, i: it, b: bo }); continue; }
+      if (c.kind === "svg") return null;
+      if ((c.fills || []).some((f) => f.type === "image")) return null;
+      const inl = c.tag && INLINE_STYLE[c.tag];
+      if (!inl || isAutoNode(c) || c.fills || c.stroke) return null;
+      const sub = flattenInline(c, it || !!inl.i, bo || !!inl.b);
+      if (sub === null) return null;
+      out.push(...sub);
+    }
+    return out;
+  };
   // Grid analysis from MEASURED geometry (not the ambiguous CSS `gap`, whose 2-value
   // `row col` form and sub-pixel rounding mis-drove the old wrap). Classifies a grid as
   // uniform "cards" (→ wrap auto-layout with the real col/row gaps) vs "positional" (→
@@ -374,6 +403,37 @@ if (PHASE === "reconstruct") {
       if (soloAligned && child.type === "TEXT" && child.width < node.w) { child.textAutoResize = "HEIGHT"; try { child.resize(Math.max(1, node.w), child.height); } catch (e) {} }
       if (!auto) placeChild(child, merged); // auto frames lay it out; non-auto place at measured y (solo) / 0
       return frame;
+    }
+    // Inline paragraph split by an ELEMENT (<em>/<strong>/<a>/<span>): the DOM breaks
+    // "before <em>mid</em> after" into 3 runs. Placed at their measured y's they OVERLAP
+    // (the before-run reflows over several lines; the after-run lands on their shared
+    // line, e.g. the Article body first paragraph). Flatten the whole inline subtree into
+    // ONE text node so nothing can overlap, re-applying <em>/<i> italic + <strong>/<b>
+    // bold as character ranges. Non-layout containers only (a genuine inline paragraph);
+    // flex/grid keep their laid-out children. The first bare run anchors the paragraph's
+    // indent/wrap width so it still lines up with sibling paragraphs.
+    if (!auto && !isTextBox) {
+      const segs = flattenInline(node, false, false);
+      const tsegs = segs ? segs.filter((s) => s.chars != null) : null;
+      const sameSz = tsegs && tsegs.length > 0 && tsegs.every((s) => Math.abs((s.text.size || 0) - (tsegs[0].text.size || 0)) < 0.5);
+      if (segs && sameSz && (tsegs.length > 1 || segs.some((s) => s.i || s.b))) {
+        let chars = ""; const ranges = [];
+        for (const s of segs) {
+          if (s.br) { chars += "\n"; continue; }
+          // The extractor trims a run's trailing space, so re-insert the inter-element
+          // space the DOM rendered: a boundary between two word characters (…than|lived)
+          // needs one; a hugging-punctuation start (…into|", and") does not.
+          if (chars && /\w$/.test(chars) && /^[\w(\[{“‘"'@#]/.test(s.chars)) chars += " ";
+          const st = chars.length; chars += s.chars;
+          if (s.i || s.b) ranges.push({ s: st, e: chars.length, i: s.i, b: s.b });
+        }
+        const base = tsegs[0].text, anchor = textRuns[0];
+        const merged = { kind: "text", x: anchor ? (anchor.x || 0) : 0, y: anchor ? (anchor.y || 0) : 0, w: anchor ? (anchor.w || node.w) : node.w, h: node.h, text: { ...base, chars } };
+        const child = await build(merged, frame, false, photos);
+        for (const r of ranges) { const font = styledFont(base, r.i, r.b); try { await figma.loadFontAsync(font); child.setRangeFontName(r.s, r.e, font); } catch (e) {} }
+        placeChild(child, merged);
+        return frame;
+      }
     }
     for (const c of node.children || []) {
       // Skip display:none / zero-box elements: they carry no pixels but, as flex
