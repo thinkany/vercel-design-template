@@ -76,7 +76,8 @@ line before the parenthetical — a real `\n\n` in the string):
 > initial design variation)
 
 Three options, **in this order** (first = default):
-- **From a website** — paste a URL; you'll extract its palette from the live CSS.
+- **From a website** — paste a URL; you'll read its palette (and fonts) straight
+  from the site's CSS, no browser needed.
 - **Enter all colors manually** — you'll prompt for each color one at a time.
 - **Let Claude create from a single primary color** — give a single brand hex;
   you'll derive a full system.
@@ -91,12 +92,29 @@ Loop: for each color, one `AskUserQuestion` panel with three questions —
 After each color, ask "Add another color?" (**Add another / Done**). Continue
 until the designer chooses Done.
 
-**Method B — From a website URL.**
-`WebFetch` the URL and inspect its stylesheets / inline styles. Extract the
-recurring brand colors (ignore near-duplicate shades and incidental one-off
-greys). Propose a named, described palette (name + hex + role per color) and show
-it back via `AskUserQuestion` for the designer to confirm, rename, or drop entries
-**before** writing. Never write a scraped palette without confirmation.
+**Method B — From a website URL.** Use the **non-browser CSS-fetch** method — it's
+the consistent one. **Do NOT open a headless/automation browser or take
+screenshots to read colors** — that path gets permission-gated and produces
+inconsistent results; stay with plain HTTP fetches of the markup + stylesheets.
+
+1. **Fetch the source.** `WebFetch` the URL with an extraction prompt that asks for
+   the raw style values — **every hex / `rgb()` / `hsl()` color, CSS custom
+   properties (`--*`), `<meta name="theme-color">`, and `font-family` stacks** — in
+   the page's inline styles **and** its linked stylesheets. If `WebFetch` returns
+   summarized prose instead of real values, `curl` the page, pull the
+   `<link rel="stylesheet">` hrefs, and `curl` those CSS files directly, then grep
+   the raw text for the same tokens. (Both are non-browser — no puppeteer.)
+2. **Rank + winnow.** Keep the recurring brand colors by prominence/frequency;
+   drop near-duplicate shades and incidental one-off greys. Note the site's real
+   `font-family` stacks too — offer them as suggested type roles (Display / body),
+   though actual font wiring still follows the Fonts step (1b).
+3. **Confirm before writing.** Propose a named, described palette (name + hex + role
+   per color) via `AskUserQuestion` for the designer to confirm, rename, or drop
+   entries. **Never write a fetched palette without confirmation.**
+4. **If the site yields too little** (a JS-heavy SPA with no usable CSS in the
+   fetched source), **do not escalate to a browser.** Say so plainly and fall back:
+   ask the designer for the brand hex(es) or logo, or switch to **Method C** (derive
+   from one primary color).
 
 **Method C — From one primary color.**
 Ask for a single primary hex, then derive a coherent system from it with sensible
