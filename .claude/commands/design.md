@@ -152,6 +152,31 @@ routing (`?v={id}&about`), rendering, the nav link, and Figma export. No
    icons, `motion` for animation, `recharts` for charts. Compose classNames with
    `cn()` from `ui/utils.ts`. Reach for these before hand-rolling.
 
+## 4b. Images — non-browser, download to `public/`, else placeholder
+
+Design generation is code — no browser. Gathering images is the same:
+**never open a headless/automation browser or screenshot to find images** (it gets
+permission-gated and is inconsistent). Source them over plain HTTP instead:
+
+1. **Default: download into `public/`.** A same-origin local file always resolves —
+   in the live preview **and** in the Figma export's asset-fetch (external CDN URLs
+   render in preview but the export *skips* any that block/stall — see below). One
+   **bounded, fast** attempt from a stable URL, e.g.
+   `curl -fsS --max-time 8 -o public/images/hero.jpg "<url>"` (`-f` = fail on
+   non-200, `--max-time` = don't hang). Reference it as `/images/hero.jpg`.
+2. **Quick 200 → use it. Anything else → placeholder, move on.** If the fetch
+   isn't a fast success (timeout, non-200, error, or a declined permission prompt),
+   **do not retry, do not escalate to a browser, do not hang.** Drop in a
+   **network-free placeholder** — a token-colored block with the right aspect ratio
+   (e.g. `<div className="aspect-video bg-ta-gray-light rounded" />`) — and keep
+   building. Note it so the designer can supply the real asset later.
+3. **Single-source still applies** (rule 4): author the image once; `DesignSurface`
+   renders it across every device frame.
+
+Why local over hotlinking: the Figma export fetches each image URL with a bounded
+timeout and **skips a slow/blocked/CORS'd CDN image** (empty box in Figma), so a
+`public/` file is the only source guaranteed to survive both preview and export.
+
 ## 5. Verify
 
 The dev server hot-reloads, so the change is live at http://localhost:5173 the
