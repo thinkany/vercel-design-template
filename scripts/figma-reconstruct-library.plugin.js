@@ -586,13 +586,20 @@ if (PHASE === "compose") {
     frame.fills = [];
     frame.resize(w, 10);
     frame.layoutSizingHorizontal = "FIXED";
+    // Center blocks on the page: full-width sections (Hero/Header/Footer, captured at the
+    // page width) FILL edge-to-edge so a few px of capture slack still spans; narrower
+    // `max-w-* mx-auto` sections (Shop by Room, From The Journal, the grids at 1200) keep
+    // their captured width and CENTER — pinning them left made them read as left-aligned
+    // and narrower than the Hero.
+    frame.counterAxisAlignItems = "CENTER";
     frame.x = x; frame.y = 80;
     for (const b of pg.blocks) {
       const variant = pickVariant(comps[b.blockId], view);
       if (!variant) { missing.push(`${b.name || b.blockId}/${view}`); continue; }
       const inst = variant.createInstance();
+      const iw = inst.width;
       frame.appendChild(inst);
-      inst.layoutSizingHorizontal = "FILL";
+      if (iw >= w * 0.98) inst.layoutSizingHorizontal = "FILL";
     }
     frame.primaryAxisSizingMode = "AUTO";
     frames.push({ view, id: frame.id, blocks: frame.children.length });
