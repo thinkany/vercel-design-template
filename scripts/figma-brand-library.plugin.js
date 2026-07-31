@@ -202,7 +202,6 @@ if (PHASE === "specimen") {
   // Handy lookups keyed by token, so we can bind label colors semantically.
   const varByToken = {};
   for (const c of MANIFEST.colors) if (varByName[c.figmaName]) varByToken[c.token] = varByName[c.figmaName];
-  const pageBg = varByToken["--ta-cream"] || Object.values(varByName)[0];
   const inkVar = varByToken["--ta-ink"];
   const midVar = varByToken["--ta-gray-mid"];
   const darkVar = varByToken["--ta-gray-dark"];
@@ -236,7 +235,7 @@ if (PHASE === "specimen") {
   root.counterAxisSizingMode = "FIXED";
   root.resize(1040, 100);
   root.primaryAxisSizingMode = "AUTO";
-  root.fills = pageBg ? boundFill(pageBg) : [solid("#f8f7f3")];
+  root.fills = [solid("#ffffff")]; // plain white — the specimen needs no brand wash behind it
   // Position clear of existing content.
   const rightEdge = figma.currentPage.children.reduce((mx, n) => Math.max(mx, n.x + n.width), 0);
   root.x = rightEdge + 120; root.y = 0;
