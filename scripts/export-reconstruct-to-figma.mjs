@@ -223,8 +223,9 @@ async function printManifest(args) {
     return;
   }
   console.log(`\nreconstruct manifest — ${args.variation}  (${path})`);
+  console.log(`  keys: ${Object.keys(m).join(", ")}`);
   console.log(`  views: ${(m.views || []).join(", ")}   widths: ${JSON.stringify(m.widths || {})}`);
-  console.log(`  ${blocks.length} block(s), ${(m.pages || []).length} page(s), ${(m.assets || []).length} asset(s)\n`);
+  console.log(`  ${blocks.length} block(s) [{blockId,name,page,route,views}], ${(m.pages || []).length} page(s), ${(m.assets || []).length} asset(s)\n`);
   const rows = blocks.map((b) => {
     const entries = Object.entries(b.views || {});
     return {
