@@ -249,6 +249,11 @@ The brand-tokens pair in detail:
   1. `npm run export:brand -- -v {id}` and read the manifest.
   2. **Target file — reuse the recorded one, else create + record** (one file per
      variation; no duplicate files):
+     - **Read `existingFile` + `target` from the `export:brand` summary** — it prints
+       them (`↻ Recorded Figma file…` / `✎ No file recorded`, and `⌂ New files go
+       to…`). You already ran the generator, so don't re-parse the manifest; if you
+       must, use `jq '{existingFile,target}' figma-export/brand-{id}.json` (`jq` is
+       allowlisted) — **never `node -e`** (the `;`/`require` trips a heuristic + prompt).
      - The manifest's **`existingFile`** is the Figma file this variation last
        exported to (from the git-ignored `figma-export/figma-files.json` registry).
        If present, **verify it still exists** — a quick `get_metadata` /
