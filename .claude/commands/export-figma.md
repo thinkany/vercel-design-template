@@ -359,7 +359,15 @@ The brand-tokens pair in detail:
         the manifest** — each unique snippet is a fresh permission prompt (and can't be
         safely allowlisted; multi-line ones with `#` even trip a security heuristic),
         whereas `--print` / `--block` / `jq` / `cat` are stable, read-only, and
-        allowlisted.
+        allowlisted. **Same for surveying the calls dir** — do NOT `cd` in and run a
+        `for f in *.js; …` loop with `wc`/`head`/`du`/`stat` (a `cd &&`, a `for`, and a
+        `$(…)` all defeat the `curl`/`jq`/`cat` allowlist and trip the
+        `simple_expansion` heuristic → a prompt every run). The complete file inventory —
+        every call file with its **byte size** and the **blockIds** it carries, plus the
+        `combine`/`compose`/`oversized` breakdown — is already in `_plan.json`; read it
+        with one allowlisted `jq`, e.g.
+        `jq -r '.calls[] | "\(.file)  \(.bytes)B  [\(.blockIds // [.blockId] | join(", "))]"' figma-export/reconstruct-calls/{v}/_plan.json`,
+        or just run `--print` (which formats the same ordered list with sizes).
         The builder **returns** `built[].componentId` per `blockId` **and** a
         `photos[]` list of `{ blockId, view, asset, nodeId }`, binding fills to the
         **`Brand`** collection (canonical `var(--ta-*)` from step 4).
