@@ -207,8 +207,11 @@ from blocks), the locked **P15–P17** scope/destination/file prompts to ask **f
 (when the request doesn't already name a scope, ask with `AskUserQuestion` — don't
 guess), the offline script pairs (`export-brand`/`export-library`/`export-reconstruct`
 + their `use_figma` builders), and the step-by-step live flow you orchestrate through
-the Figma MCP. Load the `figma-use` + `figma-generate-library` skills before any
-builder call. The whole export is **offline + MCP only — it never runs on Vercel.**
+the Figma MCP. Before any `use_figma`/builder call, **read the `figma-use` +
+`figma-generate-library` MCP resources** (`skill://figma/…/SKILL.md` via
+`ReadMcpResourceTool`) — they're **MCP resources, not local Skill-tool skills**, so
+`Skill(figma-use)` fails and just adds a round-trip. The whole export is **offline +
+MCP only — it never runs on Vercel.**
 
 ### Troubleshooting visuals
 

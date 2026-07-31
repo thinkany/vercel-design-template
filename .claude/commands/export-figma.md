@@ -9,8 +9,13 @@ re-deriving the mechanics: the two runnable parts, the scope/destination prompts
 ask **first**, the offline script pairs, and the step-by-step live flow you
 orchestrate through the Figma MCP.
 
-Load the `figma-use` + `figma-generate-library` skills before any builder call. The
-export is **offline + MCP only — it never runs on Vercel.**
+**Load the Figma skills as MCP RESOURCES — not via the `Skill` tool.** In this
+setup `figma-use` + `figma-generate-library` are served by the Figma MCP server as
+resources, **not** local Skill-tool skills, so `Skill(figma-use)` fails and costs a
+round-trip. Read them **directly** with the MCP resource reader
+(**`ReadMcpResourceTool`**) at **`skill://figma/figma-use/SKILL.md`** and
+**`skill://figma/figma-generate-library/SKILL.md`** before any `use_figma`/builder
+call. The export is **offline + MCP only — it never runs on Vercel.**
 
 ## Exporting to Figma — TWO parts, ask scope FIRST
 
@@ -158,8 +163,9 @@ ready-to-submit **`_compose-{pageId}.js`** per page (in `reconstruct-calls/{vari
 listed in `_plan.json`'s `compose[]`) alongside the block calls.
 
 Three script pairs (each an offline manifest + a `use_figma` builder body, same
-pattern) drive the design-system half. Load the `figma-use` +
-`figma-generate-library` skills before any builder call:
+pattern) drive the design-system half. Read the Figma skill **MCP resources**
+(`skill://figma/figma-use/SKILL.md` + `…/figma-generate-library/SKILL.md` via
+`ReadMcpResourceTool`, **not** `Skill(...)` — see top) before any builder call:
 
 - **Brand tokens** → the Styleguide Page. `scripts/export-brand-to-figma.mjs` +
   `scripts/figma-brand-library.plugin.js` (phases `scaffold`/`variables`/
@@ -235,8 +241,9 @@ The brand-tokens pair in detail:
   `use_figma` call (prepend `const MANIFEST = {…}; const PHASE = "…";`). **Idempotent**
   phases (find-by-name update, never duplicate): `scaffold` (the Pages panel;
   returns each design page's **Figma page id**) → `variables` → `textstyles` →
-  `specimen` (built **on the Styleguide Page**). Load the `figma-use` +
-  `figma-generate-library` skills first.
+  `specimen` (built **on the Styleguide Page**). Read the `figma-use` +
+  `figma-generate-library` **MCP resources** first (`ReadMcpResourceTool`, not
+  `Skill(...)` — see top).
 
 **Live flow** (you orchestrate — a plain `npm run` can't call the Figma MCP):
   1. `npm run export:brand -- -v {id}` and read the manifest.
