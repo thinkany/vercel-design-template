@@ -26,7 +26,9 @@ file-by-file play-by-play). Instead:
    background."). Talk in design terms (nav, hero, cards, CTA), never in code
    terms (components, props, tokens, hooks).
 4. **Close** by pointing at the preview: "Done — it's live at localhost:5173,
-   hot-reloaded. Want me to adjust the hero copy or spacing?"
+   hot-reloaded. Want me to adjust the hero copy or spacing?" **If any images fell
+   back to placeholders** (see §4b), list them here so the designer can supply the
+   real assets — don't leave them unmentioned.
 
 Keep technical detail for when the designer explicitly asks "how did you…". If
 something genuinely blocks you (a missing token, an ambiguous request), say so
@@ -164,13 +166,20 @@ permission-gated and is inconsistent). Source them over plain HTTP instead:
    **bounded, fast** attempt from a stable URL, e.g.
    `curl -fsS --max-time 8 -o public/images/hero.jpg "<url>"` (`-f` = fail on
    non-200, `--max-time` = don't hang). Reference it as `/images/hero.jpg`.
-2. **Quick 200 → use it. Anything else → placeholder, move on.** If the fetch
-   isn't a fast success (timeout, non-200, error, or a declined permission prompt),
-   **do not retry, do not escalate to a browser, do not hang.** Drop in a
-   **network-free placeholder** — a token-colored block with the right aspect ratio
-   (e.g. `<div className="aspect-video bg-ta-gray-light rounded" />`) — and keep
-   building. Note it so the designer can supply the real asset later.
-3. **Single-source still applies** (rule 4): author the image once; `DesignSurface`
+2. **Quick 200 → use it. Anything else → placeholder, move on.** The fetch is
+   **non-interactive** (the scaffold allowlists `curl`, so it never prompts) and
+   **bounded** (it can't hang). If it isn't a fast success (timeout, non-200,
+   error), **do not retry, do not escalate to a browser, do not stop to ask** —
+   drop in a **network-free placeholder** (a token-colored block at the right aspect
+   ratio, e.g. `<div className="aspect-video bg-ta-gray-light rounded" />`) and keep
+   building. **Don't interrupt the design over a missing image.**
+3. **Track placeholders → report them in the closing summary.** Keep a running list
+   of every image that fell back to a placeholder (which section, what it should
+   be). When the design is ready to view, tell the designer plainly in the wrap-up —
+   e.g. "Heads-up: 2 images couldn't be fetched, so I used placeholders in the hero
+   and the testimonial — send me those and I'll drop them in." Never leave silent
+   placeholders.
+4. **Single-source still applies** (rule 4): author the image once; `DesignSurface`
    renders it across every device frame.
 
 Why local over hotlinking: the Figma export fetches each image URL with a bounded
