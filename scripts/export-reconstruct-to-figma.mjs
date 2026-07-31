@@ -430,13 +430,14 @@ function extractSpec(blockSel) {
   };
   const walk = (el, pr) => {
     const cs = getComputedStyle(el);
-    // Skip hidden subtrees — display:none content isn't visible, so it must never
-    // enter the spec. Critically this drops the CLOSED hover dropdown/mega panels
-    // (the Header renders them `hidden` until open) out of the Header block's walk;
-    // they're captured separately as "Menu — {item}" blocks when forced open. Without
-    // it the header bloats with hundreds of hidden nodes (over the 50K call limit) and
-    // the panels double as stacked overlays inside the Figma header component.
-    if (cs.display === "none") return null;
+    // Skip EFFECTIVELY-HIDDEN subtrees so they never enter the spec. Headers hide
+    // their closed dropdown/mega panels different ways: the scaffold uses `hidden`
+    // (display:none), but a fade-animated Header keeps them mounted with opacity-0 +
+    // pointer-events-none, and some use visibility:hidden — catch all three. Without
+    // this the CLOSED panels (mounted in the header DOM) bloat the Header block past
+    // the 50K call limit and duplicate the separate "Menu — {item}" blocks. The menu
+    // pass still captures each panel when it forces it OPEN (opacity:1, interactive).
+    if (cs.display === "none" || cs.visibility === "hidden" || (cs.opacity === "0" && cs.pointerEvents === "none")) return null;
     const rect = el.getBoundingClientRect(); const tag = el.tagName.toLowerCase();
     if (tag === "svg") return { kind: "svg", ...relRect(rect, pr), svg: el.outerHTML, color: toRGBA(cs.color) };
     const isFlex = cs.display === "flex" || cs.display === "inline-flex"; const isGrid = cs.display === "grid";

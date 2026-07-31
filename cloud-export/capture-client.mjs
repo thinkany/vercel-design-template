@@ -207,12 +207,13 @@ function serializeRaw(blockSel, PROPS) {
   };
   const walk = (el, pr) => {
     const cs = getComputedStyle(el);
-    // Skip hidden subtrees — display:none content isn't visible, so it must never
-    // enter the spec. Critically this drops the CLOSED hover dropdown/mega panels
-    // (the Header renders them `hidden` until open) out of the Header block; they're
-    // captured separately as "Menu — {item}" blocks when forced open. Without it the
-    // header bloats with hundreds of hidden nodes and the panels double as overlays.
-    if (cs.display === "none") return null;
+    // Skip EFFECTIVELY-HIDDEN subtrees so they never enter the spec. Headers hide
+    // closed dropdown/mega panels different ways: the scaffold uses `hidden`
+    // (display:none), a fade-animated Header keeps them mounted with opacity-0 +
+    // pointer-events-none, and some use visibility:hidden — catch all three. Without
+    // it the CLOSED panels bloat the Header block and duplicate the "Menu — {item}"
+    // blocks. The menu pass still captures each panel when it forces it OPEN.
+    if (cs.display === "none" || cs.visibility === "hidden" || (cs.opacity === "0" && cs.pointerEvents === "none")) return null;
     const rect = el.getBoundingClientRect();
     const tag = el.tagName.toLowerCase();
     const node = { tag, rect: relRect(rect, pr), style: styleOf(cs) };
