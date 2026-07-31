@@ -36,7 +36,7 @@
  * PREREQUISITE: dev server running. puppeteer auto-installs locally on first run
  *   (never a project dep, never on Vercel — the deploy never runs this).
  */
-import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 
@@ -83,6 +83,7 @@ export async function emitCalls(manifest, out, limit) {
   const assemble = (m, phase) => `const MANIFEST=${JSON.stringify(m)};\nconst PHASE=${JSON.stringify(phase)};\n${body}`;
   // Per-variation subdir so different variations' call payloads never clobber.
   const dir = join(out, "reconstruct-calls", manifest.variation);
+  await rm(dir, { recursive: true, force: true }); // wipe stale payloads (e.g. per-view temp files from a prior over-limit run) so nothing to hand-clean
   await mkdir(dir, { recursive: true });
   const plan = { note: "PART 1 (Styleguide+Blocks): submit each calls[].file as the use_figma `code` param (with your fileKey), collect photos[] from each return + upload_assets, then submit _combine.js. PART 2 (Pages from blocks): once blocks exist, submit each compose[].file — one per page, fan out in parallel — to compose design Pages from block instances (resolved BY NAME off the Block Library page).", calls: [], combine: [], compose: [], oversized: [] };
   // Greedily PACK blocks into batches that each fit one call's `limit`. The fixed
@@ -248,7 +249,17 @@ async function printManifest(args) {
     const batchCalls = plan.calls.filter((c) => c.batch);
     const packed = batchCalls.reduce((n, c) => n + (c.blocks || 0), 0);
     console.log(`\n  _plan.json: ${packed} block(s) → ${batchCalls.length} batched call(s), ${plan.combine.length} split, ${plan.compose.length} compose page(s)${plan.oversized.length ? `, ${plan.oversized.length} oversized ⚠` : ""}`);
-    for (const c of batchCalls) console.log(`    ${c.file}: [${(c.blockIds || []).join(", ")}]  ${kb(c.bytes)}`);
+    // Full submission order — submit each file as the use_figma `code` param in THIS
+    // order (Part 1 block calls → _combine.js → Part 2 compose). No need to read
+    // _plan.json yourself.
+    console.log(`  submission order:`);
+    for (const c of plan.calls) {
+      const label = c.batch ? `[${(c.blockIds || []).join(", ")}]` : (c.temp ? `${c.blockId} (${c.view} temp)` : c.blockId);
+      console.log(`    ${c.file.padEnd(26)} ${kb(c.bytes).padStart(8)}  ${label}`);
+    }
+    if (plan.combineCall) console.log(`    ${plan.combineCall.file.padEnd(26)} ${kb(plan.combineCall.bytes).padStart(8)}  combine → ${plan.combine.map((c) => c.blockId).join(", ")}`);
+    for (const c of plan.compose) console.log(`    ${c.file.padEnd(26)} ${kb(c.bytes).padStart(8)}  compose ${c.page}`);
+    if (plan.oversized.length) console.log(`    ⚠ oversized (node-tree split needed): ${plan.oversized.map((o) => `${o.blockId}/${o.view}`).join(", ")}`);
   } catch { /* no _plan.json yet (run with --emit-calls) — fine */ }
   console.log("");
 }

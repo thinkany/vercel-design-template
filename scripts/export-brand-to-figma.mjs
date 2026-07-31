@@ -50,7 +50,7 @@
  *   package.json and this never runs on Vercel.
  */
 
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -390,6 +390,7 @@ async function emitBrandCalls(manifest, outDir) {
   const body = await readFile(join(__dirname, "figma-brand-library.plugin.js"), "utf8");
   // Per-variation subdir so v00 / v01 / … payloads never clobber each other.
   const dir = join(ROOT, outDir, "brand-calls", manifest.variationId);
+  await rm(dir, { recursive: true, force: true }); // wipe stale payloads so nothing to hand-clean
   await mkdir(dir, { recursive: true });
   const manifestJson = JSON.stringify(manifest); // compact — smaller payload
   const LIMIT = 50000;

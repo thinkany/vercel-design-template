@@ -338,11 +338,14 @@ The brand-tokens pair in detail:
         probe `reconstruct-{v}.json` yourself, and you don't need to know its internal
         schema (it's `{ variation, views, widths, blocks:[{blockId,name,page,route,
         views:{[view]:spec}}], pages, assets }` — but treat that as opaque). To see
-        block structure, sizes, compose order, or how blocks batched, run
-        `node scripts/export-reconstruct-to-figma.mjs --print`. To diagnose **why a
-        block is oversized** (node composition + per-kind weight + heaviest inline
-        SVGs per view), run `… --block {id}`. Both are read-only (no capture, no dev
-        server); or read `_plan.json` directly (`cat`/`jq`). **Never improvise
+        block structure, sizes, compose order, or **the full ordered list of call
+        files to submit** (block calls → `_combine.js` → compose, with sizes), run
+        `node scripts/export-reconstruct-to-figma.mjs --print` — so you never read
+        `_plan.json` or `ls` the calls dir yourself. To diagnose **why a block is
+        oversized** (node composition + per-kind weight + heaviest inline SVGs per
+        view), run `… --block {id}`. Both are read-only (no capture, no dev server).
+        `--emit-calls` **wipes stale payloads** in `reconstruct-calls/{variation}/`
+        each run, so there are never orphaned temp files to hand-`rm`. **Never improvise
         `node -e`/`python3 -c` (or hand-read the raw JSON) to spelunk or schema-probe
         the manifest** — each unique snippet is a fresh permission prompt (and can't be
         safely allowlisted; multi-line ones with `#` even trip a security heuristic),
