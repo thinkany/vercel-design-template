@@ -271,6 +271,13 @@ The brand-tokens pair in detail:
       --plan {planKey} [--plan-name {name}] [--project {url}]` (`--forget-target`
       resets). Reused files (`existingFile`) keep their own home — destination
       only governs newly-created files.
+     **Emit the phase payloads with the script — don't hand-assemble.** Run
+     `npm run export:brand -- -v {id} --emit-calls` (or
+     `node scripts/export-brand-to-figma.mjs -v {id} --emit-calls`) and it writes
+     `figma-export/brand-calls/brand-{phase}.js` (MANIFEST + PHASE + builder body,
+     ready to submit) + `_plan.json`. Submit those files as the `use_figma` `code`
+     param — **never improvise a `node -e` to build the payloads** (unallowlistable
+     arbitrary code; the script command is stable and allowlisted).
   3. Run **`scaffold`** → note the returned `anchors` (`{pageId}` per design page).
   4. Run **`variables`** → **`textstyles`** → **`specimen`** (sequential, never
      parallel), each embedding the brand `MANIFEST` + the matching `PHASE` + the

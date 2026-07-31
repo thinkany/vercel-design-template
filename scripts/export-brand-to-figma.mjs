@@ -61,7 +61,7 @@ const ROOT = join(__dirname, "..");
 
 function parseArgs(argv) {
   const args = {
-    variation: "v00", out: "figma-export", print: false,
+    variation: "v00", out: "figma-export", print: false, emitCalls: false,
     record: false, forget: false, fileKey: null, fileUrl: null, fileName: null,
     setTarget: false, forgetTarget: false, scope: null, plan: null, planName: null, project: null,
   };
@@ -70,6 +70,7 @@ function parseArgs(argv) {
     if (a === "--variation" || a === "-v") args.variation = argv[++i];
     else if (a === "--out") args.out = argv[++i];
     else if (a === "--print") args.print = true;
+    else if (a === "--emit-calls") args.emitCalls = true;
     else if (a === "--record") args.record = true;
     else if (a === "--forget") args.forget = true;
     else if (a === "--file-key") args.fileKey = argv[++i];
@@ -378,6 +379,35 @@ function printSummary(m, styleDir) {
   console.log(`  ${m.typeScale.length} type sizes → text-style ramp ("Type Scale/{px}")`);
 }
 
+// ── Emit ready-to-submit use_figma call payloads (the brand-side of reconstruct's
+// --emit-calls). Writes one `brand-{phase}.js` per phase = `const MANIFEST=…;
+// const PHASE=…;` + the figma-brand-library.plugin.js body, so Claude submits a
+// STABLE file as the use_figma `code` param instead of hand-assembling it with an
+// (unallowlistable) `node -e`. The manifest is one small object shared by all four
+// phases, so each payload comfortably fits the 50K `code` limit.
+const BRAND_PHASES = ["scaffold", "variables", "textstyles", "specimen"];
+async function emitBrandCalls(manifest, outDir) {
+  const body = await readFile(join(__dirname, "figma-brand-library.plugin.js"), "utf8");
+  const dir = join(ROOT, outDir, "brand-calls");
+  await mkdir(dir, { recursive: true });
+  const manifestJson = JSON.stringify(manifest); // compact — smaller payload
+  const LIMIT = 50000;
+  const phases = [];
+  for (const phase of BRAND_PHASES) {
+    const code = `const MANIFEST = ${manifestJson};\nconst PHASE = ${JSON.stringify(phase)};\n\n${body}`;
+    const file = `brand-${phase}.js`;
+    await writeFile(join(dir, file), code, "utf8");
+    phases.push({ phase, file, bytes: code.length, over: code.length > LIMIT });
+  }
+  const plan = {
+    note: "Submit each phases[].file as the use_figma `code` param (with your fileKey), SEQUENTIALLY in order: scaffold → variables → textstyles → specimen (see /export-figma Part 1). scaffold returns the design-page ids; specimen builds the styleguide frame.",
+    phases,
+  };
+  await writeFile(join(dir, "_plan.json"), JSON.stringify(plan, null, 2) + "\n", "utf8");
+  console.log(`\n→ emitted ${phases.length} brand call(s) + _plan.json → ${outDir}/brand-calls`);
+  for (const p of phases) console.log(`    ${p.file.padEnd(22)} ${(p.bytes / 1024).toFixed(1)}KB${p.over ? "  ⚠ over 50K — trim the builder body" : ""}`);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -386,6 +416,10 @@ async function main() {
   -v, --variation <id>   Variation to export (default: v00)
   --out <dir>            Output dir (default: figma-export)
   --print                Print the manifest instead of writing it
+  --emit-calls           Also write ready-to-submit use_figma payloads, one
+                         brand-{phase}.js per phase (scaffold/variables/textstyles/
+                         specimen) → figma-export/brand-calls/ + _plan.json. Submit
+                         these instead of hand-assembling with node -e.
 
   File registry (remember one Figma file per variation):
   --record --file-key <k> [--file-url <u>] [--file-name <n>]
@@ -482,8 +516,15 @@ async function main() {
   const outPath = join(ROOT, args.out, `brand-${args.variation}.json`);
   await writeFile(outPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
   console.log(`\n→ wrote ${args.out}/brand-${args.variation}.json`);
-  console.log("  Next (live): Claude reads this manifest and runs the Figma builder");
-  console.log("  (scripts/figma-brand-library.plugin.js) via use_figma. See CLAUDE.md.");
+  if (args.emitCalls) {
+    await emitBrandCalls(manifest, args.out);
+    console.log("  Next (live): submit each brand-calls/brand-{phase}.js as the use_figma");
+    console.log("  `code` param, SEQUENTIALLY (scaffold → variables → textstyles → specimen).");
+  } else {
+    console.log("  Next (live): Claude reads this manifest and runs the Figma builder");
+    console.log("  (scripts/figma-brand-library.plugin.js) via use_figma. Add --emit-calls to");
+    console.log("  write ready-to-submit phase payloads (brand-calls/). See CLAUDE.md.");
+  }
 }
 
 main().catch((e) => {
