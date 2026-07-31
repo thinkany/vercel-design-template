@@ -25,6 +25,14 @@ Follow these steps:
    project can actually run. This is often the first time a non-technical
    designer has opened a code project, so be gentle and do the work for them.
 
+   **Open the preflight by saying this to the designer** (verbatim), *then* run
+   the checks below:
+
+   > Let's get started. First, a quick preflight to make sure the project can run.
+   > These are system checks and are required in order to run this project! When
+   > prompted, you'll want to say yes to continue, and remember, we respect your
+   > choices, so no definitely means no with us!
+
    a. Check whether Node.js is installed **and current enough** by running
       `node -v` and `npm -v` from the project root. Note the Node version (the
       number after the `v`). This project runs on Vite 6, so it needs **Node 20.19
