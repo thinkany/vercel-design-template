@@ -333,11 +333,21 @@ if (PHASE === "reconstruct") {
     const textRuns = kids.filter((c) => c.kind === "text");
     const isTextBox = kids.length > 0 && textRuns.length > 0 && kids.every((c) => c.kind === "text" || c.tag === "br");
     const uniform = isTextBox && textRuns.every((r) => r.text.family === textRuns[0].text.family && r.text.size === textRuns[0].text.size && r.text.weight === textRuns[0].text.weight);
-    if (isTextBox && uniform && (textRuns.length > 1 || kids.some((c) => c.tag === "br"))) {
+    // Also fire for a SINGLE center/right-aligned run: that case (e.g. a Hero
+    // eyebrow "WELCOME HOME") is otherwise built as a HUG-width text node placed at
+    // x=0 of its full-width wrapper, where textAlignHorizontal=CENTER has nothing to
+    // center within — so it renders LEFT while the multi-line headline/body (which
+    // merge to the full wrapper width) center correctly. Merging + filling it to the
+    // wrapper width lets the alignment do its job.
+    const soloAligned = textRuns.length === 1 && (textRuns[0].text.align === "center" || textRuns[0].text.align === "right");
+    if (isTextBox && uniform && (textRuns.length > 1 || kids.some((c) => c.tag === "br") || soloAligned)) {
       let chars = "";
       for (const c of kids) { if (c.kind === "text") chars += c.text.chars; else if (c.tag === "br") chars += "\n"; }
       const merged = { kind: "text", x: 0, y: 0, w: node.w, h: node.h, text: { ...textRuns[0].text, chars } };
       const child = await build(merged, frame, false, photos);
+      // A single-line centered/right run stays hug (WIDTH_AND_HEIGHT) after build; fill
+      // it to the container width so the alignment centers/right-justifies it.
+      if (soloAligned && child.type === "TEXT" && child.width < node.w) { child.textAutoResize = "HEIGHT"; try { child.resize(Math.max(1, node.w), child.height); } catch (e) {} }
       if (!auto) placeChild(child, merged); // auto frames lay it out; non-auto place at 0,0
       return frame;
     }
