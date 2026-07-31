@@ -53,6 +53,28 @@ export interface PaletteGroup {
   colors: BrandColor[];
 }
 
+export interface SpacingStep {
+  /** Tailwind scale key, e.g. "4" (→ p-4/gap-4). */
+  scale: string;
+  /** Pixel value. Exported to Figma as a FLOAT variable (Spacing/{scale}). */
+  px: number;
+  /** Representative Tailwind utilities, e.g. "p-4 / gap-4". */
+  tw: string;
+  /** What the step is for. */
+  use: string;
+}
+
+export interface RadiusStep {
+  /** Human name, e.g. "Base". Exported to Figma as a FLOAT variable (Radius/{name}). */
+  name: string;
+  /** Corner-radius in px (9999 = fully rounded / pill). */
+  px: number;
+  /** Representative Tailwind utility, e.g. "rounded". */
+  tw: string;
+  /** What the radius is for. */
+  use: string;
+}
+
 export interface Brand {
   /**
    * Brand color groups — each renders as its own titled subsection in the
@@ -63,6 +85,12 @@ export interface Brand {
    */
   paletteGroups: PaletteGroup[];
   fonts: BrandFont[];
+  /** Spacing scale (px). Documented in the guide; exported as FLOAT variables. */
+  spacing: SpacingStep[];
+  /** Corner-radius scale (px). Documented in the guide; exported as FLOAT variables. */
+  radii: RadiusStep[];
+  /** Type scale (px sizes, ascending). Guide ramp; exported as a text-style ramp. */
+  typeScale: number[];
 }
 
 // The template DEFAULT palette & type roles. Ships as-is until a project runs
@@ -90,4 +118,28 @@ export const brand: Brand = {
     { name: "Sans",    token: "--ta-font-sans",    stack: "var(--ta-font-sans)",    role: "UI labels, navigation, metadata",    sample: "THE QUICK BROWN FOX · 24 JUNE 2026" },
     { name: "Mono",    token: "--ta-font-mono",    stack: "var(--ta-font-mono)",    role: "Numeric data, tabular values, code", sample: "0123456789  ·  $1,240.50  ·  99.9%" },
   ],
+  spacing: [
+    { scale: "0.5", px: 2,  tw: "p-0.5 / gap-0.5", use: "Micro gap — tight metadata stacks" },
+    { scale: "1",   px: 4,  tw: "p-1 / gap-1",     use: "Icon/text pairs, atom spacing" },
+    { scale: "1.5", px: 6,  tw: "p-1.5 / gap-1.5", use: "Label rows, badge groups" },
+    { scale: "2",   px: 8,  tw: "p-2 / gap-2",     use: "Compact item spacing" },
+    { scale: "3",   px: 12, tw: "p-3 / gap-3",     use: "Card internal padding" },
+    { scale: "3.5", px: 14, tw: "p-3.5",           use: "Compact card padding" },
+    { scale: "4",   px: 16, tw: "p-4 / gap-4",     use: "Base unit — standard padding" },
+    { scale: "5",   px: 20, tw: "p-5 / gap-5",     use: "Section gap" },
+    { scale: "6",   px: 24, tw: "p-6 / gap-6",     use: "Column padding" },
+    { scale: "7",   px: 28, tw: "p-7",             use: "Section top padding" },
+    { scale: "8",   px: 32, tw: "p-8 / gap-8",     use: "Column gutter" },
+    { scale: "10",  px: 40, tw: "p-10",            use: "Section vertical spacing" },
+  ],
+  radii: [
+    { name: "None", px: 0,    tw: "rounded-none", use: "Squared — tables, full-bleed media" },
+    { name: "SM",   px: 2,    tw: "rounded-sm",   use: "Inputs, badges, small controls" },
+    { name: "Base", px: 4,    tw: "rounded",      use: "Buttons, default controls" },
+    { name: "MD",   px: 6,    tw: "rounded-md",   use: "Cards, panels" },
+    { name: "LG",   px: 8,    tw: "rounded-lg",   use: "Modals, image tiles" },
+    { name: "XL",   px: 12,   tw: "rounded-xl",   use: "Feature cards, hero media" },
+    { name: "Full", px: 9999, tw: "rounded-full", use: "Pills, avatars, toggles" },
+  ],
+  typeScale: [9, 10, 11, 12, 13, 14, 15, 16, 18, 21, 24, 28, 34],
 };

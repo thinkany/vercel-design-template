@@ -291,10 +291,35 @@ function buildManifest(variationId, brand, tokens, designPages) {
       sample: f.sample || "The quick brown fox jumps over the lazy dog.",
     });
   }
+  // Spacing + radius → FLOAT number variables. Scopes gate where Figma offers them:
+  // spacing binds gaps/padding + width/height; radius binds corner radius only.
+  const spacing = (brand.spacing || []).map((s) => ({
+    figmaName: `Spacing/${s.scale}`,
+    scale: s.scale,
+    px: s.px,
+    tw: s.tw,
+    use: s.use,
+    scopes: ["GAP", "WIDTH_HEIGHT"],
+  }));
+  const radii = (brand.radii || []).map((r) => ({
+    figmaName: `Radius/${r.name}`,
+    name: r.name,
+    px: r.px,
+    tw: r.tw,
+    use: r.use,
+    scopes: ["CORNER_RADIUS"],
+  }));
+  // Type scale → a ramp of TEXT STYLES (Type Scale/{px}), size-only, neutral face.
+  const typeScale = (brand.typeScale || []).map((size) => ({
+    figmaName: `Type Scale/${size}`,
+    size,
+  }));
   return {
     variationId,
     collectionName: "Brand",       // COLOR variable collection
     typeCollectionName: "Type",    // STRING (font-family) variable collection
+    spacingCollectionName: "Spacing", // FLOAT (px) spacing variable collection
+    radiusCollectionName: "Radius",   // FLOAT (px) corner-radius variable collection
     specimenFrameName: "Brand Library — Foundations",
     // Figma file structure (Pages panel), in order.
     styleguidePageName: STYLEGUIDE_PAGE,
@@ -304,6 +329,9 @@ function buildManifest(variationId, brand, tokens, designPages) {
     generatedAt: new Date().toISOString(),
     colors,
     fonts,
+    spacing,
+    radii,
+    typeScale,
   };
 }
 
@@ -338,6 +366,9 @@ function printSummary(m, styleDir) {
     const fam = f.requestedFamily || `${f.proxyFamily} (proxy)`;
     console.log(`    · ${f.figmaName.padEnd(16)} ${fam.padEnd(24)} ${f.token}`);
   }
+  console.log(`  ${m.spacing.length} spacing steps → FLOAT variables (collection "${m.spacingCollectionName}")`);
+  console.log(`  ${m.radii.length} radius steps → FLOAT variables (collection "${m.radiusCollectionName}")`);
+  console.log(`  ${m.typeScale.length} type sizes → text-style ramp ("Type Scale/{px}")`);
 }
 
 async function main() {

@@ -15,13 +15,17 @@
 //                       Returns each design page's Figma page id (the capture
 //                       target — mint generate_figma_design(fileKey, pageId) so
 //                       breakpoint frames land on that named Page).
-//     2. "variables"  → the Brand color variable collection (file-global)
+//     2. "variables"  → the Brand color variable collection PLUS the Spacing +
+//                       Radius FLOAT (px) variable collections (all file-global).
 //     3. "textstyles" → the Type/* text styles + a "Type" collection of family
 //                       STRING variables (file-global), each text style's
 //                       fontFamily BOUND to its variable (the type analogue of
-//                       colors → bound COLOR variables).
-//     4. "specimen"   → the swatch + type specimen frame, built ON the Styleguide
-//                       Page (created/reused; other pages untouched).
+//                       colors → bound COLOR variables) — PLUS a "Type Scale/{px}"
+//                       ramp of size-only text styles.
+//     4. "specimen"   → the swatch + type + spacing + radius + type-scale specimen
+//                       frame, built ON the Styleguide Page (created/reused; other
+//                       pages untouched). Spacing bars bind WIDTH and radius squares
+//                       bind CORNER RADIUS to the FLOAT variables from phase 2.
 //   (Design-page frames themselves are captured between 1 and 4 via the page
 //    export — see CLAUDE.md "Exporting the brand to Figma".)
 //
@@ -49,6 +53,27 @@ async function getOrCreateCollection(name) {
   const modeId = col.modes[0].modeId;
   col.renameMode(modeId, "Value");
   return { col, modeId };
+}
+
+// Create/update a collection of FLOAT (number, px) variables — used for the
+// spacing + radius scales. Idempotent by name, like the color/family builders.
+async function buildFloatVars(collectionName, items, codeSyntax) {
+  if (!items || !items.length) return { collectionName, variables: [] };
+  const { col, modeId } = await getOrCreateCollection(collectionName);
+  const existing = (await figma.variables.getLocalVariablesAsync("FLOAT"))
+    .filter((v) => v.variableCollectionId === col.id);
+  const out = [];
+  for (const it of items) {
+    let v = existing.find((x) => x.name === it.figmaName);
+    const created = !v;
+    if (!v) { v = figma.variables.createVariable(it.figmaName, col, "FLOAT"); existing.push(v); }
+    v.setValueForMode(modeId, it.px);
+    v.scopes = it.scopes || [];
+    v.description = it.use || "";
+    if (codeSyntax) { try { v.setVariableCodeSyntax("WEB", codeSyntax(it)); } catch (e) { /* older API */ } }
+    out.push({ name: it.figmaName, id: v.id, created });
+  }
+  return { collectionId: col.id, collectionName: col.name, variables: out };
 }
 
 // ── PHASE 0: file scaffold (the Figma Pages panel) ────────────────────────────
@@ -123,7 +148,16 @@ if (PHASE === "variables") {
     v.setVariableCodeSyntax("WEB", `var(${c.token})`);
     result.push({ name: c.figmaName, id: v.id, created });
   }
-  return { phase: "variables", collectionId: col.id, collectionName: col.name, variables: result };
+  // Spacing + radius scales → FLOAT (px) variable collections (siblings of Brand).
+  const spacing = await buildFloatVars(
+    MANIFEST.spacingCollectionName || "Spacing", MANIFEST.spacing,
+    (s) => `${s.px}px`,
+  );
+  const radii = await buildFloatVars(
+    MANIFEST.radiusCollectionName || "Radius", MANIFEST.radii,
+    (r) => (r.px >= 9999 ? "9999px" : `${r.px}px`),
+  );
+  return { phase: "variables", collectionId: col.id, collectionName: col.name, variables: result, spacing, radii };
 }
 
 // ── PHASE 2: type — family STRING variables + text styles bound to them ───────
@@ -179,7 +213,26 @@ if (PHASE === "textstyles") {
 
     result.push({ name: f.figmaName, id: ts.id, resolvedFont: `${family} ${style}`, proxy: f.isProxy, created, familyVar: { name: varName, id: fv.id, created: varCreated } });
   }
-  return { phase: "textstyles", typeCollectionId: typeCol.id, textStyles: result };
+
+  // Type scale → a ramp of size-only text styles ("Type Scale/{px}"), rendered in
+  // a neutral face (Inter) so they read as sizes, not a voice. Ready to apply to
+  // any text layer; the per-role Type/* styles above carry the brand faces.
+  const scaleFace = { family: families.has("Inter") ? "Inter" : "Roboto", style: "Regular" };
+  const haveScaleFace = families.has(scaleFace.family);
+  if (haveScaleFace) await figma.loadFontAsync(scaleFace);
+  const typeScale = [];
+  for (const t of (MANIFEST.typeScale || [])) {
+    let ts = styles.find((s) => s.name === t.figmaName);
+    const created = !ts;
+    if (!ts) { ts = figma.createTextStyle(); styles.push(ts); }
+    ts.name = t.figmaName;
+    if (haveScaleFace) ts.fontName = scaleFace;
+    ts.fontSize = t.size;
+    ts.lineHeight = { unit: "PERCENT", value: 120 };
+    ts.description = `Type scale — ${t.size}px`;
+    typeScale.push({ name: t.figmaName, id: ts.id, size: t.size, created });
+  }
+  return { phase: "textstyles", typeCollectionId: typeCol.id, textStyles: result, typeScale };
 }
 
 // ── PHASE 3: specimen frame (delete + rebuild, ON the Styleguide Page) ─────────
@@ -198,6 +251,10 @@ if (PHASE === "specimen") {
   const varByName = Object.fromEntries(allVars.map((v) => [v.name, v]));
   const styles = await figma.getLocalTextStylesAsync();
   const styleByName = Object.fromEntries(styles.map((s) => [s.name, s]));
+  // Spacing/radius FLOAT variables (namespaced names: "Spacing/…", "Radius/…").
+  const floatByName = Object.fromEntries(
+    (await figma.variables.getLocalVariablesAsync("FLOAT")).map((v) => [v.name, v]),
+  );
 
   // Handy lookups keyed by token, so we can bind label colors semantically.
   const varByToken = {};
@@ -301,7 +358,79 @@ if (PHASE === "specimen") {
     sample.layoutSizingHorizontal = "FILL"; sample.textAutoResize = "HEIGHT";
   }
 
-  return { phase: "specimen", frameId: root.id, removedPriorFrames: removed, colors: MANIFEST.colors.length, fonts: MANIFEST.fonts.length };
+  // Spacing — a bar per step whose WIDTH is bound to the Spacing/* FLOAT variable,
+  // so the swatch literally measures the token (edit the variable → bar reflows).
+  if ((MANIFEST.spacing || []).length) {
+    const spSec = figma.createAutoLayout("VERTICAL", { name: "Spacing", itemSpacing: 12 });
+    root.appendChild(spSec); spSec.layoutSizingHorizontal = "FILL";
+    const spLbl = label("SPACING", "bold", 12, midVar, "#777777"); spLbl.letterSpacing = { unit: "PIXELS", value: 1.5 };
+    spSec.appendChild(spLbl);
+    for (const s of MANIFEST.spacing) {
+      const row = figma.createAutoLayout("HORIZONTAL", { name: `Space/${s.scale}`, itemSpacing: 16 });
+      spSec.appendChild(row); row.layoutSizingHorizontal = "FILL"; row.counterAxisAlignItems = "CENTER";
+      const px = label(`${s.px}px`, "mono", 11, midVar, "#777777"); row.appendChild(px);
+      const bar = figma.createRectangle(); bar.resize(Math.max(s.px, 1), 16); bar.cornerRadius = 1;
+      bar.fills = inkVar ? boundFill(inkVar) : [solid("#111111")];
+      row.appendChild(bar); bar.layoutSizingHorizontal = "FIXED";
+      const sv = floatByName[s.figmaName];
+      if (sv) { try { bar.setBoundVariable("width", sv); } catch (e) { /* older API — literal px stands */ } }
+      const tw = label(s.tw, "mono", 11, midVar, "#777777"); row.appendChild(tw);
+      const use = label(s.use, "regular", 12, darkVar, "#333333"); row.appendChild(use); use.layoutSizingHorizontal = "FILL"; use.textAutoResize = "HEIGHT";
+    }
+  }
+
+  // Radius — a square per step with all four corners bound to the Radius/* variable.
+  if ((MANIFEST.radii || []).length) {
+    const rSec = figma.createAutoLayout("VERTICAL", { name: "Radius", itemSpacing: 18 });
+    root.appendChild(rSec); rSec.layoutSizingHorizontal = "FILL";
+    const rLbl = label("RADIUS", "bold", 12, midVar, "#777777"); rLbl.letterSpacing = { unit: "PIXELS", value: 1.5 };
+    rSec.appendChild(rLbl);
+    const rGrid = figma.createAutoLayout("HORIZONTAL", { name: "Radii", itemSpacing: 16 });
+    rSec.appendChild(rGrid); rGrid.layoutSizingHorizontal = "FILL"; rGrid.layoutWrap = "WRAP"; rGrid.counterAxisSpacing = 20;
+    for (const r of MANIFEST.radii) {
+      const card = figma.createAutoLayout("VERTICAL", { name: `Radius/${r.name}`, itemSpacing: 8 });
+      rGrid.appendChild(card); card.layoutSizingHorizontal = "FIXED"; card.resize(150, card.height); card.primaryAxisSizingMode = "AUTO";
+      const sq = figma.createRectangle(); sq.resize(72, 72); sq.cornerRadius = Math.min(r.px, 36);
+      sq.fills = inkVar ? boundFill(inkVar) : [solid("#111111")];
+      card.appendChild(sq); sq.layoutSizingHorizontal = "FIXED";
+      const rv = floatByName[r.figmaName];
+      if (rv) for (const corner of ["topLeftRadius", "topRightRadius", "bottomLeftRadius", "bottomRightRadius"]) {
+        try { sq.setBoundVariable(corner, rv); } catch (e) { /* older API — literal radius stands */ }
+      }
+      const nm = label(`${r.name} · ${r.px >= 9999 ? "full" : r.px + "px"}`, "bold", 12, inkVar, "#111111"); card.appendChild(nm); nm.layoutSizingHorizontal = "FILL"; nm.textAutoResize = "HEIGHT";
+      const tw = label(r.tw, "mono", 11, midVar, "#777777"); card.appendChild(tw); tw.layoutSizingHorizontal = "FILL"; tw.textAutoResize = "HEIGHT";
+      const use = label(r.use, "regular", 12, darkVar, "#333333"); card.appendChild(use); use.layoutSizingHorizontal = "FILL"; use.textAutoResize = "HEIGHT";
+    }
+  }
+
+  // Type scale — each size rendered by APPLYING its "Type Scale/{px}" text style.
+  if ((MANIFEST.typeScale || []).length) {
+    const tsSec = figma.createAutoLayout("VERTICAL", { name: "Type Scale", itemSpacing: 8 });
+    root.appendChild(tsSec); tsSec.layoutSizingHorizontal = "FILL";
+    const tsLbl = label("TYPE SCALE", "bold", 12, midVar, "#777777"); tsLbl.letterSpacing = { unit: "PIXELS", value: 1.5 };
+    tsSec.appendChild(tsLbl);
+    for (const t of MANIFEST.typeScale) {
+      const row = figma.createAutoLayout("HORIZONTAL", { name: `Size/${t.size}`, itemSpacing: 16 });
+      tsSec.appendChild(row); row.layoutSizingHorizontal = "FILL"; row.counterAxisAlignItems = "CENTER";
+      const px = label(`${t.size}`, "mono", 11, midVar, "#777777"); row.appendChild(px);
+      const st = styleByName[t.figmaName];
+      const smp = figma.createText();
+      if (st) { await figma.loadFontAsync(st.fontName); smp.fontName = st.fontName; }
+      else { smp.fontName = { family: "Inter", style: "Regular" }; }
+      smp.characters = "The quick brown fox jumps";
+      smp.fontSize = t.size;
+      smp.fills = inkVar ? boundFill(inkVar) : [solid("#111111")];
+      row.appendChild(smp);
+      if (st) await smp.setTextStyleIdAsync(st.id);
+      smp.layoutSizingHorizontal = "FILL"; smp.textAutoResize = "HEIGHT";
+    }
+  }
+
+  return {
+    phase: "specimen", frameId: root.id, removedPriorFrames: removed,
+    colors: MANIFEST.colors.length, fonts: MANIFEST.fonts.length,
+    spacing: (MANIFEST.spacing || []).length, radii: (MANIFEST.radii || []).length, typeScale: (MANIFEST.typeScale || []).length,
+  };
 }
 
 throw new Error(`Unknown PHASE "${PHASE}" — expected "variables" | "textstyles" | "specimen"`);

@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { siteConfig } from "@/config/site";
 import { resolveBrand } from "@/app/brandRegistry";
-import type { BrandFont, PaletteGroup } from "@/styles/brand";
+import type { BrandFont, PaletteGroup, SpacingStep, RadiusStep } from "@/styles/brand";
 
 interface Props {
   onNavigate: (page: string) => void;
@@ -113,7 +113,8 @@ const SYSTEM_COLORS: { name: string; token: string | null; fallback: string; tex
   { name: "Nav Dropdown BG", token: "--ta-cream",        fallback: "#f8f7f3", text: C.ink },
 ];
 
-const TYPE_SCALE = [9, 10, 11, 12, 13, 14, 15, 16, 18, 21, 24, 28, 34];
+// Spacing scale, radius scale, and type scale now live in brand.ts (the single
+// source the Figma foundations export also reads), passed into the sections below.
 
 const LINE_HEIGHTS = [
   { value: 1.1, label: "1.1", use: "Display headlines, tight hero titles" },
@@ -124,27 +125,13 @@ const LINE_HEIGHTS = [
   { value: 1.8, label: "1.8", use: "Long-form prose, essay content" },
 ];
 
-const SPACING_SCALE = [
-  { scale: "0.5", px: 2,  tw: "p-0.5 / gap-0.5", use: "Micro gap — tight metadata stacks" },
-  { scale: "1",   px: 4,  tw: "p-1 / gap-1",     use: "Icon/text pairs, atom spacing" },
-  { scale: "1.5", px: 6,  tw: "p-1.5 / gap-1.5", use: "Label rows, badge groups" },
-  { scale: "2",   px: 8,  tw: "p-2 / gap-2",     use: "Compact item spacing" },
-  { scale: "3",   px: 12, tw: "p-3 / gap-3",     use: "Card internal padding" },
-  { scale: "3.5", px: 14, tw: "p-3.5",           use: "Compact card padding" },
-  { scale: "4",   px: 16, tw: "p-4 / gap-4",     use: "Base unit — standard padding" },
-  { scale: "5",   px: 20, tw: "p-5 / gap-5",     use: "Section gap" },
-  { scale: "6",   px: 24, tw: "p-6 / gap-6",     use: "Column padding" },
-  { scale: "7",   px: 28, tw: "p-7",             use: "Section top padding" },
-  { scale: "8",   px: 32, tw: "p-8 / gap-8",     use: "Column gutter" },
-  { scale: "10",  px: 40, tw: "p-10",            use: "Section vertical spacing" },
-];
-
 const NAV_SECTIONS = [
   { id: "intro", label: "Introduction", group: null, isHeader: false },
 
   { id: null, label: "PRIMITIVES", group: null, isHeader: true },
   { id: "primitives-colors", label: "Colors", group: "prims", isHeader: false },
   { id: "primitives-spacing", label: "Spacing", group: "prims", isHeader: false },
+  { id: "primitives-radius", label: "Radius", group: "prims", isHeader: false },
   { id: "primitives-typography", label: "Typography", group: "prims", isHeader: false },
   { id: "primitives-semantic", label: "Semantic Types", group: "prims", isHeader: false },
   { id: "primitives-lineheight", label: "Line Height", group: "prims", isHeader: false },
@@ -380,7 +367,7 @@ function ColorsSection({ groups, brandNeedsSetup, onMarkBrandEstablished }: {
   );
 }
 
-function SpacingSection() {
+function SpacingSection({ spacing }: { spacing: SpacingStep[] }) {
   return (
     <section id="primitives-spacing" data-sg-section="primitives-spacing">
       <Divider />
@@ -391,12 +378,37 @@ function SpacingSection() {
           desc="Based on Tailwind 4's 4px grid. All padding, margin, and gap values in new code should use these Tailwind utilities. Arbitrary pixel values should only appear in legacy inline styles pending Phase 4 cleanup."
         />
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {SPACING_SCALE.map((s) => (
+          {spacing.map((s) => (
             <div key={s.px} style={{ display: "flex", alignItems: "center", gap: 16 }}>
               <div style={{ fontFamily: A.mono, fontSize: 11, color: CA.mid, width: 28, textAlign: "right", flexShrink: 0 }}>{s.px}px</div>
               <div style={{ background: CA.accent, height: 20, width: s.px * 4, minWidth: 2, borderRadius: 1, flexShrink: 0 }} />
               <div style={{ fontFamily: A.mono, fontSize: 11, color: CA.accent, width: 120, flexShrink: 0 }}>{s.tw}</div>
               <div style={{ fontFamily: A.body, fontSize: 13, color: CA.mid }}>{s.use}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RadiusSection({ radii }: { radii: RadiusStep[] }) {
+  return (
+    <section id="primitives-radius" data-sg-section="primitives-radius">
+      <Divider />
+      <div style={{ paddingTop: 48 }}>
+        <SectionTitle
+          eyebrow="Primitives · Sub-Atomic Tokens"
+          title="Radius Scale"
+          desc="Corner-radius steps for controls, cards, and media. Use the Tailwind utility; each step exports to Figma as a corner-radius variable."
+        />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 20 }}>
+          {radii.map((r) => (
+            <div key={r.name} style={{ display: "flex", flexDirection: "column", gap: 8, width: 150 }}>
+              <div style={{ background: CA.accent, height: 64, borderRadius: Math.min(r.px, 32), border: "1px solid rgba(0,0,0,0.06)" }} />
+              <div style={{ fontFamily: A.body, fontSize: 12, fontWeight: 600, color: CA.dark }}>{r.name} · {r.px === 9999 ? "full" : `${r.px}px`}</div>
+              <div style={{ fontFamily: A.mono, fontSize: 11, color: CA.accent }}>{r.tw}</div>
+              <div style={{ fontFamily: A.body, fontSize: 12, color: CA.mid, lineHeight: 1.4 }}>{r.use}</div>
             </div>
           ))}
         </div>
@@ -471,7 +483,7 @@ function TypographySection({ fonts, needsSetup }: { fonts: BrandFont[]; needsSet
   );
 }
 
-function TypeScaleSection({ fonts }: { fonts: BrandFont[] }) {
+function TypeScaleSection({ fonts, typeScale }: { fonts: BrandFont[]; typeScale: number[] }) {
   const resolvedFonts = useResolvedTokens(fonts.map((f) => f.token));
   return (
     <section id="primitives-typescale" data-sg-section="primitives-typescale">
@@ -480,7 +492,7 @@ function TypeScaleSection({ fonts }: { fonts: BrandFont[] }) {
         <SectionTitle
           eyebrow="Primitives · Sub-Atomic Tokens"
           title="Type Scale"
-          desc={`${TYPE_SCALE.length} type sizes form the visual scale. Each is shown across all ${fonts.length} ${siteConfig.clientName} font families to illustrate how the same size reads differently at each voice.`}
+          desc={`${typeScale.length} type sizes form the visual scale. Each is shown across all ${fonts.length} ${siteConfig.clientName} font families to illustrate how the same size reads differently at each voice.`}
         />
 
         {fonts.map((ff) => (
@@ -488,7 +500,7 @@ function TypeScaleSection({ fonts }: { fonts: BrandFont[] }) {
             <SubHead>{ff.name} — {ff.role}</SubHead>
             <div style={{ fontFamily: A.mono, fontSize: 11, color: CA.mid, marginBottom: 10 }}>{ff.token} → {fontName(resolvedFonts[ff.token] || ff.stack)}</div>
             <DemoBox bg={C.white} pad={24}>
-              {TYPE_SCALE.map((size) => (
+              {typeScale.map((size) => (
                 <div key={size} style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 6 }}>
                   <span style={{ fontFamily: A.mono, fontSize: 10, color: CA.mid, width: 28, flexShrink: 0, textAlign: "right" }}>{size}</span>
                   <span style={{ fontFamily: ff.stack, fontSize: size, color: C.ink, lineHeight: 1.2 }}>{ff.sample}</span>
@@ -1018,11 +1030,12 @@ export function StyleGuide({ onNavigate, variationId, needsSetup, onMarkUpdated,
 
           {/* SECTIONS */}
           <ColorsSection groups={brand.paletteGroups} brandNeedsSetup={brandNeedsSetup} onMarkBrandEstablished={onMarkBrandEstablished} />
-          <SpacingSection />
+          <SpacingSection spacing={brand.spacing ?? []} />
+          <RadiusSection radii={brand.radii ?? []} />
           <TypographySection fonts={brand.fonts} needsSetup={needsSetup} />
           <SemanticTypesSection />
           <LineHeightSection />
-          <TypeScaleSection fonts={brand.fonts} />
+          <TypeScaleSection fonts={brand.fonts} typeScale={brand.typeScale ?? []} />
 
           <ButtonsSection />
           <BadgesSection />

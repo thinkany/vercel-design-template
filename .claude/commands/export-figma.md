@@ -138,8 +138,9 @@ usage is in [README.md](../../README.md) → "Exporting designs to Figma".
 The full first-time export produces **one Figma file per variation** whose **Pages
 panel** mirrors the project: a **Page per design page** (Home, About, …) holding
 that page's per-breakpoint frames **composed from block instances**, a `———`
-separator, a **Styleguide** Page (real color **variables** + text **styles** whose
-font family is **bound to `Type` string variables** + a specimen), a **Components** Page (the shadcn components **this design actually uses**
+separator, a **Styleguide** Page (real color **variables**, **spacing + radius
+number variables**, text **styles** whose font family is **bound to `Type` string
+variables**, a **type-scale text-style ramp**, + a specimen), a **Components** Page (the shadcn components **this design actually uses**
 — see the usage scan below — as component sets with variant properties), and a
 **Block Library** Page (section blocks **reconstructed from the real page** — every
 `[data-block]` section, at each breakpoint, as `View=…` component sets). Everything
@@ -274,8 +275,12 @@ The brand-tokens pair in detail:
   4. Run **`variables`** → **`textstyles`** → **`specimen`** (sequential, never
      parallel), each embedding the brand `MANIFEST` + the matching `PHASE` + the
      brand builder body. This populates the **`Brand`** color collection everything
-     binds to, plus a **`Type`** collection of font-family string variables the text
-     styles bind their `fontFamily` to.
+     binds to, the **`Spacing`** + **`Radius`** FLOAT (px) collections (`variables`
+     phase), a **`Type`** collection of font-family string variables the role text
+     styles bind their `fontFamily` to, and a **`Type Scale/{px}`** ramp of
+     size-only text styles (`textstyles` phase). The `specimen` frame documents all
+     of them — spacing bars bind their **width** and radius squares their **corner
+     radius** to the FLOAT variables, so editing a token reflows the swatch.
   5. **Fill the Components Page (design's components):** `npm run export:library -- -v {id}`,
      which scans the design surface and emits a manifest of **only the ui components
      this design uses** (check its `coverage` report — a warned `unsupported` entry

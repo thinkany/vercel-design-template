@@ -249,10 +249,16 @@ win (a variation can diverge its own fonts/colors).
   `--ta-*` directly and is unaffected. Leave `--destructive`, surfaces, and
   `--chart-*`/`--sidebar-*` stock unless the brand deliberately maps them.
 
-[src/styles/brand.ts](src/styles/brand.ts) is the human-facing manifest
-(names/roles/order) the styleguide renders; [tokens.css](src/styles/tokens.css)
-holds the values components actually consume. `/setup-styleguide` writes **both**
-together so they never drift.
+[src/styles/brand.ts](src/styles/brand.ts) is the human-facing manifest the
+styleguide renders — color groups + type roles, **plus the `spacing`, `radii`, and
+`typeScale` scales** (the guide's Spacing/Radius/Type-Scale sections read these, so
+they're single-source, not hardcoded in `StyleGuide.tsx`);
+[tokens.css](src/styles/tokens.css) holds the values components actually consume.
+`/setup-styleguide` writes **both** together so they never drift. The Figma
+**foundations export** reads the same `brand.ts`: colors → COLOR variables, fonts →
+text styles bound to `Type` family variables, **`spacing`/`radii` → FLOAT (px)
+variables** (`Spacing`/`Radius` collections), and **`typeScale` → a `Type Scale/{px}`
+text-style ramp**.
 
 ### Config & readiness flags
 
