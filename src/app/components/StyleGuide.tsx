@@ -125,7 +125,7 @@ const LINE_HEIGHTS = [
 ];
 
 const SPACING_SCALE = [
-  { scale: "0.5", px: 2,  tw: "p-0.5 / gap-0.5", use: "Micro gap — tight metadata stacks, star gaps" },
+  { scale: "0.5", px: 2,  tw: "p-0.5 / gap-0.5", use: "Micro gap — tight metadata stacks" },
   { scale: "1",   px: 4,  tw: "p-1 / gap-1",     use: "Icon/text pairs, atom spacing" },
   { scale: "1.5", px: 6,  tw: "p-1.5 / gap-1.5", use: "Label rows, badge groups" },
   { scale: "2",   px: 8,  tw: "p-2 / gap-2",     use: "Compact item spacing" },
@@ -137,10 +137,6 @@ const SPACING_SCALE = [
   { scale: "7",   px: 28, tw: "p-7",             use: "Section top padding" },
   { scale: "8",   px: 32, tw: "p-8 / gap-8",     use: "Column gutter" },
   { scale: "10",  px: 40, tw: "p-10",            use: "Section vertical spacing" },
-];
-
-const STAR_RATINGS = [
-  "★★★★★", "★★★★½", "★★★★", "★★★½", "★★★", "★★½", "★★", "★½", "★", "½",
 ];
 
 const NAV_SECTIONS = [

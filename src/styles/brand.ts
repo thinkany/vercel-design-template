@@ -75,7 +75,7 @@ export const brand: Brand = {
       title: "Brand Palette",
       colors: [
         { name: "Brand Blue",      token: "--ta-blue",       value: "#1e4b96", text: "#ffffff", role: "Links, active nav, accent borders" },
-        { name: "Accent Red",      token: "--ta-red",        value: "#c41230", text: "#ffffff", role: "Star ratings, NEW badge, alerts" },
+        { name: "Accent Red",      token: "--ta-red",        value: "#c41230", text: "#ffffff", role: "NEW badge, alerts, sale price" },
         { name: "Page Background", token: "--ta-cream",      value: "#f8f7f3", text: "#111111", role: "Site background, card fills, hero wash" },
         { name: "Primary Text",    token: "--ta-ink",        value: "#111111", text: "#ffffff", role: "Body text, primary headings" },
         { name: "Secondary Text",  token: "--ta-gray-dark",  value: "#333333", text: "#ffffff", role: "Secondary body text" },
@@ -88,6 +88,6 @@ export const brand: Brand = {
     { name: "Display", token: "--ta-font-display", stack: "var(--ta-font-display)", role: "Headings, titles, hero text",        sample: "The quick brown fox jumps" },
     { name: "Serif",   token: "--ta-font-serif",   stack: "var(--ta-font-serif)",   role: "Body copy, long-form reading",       sample: "The quick brown fox jumps over the lazy dog." },
     { name: "Sans",    token: "--ta-font-sans",    stack: "var(--ta-font-sans)",    role: "UI labels, navigation, metadata",    sample: "THE QUICK BROWN FOX · 24 JUNE 2026" },
-    { name: "Mono",    token: "--ta-font-mono",    stack: "var(--ta-font-mono)",    role: "Numeric data, tabular values, code", sample: "0123456789  ·  ★★★★½" },
+    { name: "Mono",    token: "--ta-font-mono",    stack: "var(--ta-font-mono)",    role: "Numeric data, tabular values, code", sample: "0123456789  ·  $1,240.50  ·  99.9%" },
   ],
 };
