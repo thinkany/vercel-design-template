@@ -467,9 +467,27 @@ if (PHASE === "reconstruct") {
       const spec = blk.views[view];
       if (!spec) continue;
       const photos = [];
-      const root = await build(spec, page, true, photos);
+      let root = await build(spec, page, true, photos);
       for (const n of [root, ...root.findAll(() => true)]) { if ("fills" in n) bindPaints(n, "fills"); if ("strokes" in n) bindPaints(n, "strokes"); }
       for (const p of photos) { p.nodeId = p._frame.id; photoOut.push({ blockId: blk.blockId, view, asset: p.asset, nodeId: p._frame.id }); }
+      // Standardize each block to a full-width ROW at the breakpoint canvas: a section
+      // narrower than the canvas (its `max-w-* mx-auto` box — Shop by Room 1200, the
+      // grids, the 720 Journal hero) is wrapped in a canvas-width frame with its content
+      // CENTERED, so every block is a consistent-width row that stacks edge-to-edge and
+      // matches the live page, instead of a tight box whose width swings with the
+      // section's max-w. Full-width sections (Hero/Header/Footer, already ≈ canvas) are
+      // untouched. Overlay blocks (menu panels, mobile drawer) are NOT page rows — they
+      // keep their natural size.
+      const canvasW = (MANIFEST.widths && MANIFEST.widths[view]) || 0;
+      if (canvasW && !/^menu-|^mobile-menu/.test(blk.blockId) && root.width < canvasW - 1) {
+        const row = figma.createFrame();
+        row.fills = []; row.clipsContent = false;
+        page.appendChild(row);
+        row.resize(canvasW, root.height);
+        row.appendChild(root);
+        root.x = Math.round((canvasW - root.width) / 2); root.y = 0;
+        root = row;
+      }
       if (TEMP) {
         const tname = `__tmp:${blk.blockId}:${view}`;
         for (const n of [...page.children]) if (n.name === tname && (n.type === "COMPONENT" || n.type === "COMPONENT_SET")) n.remove(); // idempotent
