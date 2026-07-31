@@ -131,6 +131,17 @@ hex/fonts, edit `src/variations/{id}/` (not the base) when working on a variatio
 section (binds its colors to `--ta-*` variables, componentizes per breakpoint). No
 `blocks.ts`, no hand-built builders. Header/Footer carry markers too. See
 [`/export-figma`](.claude/commands/export-figma.md) for the derive pipeline.
+- **Put the marker on the element that owns the section's spacing & background —
+  not an inner card.** A block's box is exactly the marked element, and composed
+  pages stack blocks flush (the gap between two sections comes from their own
+  `py-*`, since compose adds none). So if the section's vertical spacing or
+  full-bleed background lives on a **wrapper** (`<Reveal className="… pb-24">`, a
+  `bg-* w-full` ancestor) while the marker sits on an inner card, that
+  spacing/background is **outside the block** and the section renders flush /
+  bare in the export. Mark the outermost element that carries the `py-*`/`bg-*`
+  (or, if a component wrapper like `Reveal` can't take the marker, wrap the card
+  in a `<div data-block=…>` that holds the padding). Siblings that already mark
+  the padded `<section>` are the pattern to match.
 
 ### Global elements (Header / Footer / Mobile Menu)
 
