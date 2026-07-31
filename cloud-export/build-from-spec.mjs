@@ -7,8 +7,8 @@
  * The cloud path ends with capture-client --post writing a BuildSpec to
  * cloud-export/out/reconstruct-{v}.json. The Figma build itself is unchanged: it
  * still runs through emitCalls() in scripts/export-reconstruct-to-figma.mjs, which
- * packs a spec into ready-to-submit use_figma call payloads (reconstruct-calls/
- * _plan.json + per-block .js). This bridge just feeds the cloud spec into that
+ * packs a spec into ready-to-submit use_figma call payloads
+ * (reconstruct-calls/{variation}/ _plan.json + per-block .js). This bridge just feeds the cloud spec into that
  * packer — no puppeteer, no browser, purely local (the build layer stays local
  * under the user's Figma auth). Output is byte-identical to the old offline
  * `export-reconstruct --emit-calls`, so the /export-figma Part 1 / Part 2
@@ -21,8 +21,8 @@
  * Typical flow:
  *   DERIVE_ENDPOINT=… DERIVE_LICENSE_KEY=… \
  *     node cloud-export/capture-client.mjs -v v00 --post   # → out/reconstruct-v00.json
- *   node cloud-export/build-from-spec.mjs -v v00           # → out/reconstruct-calls/
- *   # then submit each reconstruct-calls/*.js via use_figma (see /export-figma)
+ *   node cloud-export/build-from-spec.mjs -v v00           # → out/reconstruct-calls/v00/
+ *   # then submit each reconstruct-calls/{variation}/*.js via use_figma (see /export-figma)
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -67,9 +67,9 @@ async function main() {
   if (!spec.blocks.length) throw new Error(`BuildSpec has no blocks — nothing to build`);
 
   const plan = await emitCalls(spec, outDir, args.limit);
-  const callsDir = join(outDir, "reconstruct-calls");
+  const callsDir = join(outDir, "reconstruct-calls", spec.variation);
   console.error(`✓ bridge: packed ${spec.blocks.length} block(s) → ${callsDir}`);
-  console.error(`  Next: submit each reconstruct-calls/*.js as the use_figma \`code\` param (see /export-figma Part 1), then _combine.js, then compose.`);
+  console.error(`  Next: submit each reconstruct-calls/${spec.variation}/*.js as the use_figma \`code\` param (see /export-figma Part 1), then _combine.js, then compose.`);
   console.log(JSON.stringify({
     inPath, callsDir,
     calls: plan.calls.length, splitBlocks: plan.combine.length,

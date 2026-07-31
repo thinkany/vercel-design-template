@@ -388,7 +388,8 @@ function printSummary(m, styleDir) {
 const BRAND_PHASES = ["scaffold", "variables", "textstyles", "specimen"];
 async function emitBrandCalls(manifest, outDir) {
   const body = await readFile(join(__dirname, "figma-brand-library.plugin.js"), "utf8");
-  const dir = join(ROOT, outDir, "brand-calls");
+  // Per-variation subdir so v00 / v01 / … payloads never clobber each other.
+  const dir = join(ROOT, outDir, "brand-calls", manifest.variationId);
   await mkdir(dir, { recursive: true });
   const manifestJson = JSON.stringify(manifest); // compact — smaller payload
   const LIMIT = 50000;
@@ -404,7 +405,7 @@ async function emitBrandCalls(manifest, outDir) {
     phases,
   };
   await writeFile(join(dir, "_plan.json"), JSON.stringify(plan, null, 2) + "\n", "utf8");
-  console.log(`\n→ emitted ${phases.length} brand call(s) + _plan.json → ${outDir}/brand-calls`);
+  console.log(`\n→ emitted ${phases.length} brand call(s) + _plan.json → ${outDir}/brand-calls/${manifest.variationId}`);
   for (const p of phases) console.log(`    ${p.file.padEnd(22)} ${(p.bytes / 1024).toFixed(1)}KB${p.over ? "  ⚠ over 50K — trim the builder body" : ""}`);
 }
 
@@ -418,8 +419,8 @@ async function main() {
   --print                Print the manifest instead of writing it
   --emit-calls           Also write ready-to-submit use_figma payloads, one
                          brand-{phase}.js per phase (scaffold/variables/textstyles/
-                         specimen) → figma-export/brand-calls/ + _plan.json. Submit
-                         these instead of hand-assembling with node -e.
+                         specimen) → figma-export/brand-calls/{variation}/ + _plan.json.
+                         Submit these instead of hand-assembling with node -e.
 
   File registry (remember one Figma file per variation):
   --record --file-key <k> [--file-url <u>] [--file-name <n>]
@@ -518,8 +519,8 @@ async function main() {
   console.log(`\n→ wrote ${args.out}/brand-${args.variation}.json`);
   if (args.emitCalls) {
     await emitBrandCalls(manifest, args.out);
-    console.log("  Next (live): submit each brand-calls/brand-{phase}.js as the use_figma");
-    console.log("  `code` param, SEQUENTIALLY (scaffold → variables → textstyles → specimen).");
+    console.log(`  Next (live): submit each brand-calls/${args.variation}/brand-{phase}.js as the`);
+    console.log("  use_figma `code` param, SEQUENTIALLY (scaffold → variables → textstyles → specimen).");
   } else {
     console.log("  Next (live): Claude reads this manifest and runs the Figma builder");
     console.log("  (scripts/figma-brand-library.plugin.js) via use_figma. Add --emit-calls to");

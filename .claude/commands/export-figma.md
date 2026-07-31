@@ -154,8 +154,8 @@ and **Part 2 = Pages from blocks** (step 7's `compose`). The "Both" scope just r
 1→2 back-to-back. Part 2 is **standalone**: it resolves each block's component **by
 name** off the Block Library page, so it can run any time after Part 1 without re-doing
 the expensive block builds — `npm run export:reconstruct -- --emit-calls` writes a
-ready-to-submit **`_compose-{pageId}.js`** per page (in `reconstruct-calls/`, listed in
-`_plan.json`'s `compose[]`) alongside the block calls.
+ready-to-submit **`_compose-{pageId}.js`** per page (in `reconstruct-calls/{variation}/`,
+listed in `_plan.json`'s `compose[]`) alongside the block calls.
 
 Three script pairs (each an offline manifest + a `use_figma` builder body, same
 pattern) drive the design-system half. Load the `figma-use` +
@@ -274,7 +274,7 @@ The brand-tokens pair in detail:
      **Emit the phase payloads with the script — don't hand-assemble.** Run
      `npm run export:brand -- -v {id} --emit-calls` (or
      `node scripts/export-brand-to-figma.mjs -v {id} --emit-calls`) and it writes
-     `figma-export/brand-calls/brand-{phase}.js` (MANIFEST + PHASE + builder body,
+     `figma-export/brand-calls/{variation}/brand-{phase}.js` (MANIFEST + PHASE + builder body,
      ready to submit) + `_plan.json`. Submit those files as the `use_figma` `code`
      param — **never improvise a `node -e` to build the payloads** (unallowlistable
      arbitrary code; the script command is stable and allowlisted).
@@ -308,7 +308,7 @@ The brand-tokens pair in detail:
         `--fast` for the primary breakpoint, `--only {ids}` to re-extract some blocks.)
         Specs OMIT default-valued fields (≈40–50% smaller) so heavy blocks fit a call.
      b. **Add `--emit-calls`** and the script also writes **batched, ready-to-submit
-        `use_figma` payloads** to `figma-export/reconstruct-calls/` — assembled
+        `use_figma` payloads** to `figma-export/reconstruct-calls/{variation}/` — assembled
         (spec + builder body) and **sized to the 50K `code` limit**, plus `_plan.json`.
         This is the robust way to run the builder: **size is known offline, so route
         without failed "try-then-discover-it's-too-big" attempts.** **Blocks are

@@ -81,7 +81,8 @@ export async function emitCalls(manifest, out, limit) {
   if (body.length < rawBody.length) console.error(`  ✓ builder body slimmed ${rawBody.length}B → ${body.length}B (${Math.round(100 * (1 - body.length / rawBody.length))}% smaller, per call; multi-line preserved)`);
   const base = { blockPageName: manifest.blockPageName, brandCollectionName: manifest.brandCollectionName, brandColors: manifest.brandColors, fonts: manifest.fonts, views: manifest.views, widths: manifest.widths };
   const assemble = (m, phase) => `const MANIFEST=${JSON.stringify(m)};\nconst PHASE=${JSON.stringify(phase)};\n${body}`;
-  const dir = join(out, "reconstruct-calls");
+  // Per-variation subdir so different variations' call payloads never clobber.
+  const dir = join(out, "reconstruct-calls", manifest.variation);
   await mkdir(dir, { recursive: true });
   const plan = { note: "PART 1 (Styleguide+Blocks): submit each calls[].file as the use_figma `code` param (with your fileKey), collect photos[] from each return + upload_assets, then submit _combine.js. PART 2 (Pages from blocks): once blocks exist, submit each compose[].file — one per page, fan out in parallel — to compose design Pages from block instances (resolved BY NAME off the Block Library page).", calls: [], combine: [], compose: [], oversized: [] };
   // Greedily PACK blocks into batches that each fit one call's `limit`. The fixed
@@ -208,7 +209,7 @@ async function printManifest(args) {
     for (const p of m.pages) console.log(`    ${(p.id || "").padEnd(10)} ${(p.blocks || []).map((b) => b.blockId).join(" → ")}`);
   }
   try {
-    const plan = JSON.parse(await readFile(join(args.out, "reconstruct-calls", "_plan.json"), "utf8"));
+    const plan = JSON.parse(await readFile(join(args.out, "reconstruct-calls", args.variation, "_plan.json"), "utf8"));
     const batchCalls = plan.calls.filter((c) => c.batch);
     const packed = batchCalls.reduce((n, c) => n + (c.blocks || 0), 0);
     console.log(`\n  _plan.json: ${packed} block(s) → ${batchCalls.length} batched call(s), ${plan.combine.length} split, ${plan.compose.length} compose page(s)${plan.oversized.length ? `, ${plan.oversized.length} oversized ⚠` : ""}`);
