@@ -156,7 +156,7 @@ const VIEWPORT_HEIGHTS = { desktop: 900, tablet: 900, mobile: 780 };
 const viewHeight = (view) => VIEWPORT_HEIGHTS[view] ?? VIEWPORT_HEIGHT;
 
 function parseArgs(argv) {
-  const args = { url: "http://localhost:5173", variation: "v00", out: "figma-export", views: null, pages: null, only: null, fast: false, emitCalls: false, limit: 48000 };
+  const args = { url: "http://localhost:5173", variation: "v00", out: "figma-export", views: null, pages: null, only: null, fast: false, emitCalls: false, limit: 48000, print: false };
   const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -169,9 +169,51 @@ function parseArgs(argv) {
     else if (a === "--fast") args.fast = true;
     else if (a === "--emit-calls") args.emitCalls = true;
     else if (a === "--limit") args.limit = parseInt(argv[++i], 10) || 48000;
+    else if (a === "--print") args.print = true;
     else if (a === "--help" || a === "-h") args.help = true;
   }
   return args;
+}
+
+// Read-only inspection of an EXISTING manifest (+ its _plan.json, if emitted). No
+// capture, no dev server, no Figma — so you can understand block structure/sizes
+// without improvising `node -e` snippets (which each trigger a fresh permission
+// prompt). This is THE way to inspect the reconstruct output.
+async function printManifest(args) {
+  const kb = (bytes) => (bytes / 1024).toFixed(1) + "KB";
+  const path = join(args.out, `reconstruct-${args.variation}.json`);
+  let m;
+  try { m = JSON.parse(await readFile(path, "utf8")); }
+  catch { console.error(`No manifest at ${path}. Run the extractor first (without --print) to generate it.`); return; }
+  const blocks = m.blocks || [];
+  console.log(`\nreconstruct manifest — ${args.variation}  (${path})`);
+  console.log(`  views: ${(m.views || []).join(", ")}   widths: ${JSON.stringify(m.widths || {})}`);
+  console.log(`  ${blocks.length} block(s), ${(m.pages || []).length} page(s), ${(m.assets || []).length} asset(s)\n`);
+  const rows = blocks.map((b) => {
+    const entries = Object.entries(b.views || {});
+    return {
+      page: b.page || "", blockId: b.blockId, name: b.name || "",
+      views: entries.map(([v]) => v).join(","),
+      per: entries.map(([v, spec]) => `${v}:${kb(JSON.stringify(spec).length)}`).join(" "),
+      total: entries.reduce((n, [, spec]) => n + JSON.stringify(spec).length, 0),
+    };
+  });
+  const wId = Math.max(5, ...rows.map((r) => r.blockId.length));
+  const wNm = Math.max(4, ...rows.map((r) => r.name.length));
+  console.log(`  ${"PAGE".padEnd(8)}${"BLOCK".padEnd(wId + 2)}${"NAME".padEnd(wNm + 2)}${"VIEWS".padEnd(15)}SIZE`);
+  for (const r of rows) console.log(`  ${r.page.padEnd(8)}${r.blockId.padEnd(wId + 2)}${r.name.padEnd(wNm + 2)}${r.views.padEnd(15)}${kb(r.total)}  (${r.per})`);
+  if ((m.pages || []).length) {
+    console.log(`\n  pages (compose order):`);
+    for (const p of m.pages) console.log(`    ${(p.id || "").padEnd(10)} ${(p.blocks || []).map((b) => b.blockId).join(" → ")}`);
+  }
+  try {
+    const plan = JSON.parse(await readFile(join(args.out, "reconstruct-calls", "_plan.json"), "utf8"));
+    const batchCalls = plan.calls.filter((c) => c.batch);
+    const packed = batchCalls.reduce((n, c) => n + (c.blocks || 0), 0);
+    console.log(`\n  _plan.json: ${packed} block(s) → ${batchCalls.length} batched call(s), ${plan.combine.length} split, ${plan.compose.length} compose page(s)${plan.oversized.length ? `, ${plan.oversized.length} oversized ⚠` : ""}`);
+    for (const c of batchCalls) console.log(`    ${c.file}: [${(c.blockIds || []).join(", ")}]  ${kb(c.bytes)}`);
+  } catch { /* no _plan.json yet (run with --emit-calls) — fine */ }
+  console.log("");
 }
 
 function help() {
@@ -186,6 +228,10 @@ export-reconstruct-to-figma — walk every [data-block] into a Figma build spec.
       --only <list>      Only these block ids
       --fast             Primary (first active) breakpoint only
       --out <dir>        Output dir (default figma-export)
+      --print            Inspect the EXISTING manifest (+ _plan.json): block
+                         index, per-view sizes, compose order, batched calls.
+                         Read-only — no capture, no dev server. Use this to
+                         understand structure instead of ad-hoc node -e.
 `);
 }
 
@@ -431,6 +477,7 @@ async function settlePage(page) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) return help();
+  if (args.print) return printManifest(args);
   const t0 = performance.now();
   const puppeteer = await loadPuppeteer();
   const browser = await puppeteer.launch({ headless: "new", protocolTimeout: 600000 });

@@ -318,6 +318,14 @@ The brand-tokens pair in detail:
         `_plan.json.oversized` flags any single view STILL over the limit even shrunk
         (needs a node-tree split — rare). Builder calls stay **sequential**; the
         `upload_assets` POSTs and per-page `compose` calls parallelize.
+
+        **Inspecting the manifest/plan — use `--print`, NOT `node -e`.** To see block
+        structure, sizes, compose order, or how blocks batched, run
+        `node scripts/export-reconstruct-to-figma.mjs --print` (read-only; no capture,
+        no dev server) or read `_plan.json` directly (`cat`/`jq`). **Do not improvise
+        `node -e '…'` snippets to spelunk the JSON** — each unique snippet is a fresh
+        permission prompt (and can't be safely allowlisted), whereas `--print` /
+        `jq` / `cat` are stable, read-only, and allowlistable.
         The builder **returns** `built[].componentId` per `blockId` **and** a
         `photos[]` list of `{ blockId, view, asset, nodeId }`, binding fills to the
         **`Brand`** collection (canonical `var(--ta-*)` from step 4).
