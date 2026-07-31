@@ -85,7 +85,7 @@ export async function emitCalls(manifest, out, limit) {
   const dir = join(out, "reconstruct-calls", manifest.variation);
   await rm(dir, { recursive: true, force: true }); // wipe stale payloads (e.g. per-view temp files from a prior over-limit run) so nothing to hand-clean
   await mkdir(dir, { recursive: true });
-  const plan = { note: "PART 1 (Styleguide+Blocks): submit each calls[].file as the use_figma `code` param (with your fileKey), collect photos[] from each return + upload_assets, then submit _combine.js. PART 2 (Pages from blocks): once blocks exist, submit each compose[].file — one per page, fan out in parallel — to compose design Pages from block instances (resolved BY NAME off the Block Library page).", calls: [], combine: [], compose: [], oversized: [] };
+  const plan = { note: "INVARIANT: every *.js call file embeds the SAME builder body (read once from the plugin); files differ ONLY in their leading `const MANIFEST=…;` + `const PHASE=…;` lines — do NOT diff/md5 the bodies to 'verify', they are identical by construction. PART 1 (Styleguide+Blocks): submit each calls[].file as the use_figma `code` param (with your fileKey), collect photos[] from each return + upload_assets, then submit _combine.js. PART 2 (Pages from blocks): once blocks exist, submit each compose[].file — one per page, fan out in parallel — to compose design Pages from block instances (resolved BY NAME off the Block Library page).", calls: [], combine: [], compose: [], oversized: [] };
   // Greedily PACK blocks into batches that each fit one call's `limit`. The fixed
   // builder body dominates every payload, so batching both amortizes it across
   // several blocks AND — the real win — makes far fewer sequential use_figma

@@ -402,7 +402,7 @@ async function emitBrandCalls(manifest, outDir) {
     phases.push({ phase, file, bytes: code.length, over: code.length > LIMIT });
   }
   const plan = {
-    note: "Submit each phases[].file as the use_figma `code` param (with your fileKey), SEQUENTIALLY in order: scaffold → variables → textstyles → specimen (see /export-figma Part 1). scaffold returns the design-page ids; specimen builds the styleguide frame.",
+    note: "INVARIANT: every brand-{phase}.js embeds the SAME builder body; files differ ONLY in their leading MANIFEST + PHASE lines — identical by construction, do NOT diff them. Submit each phases[].file as the use_figma `code` param (with your fileKey), SEQUENTIALLY in order: scaffold → variables → textstyles → specimen (see /export-figma Part 1). scaffold returns the design-page ids; specimen builds the styleguide frame.",
     phases,
   };
   await writeFile(join(dir, "_plan.json"), JSON.stringify(plan, null, 2) + "\n", "utf8");

@@ -328,7 +328,11 @@ The brand-tokens pair in detail:
         deletion) **+** a shared `_combine.js` (PHASE `combine`) that merges the temps
         into the `View=` set (photos set on temp nodes survive the combine). Submit
         each `calls[].file` verbatim as the `code` param (with your fileKey), collect
-        `photos[]` from each return, then submit `_combine.js`.
+        `photos[]` from each return, then submit `_combine.js`. **Every call file
+        embeds a byte-identical builder body by construction — they differ ONLY in
+        their leading `MANIFEST`/`PHASE` lines. Trust that; do NOT diff/md5 the files
+        to "verify" it** (a wasted, prompt-triggering check — the `_plan.json` note
+        states the same invariant).
         `_plan.json.oversized` flags any single view STILL over the limit even shrunk
         (needs a node-tree split — rare). Builder calls stay **sequential**; the
         `upload_assets` POSTs and per-page `compose` calls parallelize.
