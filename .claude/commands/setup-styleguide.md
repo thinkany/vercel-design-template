@@ -108,9 +108,11 @@ inconsistent results; stay with plain HTTP fetches of the markup + stylesheets.
    drop near-duplicate shades and incidental one-off greys. Note the site's real
    `font-family` stacks too — offer them as suggested type roles (Display / body),
    though actual font wiring still follows the Fonts step (1b).
-3. **Confirm before writing.** Propose a named, described palette (name + hex + role
-   per color) via `AskUserQuestion` for the designer to confirm, rename, or drop
-   entries. **Never write a fetched palette without confirmation.**
+3. **Preview + confirm before writing.** Assemble the named, described palette
+   (name + hex + role per color), **publish the swatch preview** (see *Swatch
+   preview* below) so the designer sees the actual colors, then confirm / rename /
+   drop entries via `AskUserQuestion`. **Never write a fetched palette without
+   confirmation.**
 4. **If the site yields too little** (a JS-heavy SPA with no usable CSS in the
    fetched source), **do not escalate to a browser.** Say so plainly and fall back:
    ask the designer for the brand hex(es) or logo, or switch to **Method C** (derive
@@ -119,9 +121,26 @@ inconsistent results; stay with plain HTTP fetches of the markup + stylesheets.
 **Method C — From one primary color.**
 Ask for a single primary hex, then derive a coherent system from it with sensible
 color theory — typically one or two accents (e.g. a complementary/secondary), a
-neutral ramp (a near-black ink plus 2–3 greys), and a page background. Present the
-derived palette (name + hex + role) via `AskUserQuestion` to confirm/tweak before
-writing.
+neutral ramp (a near-black ink plus 2–3 greys), and a page background. **Publish the
+swatch preview** (see *Swatch preview* below) so the designer sees the actual
+colors, then present the derived palette (name + hex + role) via `AskUserQuestion`
+to confirm/tweak before writing.
+
+**Swatch preview (Artifact) — proposed palettes (Methods B & C only).**
+`AskUserQuestion` options are text-only (no color chips), so for a *proposed*
+palette, show the real colors as an **Artifact** first — it renders inline in
+Claude Desktop, before anything is written to disk. (Method A / manual entry skips
+this — the designer is supplying the hexes themselves.)
+
+- Write a **self-contained HTML** file to the scratchpad: a responsive grid of
+  cards, each = a filled color block (`background:{hex}`) above its **name**, the
+  **hex** (mono), and the **role**. Theme-aware, favicon `🎨`. Load the
+  `artifact-design` skill first (the Artifact tool requires it) but keep the
+  investment **minimal** — this is a quick utility swatch card, not a showcase.
+- **Publish it** with the Artifact tool (private by default), then run the
+  `AskUserQuestion` confirm. If the designer renames/drops/re-tints a color, **edit
+  the same file and re-publish** (same path → same URL updates in place).
+- Only **after** they confirm do you write `tokens.css` + `brand.ts`.
 
 **Token naming (all methods).** Generate each token as `--ta-<slug>`, where
 `<slug>` is the color name lowercased with spaces → hyphens and non-alphanumerics
