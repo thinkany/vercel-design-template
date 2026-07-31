@@ -390,7 +390,15 @@ function extractSpec(blockSel) {
     }).filter((sh) => sh.color && sh.color.a > 0);
   };
   const walk = (el, pr) => {
-    const cs = getComputedStyle(el); const rect = el.getBoundingClientRect(); const tag = el.tagName.toLowerCase();
+    const cs = getComputedStyle(el);
+    // Skip hidden subtrees — display:none content isn't visible, so it must never
+    // enter the spec. Critically this drops the CLOSED hover dropdown/mega panels
+    // (the Header renders them `hidden` until open) out of the Header block's walk;
+    // they're captured separately as "Menu — {item}" blocks when forced open. Without
+    // it the header bloats with hundreds of hidden nodes (over the 50K call limit) and
+    // the panels double as stacked overlays inside the Figma header component.
+    if (cs.display === "none") return null;
+    const rect = el.getBoundingClientRect(); const tag = el.tagName.toLowerCase();
     if (tag === "svg") return { kind: "svg", ...relRect(rect, pr), svg: el.outerHTML, color: toRGBA(cs.color) };
     const isFlex = cs.display === "flex" || cs.display === "inline-flex"; const isGrid = cs.display === "grid";
     const node = { tag, ...relRect(rect, pr) };
@@ -454,13 +462,14 @@ function extractSpec(blockSel) {
     const children = [];
     for (const cn of el.childNodes) {
       if (cn.nodeType === 3) { const chars = cn.textContent.replace(/\s+/g, " ").trim(); if (!chars) continue; const rng = document.createRange(); rng.selectNodeContents(cn); children.push({ kind: "text", ...relRect(rng.getBoundingClientRect(), rect), text: { chars, ...textStyle(cs) } }); }
-      else if (cn.nodeType === 1) children.push(walk(cn, rect));
+      else if (cn.nodeType === 1) { const w = walk(cn, rect); if (w) children.push(w); }
     }
     if (children.length) node.children = children;
     return node;
   };
   const rr = root.getBoundingClientRect();
   const tree = walk(root, { left: rr.left, top: rr.top });
+  if (!tree) return { error: "block root is display:none" };
   tree.x = 0; tree.y = 0;
   return { spec: tree };
 }

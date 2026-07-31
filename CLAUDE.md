@@ -189,7 +189,11 @@ breakpoint, and every variation** (a variation diverges by dropping its own
   menu-bearing item is built** — one representative panel — because building every
   item's panel is the slow part of a first export (each is a full load+settle, and
   mega panels are large). Ask for the rest with **`--menus all`** (or a specific one
-  with **`--only menu-{id}`**). Menu open/active state is shared via
+  with **`--only menu-{id}`**). **Surface this in the export summary** — when the nav
+  has more than one menu-bearing item, tell the designer how many exist and that only
+  the first was built ("Built the Products mega menu; 3 more nav menus available — say
+  the word for the rest"), so the trimmed default is a visible choice, not a silent
+  omission. Menu open/active state is shared via
   [menuState.ts](src/app/menuState.ts) (same context as the mobile drawer).
 
 ### Exporting to Figma

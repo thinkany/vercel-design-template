@@ -207,6 +207,12 @@ function serializeRaw(blockSel, PROPS) {
   };
   const walk = (el, pr) => {
     const cs = getComputedStyle(el);
+    // Skip hidden subtrees — display:none content isn't visible, so it must never
+    // enter the spec. Critically this drops the CLOSED hover dropdown/mega panels
+    // (the Header renders them `hidden` until open) out of the Header block; they're
+    // captured separately as "Menu — {item}" blocks when forced open. Without it the
+    // header bloats with hundreds of hidden nodes and the panels double as overlays.
+    if (cs.display === "none") return null;
     const rect = el.getBoundingClientRect();
     const tag = el.tagName.toLowerCase();
     const node = { tag, rect: relRect(rect, pr), style: styleOf(cs) };
@@ -222,7 +228,7 @@ function serializeRaw(blockSel, PROPS) {
         const rng = document.createRange(); rng.selectNodeContents(cn);
         children.push({ kind: "text", chars, rect: relRect(rng.getBoundingClientRect(), rect) });
       } else if (cn.nodeType === 1) {
-        children.push(walk(cn, rect));
+        const w = walk(cn, rect); if (w) children.push(w);
       }
     }
     if (children.length) node.children = children;
@@ -230,6 +236,7 @@ function serializeRaw(blockSel, PROPS) {
   };
   const rr = root.getBoundingClientRect();
   const tree = walk(root, { left: rr.left, top: rr.top });
+  if (!tree) return { error: "block root is display:none" };
   tree.rect.x = 0; tree.rect.y = 0;
   return { root: tree };
 }
