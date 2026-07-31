@@ -184,10 +184,13 @@ breakpoint, and every variation** (a variation diverges by dropping its own
   edited/mixed per item there. Panels are in-frame overlays in the Header (mega
   spans the **content column** width), carrying `data-block="menu-{id}"` **only
   while open**. The export discovers menu-bearing items (they carry
-  `data-menu-item`), opens each (`?menu=open&item={id}`), and captures it as its
-  own **"Menu — {Item}" Block** after the Header — one per menu-bearing item, so a
-  mix of mega + dropdown shows up as distinct blocks. Menu open/active state is
-  shared via [menuState.ts](src/app/menuState.ts) (same context as the mobile drawer).
+  `data-menu-item`) and captures an item's open panel (`?menu=open&item={id}`) as
+  its own **"Menu — {Item}" Block** after the Header. **By default only the FIRST
+  menu-bearing item is built** — one representative panel — because building every
+  item's panel is the slow part of a first export (each is a full load+settle, and
+  mega panels are large). Ask for the rest with **`--menus all`** (or a specific one
+  with **`--only menu-{id}`**). Menu open/active state is shared via
+  [menuState.ts](src/app/menuState.ts) (same context as the mobile drawer).
 
 ### Exporting to Figma
 

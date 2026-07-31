@@ -61,7 +61,7 @@ const CAPTURED_STYLE_PROPS = [
 
 function parseArgs(argv) {
   const args = {
-    url: "http://localhost:5173", variation: "v00", out: null, views: null, pages: null, only: null, fast: false,
+    url: "http://localhost:5173", variation: "v00", out: null, views: null, pages: null, only: null, fast: false, menus: "first",
     // --post sends the bundle to the cloud derive and writes back the BuildSpec.
     // Endpoint + key default to env; flags override. No key is required to WRITE
     // the bundle to disk — only to POST it.
@@ -76,6 +76,7 @@ function parseArgs(argv) {
     else if (a === "--views") args.views = list(argv[++i]);
     else if (a === "--pages") args.pages = list(argv[++i]);
     else if (a === "--only") args.only = list(argv[++i]);
+    else if (a === "--menus") args.menus = argv[++i] === "all" ? "all" : "first";
     else if (a === "--fast") args.fast = true;
     else if (a === "--post") args.post = true;
     else if (a === "--endpoint") args.endpoint = argv[++i];
@@ -111,7 +112,8 @@ capture-client — serialize every [data-block] into a raw CaptureBundle.
       --url <url>        Dev server (default http://localhost:5173)
       --views <list>     Override active breakpoints (e.g. desktop,mobile)
       --pages <list>     Limit to these page ids
-      --only <list>      Only these block ids
+      --only <list>      Only these block ids (e.g. menu-products for one panel)
+      --menus <first|all> Desktop open-menu panels: first (default) or all
       --fast             Primary (first active) breakpoint only
       --out <dir>        Output dir (default cloud-export/out)
       --post             POST the bundle to the cloud derive → write BuildSpec
@@ -351,7 +353,15 @@ async function main() {
         await page.goto(`${args.url}/?v=${args.variation}&capture=desktop`, { waitUntil: "networkidle0" });
         await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
         const items = await page.evaluate(() => [...document.querySelectorAll("[data-menu-item]")].map((e) => e.getAttribute("data-menu-item")).filter(Boolean));
-        for (const id of items) {
+        // DEFAULT = just the FIRST menu-bearing item (one representative panel).
+        // Building every item's open panel is the slow part of a first export (each
+        // is a full load+settle; mega panels are large). Opt in with `--menus all`
+        // or `--only menu`; target one with `--only menu-{id}`.
+        const specific = (args.only || []).filter((o) => o.startsWith("menu-")).map((o) => o.slice(5));
+        const wantAll = args.menus === "all" || (args.only || []).includes("menu");
+        const targetItems = specific.length ? items.filter((id) => specific.includes(id)) : (wantAll ? items : items.slice(0, 1));
+        if (!specific.length && !wantAll && items.length > 1) console.error(`  · menus: building 1 of ${items.length} (${targetItems[0]}) — run --menus all (or --only menu-{id}) for the rest`);
+        for (const id of targetItems) {
           const sel = `menu-${id}`;
           await page.goto(`${args.url}/?v=${args.variation}&capture=desktop&menu=open&item=${encodeURIComponent(id)}`, { waitUntil: "networkidle0" });
           await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });

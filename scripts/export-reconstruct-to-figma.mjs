@@ -156,7 +156,7 @@ const VIEWPORT_HEIGHTS = { desktop: 900, tablet: 900, mobile: 780 };
 const viewHeight = (view) => VIEWPORT_HEIGHTS[view] ?? VIEWPORT_HEIGHT;
 
 function parseArgs(argv) {
-  const args = { url: "http://localhost:5173", variation: "v00", out: "figma-export", views: null, pages: null, only: null, fast: false, emitCalls: false, limit: 48000, print: false };
+  const args = { url: "http://localhost:5173", variation: "v00", out: "figma-export", views: null, pages: null, only: null, fast: false, emitCalls: false, limit: 48000, print: false, menus: "first" };
   const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -170,6 +170,7 @@ function parseArgs(argv) {
     else if (a === "--emit-calls") args.emitCalls = true;
     else if (a === "--limit") args.limit = parseInt(argv[++i], 10) || 48000;
     else if (a === "--print") args.print = true;
+    else if (a === "--menus") args.menus = argv[++i] === "all" ? "all" : "first";
     else if (a === "--help" || a === "-h") args.help = true;
   }
   return args;
@@ -225,7 +226,9 @@ export-reconstruct-to-figma — walk every [data-block] into a Figma build spec.
       --url <url>        Dev server (default http://localhost:5173)
       --views <list>     Override active breakpoints (e.g. desktop,mobile)
       --pages <list>     Limit to these page ids
-      --only <list>      Only these block ids
+      --only <list>      Only these block ids (e.g. menu-products for one panel)
+      --menus <first|all> Desktop open-menu panels to build: first (default —
+                         one representative item) or all (every menu-bearing item)
       --fast             Primary (first active) breakpoint only
       --out <dir>        Output dir (default figma-export)
       --print            Inspect the EXISTING manifest (+ _plan.json): block
@@ -560,7 +563,15 @@ async function main() {
         await page.goto(`${args.url}/?v=${args.variation}&capture=desktop`, { waitUntil: "networkidle0" });
         await page.waitForSelector("[data-capture-ready]", { timeout: 15000 });
         const items = await page.evaluate(() => [...document.querySelectorAll("[data-menu-item]")].map((e) => e.getAttribute("data-menu-item")).filter(Boolean));
-        for (const id of items) {
+        // Which open panels to build. DEFAULT = just the FIRST menu-bearing item (a
+        // representative mega/dropdown). Building every item's panel is the slow part
+        // of a first export (each is a full load+settle, and mega panels are large).
+        // Opt in with `--menus all` or `--only menu`; target one with `--only menu-{id}`.
+        const specific = (args.only || []).filter((o) => o.startsWith("menu-")).map((o) => o.slice(5));
+        const wantAll = args.menus === "all" || (args.only || []).includes("menu");
+        const targetItems = specific.length ? items.filter((id) => specific.includes(id)) : (wantAll ? items : items.slice(0, 1));
+        if (!specific.length && !wantAll && items.length > 1) console.error(`  · menus: building 1 of ${items.length} (${targetItems[0]}) — run --menus all (or --only menu-{id}) for the rest`);
+        for (const id of targetItems) {
           const sel = `menu-${id}`;
           if (blocks.has(sel)) continue;
           await page.goto(`${args.url}/?v=${args.variation}&capture=desktop&menu=open&item=${encodeURIComponent(id)}`, { waitUntil: "networkidle0" });
