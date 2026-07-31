@@ -368,10 +368,21 @@ The brand-tokens pair in detail:
         `figma-export/reconstruct-assets/{asset}` to the returned `submitUrl`. These
         uploads **can run in parallel**. This sets the real photos on the placeholder
         rects. **Prefer uploading each call's `photos[]` right after that call**, so
-        there's nothing to accumulate. If you DO persist the running `{asset,nodeId}`
-        map across calls, write it with the **Write tool** to your scratchpad — **never
-        a bash `cat <<'EOF'` heredoc** (the JSON braces trip an "expansion obfuscation"
-        security heuristic and prompt every time).
+        there's nothing to accumulate.
+        **POST form — one bare `curl` per asset, fired as parallel tool calls (NOT a
+        shell loop).** Each POST must be a single command whose **first token is
+        `curl`** so it matches the allowlisted `Bash(curl:*)` and never prompts:
+        `curl -sS -o /dev/null -w "%{http_code}\n" -F "file=@ABS/PATH/asset.png;type=image/png" "SUBMIT_URL"`.
+        Use an **absolute** `file=@` path so there's no `cd …&&` prefix (that makes the
+        first token `cd`, breaking the match). **Never** wrap the POSTs in a
+        `declare -a`/array + `for` loop with `& … wait` — the loop's first token isn't
+        `curl` (so it can't be allowlisted) and `declare -a` trips a "changes assignment
+        semantics" heuristic; both prompt every run. To parallelize, emit the N bare
+        `curl` calls as N tool calls in one message — the harness runs them concurrently.
+        If you DO persist the running `{asset,nodeId}` map across calls, write it with the
+        **Write tool** to your scratchpad — **never a bash `cat <<'EOF'` heredoc** (the
+        JSON braces trip an "expansion obfuscation" security heuristic and prompt every
+        time).
   7. **Compose the design Pages from block INSTANCES — this is PART 2, runnable on its
      own** (top of the cascade variables → components → blocks → **pages**; REPLACES any
      raw page-capture). For **each** page in the discovery `pages`, assemble
