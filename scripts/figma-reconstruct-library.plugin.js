@@ -233,7 +233,17 @@ if (PHASE === "reconstruct") {
     // a shorter label (the "View all" arrow). The parent positions the returned text.
     {
       const w1 = (node.children || []).filter((c) => (c.w || 0) > 0 || (c.h || 0) > 0);
-      if (w1.length === 1 && w1[0].kind === "text"
+      // Don't collapse a wrapper that is meaningfully WIDER than its centred/right text —
+      // that extra width IS the alignment context (a full-width `text-center` eyebrow like
+      // "Welcome home"). Collapsing to a hug text placed at the wrapper's x renders it
+      // left/uncentred. Let it fall through to the text-merge branch, which fills it to the
+      // wrapper width so the alignment centres it. A HUG wrapper (w ≈ text width) still
+      // collapses — the "View all →" arrow-baseline case this optimisation fixes.
+      const only = w1[0];
+      const alignedWide = only && only.kind === "text"
+        && (only.text.align === "center" || only.text.align === "right")
+        && (only.w || 0) < node.w - 1;
+      if (w1.length === 1 && w1[0].kind === "text" && !alignedWide
         && !node.fills && !node.stroke && !node.shadows && !node.blur && node.radius == null && !node.radii
         && !(node.layout && node.layout.padding)) {
         return build({ kind: "text", x: 0, y: 0, w: node.w, h: node.h, text: w1[0].text }, parent, false, photos);
@@ -352,12 +362,17 @@ if (PHASE === "reconstruct") {
     if (isTextBox && uniform && (textRuns.length > 1 || kids.some((c) => c.tag === "br") || soloAligned)) {
       let chars = "";
       for (const c of kids) { if (c.kind === "text") chars += c.text.chars; else if (c.tag === "br") chars += "\n"; }
-      const merged = { kind: "text", x: 0, y: 0, w: node.w, h: node.h, text: { ...textRuns[0].text, chars } };
+      // A SINGLE centred/right run (no <br>) keeps its measured y so it stays vertically
+      // centred inside a padded box — e.g. a button label centred by `py-[13px]` sits at
+      // y=13, not pinned to the top. Multi-run/<br> merges start at y=0 (their runs re-flow
+      // from the top of the merged node).
+      const solo = soloAligned && textRuns.length === 1 && !kids.some((c) => c.tag === "br");
+      const merged = { kind: "text", x: 0, y: solo ? (textRuns[0].y || 0) : 0, w: node.w, h: node.h, text: { ...textRuns[0].text, chars } };
       const child = await build(merged, frame, false, photos);
       // A single-line centered/right run stays hug (WIDTH_AND_HEIGHT) after build; fill
       // it to the container width so the alignment centers/right-justifies it.
       if (soloAligned && child.type === "TEXT" && child.width < node.w) { child.textAutoResize = "HEIGHT"; try { child.resize(Math.max(1, node.w), child.height); } catch (e) {} }
-      if (!auto) placeChild(child, merged); // auto frames lay it out; non-auto place at 0,0
+      if (!auto) placeChild(child, merged); // auto frames lay it out; non-auto place at measured y (solo) / 0
       return frame;
     }
     for (const c of node.children || []) {
