@@ -293,8 +293,15 @@ function buildManifest(variationId, brand, tokens, designPages) {
   }
   // Spacing + radius → FLOAT number variables. Scopes gate where Figma offers them:
   // spacing binds gaps/padding + width/height; radius binds corner radius only.
+  // NOTE: figma.variables.createVariable REJECTS names containing "." — so a
+  // fractional spacing scale ("0.5"/"1.5"/"3.5") would abort the whole variables
+  // phase. Sanitize the name segment (period → underscore) at the SOURCE so the
+  // manifest never emits a period name; the builder and the specimen both read this
+  // same figmaName, so their lookups stay consistent. The human-readable tw/px/use
+  // fields stay literal (the specimen renders "p-0.5"/"2px" from those).
+  const figSafe = (seg) => String(seg).replace(/\./g, "_"); // keep "/" for grouping
   const spacing = (brand.spacing || []).map((s) => ({
-    figmaName: `Spacing/${s.scale}`,
+    figmaName: `Spacing/${figSafe(s.scale)}`,
     scale: s.scale,
     px: s.px,
     tw: s.tw,
@@ -302,7 +309,7 @@ function buildManifest(variationId, brand, tokens, designPages) {
     scopes: ["GAP", "WIDTH_HEIGHT"],
   }));
   const radii = (brand.radii || []).map((r) => ({
-    figmaName: `Radius/${r.name}`,
+    figmaName: `Radius/${figSafe(r.name)}`,
     name: r.name,
     px: r.px,
     tw: r.tw,
