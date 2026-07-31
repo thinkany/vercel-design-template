@@ -193,7 +193,16 @@ if (PHASE === "reconstruct") {
         // "Shop the 5 Stripe" jumping off-centre). Those keep their measured width.
         let wrapW = node.w;
         if (!t.align || t.align === "justified") {
-          try { const pw = parent.width - (parent.paddingLeft || 0) - (parent.paddingRight || 0) - (node.x || 0); if (pw > wrapW) wrapW = pw; } catch (e) {}
+          try {
+            const pw = parent.width - (parent.paddingLeft || 0) - (parent.paddingRight || 0) - (node.x || 0);
+            // Extend to the parent edge ONLY for a MODEST widening — the font-metric
+            // slack for a paragraph that already fills its box. A large jump means
+            // `parent` is much wider than the text's real wrap container (e.g. a heading
+            // or paragraph whose wrapper flattened into the full multi-column-grid column
+            // — 478→640 here), which would change the DOM's line breaks or overflow the
+            // column. Cap it: past ~15% over the measured width, keep the measured width.
+            if (pw > wrapW && pw <= wrapW * 1.15) wrapW = pw;
+          } catch (e) {}
         }
         tn.resize(Math.max(1, wrapW), tn.height);
       }
