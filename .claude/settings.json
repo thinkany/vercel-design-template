@@ -8,7 +8,11 @@
       "Bash(node scripts/export-brand-to-figma.mjs:*)",
       "Bash(node scripts/export-to-figma.mjs:*)",
       "Bash(node scripts/export-library-to-figma.mjs:*)",
-      "Bash(npm run export:*)"
+      "Bash(npm run export:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(echo:*)",
+      "Bash(ls:*)"
     ]
   },
   "hooks": {
