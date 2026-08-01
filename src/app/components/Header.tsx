@@ -1,9 +1,9 @@
 // ©2026 thinkany llc. All rights reserved.
 import { Menu, X, ChevronDown } from "lucide-react";
-import { designPages } from "../pages";
+import { designPages } from "@/app/pages";
 import { siteConfig } from "@/config/site";
-import { MENU_SIDE, useMenuState } from "../menuState";
-import { menuFor, type DropdownMenu, type MegaMenu } from "../menu";
+import { MENU_SIDE, useMenuState } from "@/app/menuState";
+import { menuFor, type DropdownMenu, type MegaMenu } from "@/app/menu";
 
 /**
  * Global site header — rendered for every WEBSITE design page by DesignSurface

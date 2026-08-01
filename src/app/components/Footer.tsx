@@ -1,5 +1,5 @@
 // ©2026 thinkany llc. All rights reserved.
-import { designPages } from "../pages";
+import { designPages } from "@/app/pages";
 import { siteConfig } from "@/config/site";
 
 /**

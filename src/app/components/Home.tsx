@@ -1,5 +1,5 @@
 // ©2026 thinkany llc. All rights reserved.
-import { DesignSurface } from "../DesignSurface";
+import { DesignSurface } from "@/app/DesignSurface";
 import { siteConfig } from "@/config/site";
 
 type View = "desktop" | "tablet" | "mobile";

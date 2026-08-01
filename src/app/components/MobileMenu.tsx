@@ -1,8 +1,8 @@
 // ©2026 thinkany llc. All rights reserved.
 import { X } from "lucide-react";
-import { designPages } from "../pages";
+import { designPages } from "@/app/pages";
 import { siteConfig } from "@/config/site";
-import { MENU_SIDE, useMenuState } from "../menuState";
+import { MENU_SIDE, useMenuState } from "@/app/menuState";
 
 /**
  * Default mobile menu — a slide-in drawer shown on the narrow breakpoints (below
