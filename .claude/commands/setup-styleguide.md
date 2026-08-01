@@ -24,6 +24,34 @@ click away. Step 3 (the example sections) is the exception — it's a short
 
 Walk the designer through these steps:
 
+## 0. Establish the working design variation (scope for everything below)
+
+This template's model: **base v00 is the pristine blueprint — the designer's real
+design *and* styleguide live in a variation**, which keeps the base clean so template
+upgrades can refresh the framework without clobbering their work. So the first thing
+this command does is make sure a working variation exists; **every step below then
+configures THAT variation, never the base.**
+
+**Check what's already there** (the `?v=` in the styleguide URL, or `ls src/variations`):
+- **A design variation already exists** (e.g. the designer arrived at
+  `/?v=v01&styleguide`) → that's the scope. Skip to Step 1.
+- **Only base v00 exists** → create the working variation now by copying the base
+  files on disk (use the next free `vNN` — `v01` on a fresh project):
+
+  ```bash
+  mkdir -p src/variations/v01
+  cp -R src/app/components src/variations/v01/components
+  cp -R src/styles src/variations/v01/styles
+  ```
+
+  The dashboard auto-discovers it through the variations manifest — there's no
+  localStorage record to write from here. Tell the designer in one plain line that
+  you've set up their working design copy and the base stays the clean starting point.
+
+**From here, `{id}` = that variation.** Everything this command writes goes to
+`src/variations/{id}/styles/…` (and its `components/` for the logo step) — **never the
+base.**
+
 ## 1. Set the Primitives — the token layer (colors first, then fonts)
 
 The single source of truth is **`src/styles/tokens.css`** — pure CSS custom
@@ -37,12 +65,11 @@ first**, then fonts.
 
 ### 1a. Colors — build the scope's `--ta-*` brand palette
 
-**Determine the scope first.** This command configures ONE scope, and each scope
-is fully siloed — a red-based variation and a blue-based one never cross. Check
-the `?v=` in the styleguide URL (or ask):
-- **Base (v00)** → write to `src/styles/…`, and the flag is `VITE_BRAND_READY` in `.env`.
-- **Variation `{id}`** → write to `src/variations/{id}/styles/…` ONLY (never the
-  base, never a sibling), and the flag is that variation's `brandStatus` record.
+**The scope is the working variation from Step 0** (`{id}`). Write to
+`src/variations/{id}/styles/…` **ONLY** — never the base, never a sibling. Each scope
+is fully siloed: a red-based variation and a blue-based one never cross. The
+brand-ready marker is that variation's `brandStatus` record field, cleared via the
+in-page "Mark brand established" button (a file edit can't reach localStorage).
 
 The brand palette lives in **two coupled files that must stay in sync**, both in
 the scope's `styles/` folder:
@@ -167,11 +194,10 @@ new group and leaves existing ones intact.
   `/* ── Brand colors ── */` (same hex values), leaving `--admin-*`,
   `--ta-font-*`, and the system palette untouched.
 
-**Set the brand flag** so the styleguide stops showing the "template defaults" notice:
-- **Base** → set `VITE_BRAND_READY="true"` in `.env`.
-- **Variation** → the flag lives in the variation's localStorage record, which
-  a file edit can't reach; tell the designer to click **"Mark brand established"**
-  in that variation's styleguide Colors section.
+**Clear the brand marker** so the variation's styleguide stops flagging its Colors as
+template defaults: the marker lives in the variation's localStorage record, which a
+file edit can't reach — tell the designer to click **"Mark brand established"** in that
+variation's styleguide Colors section.
 
 ### 1b. Fonts
 
@@ -252,13 +278,12 @@ step offers to swap in a real logo image for the first design pass.
 
 > **Scope.** This is the **design** logo (the pages' header) — distinct from the
 > **login-screen** logo `/setup-project` sets in `middleware.js`. They're often the
-> same file; they don't have to be. Edit the **base** `Header.tsx` (v00); a
-> variation with its own `Header.tsx` under `src/variations/{id}/components/` edits
-> that copy instead.
+> same file; they don't have to be. Edit the **working variation's**
+> `src/variations/{id}/components/Header.tsx` (created in Step 0) — never the base.
 
 **First, read the current state** so you ask the right question:
-- Open `src/app/components/Header.tsx` and look at the logo lockup (the button that
-  calls `onNavigate("home")`).
+- Open `src/variations/{id}/components/Header.tsx` and look at the logo lockup (the
+  button that calls `onNavigate("home")`).
   - Renders **only the text wordmark** (`siteConfig.clientName`, no `<img>`) → the
     logo is **BLANK**.
   - Renders an **`<img src="/brand/…">`** → a logo is **IN PLACE**.
@@ -318,48 +343,14 @@ preview's header (and in the phone frame, where it should scale down cleanly).
 > at `/brand/<file>`. If the client would rather it not live in this project, keep
 > the wordmark instead.
 
-## 2. Name the default variation (base v00 only)
+## 2. The working variation's name (just inform)
 
-The dashboard lists each design as a **variation**, and the base one (`v00`) is
-what the designer lands on first. Its **Title** and **Description** currently show
-the template defaults (**"Base"** / **"Base version."**) — give the designer the
-chance to rename it to something meaningful for *this* project.
-
-**Scope:** this step applies to the **base (v00)** scope only. `v00`'s title and
-description live in `INITIAL_VARIATIONS` in **`src/data/variations.ts`**, and
-`loadVariations` refreshes them from that seed on every load — so editing that seed
-is the authoritative place to set them. If you're configuring a **variation
-(`{id}`)**, skip this step: a variation's title/description are set when it's
-created (the "Make Variation" modal) and live only in its localStorage record, which
-a file edit can't reach.
-
-Ask both in a single `AskUserQuestion` panel (two questions):
-1. Header **"Variation Title"**. `question`:
-
-   > What should the default variation be called?
-   >
-   > This is the title shown on the dashboard card. Leave it as-is to keep the
-   > current value.
-
-   Offer the **current title** as the first preset (the default) — e.g. **"Base"** —
-   so one click keeps it. The client/project name from `/setup-project` makes a good
-   suggested alternative preset. The designer types their own via the "Other" field.
-2. Header **"Variation Description"**. `question`:
-
-   > How would you like to describe it?
-   >
-   > This is the short description under the title on the dashboard card. Leave it
-   > as-is to keep the current value.
-
-   Offer the **current description** as the first preset (the default) — e.g.
-   **"Base version."**.
-
-**Defaults:** if the designer leaves either blank (or picks the current-value
-preset), keep the existing value — do not blank it out.
-
-**Write** the confirmed values into `INITIAL_VARIATIONS[0]` in
-`src/data/variations.ts` (`title` and `description`), leaving every other field on
-that record untouched. The dashboard card reflects the change on reload.
+The dashboard lists each design as a **variation**. The working variation you created
+in Step 0 appears with an auto title (e.g. **"Design 1"**); the base keeps its **"Base"**
+blueprint label. Its title/description live in that variation's **localStorage record**
+— a file edit can't reach it — so there's nothing to write here. If the designer wants
+a specific name, that's a dashboard-side rename, not a setup step. Don't touch
+`INITIAL_VARIATIONS` (that's the base blueprint's seed, which stays "Base").
 
 ## 3. The example sections are flexible — just inform (no question)
 
@@ -378,14 +369,14 @@ unless there's a strong reason not to.
 
 ## 4. Mark it done
 
-Once the scope's tokens and sections reflect its foundation, clear the two markers
-for that scope:
-- **Brand palette** → `VITE_BRAND_READY="true"` (base) or **"Mark brand
-  established"** in the Colors section (variation) — see step 1a.
-- **Styleguide overall** → `VITE_STYLEGUIDE_READY=true` in `.env` (base) or the
-  **Mark as updated** button (variation), which clears the top-of-page setup banner.
+Once the variation's tokens and sections reflect its foundation, have the designer
+clear its two markers (both live in the variation's localStorage record — in-page
+buttons, no `.env` edit):
+- **Brand palette** → **"Mark brand established"** in the Colors section — see step 1a.
+- **Styleguide overall** → the **Mark as updated** button, which clears the
+  top-of-page setup banner.
 
-(Vite reloads on `.env` changes.)
+(Base v00 has no such markers — it's the pristine blueprint and never shows a banner.)
 
 ## 5. Sign off — onboarding complete
 
@@ -441,17 +432,17 @@ two each, not a lecture — you can't flip these for them; they're user-controll
 
 ## Variations carry their own styleguide — fully siloed
 
-This command configures **one scope**. The base (v00) lives in `src/styles/` +
-`src/app/components/`; each variation is a full copy under `src/variations/{id}/`
-(including its own `styles/brand.ts` + `styles/tokens.css`), rendered at
-`/?v={id}&styleguide`. There is **zero crossover**: `resolveBrand({id})` returns
-only that variation's manifest, and App injects only that variation's `tokens.css`.
-So running `/setup-styleguide` for a variation gathers and applies values to **that
-variation alone**.
+This command configures **one variation**. Base v00 is the pristine template
+blueprint in `src/styles/` + `src/app/components/`; each variation is a full copy
+under `src/variations/{id}/` (including its own `styles/brand.ts` +
+`styles/tokens.css`), rendered at `/?v={id}&styleguide`. There is **zero crossover**:
+`resolveBrand({id})` returns only that variation's manifest, and App injects only
+that variation's `tokens.css`. So `/setup-styleguide` gathers and applies values to
+**that variation alone**.
 
-Both markers are per-scope: the base uses the committed `VITE_STYLEGUIDE_READY` /
-`VITE_BRAND_READY` env flags; each variation carries its own `styleguideStatus`
-and `brandStatus` in its record (cleared via the in-page buttons, no `.env` edit).
+Readiness is a per-variation concept only: each variation carries its own
+`styleguideStatus` and `brandStatus` in its record, cleared via the in-page buttons
+(no `.env` flags — those are retired). Base has no readiness state.
 
 ---
 

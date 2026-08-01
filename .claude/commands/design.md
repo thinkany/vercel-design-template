@@ -57,23 +57,30 @@ every command this project offers (setup, design, this guide, preview controls).
 
 ## 1. Fastest path — where the design goes
 
-- **Design #1 = edit the base in place.** Replace the placeholder content in
-  `src/app/components/Home.tsx` (the `HomeContent` function). Do **not** create a
-  variation for the first design — variations are a deliberate later act (an
-  *alternative* version of an existing design). The starter `Home.tsx` imports
-  `siteConfig`; if your design stops using it, **drop the import too** or it dangles.
-- **A variation** (`?v={id}` other than `v00`) → edit under
-  `src/variations/{id}/components/` **only**, never the base, or you change every
-  variation that falls back to v00.
-- Check the `?v=` in the current preview URL to know the scope. When unsure, ask.
+**Every design is a variation. Base v00 is the pristine template blueprint — never
+edit it for a design.** Designing in a variation keeps the base clean, so template
+upgrades can refresh the framework without ever touching the designer's work.
+
+- **Check the `?v=` in the current preview URL to know the scope.** `?v=v01` (or any
+  non-`v00` id) → you're in a design variation: edit under
+  `src/variations/{id}/components/` **only** (its `Home.tsx` is design #1). Never edit
+  the base, or you change every variation that falls back to v00. The starter
+  `Home.tsx` imports `siteConfig`; if your design stops using it, **drop the import
+  too** or it dangles.
+- **On base (`v00`), or no variation exists yet?** The designer needs their working
+  variation first. Normally `/setup-styleguide` creates it (`v01`) during onboarding;
+  if they skipped that, point them at the dashboard's **"Start designing"** button
+  (one click — copies base → `v01`), then design in `v01`. **Don't design into the
+  base as a shortcut.**
 
 ## 2. The one live read — the palette
 
-Tokens change per project after `/setup-styleguide`, so **read
-`src/styles/tokens.css` once** for the live `--ta-*` colors and `--ta-font-*`
-families this project actually has. Use those tokens (via the Tailwind utilities
-below) — **never hardcode a hex or font stack.** That single read replaces
-crawling six files.
+Tokens change per project — and per variation — after `/setup-styleguide`, so
+**read the active variation's `src/variations/{id}/styles/tokens.css` once** (it
+falls back to base `src/styles/tokens.css` if the variation hasn't diverged its
+palette) for the live `--ta-*` colors and `--ta-font-*` families. Use those tokens
+(via the Tailwind utilities below) — **never hardcode a hex or font stack.** That
+single read replaces crawling six files.
 
 ## 3. The authoring contract (already inlined — don't re-read the source)
 
@@ -148,7 +155,8 @@ routing (`?v={id}&about`), rendering, the nav link, and Figma export. No
 4. **Content is single-source.** Author copy/images once; `DesignSurface` renders
    that one node in every device frame. Make breakpoints differ only through
    responsive *styling* — never branch content on `view`, never duplicate text
-   per device. Edit the shared `Header.tsx`/`Footer.tsx` once, not per page.
+   per device. Edit the variation's own `Header.tsx`/`Footer.tsx` once (its copy
+   under `src/variations/{id}/components/`), not per page.
 5. **Reuse, don't rebuild.** 40 shadcn components in `src/app/components/ui/`
    (button, card, dialog, tabs, accordion, carousel, form, …), `lucide-react`
    icons, `motion` for animation, `recharts` for charts. Compose classNames with

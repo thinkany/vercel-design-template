@@ -77,15 +77,17 @@ Run:
 /setup-styleguide
 ```
 
-Claude walks you through it: set your **fonts & colors** in the design-token file
-(`src/styles/tokens.css`, with font imports in `fonts.css`), then adapt the
-styleguide's generic example sections to your project. The styleguide reads the
-live token values, so its Colors/Type sections reflect your edits immediately.
-When the foundation reflects your project, set `VITE_STYLEGUIDE_READY=true` in
-`.env` to clear the setup banner shown on the styleguide page.
+Claude walks you through it: setup first creates your **working design variation**
+(so the base template stays a clean starting point), then sets your **fonts &
+colors** in that variation's design-token file (`tokens.css`, with font imports in
+`fonts.css`) and adapts the styleguide's generic example sections to your project.
+The styleguide reads the live token values, so its Colors/Type sections reflect your
+edits immediately. When the foundation reflects your project, click **Mark as
+updated** / **Mark brand established** on that variation's styleguide to clear its
+setup banner.
 
-Until that flag is set, the styleguide displays a reminder that it hasn't been
-configured yet.
+Each variation tracks its own styleguide readiness — the base template itself has no
+banner.
 
 **Per-variation styleguides.** Every design variation you create from the
 dashboard gets its own copy of the styleguide as a starting point. When creating

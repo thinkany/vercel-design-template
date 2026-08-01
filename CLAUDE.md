@@ -85,9 +85,13 @@ the five rules, the one live token read) so you go straight to designing instead
 of re-deriving the rules from this file — and it sets the design-phase
 **communication protocol**: suppress technical chatter, drive progress with a
 TodoWrite list phrased in designer language (`Creating top navigation`,
-`Building hero`, …), and give one plain-language line per milestone. The fast
-path for **design #1 is editing `Home.tsx` in place** (base v00) — a variation is
-a deliberate later act, not the first move.
+`Building hero`, …), and give one plain-language line per milestone. **Every
+design is a variation: design #1 edits the working variation's `Home.tsx` under
+`src/variations/{id}/`, never the base.** Base v00 is the pristine template
+blueprint — `/setup-styleguide` creates the working variation (`v01`) during
+onboarding, or the dashboard's "Start designing" button does (see Variations
+system). Keeping designs out of the base is what lets template upgrades refresh
+the framework without clobbering the designer's work.
 
 ### Adding a page (beyond Home)
 
@@ -99,8 +103,9 @@ add. Design pages are driven by a **manifest**
 Figma export ([scripts/export-to-figma.mjs](scripts/export-to-figma.mjs))
 enumerates it — so wiring a page is two steps. e.g. `About`:
 
-1. **Build the component.** Create `src/app/components/About.tsx` (base v00).
-   **Model it on [Home.tsx](src/app/components/Home.tsx)** — the canonical
+1. **Build the component.** Create `About.tsx` **in the working variation**
+   (`src/variations/{id}/components/About.tsx`) — the same place design #1 lives;
+   never the base. **Model it on `Home.tsx`** — the canonical
    design-surface pattern: a Tailwind-first content function, then wrap it in
    **[`<DesignSurface>`](src/app/DesignSurface.tsx)** (the shared responsive
    preview shell) and pass it the `onNavigate` prop. That wrapper is what gives
@@ -117,9 +122,11 @@ enumerates it — so wiring a page is two steps. e.g. `About`:
    automatically at every active breakpoint). No `App.tsx` edit needed.
 
 Navigate to it from any page via `onNavigate("about")` (the `onNavigate` prop is
-`setPage`). **Variations inherit it for free** via `resolveComponent`'s fallback
-to base v00; to diverge a variation's version, drop `About.tsx` into
-`src/variations/{id}/components/`.
+`setPage`). `pages.ts` is a **global** manifest (one row wires the page for every
+scope); the *component* resolves per-variation via `resolveComponent`, so the page
+renders wherever a matching `About.tsx` exists (the working variation) and any other
+variation can diverge its own by dropping an `About.tsx` into its
+`components/` folder.
 
 Same rules as everywhere: Tailwind utilities + `--ta-*` tokens, never hardcoded
 hex/fonts, edit `src/variations/{id}/` (not the base) when working on a variation.
@@ -286,11 +293,13 @@ text-style ramp**.
 [src/config/site.ts](src/config/site.ts) reads `VITE_*` and exposes:
 - `siteConfig` (client/company/project/tagline, with placeholder fallbacks while
   unbranded), `siteTitle`
-- `styleguideReady` ← `VITE_STYLEGUIDE_READY` (base scope)
-- `brandReady` ← `VITE_BRAND_READY` (base scope)
 
-Variations ignore the env flags and carry their own `styleguideStatus` /
-`brandStatus` fields on their variation record instead.
+**Styleguide/brand readiness is per-variation only** — there are no base-scope env
+flags. Base v00 is the pristine template blueprint (never shows a setup banner);
+each design variation carries its own `styleguideStatus` / `brandStatus` on its
+record, cleared via the in-page buttons. The old `VITE_STYLEGUIDE_READY` /
+`VITE_BRAND_READY` flags (and the `styleguideReady`/`brandReady` exports) are
+retired.
 
 ### Preview gate
 
@@ -371,10 +380,12 @@ one continuous flow.
   preflight `npm install` (checks Node ≥ 20.19), write `VITE_*` names to `.env`,
   choose project type, set the **company / admin** fonts (gate + `--admin-font-*`),
   point to Vercel setup, then hand off to →
-- **[`/setup-styleguide`](.claude/commands/setup-styleguide.md)** — Phase II: set
-  the **client** fonts/colors in `tokens.css` + `brand.ts`, note the styleguide
-  sections are adjustable, flip `VITE_STYLEGUIDE_READY` / `VITE_BRAND_READY`, and
-  close with the preview reminder + the optional permission-prompt tip.
+- **[`/setup-styleguide`](.claude/commands/setup-styleguide.md)** — Phase II:
+  **create the working design variation** (`v01`) so the base stays pristine, then
+  set the **client** fonts/colors in that variation's `tokens.css` + `brand.ts`,
+  note the styleguide sections are adjustable, and close with the preview reminder +
+  the optional permission-prompt tip. Readiness is the variation's own record
+  markers (in-page buttons), not env flags.
 - **[`/design`](.claude/commands/design.md)** — the post-setup **design phase**:
   the condensed authoring contract (`<DesignSurface>` shape + page skeleton + the
   five rules + one live token read) plus the low-chatter, TodoWrite-driven
