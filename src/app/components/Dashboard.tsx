@@ -99,7 +99,12 @@ export function Dashboard() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {isAdmin && <UpdateCheck />}
+          {/* Local-only notifier: import.meta.env.DEV is true solely under the
+              Vite dev server (npm run dev), false in the built bundle Vercel
+              serves — so the update pill shows for the designer on their machine,
+              never on the client-facing Vercel preview (and it's tree-shaken out
+              of the production bundle entirely). */}
+          {isAdmin && import.meta.env.DEV && <UpdateCheck />}
           <button
             onClick={() => {
               document.cookie = "ta-auth=; path=/; max-age=0";
