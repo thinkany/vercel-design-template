@@ -11,12 +11,13 @@ export interface Variation {
   screenshot?: string; // static thumbnail image URL
   // Per-variation styleguide state. "needs-review" shows the setup banner on
   // this variation's styleguide until the designer marks it done ("updated").
-  // Base (v00) ignores this and uses the committed VITE_STYLEGUIDE_READY flag.
+  // Base (v00) has no readiness state — it's the pristine template blueprint and
+  // never shows the banner.
   styleguideStatus?: "needs-review" | "updated";
   // Per-variation brand-palette state. "needs-review" flags this variation's
   // Colors as template defaults until its brand palette is established for this
   // variation only (via /setup-styleguide, then "Mark brand established").
-  // Base (v00) ignores this and uses the committed VITE_BRAND_READY flag.
+  // Base (v00) has no readiness state.
   brandStatus?: "needs-review" | "established";
 }
 

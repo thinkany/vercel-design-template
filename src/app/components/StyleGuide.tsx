@@ -9,18 +9,18 @@ interface Props {
   // The active scope, so the styleguide renders THIS scope's brand manifest.
   // Defaults to the base (v00) when omitted.
   variationId?: string;
-  // Whether this styleguide still needs setup (drives the banner). For the base
-  // (v00) App derives this from VITE_STYLEGUIDE_READY; for a variation, from its
-  // styleguideStatus.
+  // Whether this styleguide still needs setup (drives the banner). Always false
+  // for the base (v00) — it's the pristine template blueprint; for a variation it
+  // comes from that variation's styleguideStatus record.
   needsSetup?: boolean;
   // Present only for variations: marks this variation's styleguide "updated"
-  // (clears the banner). Absent for the base, which uses /setup-styleguide.
+  // (clears the banner). Absent for the base, which has no readiness state.
   onMarkUpdated?: () => void;
   // Whether this scope's brand palette is still the template default (drives the
-  // Colors notice). Base derives it from VITE_BRAND_READY; variation from brandStatus.
+  // Colors notice). Always false for the base; a variation reads its brandStatus.
   brandNeedsSetup?: boolean;
   // Present only for variations: marks this variation's brand palette established
-  // (clears the Colors notice). Absent for the base, which uses VITE_BRAND_READY.
+  // (clears the Colors notice). Absent for the base, which has no readiness state.
   onMarkBrandEstablished?: () => void;
 }
 
@@ -902,24 +902,15 @@ export function StyleGuide({ onNavigate, variationId, needsSetup, onMarkUpdated,
   return (
     <div style={{ minHeight: "100vh", background: CA.white, fontFamily: A.body, fontWeight: 300 }}>
 
-      {/* STYLEGUIDE SETUP BANNER — base uses VITE_STYLEGUIDE_READY; a variation
-          uses its own styleguideStatus and offers a "Mark as updated" action. */}
+      {/* STYLEGUIDE SETUP BANNER — a per-variation notice. Base (v00) is the
+          pristine template blueprint and never shows it; a design variation drives
+          it from its own styleguideStatus and offers a "Mark as updated" action. */}
       {needsSetup && (
         <div style={{ background: "#fef3c7", borderBottom: "1px solid #f0d488", padding: "12px 48px", display: "flex", alignItems: "flex-start", gap: 12, fontFamily: A.body, fontSize: 13, color: "#663d00", lineHeight: 1.55 }}>
           <span style={{ fontSize: 15, lineHeight: 1.2 }}>⚙</span>
           <span style={{ flex: 1 }}>
-            {onMarkUpdated ? (
-              <>
-                <strong>This variation inherited the base styleguide.</strong> Update its tokens and sections for this variation as needed, then mark it done to clear this notice.
-              </>
-            ) : (
-              <>
-                <strong>This styleguide isn't configured yet.</strong> Set your fonts &amp; colors and adapt the example sections for this project <em>before</em> designing — run{" "}
-                <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 6px", borderRadius: 3, fontFamily: A.mono, fontSize: 12 }}>/setup-styleguide</code>.
-                {" "}Clear this notice by setting{" "}
-                <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 6px", borderRadius: 3, fontFamily: A.mono, fontSize: 12 }}>VITE_STYLEGUIDE_READY=true</code>{" "}in <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 6px", borderRadius: 3, fontFamily: A.mono, fontSize: 12 }}>.env</code>.
-              </>
-            )}
+            <strong>This variation inherited the base styleguide.</strong> Set its fonts &amp; colors and adapt the example sections for this design — run{" "}
+            <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 6px", borderRadius: 3, fontFamily: A.mono, fontSize: 12 }}>/setup-styleguide</code>, then mark it done to clear this notice.
           </span>
           {onMarkUpdated && (
             <button

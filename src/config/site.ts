@@ -43,24 +43,12 @@ export const siteTitle = siteConfig.projectName
   ? `${siteConfig.clientName} : ${siteConfig.projectName}`
   : siteConfig.clientName;
 
-/**
- * Phase II marker. True once the styleguide has been configured for this
- * project (fonts & colors set, example sections adapted) and
- * VITE_STYLEGUIDE_READY has been set to "true". While false, the styleguide
- * shows a setup banner. See the /setup-styleguide command.
- */
-export const styleguideReady =
-  (import.meta.env.VITE_STYLEGUIDE_READY ?? "").trim().toLowerCase() === "true";
-
-/**
- * Brand-palette marker for the BASE (v00) scope. True once this project's brand
- * palette has been established (src/styles/brand.ts + the --ta-* tokens rewritten
- * by /setup-styleguide) and VITE_BRAND_READY set to "true". While false, the
- * styleguide flags its Colors section as showing template defaults. Variations
- * ignore this and use their own `brandStatus` record field.
- */
-export const brandReady =
-  (import.meta.env.VITE_BRAND_READY ?? "").trim().toLowerCase() === "true";
+// Styleguide/brand readiness is NOT a base-scope concept anymore. Base (v00) is
+// the pristine template blueprint — the designer's real styleguide lives in their
+// design variation, so readiness is tracked per-variation via the record's
+// `styleguideStatus` / `brandStatus` fields (see src/data/variations.ts), never a
+// global VITE flag. The old VITE_STYLEGUIDE_READY / VITE_BRAND_READY flags are
+// retired.
 
 /**
  * Project type — chosen once at /setup-project, drives the device-preview matrix.

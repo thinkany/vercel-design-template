@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 
 import { resolveComponent } from "./variationRegistry";
 import { loadVariations, saveVariations } from "../data/variations";
-import { siteConfig, styleguideReady, brandReady, previewConfig, previewWidths, projectType } from "../config/site";
+import { siteConfig, previewConfig, previewWidths, projectType } from "../config/site";
 import type { View } from "../config/site";
 
 import { Dashboard } from "./components/Dashboard";
@@ -99,12 +99,14 @@ export default function App() {
   // placeholder in place of the Home design preview (no device frames).
   const isBrandProject = projectType === "brand";
 
-  // Per-variation styleguide setup state. The base (v00) uses the committed
-  // VITE_STYLEGUIDE_READY flag; variations carry their own styleguideStatus.
+  // Styleguide setup state is a per-variation concept. Base (v00) is the pristine
+  // template blueprint — the designer works in a variation, so base never shows a
+  // "needs setup" banner. A variation drives its banner from its own
+  // styleguideStatus record.
   const isBase = variationId === "v00";
   const activeVariation = loadVariations().find(v => v.id === variationId);
   const styleguideNeedsSetup = isBase
-    ? !styleguideReady
+    ? false
     : activeVariation?.styleguideStatus === "needs-review";
 
   function markStyleguideUpdated() {
@@ -115,10 +117,10 @@ export default function App() {
     window.location.reload();
   }
 
-  // Per-variation brand-palette state. Base (v00) uses the committed
-  // VITE_BRAND_READY flag; variations carry their own brandStatus.
+  // Brand-palette state, likewise per-variation. Base never flags its Colors as
+  // "template defaults" — it IS the template; a variation uses its brandStatus.
   const brandNeedsSetup = isBase
-    ? !brandReady
+    ? false
     : activeVariation?.brandStatus === "needs-review";
 
   function markBrandEstablished() {

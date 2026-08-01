@@ -93,10 +93,9 @@ export interface Brand {
   typeScale: number[];
 }
 
-// The template DEFAULT palette & type roles. Ships as-is until a project runs
-// `/setup-styleguide`, which REPLACES these for the scope and flips the
-// brand-ready flag (VITE_BRAND_READY for the base; a variation's `brandStatus`
-// record field for a variation).
+// The template DEFAULT palette & type roles. This base copy stays the neutral
+// blueprint; `/setup-styleguide` REPLACES these in the designer's variation and
+// marks that variation's brand established (its `brandStatus` record field).
 export const brand: Brand = {
   paletteGroups: [
     {
