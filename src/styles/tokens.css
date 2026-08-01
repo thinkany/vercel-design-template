@@ -10,14 +10,26 @@
  * ───────────────────────────────────────────────────────────────────────── */
 
 :root {
-  /* ── Brand colors ─────────────────────────────────────────────── */
-  --ta-blue: #1e4b96;
-  --ta-red: #c41230;
-  --ta-cream: #f8f7f3;
+  /* ── Brand colors — SEMANTIC ROLES (stable slugs) ───────────────
+     Components reference colors by ROLE, never by color name, so a palette
+     change (via /setup-styleguide) only swaps the VALUES here — component
+     references never break and nothing has to be find/replaced. These seven
+     roles are the stable foundation; a design that needs extra named colors
+     can add more --ta-* tokens below, but keep these roles filled.
+       primary  brand color — links, buttons, active states
+       accent   secondary accent — highlights, badges, alerts
+       surface  page & section backgrounds, card fills
+       ink      headings & strong text (near-black)
+       body     body / paragraph text
+       muted    secondary text — captions, metadata, bylines
+       border   borders, dividers, hairlines                            */
+  --ta-primary: #1e4b96;
+  --ta-accent: #c41230;
+  --ta-surface: #f8f7f3;
   --ta-ink: #111111;
-  --ta-gray-dark: #333333;
-  --ta-gray-mid: #777777;
-  --ta-gray-light: #cccccc;
+  --ta-body: #333333;
+  --ta-muted: #777777;
+  --ta-border: #cccccc;
 
   /* ── Admin UI fonts (COMPANY / agency fonts) ────────────────────
      The company's fonts for the ADMIN experience — the gated page

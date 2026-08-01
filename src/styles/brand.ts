@@ -22,7 +22,7 @@
 export interface BrandColor {
   /** Human name shown under the swatch, e.g. "Brand Blue". */
   name: string;
-  /** The CSS custom property, e.g. "--ta-blue". Must exist in tokens.css. */
+  /** The CSS custom property, e.g. "--ta-primary". Must exist in tokens.css. */
   token: string;
   /** Hex value — documents/fallback; the live value is read from tokens.css. */
   value: string;
@@ -100,14 +100,17 @@ export const brand: Brand = {
   paletteGroups: [
     {
       title: "Brand Palette",
+      // Seven SEMANTIC ROLES (stable token slugs). /setup-styleguide sets each
+      // role's `value` and personalizes its `name` to the project's own color
+      // (e.g. "Navy"), but keeps the token slug — so components never break.
       colors: [
-        { name: "Brand Blue",      token: "--ta-blue",       value: "#1e4b96", text: "#ffffff", role: "Links, active nav, accent borders" },
-        { name: "Accent Red",      token: "--ta-red",        value: "#c41230", text: "#ffffff", role: "NEW badge, alerts, sale price" },
-        { name: "Page Background", token: "--ta-cream",      value: "#f8f7f3", text: "#111111", role: "Site background, card fills, hero wash" },
-        { name: "Primary Text",    token: "--ta-ink",        value: "#111111", text: "#ffffff", role: "Body text, primary headings" },
-        { name: "Secondary Text",  token: "--ta-gray-dark",  value: "#333333", text: "#ffffff", role: "Secondary body text" },
-        { name: "Metadata",        token: "--ta-gray-mid",   value: "#777777", text: "#ffffff", role: "Captions, timestamps, bylines" },
-        { name: "Dividers",        token: "--ta-gray-light", value: "#cccccc", text: "#111111", role: "Borders, separator lines" },
+        { name: "Primary", token: "--ta-primary", value: "#1e4b96", text: "#ffffff", role: "Links, buttons, active states" },
+        { name: "Accent",  token: "--ta-accent",  value: "#c41230", text: "#ffffff", role: "Highlights, badges, alerts" },
+        { name: "Surface", token: "--ta-surface", value: "#f8f7f3", text: "#111111", role: "Page & section backgrounds, card fills" },
+        { name: "Ink",     token: "--ta-ink",     value: "#111111", text: "#ffffff", role: "Headings & strong text" },
+        { name: "Body",    token: "--ta-body",    value: "#333333", text: "#ffffff", role: "Body / paragraph text" },
+        { name: "Muted",   token: "--ta-muted",   value: "#777777", text: "#ffffff", role: "Captions, metadata, bylines" },
+        { name: "Border",  token: "--ta-border",  value: "#cccccc", text: "#111111", role: "Borders, dividers, hairlines" },
       ],
     },
   ],

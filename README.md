@@ -275,7 +275,7 @@ npm run export:brand -- --print   # print the full manifest
   Claude a **project (folder) URL** once; without it, a team file stays in that
   team's private drafts. Change it anytime — *"export to my team's 2026 project."*
 - **Colors** map to Figma variables with their role as the description and the
-  CSS variable (`var(--ta-blue)`) as Dev-Mode code syntax.
+  CSS variable (`var(--ta-primary)`) as Dev-Mode code syntax.
 - **Fonts:** if the project hasn't picked real typefaces yet (a fresh template
   ships system-font placeholders), the specimen uses clearly-labelled stand-in
   faces so you can still see the type scale. Once you've branded it, it uses your

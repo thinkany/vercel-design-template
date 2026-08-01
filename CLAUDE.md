@@ -349,7 +349,7 @@ Before hand-rolling UI, use the resources already installed:
   `public/`; a same-origin file resolves in both the preview and the Figma export's
   asset-fetch (which **skips** slow/blocked/CORS'd external CDN URLs). On a
   slow/failed fetch, don't retry, prompt, or escalate — drop a network-free
-  placeholder (`aspect-video bg-ta-gray-light`), keep building, and **list the
+  placeholder (`aspect-video bg-ta-border`), keep building, and **list the
   placeholders in the closing summary** so the designer can supply the real assets.
   See [`/design`](.claude/commands/design.md) §4b.
 - **Tailwind-first.** Build components and elements with Tailwind utility

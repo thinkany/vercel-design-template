@@ -48,14 +48,17 @@ const A = {
   mono: "var(--admin-font-mono)",        // DM Mono
 };
 
+// Project palette, referenced by the guide's own example styling. The keys are
+// legacy local shorthand; each maps to a SEMANTIC ROLE token (--ta-primary,
+// --ta-surface, …) so a palette change flows through automatically.
 const C = {
-  blue: "var(--ta-blue)",
-  red: "var(--ta-red)",
-  cream: "var(--ta-cream)",
-  ink: "var(--ta-ink)",
-  dark: "var(--ta-gray-dark)",
-  mid: "var(--ta-gray-mid)",
-  light: "var(--ta-gray-light)",
+  blue: "var(--ta-primary)",   // → primary role
+  red: "var(--ta-accent)",     // → accent role
+  cream: "var(--ta-surface)",  // → surface role
+  ink: "var(--ta-ink)",        // → ink role
+  dark: "var(--ta-body)",      // → body role
+  mid: "var(--ta-muted)",      // → muted role
+  light: "var(--ta-border)",   // → border role
   card: "#efefef",  // project-specific surface, no brand token
   white: "#ffffff",
 };
@@ -110,7 +113,7 @@ const SYSTEM_COLORS: { name: string; token: string | null; fallback: string; tex
   { name: "Card Surface",    token: null,                 fallback: "#efefef", text: C.ink },
   { name: "Input BG",        token: "--input-background", fallback: "#f3f3f5", text: C.ink },
   { name: "Dark BG",         token: null,                 fallback: "#111111", text: "#fff" },
-  { name: "Nav Dropdown BG", token: "--ta-cream",        fallback: "#f8f7f3", text: C.ink },
+  { name: "Nav Dropdown BG", token: "--ta-surface",        fallback: "#f8f7f3", text: C.ink },
 ];
 
 // Spacing scale, radius scale, and type scale now live in brand.ts (the single
@@ -574,7 +577,7 @@ function SemanticTypesSection() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "60px 1fr", gap: 20, padding: "14px 0", alignItems: "baseline" }}>
               <Token>&lt;code&gt;</Token>
-              <code style={{ fontFamily: F.mono, fontSize: 13, color: C.blue, background: "#f0f0f0", padding: "2px 6px", borderRadius: 2 }}>--ta-blue</code>
+              <code style={{ fontFamily: F.mono, fontSize: 13, color: C.blue, background: "#f0f0f0", padding: "2px 6px", borderRadius: 2 }}>--ta-primary</code>
             </div>
           </div>
         </DemoBox>

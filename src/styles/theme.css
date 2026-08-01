@@ -5,14 +5,16 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* Brand colors → Tailwind utilities: bg-ta-blue, text-ta-red, etc. */
-  --color-ta-blue: var(--ta-blue);
-  --color-ta-red: var(--ta-red);
-  --color-ta-cream: var(--ta-cream);
+  /* Semantic brand roles → Tailwind utilities: bg-ta-surface, text-ta-ink,
+     text-ta-body, bg-ta-primary, border-ta-border, etc. Components use these
+     role utilities, so a palette change only swaps values in tokens.css. */
+  --color-ta-primary: var(--ta-primary);
+  --color-ta-accent: var(--ta-accent);
+  --color-ta-surface: var(--ta-surface);
   --color-ta-ink: var(--ta-ink);
-  --color-ta-gray-dark: var(--ta-gray-dark);
-  --color-ta-gray-mid: var(--ta-gray-mid);
-  --color-ta-gray-light: var(--ta-gray-light);
+  --color-ta-body: var(--ta-body);
+  --color-ta-muted: var(--ta-muted);
+  --color-ta-border: var(--ta-border);
 
   /* Project design fonts → Tailwind utilities: font-ta-display, font-ta-serif,
      font-ta-sans, font-ta-mono. These map 1:1 to the --ta-font-* design tokens

@@ -77,8 +77,8 @@ the scope's `styles/` folder:
    swatches from. Its `brand.paletteGroups` array holds **named color groups**,
    each `{ title, description?, colors: [{ name, token, value, text, role }] }`.
    Each group renders as its own titled subsection.
-2. **`tokens.css`** — the CSS declarations under `/* ── Brand colors ── */` (e.g.
-   `--ta-blue: #1e4b96;`) that components actually consume via `var(--ta-*)`.
+2. **`tokens.css`** — the CSS declarations under the Brand colors block (e.g.
+   `--ta-primary: #1e4b96;`) that components actually consume via `var(--ta-*)`.
 
 The styleguide no longer has a hardcoded color array — it reads `brand.ts` through
 `resolveBrand(variationId)`, so writing the manifest is what makes swatches appear.
@@ -88,10 +88,16 @@ The styleguide no longer has a hardcoded color array — it reads `brand.ts` thr
 **System Palette** is a FIXED reference (hardcoded in `StyleGuide.tsx`) — it is NOT
 a group and must never be added to, removed, or mixed with `--ta-*` here.
 
-This step **replaces** the default 7-token placeholder palette (blue / red /
-cream / ink / grays) with the scope's real palette. After writing, grep that
-scope's components for `var(--ta-…)` references to any token name you removed and
-remap or update them so nothing falls back to unstyled.
+**Colors are SEMANTIC ROLES, not color names — this is the key rule.** The palette
+ships as seven stable role tokens (`--ta-primary`, `--ta-accent`, `--ta-surface`,
+`--ta-ink`, `--ta-body`, `--ta-muted`, `--ta-border`), and every component
+references those roles. So you **set each role's VALUE and personalize its display
+`name`** (e.g. rename "Primary" → "Navy") — but you **never rename the token slug,
+and you never touch component files.** Because the slugs are stable, a palette
+change can't orphan a component reference, so there is **no grep-and-remap step** —
+that whole class of breakage is gone. (If the designer supplies extra colors beyond
+the seven roles, add them as additional tokens/groups, but keep the seven roles
+filled — components depend on them.)
 
 **First, ask how the designer wants to supply the palette** — one
 `AskUserQuestion`, header **"Client Palette"**, `question` text below (blank
@@ -113,9 +119,10 @@ Then, per method:
 
 **Method A — Manual (iterative, one color at a time).**
 Loop: for each color, one `AskUserQuestion` panel with three questions —
-1. "Color name" (e.g. `Brand Blue`) — you'll slugify it to the token name.
+1. "Color name" (e.g. `Navy`) — becomes the swatch's display `name`.
 2. "Hex value" (e.g. `#1e4b96`).
-3. "Description / role" (e.g. `Links, active nav, accent borders`).
+3. "Role" — which of the seven roles it fills (primary / accent / surface / ink /
+   body / muted / border), which decides the token slug it maps to.
 After each color, ask "Add another color?" (**Add another / Done**). Continue
 until the designer chooses Done.
 
@@ -169,10 +176,17 @@ this — the designer is supplying the hexes themselves.)
   the same file and re-publish** (same path → same URL updates in place).
 - Only **after** they confirm do you write `tokens.css` + `brand.ts`.
 
-**Token naming (all methods).** Generate each token as `--ta-<slug>`, where
-`<slug>` is the color name lowercased with spaces → hyphens and non-alphanumerics
-stripped (`Brand Blue` → `--ta-brand-blue`). Ensure slugs are unique (suffix
-`-2`, `-3`… on collision).
+**Map to the seven roles (all methods) — do NOT invent slugs from color names.**
+The token slugs are FIXED: `--ta-primary`, `--ta-accent`, `--ta-surface`, `--ta-ink`,
+`--ta-body`, `--ta-muted`, `--ta-border`. For each color the designer gives you,
+decide which role it fills (primary = links/buttons; accent = highlights/badges;
+surface = backgrounds; ink = headings; body = paragraph text; muted = captions;
+border = dividers) and set that role's **value**. Put the designer's own color name
+in the `name` field (e.g. `name: "Navy"`, `token: "--ta-primary"`). This is what makes
+a palette change safe — components reference the role slugs, so you never rename a
+slug and never edit a component. If the designer has MORE colors than the seven roles,
+add the extras as additional `--ta-*` tokens (own slugs fine) in a separate group, but
+always keep the seven roles filled.
 
 **Contrast (`text`) field.** For each color entry, compute a legible overlay text
 color from the hex's luminance — dark swatch → `#ffffff`, light swatch → a
@@ -185,14 +199,14 @@ usually replaces the single default group; an "add a section" request appends a
 new group and leaves existing ones intact.
 
 **Write both files** in the scope's `styles/` folder for the confirmed palette:
-- In **`brand.ts`**, write the colors into the target group inside
-  `brand.paletteGroups` (`{ title, description?, colors: [{ name, token,
-  value: "#hex", text, role }] }`) — replacing the default group for a full setup,
-  or appending a new group to add a section. The styleguide derives its swatch
-  count, group headings, and "N brand tokens" prose automatically — no other edit.
-- In **`tokens.css`**, write the matching `--ta-*` declarations under
-  `/* ── Brand colors ── */` (same hex values), leaving `--admin-*`,
-  `--ta-font-*`, and the system palette untouched.
+- In **`brand.ts`**, update each of the seven role entries in the "Brand Palette"
+  group — set its `value`, `name` (the designer's color name), `text`, and `role` —
+  **keeping the seven `token` slugs unchanged.** Append a new group only for extra
+  colors beyond the roles. The styleguide derives its swatch count, group headings,
+  and "N brand tokens" prose automatically — no other edit.
+- In **`tokens.css`**, set the matching `--ta-*` role **values** under the Brand
+  colors block (keep the slugs), leaving `--admin-*`, `--ta-font-*`, and the system
+  palette untouched.
 
 **Clear the brand marker** so the variation's styleguide stops flagging its Colors as
 template defaults: the marker lives in the variation's localStorage record, which a

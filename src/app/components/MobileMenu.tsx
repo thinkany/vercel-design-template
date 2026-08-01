@@ -40,7 +40,7 @@ export function MobileMenu({ onNavigate }: { onNavigate: (page: string) => void 
           the open drawer and ignores the closed off-screen one. */}
       <nav
         {...(open ? { "data-block": "mobile-menu", "data-block-name": "Mobile Menu" } : {})}
-        className={`absolute inset-y-0 ${MENU_SIDE === "left" ? "left-0" : "right-0"} z-[80] flex w-[78%] max-w-[320px] flex-col bg-ta-cream shadow-2xl transition-transform duration-300 ${
+        className={`absolute inset-y-0 ${MENU_SIDE === "left" ? "left-0" : "right-0"} z-[80] flex w-[78%] max-w-[320px] flex-col bg-ta-surface shadow-2xl transition-transform duration-300 ${
           open ? "translate-x-0" : `${off} pointer-events-none`
         }`}
       >
@@ -63,7 +63,7 @@ export function MobileMenu({ onNavigate }: { onNavigate: (page: string) => void 
               onNavigate(p.id);
               setOpen(false);
             }}
-            className="cursor-pointer border-t border-black/5 px-6 py-4 text-left font-ta-sans text-sm font-medium uppercase tracking-[0.1em] text-ta-gray-dark first:border-t-0 hover:text-ta-ink"
+            className="cursor-pointer border-t border-black/5 px-6 py-4 text-left font-ta-sans text-sm font-medium uppercase tracking-[0.1em] text-ta-body first:border-t-0 hover:text-ta-ink"
           >
             {p.name}
           </button>

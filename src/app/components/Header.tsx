@@ -30,13 +30,13 @@ function DropdownPanel({
   return (
     <div
       {...(open ? { "data-block": `menu-${id}`, "data-block-name": `Menu — ${name}` } : {})}
-      className={`absolute left-0 top-full z-40 min-w-[220px] flex-col border border-black/10 bg-ta-cream p-2 shadow-xl ${open ? "flex" : "hidden"}`}
+      className={`absolute left-0 top-full z-40 min-w-[220px] flex-col border border-black/10 bg-ta-surface p-2 shadow-xl ${open ? "flex" : "hidden"}`}
     >
       {menu.links.map((l) => (
         <button
           key={l.label}
           onClick={() => onNavigate(id)}
-          className="cursor-pointer px-4 py-2.5 text-left font-ta-sans text-xs font-medium uppercase tracking-[0.08em] text-ta-gray-dark hover:text-ta-ink"
+          className="cursor-pointer px-4 py-2.5 text-left font-ta-sans text-xs font-medium uppercase tracking-[0.08em] text-ta-body hover:text-ta-ink"
         >
           {l.label}
         </button>
@@ -53,7 +53,7 @@ function MegaPanel({
   return (
     <div
       {...(open ? { "data-block": `menu-${id}`, "data-block-name": `Menu — ${name}` } : {})}
-      className={`absolute inset-x-0 top-full z-40 mx-auto max-w-[1200px] border border-black/10 bg-ta-cream px-8 py-8 shadow-xl ${open ? "block" : "hidden"}`}
+      className={`absolute inset-x-0 top-full z-40 mx-auto max-w-[1200px] border border-black/10 bg-ta-surface px-8 py-8 shadow-xl ${open ? "block" : "hidden"}`}
     >
       <div className="grid grid-cols-4 gap-8">
         {menu.sections.map((s) => (
@@ -66,7 +66,7 @@ function MegaPanel({
                 <li key={l.label}>
                   <button
                     onClick={() => onNavigate(id)}
-                    className="cursor-pointer font-ta-sans text-sm text-ta-gray-dark hover:text-ta-ink"
+                    className="cursor-pointer font-ta-sans text-sm text-ta-body hover:text-ta-ink"
                   >
                     {l.label}
                   </button>
@@ -81,7 +81,7 @@ function MegaPanel({
               Featured
             </div>
             <div className="font-ta-display text-lg text-ta-ink">{menu.featured.label}</div>
-            <p className="mt-1 font-ta-sans text-sm text-ta-gray-dark">{menu.featured.blurb}</p>
+            <p className="mt-1 font-ta-sans text-sm text-ta-body">{menu.featured.blurb}</p>
           </div>
         )}
       </div>
@@ -106,7 +106,7 @@ export function Header({ onNavigate }: { onNavigate: (page: string) => void }) {
       // so the dropdown/mega panels that overflow below the header are never hidden
       // behind a later content section (the classic "menu isn't showing" bug). The
       // MobileMenu drawer sits ABOVE this (z-[70]/z-[80]) so it still covers the bar.
-      className="sticky top-0 z-[60] w-full border-b border-black/10 bg-ta-cream"
+      className="sticky top-0 z-[60] w-full border-b border-black/10 bg-ta-surface"
     >
       <div className="flex items-center justify-between px-6 py-4 @lg:px-10">
         {/* Logo lockup */}
@@ -127,7 +127,7 @@ export function Header({ onNavigate }: { onNavigate: (page: string) => void }) {
                 <button
                   {...(hasMenu ? { "data-menu-item": p.id } : {})}
                   onClick={() => onNavigate(p.id)}
-                  className="flex items-center gap-1 font-ta-sans text-xs font-medium tracking-[0.1em] uppercase text-ta-gray-dark hover:text-ta-ink transition-colors cursor-pointer"
+                  className="flex items-center gap-1 font-ta-sans text-xs font-medium tracking-[0.1em] uppercase text-ta-body hover:text-ta-ink transition-colors cursor-pointer"
                 >
                   {p.name}
                   {hasMenu && (

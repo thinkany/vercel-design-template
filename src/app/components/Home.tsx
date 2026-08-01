@@ -25,29 +25,29 @@ interface Props {
 // type, and components. It keeps the desktop/mobile responsive preview.
 function HomeContent({ onNavigate }: { onNavigate: (page: string) => void }) {
   return (
-    <div data-block="hero" data-block-name="Hero" className="min-h-full w-full bg-ta-cream flex flex-col items-center justify-center px-8 py-20 text-center">
+    <div data-block="hero" data-block-name="Hero" className="min-h-full w-full bg-ta-surface flex flex-col items-center justify-center px-8 py-20 text-center">
       {siteConfig.projectName && (
-        <div className="font-ta-sans text-[11px] font-semibold tracking-[0.18em] uppercase text-ta-gray-mid mb-5">
+        <div className="font-ta-sans text-[11px] font-semibold tracking-[0.18em] uppercase text-ta-muted mb-5">
           {siteConfig.projectName}
         </div>
       )}
       <h1 className="font-ta-display text-[clamp(36px,6cqi,64px)] font-normal text-ta-ink mb-5 leading-[1.05] tracking-[-0.02em]">
         {siteConfig.clientName}
       </h1>
-      <p className="font-ta-serif text-[17px] text-ta-gray-dark leading-[1.6] max-w-[440px] mb-9">
+      <p className="font-ta-serif text-[17px] text-ta-body leading-[1.6] max-w-[440px] mb-9">
         This is your starting point. Build your home page here, and reference the
         styleguide for tokens, type, and components.
       </p>
       <div className="flex gap-3 flex-wrap justify-center">
         <button
           onClick={() => onNavigate("styleguide")}
-          className="font-ta-sans text-xs font-medium tracking-[0.1em] uppercase text-white bg-ta-blue px-[22px] py-[11px] rounded-[3px] cursor-pointer"
+          className="font-ta-sans text-xs font-medium tracking-[0.1em] uppercase text-white bg-ta-primary px-[22px] py-[11px] rounded-[3px] cursor-pointer"
         >
           Open styleguide
         </button>
         <button
           onClick={() => onNavigate("dashboard")}
-          className="font-ta-sans text-xs font-medium tracking-[0.1em] uppercase text-ta-gray-dark bg-transparent border border-black/20 px-[22px] py-[11px] rounded-[3px] cursor-pointer"
+          className="font-ta-sans text-xs font-medium tracking-[0.1em] uppercase text-ta-body bg-transparent border border-black/20 px-[22px] py-[11px] rounded-[3px] cursor-pointer"
         >
           Dashboard
         </button>

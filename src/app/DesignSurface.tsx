@@ -57,7 +57,7 @@ export function DesignSurface({
   orientation,
   setOrientation,
   capture,
-  bg = "var(--ta-cream)",
+  bg = "var(--ta-surface)",
   onNavigate,
   chrome,
   children,

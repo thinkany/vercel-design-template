@@ -260,8 +260,8 @@ if (PHASE === "specimen") {
   const varByToken = {};
   for (const c of MANIFEST.colors) if (varByName[c.figmaName]) varByToken[c.token] = varByName[c.figmaName];
   const inkVar = varByToken["--ta-ink"];
-  const midVar = varByToken["--ta-gray-mid"];
-  const darkVar = varByToken["--ta-gray-dark"];
+  const midVar = varByToken["--ta-muted"];
+  const darkVar = varByToken["--ta-body"];
 
   const boundFill = (v) => [figma.variables.setBoundVariableForPaint({ type: "SOLID", color: { r: 0, g: 0, b: 0 } }, "color", v)];
   // Fonts needed for labels (specimen chrome is always Inter + JetBrains Mono).

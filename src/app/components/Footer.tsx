@@ -13,9 +13,9 @@ export function Footer({ onNavigate }: { onNavigate: (page: string) => void }) {
   const pages = designPages;
 
   return (
-    <footer data-block="footer" data-block-name="Footer" className="w-full border-t border-black/10 bg-ta-cream px-6 py-8 @lg:px-10">
+    <footer data-block="footer" data-block-name="Footer" className="w-full border-t border-black/10 bg-ta-surface px-6 py-8 @lg:px-10">
       <div className="flex flex-col gap-4 @lg:flex-row @lg:items-center @lg:justify-between">
-        <div className="font-ta-sans text-[11px] tracking-[0.08em] uppercase text-ta-gray-mid">
+        <div className="font-ta-sans text-[11px] tracking-[0.08em] uppercase text-ta-muted">
           © {year} {siteConfig.clientName}
         </div>
         <nav className="flex flex-wrap gap-x-6 gap-y-2">
@@ -23,7 +23,7 @@ export function Footer({ onNavigate }: { onNavigate: (page: string) => void }) {
             <button
               key={p.id}
               onClick={() => onNavigate(p.id)}
-              className="font-ta-sans text-[11px] tracking-[0.08em] uppercase text-ta-gray-dark hover:text-ta-ink transition-colors cursor-pointer"
+              className="font-ta-sans text-[11px] tracking-[0.08em] uppercase text-ta-body hover:text-ta-ink transition-colors cursor-pointer"
             >
               {p.name}
             </button>

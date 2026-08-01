@@ -111,7 +111,7 @@ function AboutContent({ onNavigate }: { onNavigate: (page: string) => void }) {
     <section
       data-block="about-hero"
       data-block-name="About Hero"
-      className="min-h-full w-full bg-ta-cream flex flex-col items-center justify-center px-8 py-20 text-center"
+      className="min-h-full w-full bg-ta-surface flex flex-col items-center justify-center px-8 py-20 text-center"
     >
       {/* design content here */}
     </section>
@@ -179,7 +179,7 @@ permission-gated and is inconsistent). Source them over plain HTTP instead:
    **bounded** (it can't hang). If it isn't a fast success (timeout, non-200,
    error), **do not retry, do not escalate to a browser, do not stop to ask** —
    drop in a **network-free placeholder** (a token-colored block at the right aspect
-   ratio, e.g. `<div className="aspect-video bg-ta-gray-light rounded" />`) and keep
+   ratio, e.g. `<div className="aspect-video bg-ta-border rounded" />`) and keep
    building. **Don't interrupt the design over a missing image.**
 3. **Track placeholders → report them in the closing summary.** Keep a running list
    of every image that fell back to a placeholder (which section, what it should
