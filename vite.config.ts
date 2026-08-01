@@ -82,6 +82,47 @@ function variationApiPlugin() {
   }
 }
 
+// Variations manifest: the list of variation folders that actually exist on disk
+// under src/variations/ (plus base v00). The Dashboard reconciles its localStorage
+// records against this so a variation created by *files alone* — a skill scaffolding
+// v01, or a committed variation a client's fresh browser has no record of — still
+// shows up. Served live in dev (scan) AND emitted into the build output, so it works
+// on the static Vercel deploy too (fixing the old "client sees only base" gap).
+async function scanVariationIds(): Promise<string[]> {
+  const { readdir } = await import('fs/promises')
+  let ids: string[] = []
+  try {
+    ids = (await readdir(path.resolve(__dirname, 'src/variations'), { withFileTypes: true }))
+      .filter((e: any) => e.isDirectory())
+      .map((e: any) => e.name)
+  } catch {}
+  // Base is always present; keep it first and de-duped.
+  return ['v00', ...ids.filter((id) => id !== 'v00')]
+}
+
+function variationsManifestPlugin() {
+  return {
+    name: 'ta-variations-manifest',
+    configureServer(server: any) {
+      server.middlewares.use(async (req: any, res: any, next: any) => {
+        if (req.url === '/variations.json' && req.method === 'GET') {
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ ids: await scanVariationIds() }))
+          return
+        }
+        next()
+      })
+    },
+    async generateBundle(this: any) {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'variations.json',
+        source: JSON.stringify({ ids: await scanVariationIds() }),
+      })
+    },
+  }
+}
+
 function figmaAssetResolver() {
   return {
     name: 'figma-asset-resolver',
@@ -98,6 +139,7 @@ export default defineConfig({
   plugins: [
     figmaAssetResolver(),
     variationApiPlugin(),
+    variationsManifestPlugin(),
     // The React and Tailwind plugins are both required for Make, even if
     // Tailwind is not being actively used – do not remove them
     react(),

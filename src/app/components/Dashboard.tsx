@@ -1,6 +1,16 @@
 // ©2026 thinkany llc. All rights reserved.
 import { useState, useEffect } from "react";
-import { loadVariations, saveVariations, type Variation } from "@/data/variations";
+import {
+  loadVariations,
+  saveVariations,
+  reconcileWithDisk,
+  dismissVariation,
+  nextVariationId,
+  nextVersionTag,
+  formatNowDate,
+  formatNowDateTime,
+  type Variation,
+} from "@/data/variations";
 import { siteConfig } from "@/config/site";
 import { getRole } from "@/data/role";
 import { VariationCard } from "./VariationCard";
@@ -17,6 +27,7 @@ export function Dashboard() {
   const [variations, setVariations] = useState<Variation[]>(() => loadVariations());
   const [showMakeModal, setShowMakeModal] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [isStarting, setIsStarting] = useState(false);
 
   // Show a real "Modified" date driven by each variation's design-file mtimes.
   // The dev server reports them (edits happen by changing files, which the app
@@ -34,6 +45,27 @@ export function Dashboard() {
     return () => { cancelled = true; };
   }, []);
 
+  // Reconcile the localStorage gallery against the variations that actually exist
+  // on disk (/variations.json — served in dev, emitted into the Vercel build). This
+  // surfaces variations created by files alone: one a setup skill scaffolded, or a
+  // committed variation this browser has no record of (previously a client saw only
+  // base v00). Dismissed (removed) ids are skipped so they don't reappear.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/variations.json")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((manifest: { ids?: string[] } | null) => {
+        if (!manifest?.ids || cancelled) return;
+        setVariations((prev) => {
+          const merged = reconcileWithDisk(prev, manifest.ids!);
+          if (merged !== prev) saveVariations(merged);
+          return merged;
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   function handleRemoveClick(variation: Variation) {
     if (variation.isBase) {
       setDialog({ type: "base-guard" });
@@ -46,6 +78,9 @@ export function Dashboard() {
     const updated = variations.filter((v) => v.id !== id);
     setVariations(updated);
     saveVariations(updated);
+    // Remember the removal so disk reconciliation won't re-add it (its files may
+    // still be on disk).
+    dismissVariation(id);
     setDialog(null);
   }
 
@@ -55,6 +90,43 @@ export function Dashboard() {
     saveVariations(updated);
     setShowMakeModal(false);
   }
+
+  // Fallback creation path for Option A (design #1 = a variation): when the only
+  // thing here is base v00, spin up the first working variation in one click —
+  // copies base's files (dev endpoint) and writes the record. The primary path is
+  // /setup-styleguide doing this during onboarding; this catches designers who
+  // skipped it. Navigates straight into the new variation to start designing.
+  async function handleStartDesigning() {
+    if (isStarting) return;
+    setIsStarting(true);
+    const newId = nextVariationId(variations);
+    try {
+      await fetch("/api/variation/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId: "v00", targetId: newId }),
+      }).catch(() => {});
+      const firstDesign: Variation = {
+        id: newId,
+        version: nextVersionTag(variations),
+        title: "Design 1",
+        description: "",
+        createdAt: formatNowDate(),
+        modifiedAt: formatNowDateTime(),
+        isBase: false,
+        styleguideStatus: "needs-review",
+        brandStatus: "needs-review",
+      };
+      const updated = [...variations, firstDesign];
+      saveVariations(updated);
+      window.location.href = `/?v=${newId}`;
+    } finally {
+      setIsStarting(false);
+    }
+  }
+
+  // Only base exists → the designer hasn't started a design yet.
+  const onlyBase = variations.length === 1 && variations[0]?.isBase;
 
   return (
     <div style={{
@@ -181,6 +253,40 @@ export function Dashboard() {
           borderBottom: "2px solid rgba(0,0,0,0.1)",
           marginBottom: 10,
         }} />
+
+        {/* Start-designing prompt — only when base is the sole entry, admin, and
+            in local dev (creation is a dev-server capability). The first design is
+            a variation (base stays the pristine template); this is the fallback for
+            designers who skipped /setup-styleguide, which normally creates it. */}
+        {isAdmin && import.meta.env.DEV && onlyBase && (
+          <button
+            onClick={handleStartDesigning}
+            disabled={isStarting}
+            style={{
+              width: "100%",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-start",
+              gap: 4,
+              padding: "20px 22px",
+              marginBottom: 16,
+              border: "1px dashed var(--admin-accent)",
+              borderRadius: 4,
+              background: "rgba(30,75,150,0.04)",
+              cursor: isStarting ? "wait" : "pointer",
+              fontFamily: "inherit",
+              textAlign: "left",
+            }}
+          >
+            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--admin-ink)" }}>
+              {isStarting ? "Creating your first design…" : "▶  Start designing"}
+            </span>
+            <span style={{ fontSize: 12, color: "var(--admin-gray-mid)" }}>
+              Creates your working copy from the base template — your design lives
+              there, base stays the clean starting point.
+            </span>
+          </button>
+        )}
 
         {/* Variation list */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

@@ -33,6 +33,9 @@ export const INITIAL_VARIATIONS: Variation[] = [
 ];
 
 const STORAGE_KEY = "ta-variations-v2";
+// Ids the user has explicitly removed from the gallery. Disk reconciliation skips
+// these so a removed variation whose FILES still exist doesn't keep reappearing.
+const DISMISSED_KEY = "ta-variations-dismissed";
 
 export function loadVariations(): Variation[] {
   try {
@@ -71,6 +74,65 @@ export function saveVariations(variations: Variation[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(variations));
   } catch {}
+}
+
+export function loadDismissed(): string[] {
+  try {
+    const raw = localStorage.getItem(DISMISSED_KEY);
+    const arr = raw ? (JSON.parse(raw) as string[]) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+export function dismissVariation(id: string): void {
+  try {
+    const set = new Set(loadDismissed());
+    set.add(id);
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify([...set]));
+  } catch {}
+}
+
+/** Version tag for an id ("v01" → "v0.1"), matching nextVersionTag's scheme. */
+function versionTagForId(id: string): string {
+  const n = parseInt(id.replace(/\D/g, ""), 10) || 0;
+  return `v${Math.floor(n / 10)}.${n % 10}`;
+}
+
+/**
+ * A default record for a variation discovered on disk (via /variations.json) that
+ * has no localStorage record yet — e.g. one a setup skill scaffolded by copying
+ * files, or a committed variation a fresh browser has never seen. Its brand/
+ * styleguide read as inherited/needs-review until the designer marks them done.
+ */
+export function discoveredVariation(id: string): Variation {
+  const n = parseInt(id.replace(/\D/g, ""), 10) || 0;
+  return {
+    id,
+    version: versionTagForId(id),
+    title: `Design ${n}`,
+    description: "",
+    createdAt: formatNowDate(),
+    modifiedAt: formatNowDateTime(),
+    isBase: false,
+    styleguideStatus: "needs-review",
+    brandStatus: "needs-review",
+  };
+}
+
+/**
+ * Merge on-disk variation ids into an existing record list: append a default
+ * record for any id present on disk but neither already recorded nor dismissed.
+ * Returns the (possibly unchanged) list; caller persists + re-renders if it grew.
+ */
+export function reconcileWithDisk(current: Variation[], diskIds: string[]): Variation[] {
+  const known = new Set(current.map((v) => v.id));
+  const dismissed = new Set(loadDismissed());
+  const additions = diskIds
+    .filter((id) => !known.has(id) && !dismissed.has(id))
+    .map((id) => discoveredVariation(id));
+  return additions.length ? [...current, ...additions] : current;
 }
 
 export function getVariationUrl(variation: Variation): string {
