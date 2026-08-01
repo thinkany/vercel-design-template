@@ -5,6 +5,7 @@ import { siteConfig } from "@/config/site";
 import { getRole } from "@/data/role";
 import { VariationCard } from "./VariationCard";
 import { MakeVariationModal } from "./MakeVariationModal";
+import { UpdateCheck } from "./UpdateCheck";
 
 type Dialog =
   | { type: "remove"; variation: Variation }
@@ -98,6 +99,7 @@ export function Dashboard() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {isAdmin && <UpdateCheck />}
           <button
             onClick={() => {
               document.cookie = "ta-auth=; path=/; max-age=0";
