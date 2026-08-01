@@ -432,7 +432,6 @@ function fontName(stack: string): string {
 // Empty until the styleguide has been configured for this project.
 function TypographySection({ fonts, needsSetup }: { fonts: BrandFont[]; needsSetup?: boolean }) {
   const resolvedFonts = useResolvedTokens(fonts.map((f) => f.token));
-  const selected = !needsSetup;
   return (
     <section id="primitives-typography" data-sg-section="primitives-typography">
       <Divider />
@@ -440,44 +439,44 @@ function TypographySection({ fonts, needsSetup }: { fonts: BrandFont[]; needsSet
         <SectionTitle
           eyebrow="Primitives · Sub-Atomic Tokens"
           title="Typography"
-          desc={
-            selected
-              ? `The typefaces selected for ${siteConfig.clientName}. Each role maps to a CSS variable — reference it by token, never by font name. Headings use Display; body copy uses Sans.`
-              : "The project's typefaces appear here once they've been selected. Set them in tokens.css (or run /setup-styleguide) and their specimens will populate this section."
-          }
+          desc={`The typefaces selected for ${siteConfig.clientName}. Each role maps to a CSS variable — reference it by token, never by font name. Headings use Display; body copy uses Sans.`}
         />
-        {selected ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {fonts.map((ff) => {
-              const stack = resolvedFonts[ff.token] || ff.stack;
-              return (
-                <DemoBox key={ff.name} bg={C.white} pad={28}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 12, marginBottom: 18 }}>
-                    <div>
-                      <div style={{ fontFamily: A.body, fontSize: 11, fontWeight: 600, letterSpacing: "0.14em", color: CA.accent, textTransform: "uppercase", marginBottom: 6 }}>{ff.name} · {ff.role}</div>
-                      <Token>{ff.token}</Token>
-                    </div>
-                    <div style={{ fontFamily: ff.stack, fontSize: 34, color: C.ink, lineHeight: 1 }}>{fontName(stack)}</div>
-                  </div>
-                  <div style={{ fontFamily: ff.stack, fontSize: 22, color: C.ink, lineHeight: 1.3, marginBottom: 14 }}>
-                    The quick brown fox jumps over the lazy dog
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 28px" }}>
-                    <span style={{ fontFamily: ff.stack, fontSize: 18, color: C.dark }}>ABCDEFGHIJKLM · abcdefghijklm · 0123456789</span>
-                    <span style={{ fontFamily: ff.stack, fontSize: 18, color: C.mid }}>fi fl ffi ffl — Waffle office affluent</span>
-                  </div>
-                </DemoBox>
-              );
-            })}
-          </div>
-        ) : (
-          <div style={{ border: `1px dashed ${CA.light}`, borderRadius: 2, padding: "56px 32px", textAlign: "center", background: CA.surface }}>
-            <div style={{ fontFamily: A.heading, fontSize: 24, fontWeight: 700, color: CA.mid, marginBottom: 10 }}>No typeface selected yet</div>
-            <div style={{ fontFamily: A.body, fontSize: 14, color: CA.mid, lineHeight: 1.6, maxWidth: 440, margin: "0 auto" }}>
-              Choose the project's fonts in <Token>tokens.css</Token> — or run <Token>/setup-styleguide</Token> — and their specimens will appear here.
+
+        {/* Match ColorsSection: always render the specimens, and downgrade the
+            unconfigured state to a soft inline notice — never hide the fonts,
+            which are real (inherited from base) even when this scope's
+            styleguide hasn't been marked updated yet. */}
+        {needsSetup && (
+          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", border: `1px solid ${CA.light}`, background: CA.surface, borderRadius: 3, padding: "12px 16px", marginBottom: 24 }}>
+            <div style={{ fontFamily: A.body, fontSize: 13, color: CA.dark, lineHeight: 1.5 }}>
+              <strong style={{ fontWeight: 600 }}>Inherited typefaces.</strong> These are the current defaults for this scope — adjust them in <Token>tokens.css</Token> (or run <Token>/setup-styleguide</Token>), then use <strong style={{ fontWeight: 600 }}>Mark as updated</strong> in the banner above to clear its setup notice.
             </div>
           </div>
         )}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {fonts.map((ff) => {
+            const stack = resolvedFonts[ff.token] || ff.stack;
+            return (
+              <DemoBox key={ff.name} bg={C.white} pad={28}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 12, marginBottom: 18 }}>
+                  <div>
+                    <div style={{ fontFamily: A.body, fontSize: 11, fontWeight: 600, letterSpacing: "0.14em", color: CA.accent, textTransform: "uppercase", marginBottom: 6 }}>{ff.name} · {ff.role}</div>
+                    <Token>{ff.token}</Token>
+                  </div>
+                  <div style={{ fontFamily: ff.stack, fontSize: 34, color: C.ink, lineHeight: 1 }}>{fontName(stack)}</div>
+                </div>
+                <div style={{ fontFamily: ff.stack, fontSize: 22, color: C.ink, lineHeight: 1.3, marginBottom: 14 }}>
+                  The quick brown fox jumps over the lazy dog
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 28px" }}>
+                  <span style={{ fontFamily: ff.stack, fontSize: 18, color: C.dark }}>ABCDEFGHIJKLM · abcdefghijklm · 0123456789</span>
+                  <span style={{ fontFamily: ff.stack, fontSize: 18, color: C.mid }}>fi fl ffi ffl — Waffle office affluent</span>
+                </div>
+              </DemoBox>
+            );
+          })}
+        </div>
       </div>
     </section>
   );

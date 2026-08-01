@@ -13,6 +13,15 @@ interface Props {
 export function VariationCard({ variation, isAdmin, onRemove }: Props) {
   const siteUrl = getVariationUrl(variation);
   const stylesUrl = getStylesUrl(variation);
+  // Option B: the setup nudge persists until BOTH the styleguide (fonts/sections)
+  // and the brand palette are done for THIS variation — because /setup-styleguide
+  // configures both. It reads the same flags on the same record the styleguide
+  // banner does, so marking either done in the styleguide clears it from here too;
+  // it fully disappears once both are resolved. Never shown on base (v00).
+  const needsSetup =
+    !variation.isBase &&
+    (variation.styleguideStatus === "needs-review" ||
+      variation.brandStatus === "needs-review");
   const [hoveringView, setHoveringView] = useState(false);
   const [hoveringThumb, setHoveringThumb] = useState(false);
   const [tooltipPos, setTooltipPos] = useState({ top: 0, right: 0 });
@@ -204,6 +213,32 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
         }}>
           {variation.description}
         </p>
+
+        {/* Styleguide setup nudge — same amber language as the styleguide's own
+            banner, so the two surfaces read as one state. Persists until this
+            variation's fonts AND palette are configured (Option B). */}
+        {needsSetup && (
+          <div style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 8,
+            background: "#fef3c7",
+            border: "1px solid #f0d488",
+            borderRadius: 3,
+            padding: "9px 12px",
+            fontFamily: "var(--admin-font-body)",
+            fontSize: 12.5,
+            color: "#663d00",
+            lineHeight: 1.5,
+          }}>
+            <span style={{ fontSize: 13, lineHeight: 1.3 }}>⚙</span>
+            <span>
+              Styleguide not configured yet — run{" "}
+              <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 5px", borderRadius: 3, fontFamily: "ui-monospace, monospace", fontSize: 11.5 }}>/setup-styleguide</code>{" "}
+              for <strong style={{ fontWeight: 600 }}>{variation.version}</strong> to set its fonts &amp; colors, then mark it done on its <a href={stylesUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#663d00", textDecoration: "underline", textUnderlineOffset: 2 }}>styleguide</a>.
+            </span>
+          </div>
+        )}
 
         {/* Dates */}
         <div style={{

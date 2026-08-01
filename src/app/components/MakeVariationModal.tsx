@@ -19,16 +19,37 @@ interface Props {
 }
 
 export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
-  const [selectedSource, setSelectedSource] = useState<string | null>(null);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const newId = nextVariationId(variations);
+  const newVersion = nextVersionTag(variations);
+
+  // Seed the form from the most recent variation ("prior"): its title and
+  // description carried forward with the new version tag, so new variations stay
+  // consistently named and the user starts from direction instead of a blank
+  // form. The prior is also pre-selected as the duplication source.
+  const prior = variations[variations.length - 1];
+  const suggestTitle = (v: Variation) => `${v.title} ${newVersion}`;
+  const suggestDescription = (v: Variation) =>
+    v.description ? `${v.description} ${newVersion}` : "";
+
+  const [selectedSource, setSelectedSource] = useState<string | null>(prior?.id ?? null);
+  const [title, setTitle] = useState(prior ? suggestTitle(prior) : "");
+  const [description, setDescription] = useState(prior ? suggestDescription(prior) : "");
+  // Once the user edits a field, stop auto-syncing it from the source selection.
+  const [titleDirty, setTitleDirty] = useState(false);
+  const [descDirty, setDescDirty] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [needsStyleguide, setNeedsStyleguide] = useState(false);
 
-  const newId = nextVariationId(variations);
-  const newVersion = nextVersionTag(variations);
   const canCreate = selectedSource !== null && title.trim().length > 0;
+
+  // Pick a duplication source; keep any not-yet-edited field in sync with it so
+  // the suggestion always reflects what's actually being copied.
+  function selectSource(v: Variation) {
+    setSelectedSource(v.id);
+    if (!titleDirty) setTitle(suggestTitle(v));
+    if (!descDirty) setDescription(suggestDescription(v));
+  }
 
   async function handleCreate() {
     if (!canCreate || isCreating) return;
@@ -161,7 +182,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                 return (
                   <button
                     key={v.id}
-                    onClick={() => setSelectedSource(v.id)}
+                    onClick={() => selectSource(v)}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -274,7 +295,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
               <input
                 type="text"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => { setTitle(e.target.value); setTitleDirty(true); }}
                 placeholder={`Variation ${String(variations.length).padStart(2, "0")}`}
                 style={{
                   width: "100%",
@@ -305,7 +326,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
               </label>
               <textarea
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => { setDescription(e.target.value); setDescDirty(true); }}
                 placeholder="Describe what's different about this variation…"
                 rows={3}
                 style={{
