@@ -187,7 +187,7 @@ function UpgradeModal({
                 </p>
               )}
               <p style={{ margin: "14px 0 0", fontSize: 13, fontWeight: 700, color: "var(--admin-ink)" }}>
-                Update reminder: restart your dev server after applying.
+                After applying, refresh the page — restart the dev server only if something looks off.
               </p>
             </>
           )}
@@ -203,12 +203,11 @@ function UpgradeModal({
                   {state.report.review.join(", ")}
                 </p>
               )}
-              <div style={{ margin: 0, fontSize: 12, color: "#663d00", background: "#fef3c7", border: "1px solid #f0d488", borderRadius: 4, padding: "10px 12px" }}>
-                <strong>Restart the dev server now.</strong> The update rewrote
-                <code> vite.config.ts</code> and live modules, so a browser reload isn't
-                enough: stop it (<code>Ctrl+C</code>), run <code>npm run dev</code> again,
-                then hard-reload this page. Then review with <code>git diff</code> and commit.
-              </div>
+              <p style={{ margin: 0, fontSize: 12, color: "var(--admin-gray-mid)", lineHeight: 1.6 }}>
+                <strong>Refresh</strong> to see the update. If anything looks off, restart the
+                dev server (<code>Ctrl+C</code> → <code>npm run dev</code>) — it rewrote
+                <code> vite.config.ts</code>. Then review with <code>git diff</code> and commit.
+              </p>
             </>
           )}
         </div>
@@ -220,7 +219,12 @@ function UpgradeModal({
               <AccentBtn onClick={() => onApply(dirty)}>{dirty ? "Apply anyway" : "Apply update"}</AccentBtn>
             </>
           )}
-          {state.kind === "done" && <AccentBtn onClick={onClose}>Got it</AccentBtn>}
+          {state.kind === "done" && (
+            <>
+              <GhostBtn onClick={onClose}>Close</GhostBtn>
+              <AccentBtn onClick={() => window.location.reload()}>Refresh</AccentBtn>
+            </>
+          )}
           {state.kind === "error" && <GhostBtn onClick={onClose}>Close</GhostBtn>}
           {busy && <span style={{ fontSize: 12, color: "var(--admin-gray-mid)" }}>Working…</span>}
         </div>
