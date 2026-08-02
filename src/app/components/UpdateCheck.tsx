@@ -186,6 +186,9 @@ function UpgradeModal({
                   After applying, review with <code>git diff</code> and commit.
                 </p>
               )}
+              <p style={{ margin: "14px 0 0", fontSize: 13, fontWeight: 700, color: "var(--admin-ink)" }}>
+                Update reminder: restart your dev server after applying.
+              </p>
             </>
           )}
 

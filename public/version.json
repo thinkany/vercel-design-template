@@ -1,6 +1,6 @@
 {
   "version": "0.2.1",
-  "notes": "Variation metadata is now file-based (per-variation variation.json) instead of localStorage — no more cross-project mix-ups or stale state, and the initial design shows correctly in every browser. Plus dashboard polish: real Created dates, a timezone on Modified, and a cleaner card. Update reminder: restart your dev server after applying.",
+  "notes": "Variation metadata is now file-based (per-variation variation.json) instead of localStorage — no more cross-project mix-ups or stale state, and the initial design shows correctly in every browser. Plus dashboard polish: real Created dates, a timezone on Modified, and a cleaner card.",
   "date": "2026-08-02",
   "zipUrl": "https://create.thinkany.design/template-latest.zip"
 }
