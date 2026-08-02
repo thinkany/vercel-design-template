@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
-  "notes": "First beta.",
-  "date": "2026-08-01"
+  "version": "0.1.1",
+  "notes": "Variation-first onboarding: every design is a variation, base stays a clean blueprint. Semantic role tokens (no palette remaps), variation copies build via the @/app alias, and a cleaner post-setup dashboard.",
+  "date": "2026-08-02"
 }
