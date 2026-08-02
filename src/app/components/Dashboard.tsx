@@ -125,6 +125,15 @@ export function Dashboard() {
     }
   }
 
+  // Base v00 is the blueprint, not a design. Once any design variation exists,
+  // hide the base card — the designer works in their variation(s). Base only
+  // shows on its own, when setup was skipped (a bare `npm run dev`), where it
+  // sits beside the "Start designing" prompt.
+  const hasDesignVariation = variations.some((v) => !v.isBase);
+  const visibleVariations = hasDesignVariation
+    ? variations.filter((v) => !v.isBase)
+    : variations;
+
   // Only base exists → the designer hasn't started a design yet.
   const onlyBase = variations.length === 1 && variations[0]?.isBase;
 
@@ -244,7 +253,7 @@ export function Dashboard() {
             )}
           </h1>
           <p style={{ fontSize: 14, color: "var(--admin-gray-mid)", margin: 0 }}>
-            {variations.length} design variation{variations.length !== 1 ? "s" : ""}
+            {visibleVariations.length} design variation{visibleVariations.length !== 1 ? "s" : ""}
           </p>
         </div>
 
@@ -288,9 +297,9 @@ export function Dashboard() {
           </button>
         )}
 
-        {/* Variation list */}
+        {/* Variation list — base hidden once a design variation exists. */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {variations.map((v) => (
+          {visibleVariations.map((v) => (
             <VariationCard
               key={v.id}
               variation={v}

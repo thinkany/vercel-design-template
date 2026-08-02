@@ -103,9 +103,13 @@ function versionTagForId(id: string): string {
 
 /**
  * A default record for a variation discovered on disk (via /variations.json) that
- * has no localStorage record yet — e.g. one a setup skill scaffolded by copying
- * files, or a committed variation a fresh browser has never seen. Its brand/
- * styleguide read as inherited/needs-review until the designer marks them done.
+ * has no localStorage record yet. Under Option A that means it was created by
+ * FILES — i.e. `/setup-styleguide`'s Step 0 copy, which then configures it — or a
+ * committed design a fresh browser hasn't seen. Either way it's already
+ * configured, so it defaults to DONE (no setup banner). The two paths that create
+ * an *un*configured variation write their own record instead: the "Start
+ * designing" skip-setup button and the Make-Variation modal both set needs-review
+ * explicitly, so they never reach this default.
  */
 export function discoveredVariation(id: string): Variation {
   const n = parseInt(id.replace(/\D/g, ""), 10) || 0;
@@ -117,8 +121,8 @@ export function discoveredVariation(id: string): Variation {
     createdAt: formatNowDate(),
     modifiedAt: formatNowDateTime(),
     isBase: false,
-    styleguideStatus: "needs-review",
-    brandStatus: "needs-review",
+    styleguideStatus: "updated",
+    brandStatus: "established",
   };
 }
 

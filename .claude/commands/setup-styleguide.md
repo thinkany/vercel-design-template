@@ -381,16 +381,18 @@ components get built (Atoms → Molecules → Organisms → Templates → Pages)
 universal Primitives and generic Atoms (buttons, badges, form controls, icons)
 unless there's a strong reason not to.
 
-## 4. Mark it done
+## 4. Readiness is automatic — nothing to mark
 
-Once the variation's tokens and sections reflect its foundation, have the designer
-clear its two markers (both live in the variation's localStorage record — in-page
-buttons, no `.env` edit):
-- **Brand palette** → **"Mark brand established"** in the Colors section — see step 1a.
-- **Styleguide overall** → the **Mark as updated** button, which clears the
-  top-of-page setup banner.
+You don't need to mark anything done. The working variation was created by Step 0's
+file copy, so the dashboard records it as **already configured** (that's the default
+for a disk-discovered variation under this flow) — its styleguide shows **no setup
+banner**. Base v00 never shows one either (it's the pristine blueprint).
 
-(Base v00 has no such markers — it's the pristine blueprint and never shows a banner.)
+The only time the "inherited the base styleguide" banner appears is when a designer
+later **duplicates** a variation via *Make New Variation* and checks "needs its own
+styleguide" — then that copy carries the banner + an in-page **Mark as updated** /
+**Mark brand established** button until they clear it. It never applies to the
+variation this setup just configured.
 
 ## 5. Sign off — onboarding complete
 
