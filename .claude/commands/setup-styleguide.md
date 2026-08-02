@@ -54,10 +54,14 @@ configures THAT variation, never the base.**
     "version": "v0.1",
     "title": "Initial Design",
     "description": "Initial Design Concept, color and font variations.",
+    "createdAt": "MM/DD/YYYY",
     "styleguideStatus": "updated",
     "brandStatus": "established"
   }
   ```
+
+  Set `createdAt` to **today's date** (`MM/DD/YYYY`, no time). `modifiedAt` is filled
+  live from the design files' mtimes, so don't hardcode it.
 
   The dashboard reads this file directly — no localStorage, so it shows the right
   title/status in every browser. Tell the designer in one plain line that you've set

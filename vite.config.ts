@@ -20,7 +20,8 @@ function variationApiPlugin() {
             const { readdir, stat } = await import('fs/promises')
             const root = path.resolve(__dirname, 'src')
             const pad = (n: number) => String(n).padStart(2, '0')
-            const fmt = (ms: number) => { const d = new Date(ms); return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}` }
+            const tz = new Date().toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop() || ''
+            const fmt = (ms: number) => { const d = new Date(ms); return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())} ${tz}` }
             const latest = async (dir: string): Promise<number> => {
               let max = 0, entries
               try { entries = await readdir(dir, { withFileTypes: true }) } catch { return 0 }
@@ -91,7 +92,8 @@ function variationApiPlugin() {
               let cur: any = {}
               try { cur = JSON.parse(await readFile(file, 'utf8')) } catch {}
               const d = new Date(), p = (n: number) => String(n).padStart(2, '0')
-              const modifiedAt = `${p(d.getMonth() + 1)}/${p(d.getDate())}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`
+              const tz = d.toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop() || ''
+              const modifiedAt = `${p(d.getMonth() + 1)}/${p(d.getDate())}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())} ${tz}`
               const nextMeta = { ...metaDefaults(id), ...cur, ...patch, modifiedAt }
               await writeFile(file, JSON.stringify(nextMeta, null, 2) + '\n')
               res.setHeader('Content-Type', 'application/json')
@@ -167,8 +169,9 @@ function metaDefaults(id: string) {
 // Served live in dev AND emitted into the build output, so the dashboard reads
 // identical, correct data in every browser and on Vercel — no localStorage.
 async function scanVariations(): Promise<any[]> {
-  const { readdir, readFile } = await import('fs/promises')
+  const { readdir, readFile, stat } = await import('fs/promises')
   const dir = path.resolve(__dirname, 'src/variations')
+  const p = (n: number) => String(n).padStart(2, '0')
   let ids: string[] = []
   try {
     ids = (await readdir(dir, { withFileTypes: true }))
@@ -180,7 +183,16 @@ async function scanVariations(): Promise<any[]> {
   for (const id of ids) {
     let meta: any = {}
     try { meta = JSON.parse(await readFile(path.resolve(dir, id, 'variation.json'), 'utf8')) } catch {}
-    out.push({ id, ...metaDefaults(id), ...meta })
+    // Fall back to the folder's creation time for createdAt when the metadata omits it.
+    let createdAt: string | undefined
+    if (!meta.createdAt) {
+      try {
+        const s = await stat(path.resolve(dir, id))
+        const d = new Date(s.birthtimeMs || s.ctimeMs)
+        createdAt = `${p(d.getMonth() + 1)}/${p(d.getDate())}/${d.getFullYear()}`
+      } catch {}
+    }
+    out.push({ id, ...metaDefaults(id), ...(createdAt ? { createdAt } : {}), ...meta })
   }
   return out
 }

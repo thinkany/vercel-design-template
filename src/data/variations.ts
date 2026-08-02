@@ -133,7 +133,8 @@ export function formatNowDateTime(): string {
   const dd = String(d.getDate()).padStart(2, "0");
   const hh = String(d.getHours()).padStart(2, "0");
   const min = String(d.getMinutes()).padStart(2, "0");
-  return `${mm}/${dd}/${d.getFullYear()} ${hh}:${min}`;
+  const tz = d.toLocaleTimeString("en-US", { timeZoneName: "short" }).split(" ").pop() ?? "";
+  return `${mm}/${dd}/${d.getFullYear()} ${hh}:${min} ${tz}`;
 }
 
 /** Next free id given the current list (e.g. [v00] → "v01"). */

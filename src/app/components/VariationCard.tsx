@@ -141,22 +141,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
       }}>
         {/* Eyebrow row */}
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          {/* 1. Label — filled blue */}
-          <span style={{
-            display: "inline-block",
-            padding: "2px 8px",
-            background: "var(--admin-accent)",
-            color: "#fff",
-            fontSize: 10,
-            fontWeight: 500,
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            borderRadius: 2,
-            fontFamily: "var(--admin-font-body)",
-          }}>
-            {variation.label ?? (variation.isBase ? "Original" : "Client Edits")}
-          </span>
-          {/* 2. Version — outlined gray */}
+          {/* Version — outlined gray (the variant number) */}
           <span style={{
             display: "inline-block",
             padding: "2px 8px",
