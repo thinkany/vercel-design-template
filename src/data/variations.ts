@@ -113,11 +113,12 @@ function versionTagForId(id: string): string {
  */
 export function discoveredVariation(id: string): Variation {
   const n = parseInt(id.replace(/\D/g, ""), 10) || 0;
+  const isFirst = n === 1; // v01 is the initial design created by /setup-styleguide
   return {
     id,
     version: versionTagForId(id),
-    title: `Design ${n}`,
-    description: "",
+    title: isFirst ? "Initial Design" : `Design ${n}`,
+    description: isFirst ? "Initial Design Concept, color and font variations." : "",
     createdAt: formatNowDate(),
     modifiedAt: formatNowDateTime(),
     isBase: false,

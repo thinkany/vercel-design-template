@@ -109,8 +109,8 @@ export function Dashboard() {
       const firstDesign: Variation = {
         id: newId,
         version: nextVersionTag(variations),
-        title: "Design 1",
-        description: "",
+        title: "Initial Design",
+        description: "Initial Design Concept, color and font variations.",
         createdAt: formatNowDate(),
         modifiedAt: formatNowDateTime(),
         isBase: false,

@@ -12,7 +12,11 @@
       "Bash(mkdir:*)",
       "Bash(cp:*)",
       "Bash(echo:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(sort:*)",
+      "Bash(uniq:*)",
+      "Bash(head:*)"
     ]
   },
   "hooks": {

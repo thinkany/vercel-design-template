@@ -178,17 +178,10 @@ Follow these steps:
 
        Show the current value if one is set. If the user leaves it blank, ask
        again — the template stays unbranded without it.
-     - **Project name** (optional). Use `AskUserQuestion`; its `question` text
-       puts a **blank line between the two sentences** (a real `\n\n` in the
-       string) so it reads as two lines, not one run-on sentence. `header`
-       "Project Name", `question`:
-
-       > What do you want to call this project?
-       >
-       > Example: Web Redesign, Web Refresh, Brand Guidelines, or just a simple title.
-
-       Show the current value if set. Blank is allowed (the title lockup simply
-       drops the separator).
+     - **Project name** (optional) is asked **after** the project-type question —
+       its options are tailored to the chosen type — so it's handled in **step 3c**
+       below, not here. (If `$ARGUMENTS` already carried a project name, use it and
+       skip that prompt.)
 
 3b. **Ask the project type & preview shape.** This decides the device-preview
    matrix (`VITE_PROJECT_TYPE` + `VITE_ENABLE_TABLET`, consumed by `previewConfig`
@@ -219,9 +212,32 @@ Follow these steps:
 
    Note the effect back to the user: an **App** opens on the phone preview with
    no desktop button; a **Web Site** opens on desktop; tablet appears only if
-   they opted in.
+   they opted in. Keep the chosen type in mind — it tailors the project-name
+   options in the next step.
 
-3c. **Ask the desktop menu style — websites only.** SKIP for `app`/`brand`
+3c. **Ask the project name — tailored to the type.** `VITE_PROJECT_NAME` fills the
+   secondary half of the title lockup. Use `AskUserQuestion`, header **"Project
+   Name"**; the `question` text puts a **blank line between the two sentences** (a
+   real `\n\n` in the string):
+
+   > What do you want to call this project?
+   >
+   > Example: Web Redesign, Web Refresh, Brand Guidelines, or just a simple title.
+
+   **Tailor the preset options to the project TYPE chosen in 3b** (first = default),
+   so the name can't contradict the type. The auto "Other → type your own" field
+   still covers any custom title:
+   - **Web Site** → **"Website Design"** (*A brand new website design.*) ·
+     **"Web Redesign"** (*Refreshing or rebuilding an existing site.*)
+   - **App** → **"App Design"** (*A new application design.*) ·
+     **"App Redesign"** (*Reworking an existing app.*)
+   - **Brand Guideline** → **"Brand Guidelines"** (*A brand or style system.*)
+
+   Whatever they pick (or type) becomes `VITE_PROJECT_NAME`. Show the current value
+   if set. Blank is allowed (the title lockup simply drops the separator). If a
+   project name already came via `$ARGUMENTS`, skip this and use it.
+
+3d. **Ask the desktop menu style — websites only.** SKIP for `app`/`brand`
    projects (no website nav). For a **Web Site**, ask with `AskUserQuestion`.
    Header **"Menu style"**; `question`: "How should the desktop nav menus start?
    You can change or mix these per item later in `src/app/menu.ts`." Options
@@ -241,7 +257,7 @@ Follow these steps:
    of the file. Quote the values: `VITE_COMPANY_NAME="Acme Inc"`,
    `VITE_CLIENT_NAME="ACME ltd"`, `VITE_PROJECT_TYPE="app"`, and
    `VITE_ENABLE_TABLET="true"` (leave `VITE_ENABLE_TABLET=""` when tablet was
-   declined). For websites, also write `VITE_MENU_STYLE` from 3c (leave `""` for
+   declined). For websites, also write `VITE_MENU_STYLE` from 3d (leave `""` for
    traditional).
 
 5. **Confirm** what you set, and remind the user that these are Vite build-time

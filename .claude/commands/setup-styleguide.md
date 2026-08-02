@@ -131,13 +131,28 @@ the consistent one. **Do NOT open a headless/automation browser or take
 screenshots to read colors** — that path gets permission-gated and produces
 inconsistent results; stay with plain HTTP fetches of the markup + stylesheets.
 
-1. **Fetch the source.** `WebFetch` the URL with an extraction prompt that asks for
-   the raw style values — **every hex / `rgb()` / `hsl()` color, CSS custom
-   properties (`--*`), `<meta name="theme-color">`, and `font-family` stacks** — in
-   the page's inline styles **and** its linked stylesheets. If `WebFetch` returns
-   summarized prose instead of real values, `curl` the page, pull the
-   `<link rel="stylesheet">` hrefs, and `curl` those CSS files directly, then grep
-   the raw text for the same tokens. (Both are non-browser — no puppeteer.)
+1. **Fetch the source.** First try `WebFetch` with an extraction prompt that asks for
+   the raw style values **verbatim, not summarized** — **every hex / `rgb()` /
+   `hsl()` color, CSS custom properties (`--*`), `<meta name="theme-color">`, and
+   `font-family` stacks** — in the page's inline styles **and** its linked
+   stylesheets. If `WebFetch` still returns prose instead of real values, fall back
+   to a **plain curl + grep**.
+
+   **Keep that fallback command statically analyzable** so the committed `curl` /
+   `grep` allowlist can auto-approve it instead of prompting. **Do NOT** wrap it in
+   shell the permission matcher can't decompose: **no `UA="…"` variable, no
+   `cd … || cd …` fallback, no browser User-Agent string full of `;()`** — any of
+   those makes the *whole* command unanalyzable, so it prompts even though `curl` is
+   allowed. Use a single plain `curl` to a scratch file, then plain `grep`s, e.g.:
+
+   ```
+   curl -fsS --max-time 10 -A "Mozilla/5.0" "<url>" -o /tmp/site.html
+   grep -oiE '#[0-9a-f]{6}' /tmp/site.html | sort | uniq -c | sort -rn | head -20
+   grep -oE 'href="[^"]*\.css[^"]*"' /tmp/site.html | head -20
+   ```
+
+   Then `curl` any promising `.css` hrefs the same way and grep those for the same
+   tokens. (All non-browser — no puppeteer.)
 2. **Rank + winnow.** Keep the recurring brand colors by prominence/frequency;
    drop near-duplicate shades and incidental one-off greys. Note the site's real
    `font-family` stacks too — offer them as suggested type roles (Display / body),
@@ -243,40 +258,27 @@ palette you just set, so the components inherit the brand everywhere.
 > leave the `.dark` overrides alone (the palette + the Figma export are single
 > light mode).
 
-Offer the designer one `AskUserQuestion`, header **"Component palette"**:
+**Auto-map — do NOT ask.** Apply the mapping below automatically; don't prompt the
+designer whether or how to bridge. The seven semantic role tokens make it
+deterministic — there's a right target for every row — so just do it. Write the
+mappings into the scope's `tokens.css`, **`:root` only**, replacing each primitive's
+value with the `var()` **reference** (leave the `.dark` overrides alone). Afterward,
+tell the designer in **one line** that their buttons/badges/inputs now carry the
+brand — informational, not a decision.
 
-> Your shadcn UI components (buttons, badges, alerts…) still use stock colors.
-> Map them to your brand palette now?
-
-- **Yes — auto-map (recommended)** → apply the default mapping below, then show it
-  back for confirmation.
-- **Review each mapping** → propose the table and let them adjust per row before
-  writing.
-- **Skip for now** → leave stock; note they can ask to bridge later.
-
-**Default mapping** (write into the scope's `tokens.css`, `:root` only — replace
-each primitive's value with the `var()` reference; `<accent>` = the first palette
-color, the same convention the block export uses, and `<accent-contrast>` = that
-color's `text` field from `brand.ts`):
-
-| shadcn primitive | ← maps to |
+| shadcn primitive | ← maps to (semantic role) |
 |---|---|
-| `--primary` | `var(--<accent>)` |
-| `--primary-foreground` | `var(--<accent-contrast>)` or its literal hex |
-| `--secondary` | a light neutral brand token (background/cream) |
-| `--secondary-foreground` | the brand ink token |
-| `--accent` | same light neutral (or a subtle brand tint) |
-| `--accent-foreground` | the brand ink token |
-| `--muted-foreground` | a mid-grey brand token |
-| `--ring` | `var(--primary)` |
-| `--destructive` / `-foreground` | **keep stock** unless the brand defines a semantic red — then map it |
-| surfaces (`--background`, `--card`, `--popover`, `--foreground`, `--border`, `--input`) | **leave neutral** unless the brand deliberately wants tinted surfaces / non-black ink (then map `--foreground` → the brand ink) |
+| `--primary` | `var(--ta-primary)` |
+| `--primary-foreground` | the primary's contrast — its `text` field from `brand.ts` (or `#ffffff`) |
+| `--secondary` | `var(--ta-surface)` |
+| `--secondary-foreground` | `var(--ta-ink)` |
+| `--accent` | `var(--ta-surface)` |
+| `--accent-foreground` | `var(--ta-ink)` |
+| `--muted-foreground` | `var(--ta-muted)` |
+| `--ring` | `var(--ta-primary)` |
+| `--destructive` / `-foreground` | **keep stock** (unless the brand explicitly defines a semantic red) |
+| surfaces (`--background`, `--card`, `--popover`, `--foreground`, `--border`, `--input`) | **leave neutral** — only map `--foreground` → `var(--ta-ink)` if the brand wants non-black ink |
 | `--chart-*`, `--sidebar-*` | **leave alone** (data-viz has its own palette; sidebar is tooling) |
-
-Pick the neutral/ink/grey tokens by role from the palette the designer just
-defined (e.g. a cream/sand for the light neutral, a near-black for ink). If the
-palette has no obvious fit for a row, keep that primitive stock rather than forcing
-a poor match.
 
 After writing, confirm the shadcn components in the styleguide's **Atoms** section
 (buttons/badges) now render in the brand palette. The Figma **Components** export
