@@ -15,6 +15,8 @@ export type VersionManifest = {
   version: string;
   notes?: string;
   date?: string;
+  /** Canonical URL of the distribution zip the upgrade overlay pulls. */
+  zipUrl?: string;
 };
 
 /** This template copy's own version, compiled into the bundle. */

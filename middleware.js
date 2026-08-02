@@ -1,8 +1,8 @@
 export const config = {
-  // version.json is intentionally PUBLIC (gate-exempt): a designer's dashboard
-  // fetches it cross-origin to check for template updates, so it must serve
-  // without the password. Everything else stays gated.
-  matcher: ['/((?!_vercel|version.json).*)'],
+  // version.json + template-latest.zip are intentionally PUBLIC (gate-exempt): a
+  // designer's local upgrade checks version.json and pulls the zip, so both must
+  // serve without the password. Everything else stays gated.
+  matcher: ['/((?!_vercel|version.json|template-latest.zip).*)'],
 }
 
 function escapeHtml(s) {

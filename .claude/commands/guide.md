@@ -15,6 +15,10 @@ the preview/stop note. Use roughly this content, lightly adapted to the moment:
   styleguide. `/setup-project` hands off into this automatically.
 - **/design** — build or edit a design page (a hero, sections, a full landing).
   The everyday design command once setup is done.
+- **/upgrade** — pull the latest template version into this project. Overlays the
+  framework files, keeps your work (`.env`, your designs, your palette) untouched,
+  and walks you through the diff. The dashboard's "Update available" button does the
+  same thing in one click.
 - **/guide** — show this list.
 
 **Not commands — just ask in plain language:**

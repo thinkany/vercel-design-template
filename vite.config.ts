@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import path from 'path'
+import { pathToFileURL } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
@@ -45,6 +46,37 @@ function variationApiPlugin() {
           }
           return
         }
+        // POST /api/upgrade — overlay a newer template version onto THIS project.
+        // Dev-only (Node can write files; the browser can't), which is why the
+        // update pill is local-only too. Body: { url, dryRun?, force? }. Fetches the
+        // zip server-side, runs the shared engine against the project root, returns
+        // the report. The dashboard previews (dryRun) then applies on confirm.
+        if (req.url === '/api/upgrade' && req.method === 'POST') {
+          const chunks: Buffer[] = []
+          req.on('data', (c: Buffer) => chunks.push(c))
+          req.on('end', async () => {
+            try {
+              const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+              const { runUpgrade } = await import(
+                pathToFileURL(path.resolve(__dirname, 'scripts/upgrade.mjs')).href
+              )
+              const report = await runUpgrade({
+                targetDir: __dirname,
+                url: body.url || 'https://create.thinkany.design/template-latest.zip',
+                dryRun: !!body.dryRun,
+                force: !!body.force,
+              })
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify(report))
+            } catch (err: any) {
+              res.statusCode = 500
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ error: err.message }))
+            }
+          })
+          return
+        }
+
         if (req.url !== '/api/variation/create' || req.method !== 'POST') {
           return next()
         }
@@ -123,6 +155,48 @@ function variationsManifestPlugin() {
   }
 }
 
+// Template distribution: at build, zip the git-tracked source into
+// dist/template-latest.zip so the canonical deploy (create.thinkany.design) serves
+// the archive the upgrade overlay pulls. It's the full source snapshot; the overlay
+// (scripts/upgrade.mjs) decides each file's fate via upgrade.manifest.json. Emitted
+// into the build output (never committed as a binary blob). Uses the zero-dep zip
+// module so nothing new enters package.json.
+function templateZipPlugin() {
+  return {
+    name: 'ta-template-zip',
+    async generateBundle(this: any) {
+      const { execSync } = await import('node:child_process')
+      const { readFile } = await import('node:fs/promises')
+      const { createZip } = await import(
+        pathToFileURL(path.resolve(__dirname, 'scripts/lib/zip.mjs')).href
+      )
+
+      // git-tracked files = exactly the distributable template source.
+      let files: string[]
+      try {
+        files = execSync('git ls-files', { cwd: __dirname, encoding: 'utf8' })
+          .split('\n').map((s) => s.trim()).filter(Boolean)
+      } catch {
+        this.warn('template-zip: `git ls-files` failed; skipping archive')
+        return
+      }
+
+      const entries: { name: string; data: Buffer }[] = []
+      for (const rel of files) {
+        try {
+          entries.push({ name: rel, data: await readFile(path.resolve(__dirname, rel)) })
+        } catch {} // a listed-but-absent file (rare) is skipped
+      }
+
+      this.emitFile({
+        type: 'asset',
+        fileName: 'template-latest.zip',
+        source: createZip(entries),
+      })
+    },
+  }
+}
+
 function figmaAssetResolver() {
   return {
     name: 'figma-asset-resolver',
@@ -140,6 +214,7 @@ export default defineConfig({
     figmaAssetResolver(),
     variationApiPlugin(),
     variationsManifestPlugin(),
+    templateZipPlugin(),
     // The React and Tailwind plugins are both required for Make, even if
     // Tailwind is not being actively used – do not remove them
     react(),

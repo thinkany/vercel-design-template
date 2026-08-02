@@ -310,6 +310,39 @@ inline `<style>` (can't read the app's tokens). Fail-closed: locked until
 server** — the gate exists only on the Vercel deploy, so it can only be tested
 there.
 
+### Distribution & upgrades
+
+Designers get the template as a **download** (no git link back), copy it into their
+own repo, and connect that to their own Vercel. So pushing a new version is a
+**file-overlay** problem — the designer's own `git diff` is the safety net.
+
+- **Version marker (single source):** [public/version.json](public/version.json) is
+  imported into the bundle (this copy's own version, [src/version.ts](src/version.ts))
+  **and** served at `/version.json`. On the canonical deploy
+  **create.thinkany.design** that served copy IS the latest (it builds from `main`).
+  It's **gate-exempt** ([middleware.js](middleware.js) matcher) + CORS
+  ([vercel.json](vercel.json)) so a designer's copy can read it cross-origin, and it
+  carries `zipUrl`.
+- **The pill** ([UpdateCheck.tsx](src/app/components/UpdateCheck.tsx)) is **admin +
+  local-dev only** (`import.meta.env.DEV`): it compares bundled vs canonical and, when
+  newer, opens a preview → confirm → apply flow. Upgrades are **local by nature** — a
+  browser can't write project files, but the Vite dev server (Node) can.
+- **The archive:** a build plugin ([vite.config.ts](vite.config.ts) `templateZipPlugin`)
+  zips the git-tracked source into `dist/template-latest.zip` (gate-exempt + CORS) via
+  the **zero-dep** [scripts/lib/zip.mjs](scripts/lib/zip.mjs) — no toolchain dep, no
+  committed blob.
+- **The engine:** [scripts/upgrade.mjs](scripts/upgrade.mjs) (pure Node) reads
+  [upgrade.manifest.json](upgrade.manifest.json) and overlays by tier — **CORE**
+  overwritten (default), **KEEP** never touched (`.env`, `src/variations/**`,
+  `pages.ts`/`menu.ts`, base `tokens.css`/`brand.ts`, `public/images`), **REVIEW**
+  written as a `*.upgrade-new` sidecar (`package.json`, `.claude/settings.json`). It
+  refuses to write on a dirty tree unless forced.
+- **Two front doors, one engine:** the dashboard button → `/api/upgrade` (dev
+  middleware) → the engine; and [`/upgrade`](.claude/commands/upgrade.md) → the same
+  engine as a Claude command that walks the sidecars + git diff. **Option A is what
+  makes the CORE/KEEP split clean** — the designer's work is siloed in
+  `src/variations/**` (KEEP), so base chrome + `Home` are safely CORE.
+
 ## Reuse what's already here — don't rebuild
 
 Before hand-rolling UI, use the resources already installed:
@@ -396,6 +429,10 @@ one continuous flow.
   prints this project's commands (setup, design, guide) + how to run/stop the
   preview. Designers can type `/guide` at any time; it's introduced at the setup
   sign-off and re-offered by `/design`.
+- **[`/upgrade`](.claude/commands/upgrade.md)** — apply the latest template version:
+  the transparent front door to the overlay engine (dry-run → apply → walk sidecars +
+  git diff). Same engine the dashboard's one-click Update button drives. See
+  **Distribution & upgrades** above.
 - **[`/export-figma`](.claude/commands/export-figma.md)** — the **Figma export
   phase**: the cohesive two-part pipeline (Part 1 Styleguide + Blocks, Part 2
   Pages/App from blocks), the offline script pairs + `use_figma` builders, and the

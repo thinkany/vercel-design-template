@@ -1,0 +1,38 @@
+{
+  "//": "Upgrade tiers for scripts/upgrade.mjs. The distributed zip contains the template's git-tracked source; the overlay decides each incoming file's fate by matching these globs. DEFAULT is CORE (overwrite). 'keep' files are NEVER written (designer-owned). 'review' files are written to a '<path>.upgrade-new' sidecar and flagged, never overwritten in place. Glob support: '**' (any depth), '*' (one segment), exact paths. Matched against the repo-relative POSIX path.",
+
+  "keep": [
+    ".env",
+    ".env.local",
+    "src/variations/**",
+    "public/images/**",
+    "public/brand/**",
+    "src/app/pages.ts",
+    "src/app/menu.ts",
+    "pnpm-lock.yaml",
+    "package-lock.json",
+    "figma-export/**"
+  ],
+
+  "keepNotes": {
+    ".env": "Designer's committed brand config (VITE_* names).",
+    "src/variations/**": "The designer's designs live here — the whole point of Option A. Never touch.",
+    "public/images/**": "Designer-gathered images.",
+    "public/brand/**": "Designer logos.",
+    "src/app/pages.ts": "Designer's page list (data). pages.schema.ts is CORE.",
+    "src/app/menu.ts": "Designer's nav menus (data). menu.schema.ts is CORE.",
+    "pnpm-lock.yaml": "Vercel builds from it with --no-frozen-lockfile, so new template deps still resolve; regenerating needs pnpm, so don't clobber."
+  },
+
+  "review": [
+    "package.json",
+    ".claude/settings.json"
+  ],
+
+  "reviewNotes": {
+    "package.json": "Hybrid: template scripts/deps + any deps the designer added. Written as package.json.upgrade-new for the designer to merge.",
+    ".claude/settings.json": "Hybrid: template allowlist + any permissions the designer added."
+  },
+
+  "coreNotes": "Everything else is CORE and overwritten: build config (vite.config.ts, vercel.json, middleware.js, index.html, postcss.config.*), scripts/**, cloud-export/**, .claude/commands/**, .claude/launch.json, .claude/hooks/**, CLAUDE.md, README.md, the app machinery + base chrome + tooling under src/app/** (except the two KEEP data files), src/config/**, src/data/**, src/styles/** (base tokens.css/brand.ts are template DEFAULTS under Option A — the designer's palette lives in their variation), src/version.ts, and public/version.json (so the local version marker advances and the update pill clears)."
+}
