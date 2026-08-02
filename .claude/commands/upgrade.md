@@ -57,11 +57,16 @@ node scripts/upgrade.mjs            # or add --force if they accepted a dirty tr
   and help the designer merge the template's changes into their file, then delete the
   sidecar. These are usually small (a new script, a new permission).
 - **Show the diff.** `git --no-pager diff --stat` for the shape, and offer to walk any
-  specific file. Remind them the change is fully revertible until they commit
-  (`git restore .` / `git checkout .`).
-- **Restart the dev server if it was running** — the upgrade rewrites `vite.config.ts`
-  and other framework files, so a running `npm run dev` should be restarted to pick
-  them up.
+  specific file.
+- **Undo is always available.** Before writing anything, the overlay snapshots every
+  file it will overwrite into `.upgrade-backup/<timestamp>/` (gitignored). To roll the
+  whole update back — restore the overwritten files, delete what it added, remove the
+  sidecars — run **`node scripts/upgrade.mjs --revert`** (or the dashboard's **"Revert
+  update"** button). Git works too (`git restore .`) on a clean tree; the backup covers
+  non-git / forced applies as well.
+- **A dev-server restart is usually NOT needed** — a browser refresh picks up most
+  updates. Only restart `npm run dev` if something looks off after refreshing (the
+  overlay does rewrite `vite.config.ts`).
 
 ## 5. Commit
 

@@ -78,6 +78,25 @@ function variationApiPlugin() {
           return
         }
 
+        // /api/upgrade/revert — GET returns whether a revert is available (a backup
+        // exists); POST restores the most recent update's pre-change state.
+        if (req.url === '/api/upgrade/revert' && (req.method === 'GET' || req.method === 'POST')) {
+          const run = async () => {
+            const mod = await import(pathToFileURL(path.resolve(__dirname, 'scripts/upgrade.mjs')).href)
+            const result = req.method === 'POST'
+              ? await mod.runRevert(__dirname)
+              : await mod.revertStatus(__dirname)
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+          }
+          run().catch((err: any) => {
+            res.statusCode = 500
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: err.message }))
+          })
+          return
+        }
+
         // POST /api/variation/update — patch a variation's variation.json (status,
         // removed, title…). The single source of truth for variation metadata, so
         // "Mark established" / remove / rename all write here. Dev-only.

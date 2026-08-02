@@ -14,7 +14,7 @@
 //   node scripts/upgrade.mjs --url https://create.thinkany.design/template-latest.zip
 //   node scripts/upgrade.mjs --zip ./template-latest.zip --target /path/to/project
 //   node scripts/upgrade.mjs --source ./fresh-template --dry-run
-import { readFile, writeFile, mkdir, readdir, stat } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir, stat, cp, rm } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -128,23 +128,113 @@ export async function runUpgrade(opts = {}) {
     return report;
   }
 
+  // Dry run: classify + report only, nothing written or backed up.
+  if (opts.dryRun) {
+    for (const [rel] of files) {
+      const tier = classify(rel, manifest);
+      if (tier === "keep") report.kept.push(rel);
+      else (tier === "review" ? report.review : report.applied).push(rel);
+    }
+    report.message = `Dry run: ${report.applied.length} core file(s) would update, ${report.review.length} need review, ${report.kept.length} kept.`;
+    return report;
+  }
+
+  // Plan every write (dest path + whether the target already exists), so we can
+  // back up before touching anything.
+  const plan = [];
   for (const [rel, data] of files) {
     const tier = classify(rel, manifest);
     if (tier === "keep") { report.kept.push(rel); continue; }
-
     const dest = tier === "review" ? rel + ".upgrade-new" : rel;
     const abs = path.join(targetDir, dest);
-    if (!opts.dryRun) {
-      await mkdir(path.dirname(abs), { recursive: true });
-      await writeFile(abs, data);
-    }
+    plan.push({ data, dest, abs, tier, existed: await fileExists(abs) });
     (tier === "review" ? report.review : report.applied).push(rel);
   }
 
-  report.message = report.dryRun
-    ? `Dry run: ${report.applied.length} core file(s) would update, ${report.review.length} need review, ${report.kept.length} kept.`
-    : `Applied ${report.applied.length} core file(s); ${report.review.length} sidecar(s) for review; ${report.kept.length} kept.`;
+  // Backup pass — copy every file we'll OVERWRITE into .upgrade-backup/<ts>/, and
+  // record files we ADD (revert deletes those). Written BEFORE any apply, so a
+  // crash mid-write is still fully revertible.
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupDir = path.join(targetDir, ".upgrade-backup", ts);
+  const filesOverwritten = [], filesAdded = [];
+  for (const item of plan) {
+    if (item.existed) {
+      const bAbs = path.join(backupDir, item.dest);
+      await mkdir(path.dirname(bAbs), { recursive: true });
+      await cp(item.abs, bAbs);
+      filesOverwritten.push(item.dest);
+    } else {
+      filesAdded.push(item.dest);
+    }
+  }
+  const backupManifest = {
+    fromVersion: report.version.from, toVersion: report.version.to,
+    date: ts, filesOverwritten, filesAdded,
+  };
+  await mkdir(backupDir, { recursive: true });
+  await writeFile(path.join(backupDir, "manifest.json"), JSON.stringify(backupManifest, null, 2));
+
+  // Apply pass.
+  for (const item of plan) {
+    await mkdir(path.dirname(item.abs), { recursive: true });
+    await writeFile(item.abs, item.data);
+  }
+
+  report.backup = { dir: path.relative(targetDir, backupDir), ...backupManifest };
+  report.message = `Applied ${report.applied.length} core file(s); ${report.review.length} sidecar(s) for review; ${report.kept.length} kept. Revert available.`;
   return report;
+}
+
+async function fileExists(p) { try { await stat(p); return true; } catch { return false; } }
+
+/** Newest backup stamp dir (sortable ISO name), or null. */
+async function latestBackup(targetDir) {
+  const root = path.join(targetDir, ".upgrade-backup");
+  try {
+    const stamps = (await readdir(root, { withFileTypes: true }))
+      .filter((e) => e.isDirectory()).map((e) => e.name).sort();
+    return stamps.length ? path.join(root, stamps[stamps.length - 1]) : null;
+  } catch { return null; }
+}
+
+/** Whether a revert is available (a backup exists), + a summary for the UI. */
+export async function revertStatus(targetDir = process.cwd()) {
+  const dir = await latestBackup(path.resolve(targetDir));
+  if (!dir) return { canRevert: false };
+  try {
+    const bm = JSON.parse(await readFile(path.join(dir, "manifest.json"), "utf8"));
+    return {
+      canRevert: true, from: bm.toVersion, to: bm.fromVersion,
+      count: (bm.filesOverwritten?.length || 0) + (bm.filesAdded?.length || 0),
+    };
+  } catch { return { canRevert: false }; }
+}
+
+/**
+ * Revert the most recent update: restore every overwritten file from the backup,
+ * delete every file the update added (incl. *.upgrade-new sidecars), then remove
+ * the backup so revert is one-shot. Returns a report.
+ */
+export async function runRevert(targetDir = process.cwd()) {
+  targetDir = path.resolve(targetDir);
+  const dir = await latestBackup(targetDir);
+  if (!dir) return { reverted: false, message: "No upgrade backup found — nothing to revert." };
+  const bm = JSON.parse(await readFile(path.join(dir, "manifest.json"), "utf8"));
+  const restored = [], deleted = [];
+  for (const rel of bm.filesOverwritten || []) {
+    const dst = path.join(targetDir, rel);
+    await mkdir(path.dirname(dst), { recursive: true });
+    await cp(path.join(dir, rel), dst);
+    restored.push(rel);
+  }
+  for (const rel of bm.filesAdded || []) {
+    try { await rm(path.join(targetDir, rel)); deleted.push(rel); } catch {}
+  }
+  await rm(dir, { recursive: true, force: true });
+  return {
+    reverted: true, from: bm.toVersion, to: bm.fromVersion, restored, deleted,
+    message: `Reverted (v${bm.toVersion ?? "?"} → v${bm.fromVersion ?? "?"}): restored ${restored.length} file(s), removed ${deleted.length}.`,
+  };
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
@@ -154,6 +244,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a === "--dry-run") o.dryRun = true;
     else if (a === "--force") o.force = true;
+    else if (a === "--revert") o.revert = true;
     else if (a === "--url") o.url = argv[++i];
     else if (a === "--zip") o.zip = argv[++i];
     else if (a === "--source") o.source = argv[++i];
@@ -165,6 +256,12 @@ function parseArgs(argv) {
 // Run as CLI only when invoked directly (not when imported by the dev endpoint).
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   const opts = parseArgs(process.argv.slice(2));
+
+  if (opts.revert) {
+    runRevert(opts.targetDir)
+      .then((r) => { console.log("\n" + r.message); if (!r.reverted) process.exit(2); })
+      .catch((e) => { console.error("revert failed:", e.message); process.exit(1); });
+  } else {
   if (!opts.url && !opts.zip && !opts.source) {
     opts.url = "https://create.thinkany.design/template-latest.zip";
   }
@@ -176,6 +273,8 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
       if (r.applied.length) console.log("\nUpdated (CORE):\n  " + r.applied.join("\n  "));
       if (r.review.length) console.log("\nReview these (written as *.upgrade-new):\n  " + r.review.join("\n  "));
       console.log("\nReview everything with `git diff`, then commit.");
+      if (r.backup) console.log("Changed your mind? `node scripts/upgrade.mjs --revert` restores the pre-update state.");
     })
     .catch((e) => { console.error("upgrade failed:", e.message); process.exit(1); });
+  }
 }

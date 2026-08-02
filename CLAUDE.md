@@ -337,6 +337,12 @@ own repo, and connect that to their own Vercel. So pushing a new version is a
   `pages.ts`/`menu.ts`, base `tokens.css`/`brand.ts`, `public/images`), **REVIEW**
   written as a `*.upgrade-new` sidecar (`package.json`, `.claude/settings.json`). It
   refuses to write on a dirty tree unless forced.
+- **One-click revert:** before writing, the engine snapshots every file it will
+  overwrite into `.upgrade-backup/<ts>/` (gitignored) + a manifest. `runRevert()`
+  restores them, deletes what the update added, and drops the backup — exposed via the
+  dashboard **"Revert update"** button, **`/api/upgrade/revert`**, and
+  `node scripts/upgrade.mjs --revert`. Works without git (covers forced/non-git
+  applies) and survives a half-applied crash (backup written before any apply).
 - **Two front doors, one engine:** the dashboard button → `/api/upgrade` (dev
   middleware) → the engine; and [`/upgrade`](.claude/commands/upgrade.md) → the same
   engine as a Claude command that walks the sidecars + git diff. **Option A is what

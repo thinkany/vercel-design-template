@@ -13,3 +13,6 @@ pnpm-workspace 2.yaml
 
 # Figma export output (local, throwaway)
 figma-export/
+
+# Pre-update snapshots for one-click revert (local, throwaway)
+.upgrade-backup/

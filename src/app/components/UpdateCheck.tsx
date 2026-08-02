@@ -40,6 +40,14 @@ type Upgrade =
   | { kind: "done"; report: UpgradeReport }
   | { kind: "error"; message: string };
 
+type RevertInfo = { canRevert: boolean; from?: string; to?: string; count?: number };
+type Revert =
+  | null
+  | { kind: "confirm" }
+  | { kind: "doing" }
+  | { kind: "done"; msg: string }
+  | { kind: "error"; msg: string };
+
 export function UpdateCheck() {
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [upgrade, setUpgrade] = useState<Upgrade>(null);
@@ -59,6 +67,22 @@ export function UpdateCheck() {
   }, []);
 
   useEffect(() => { check(); }, [check]);
+
+  // Revert availability — a backup left by the last applied update, if any.
+  const [revertInfo, setRevertInfo] = useState<RevertInfo | null>(null);
+  const refreshRevert = useCallback(() => {
+    fetch("/api/upgrade/revert").then((r) => (r.ok ? r.json() : null)).then(setRevertInfo).catch(() => {});
+  }, []);
+  useEffect(() => { refreshRevert(); }, [refreshRevert]);
+
+  const [revert, setRevert] = useState<Revert>(null);
+  function doRevert() {
+    setRevert({ kind: "doing" });
+    fetch("/api/upgrade/revert", { method: "POST" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((res) => setRevert({ kind: "done", msg: res.message || "Reverted." }))
+      .catch((e) => setRevert({ kind: "error", msg: String(e.message || e) }));
+  }
 
   const latest = status.kind === "available" ? status.latest : null;
 
@@ -80,9 +104,10 @@ export function UpdateCheck() {
   function applyUpgrade(dirty: boolean) {
     setUpgrade({ kind: "applying" });
     callUpgrade(false, dirty)
-      .then((report) =>
-        setUpgrade(report.blocked ? { kind: "error", message: report.message } : { kind: "done", report }),
-      )
+      .then((report) => {
+        if (!report.blocked) refreshRevert(); // a backup now exists → offer revert
+        setUpgrade(report.blocked ? { kind: "error", message: report.message } : { kind: "done", report });
+      })
       .catch((e) => setUpgrade({ kind: "error", message: String(e.message || e) }));
   }
 
@@ -116,12 +141,41 @@ export function UpdateCheck() {
         {label}
       </button>
 
+      {revertInfo?.canRevert && (
+        <button
+          onClick={() => setRevert({ kind: "confirm" })}
+          title={`Undo the last update (v${revertInfo.to ?? "?"} → v${revertInfo.from ?? "?"})`}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 5,
+            background: "transparent", border: "1px solid rgba(0,0,0,0.15)",
+            borderRadius: 3, padding: "7px 12px", fontSize: 11, fontWeight: 500,
+            letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer",
+            color: "var(--admin-gray-mid)", fontFamily: "inherit",
+          }}
+        >
+          ↩ Revert update
+        </button>
+      )}
+
       {upgrade && latest && (
         <UpgradeModal
           latest={latest}
           state={upgrade}
           onApply={applyUpgrade}
           onClose={() => setUpgrade(null)}
+        />
+      )}
+
+      {revert && (
+        <RevertModal
+          state={revert}
+          info={revertInfo}
+          onConfirm={doRevert}
+          onClose={() => {
+            const wasDone = revert.kind === "done";
+            setRevert(null);
+            if (wasDone) { refreshRevert(); window.location.reload(); }
+          }}
         />
       )}
     </>
@@ -225,6 +279,49 @@ function UpgradeModal({
               <AccentBtn onClick={() => window.location.reload()}>Refresh</AccentBtn>
             </>
           )}
+          {state.kind === "error" && <GhostBtn onClick={onClose}>Close</GhostBtn>}
+          {busy && <span style={{ fontSize: 12, color: "var(--admin-gray-mid)" }}>Working…</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RevertModal({
+  state, info, onConfirm, onClose,
+}: {
+  state: Exclude<Revert, null>;
+  info: RevertInfo | null;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const busy = state.kind === "doing";
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--admin-font-body)" }}
+    >
+      <div style={{ background: "#fff", borderRadius: 4, width: "90%", maxWidth: 460, boxShadow: "0 24px 64px rgba(0,0,0,0.22)" }}>
+        <div style={{ padding: "22px 26px 16px", borderBottom: "1px solid rgba(0,0,0,0.08)" }}>
+          <h2 style={{ fontFamily: "var(--admin-font-heading)", fontSize: 20, fontWeight: 300, color: "var(--admin-ink)", margin: 0 }}>
+            {state.kind === "done" ? "Update reverted" : "Revert the last update?"}
+          </h2>
+        </div>
+        <div style={{ padding: "20px 26px", fontSize: 13, color: "var(--admin-gray-dark)", lineHeight: 1.6 }}>
+          {state.kind === "confirm" && (
+            <p style={{ margin: 0 }}>
+              This restores the {info?.count ?? "changed"} file(s) from before the last update
+              {info?.from ? <> (back to <strong>v{info.from}</strong>)</> : null}, and removes anything it added.
+              Your work — <code>.env</code>, your variations, your palette — is untouched either way.
+            </p>
+          )}
+          {state.kind === "doing" && <p style={{ margin: 0 }}>Restoring…</p>}
+          {state.kind === "done" && <p style={{ margin: 0 }}>{state.msg} Reload to see the restored version, then restart the dev server if anything looks off.</p>}
+          {state.kind === "error" && <p style={{ margin: 0, color: "var(--admin-danger)" }}>{state.msg}</p>}
+        </div>
+        <div style={{ padding: "14px 26px", borderTop: "1px solid rgba(0,0,0,0.08)", display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          {state.kind === "confirm" && (<><GhostBtn onClick={onClose}>Cancel</GhostBtn><AccentBtn onClick={onConfirm}>Revert</AccentBtn></>)}
+          {state.kind === "done" && <AccentBtn onClick={onClose}>Reload</AccentBtn>}
           {state.kind === "error" && <GhostBtn onClick={onClose}>Close</GhostBtn>}
           {busy && <span style={{ fontSize: 12, color: "var(--admin-gray-mid)" }}>Working…</span>}
         </div>
