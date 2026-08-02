@@ -200,9 +200,12 @@ function UpgradeModal({
                   {state.report.review.join(", ")}
                 </p>
               )}
-              <p style={{ margin: 0, fontSize: 12, color: "var(--admin-gray-mid)" }}>
-                Review everything with <code>git diff</code>, then commit. Reload to pick up the new dashboard.
-              </p>
+              <div style={{ margin: 0, fontSize: 12, color: "#663d00", background: "#fef3c7", border: "1px solid #f0d488", borderRadius: 4, padding: "10px 12px" }}>
+                <strong>Restart the dev server now.</strong> The update rewrote
+                <code> vite.config.ts</code> and live modules, so a browser reload isn't
+                enough: stop it (<code>Ctrl+C</code>), run <code>npm run dev</code> again,
+                then hard-reload this page. Then review with <code>git diff</code> and commit.
+              </div>
             </>
           )}
         </div>
@@ -214,12 +217,7 @@ function UpgradeModal({
               <AccentBtn onClick={() => onApply(dirty)}>{dirty ? "Apply anyway" : "Apply update"}</AccentBtn>
             </>
           )}
-          {state.kind === "done" && (
-            <>
-              <GhostBtn onClick={onClose}>Close</GhostBtn>
-              <AccentBtn onClick={() => window.location.reload()}>Reload</AccentBtn>
-            </>
-          )}
+          {state.kind === "done" && <AccentBtn onClick={onClose}>Got it</AccentBtn>}
           {state.kind === "error" && <GhostBtn onClick={onClose}>Close</GhostBtn>}
           {busy && <span style={{ fontSize: 12, color: "var(--admin-gray-mid)" }}>Working…</span>}
         </div>
