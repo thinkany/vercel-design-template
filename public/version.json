@@ -1,6 +1,6 @@
 {
-  "version": "0.2.1",
-  "notes": "Variation metadata is now file-based (per-variation variation.json) instead of localStorage — no more cross-project mix-ups or stale state, and the initial design shows correctly in every browser. Plus dashboard polish: real Created dates, a timezone on Modified, and a cleaner card.",
+  "version": "0.2.2",
+  "notes": "One-click revert: every update now snapshots what it changes first, so you can roll it back from the dashboard (or `scripts/upgrade.mjs --revert`) if anything looks wrong — works with or without git. Applying rarely needs a dev-server restart now; a refresh usually does it.",
   "date": "2026-08-02",
   "zipUrl": "https://create.thinkany.design/template-latest.zip"
 }
