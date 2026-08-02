@@ -1,14 +1,12 @@
 // ©2026 thinkany llc. All rights reserved.
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
-  loadVariations,
-  saveVariations,
-  reconcileWithDisk,
-  dismissVariation,
+  fetchVariations,
+  createVariation,
+  patchVariation,
+  defaultVariationMeta,
   nextVariationId,
-  nextVersionTag,
-  formatNowDate,
-  formatNowDateTime,
+  BASE,
   type Variation,
 } from "@/data/variations";
 import { siteConfig } from "@/config/site";
@@ -24,47 +22,27 @@ type Dialog =
 
 export function Dashboard() {
   const isAdmin = getRole() === "admin";
-  const [variations, setVariations] = useState<Variation[]>(() => loadVariations());
+  const [variations, setVariations] = useState<Variation[]>([BASE]);
   const [showMakeModal, setShowMakeModal] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [isStarting, setIsStarting] = useState(false);
 
-  // Show a real "Modified" date driven by each variation's design-file mtimes.
-  // The dev server reports them (edits happen by changing files, which the app
-  // can't otherwise observe); on the Vercel static deploy this fetch 404s and the
-  // stored modifiedAt shows instead. Display-only — not persisted to localStorage.
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/variation/mtimes")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((mtimes: Record<string, string> | null) => {
-        if (!mtimes || cancelled) return;
-        setVariations((prev) => prev.map((v) => (mtimes[v.id] ? { ...v, modifiedAt: mtimes[v.id] } : v)));
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
+  // Load the gallery from the file-based manifest (/variations.json — every on-disk
+  // variation with its committed metadata) + real "Modified" dates from design-file
+  // mtimes. No localStorage: identical, correct data in every browser and on Vercel.
+  const refresh = useCallback(async () => {
+    const vars = await fetchVariations();
+    let mtimes: Record<string, string> | null = null;
+    try {
+      const r = await fetch("/api/variation/mtimes");
+      if (r.ok) mtimes = await r.json();
+    } catch {}
+    setVariations(
+      mtimes ? vars.map((v) => (mtimes![v.id] ? { ...v, modifiedAt: mtimes![v.id] } : v)) : vars,
+    );
   }, []);
 
-  // Reconcile the localStorage gallery against the variations that actually exist
-  // on disk (/variations.json — served in dev, emitted into the Vercel build). This
-  // surfaces variations created by files alone: one a setup skill scaffolded, or a
-  // committed variation this browser has no record of (previously a client saw only
-  // base v00). Dismissed (removed) ids are skipped so they don't reappear.
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/variations.json")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((manifest: { ids?: string[] } | null) => {
-        if (!manifest?.ids || cancelled) return;
-        setVariations((prev) => {
-          const merged = reconcileWithDisk(prev, manifest.ids!);
-          if (merged !== prev) saveVariations(merged);
-          return merged;
-        });
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
 
   function handleRemoveClick(variation: Variation) {
     if (variation.isBase) {
@@ -75,50 +53,32 @@ export function Dashboard() {
   }
 
   function confirmRemove(id: string) {
-    const updated = variations.filter((v) => v.id !== id);
-    setVariations(updated);
-    saveVariations(updated);
-    // Remember the removal so disk reconciliation won't re-add it (its files may
-    // still be on disk).
-    dismissVariation(id);
+    setVariations((prev) => prev.filter((v) => v.id !== id)); // optimistic hide
+    patchVariation(id, { removed: true }); // files kept; the manifest excludes it
     setDialog(null);
   }
 
-  function handleCreate(newVariation: Variation) {
-    const updated = [...variations, newVariation];
-    setVariations(updated);
-    saveVariations(updated);
+  // The modal created the variation on disk (files + variation.json); just refresh.
+  function handleCreate() {
     setShowMakeModal(false);
+    refresh();
   }
 
   // Fallback creation path for Option A (design #1 = a variation): when the only
   // thing here is base v00, spin up the first working variation in one click —
-  // copies base's files (dev endpoint) and writes the record. The primary path is
-  // /setup-styleguide doing this during onboarding; this catches designers who
-  // skipped it. Navigates straight into the new variation to start designing.
+  // copies base's files and writes its variation.json (unconfigured → needs-review,
+  // since setup was skipped). The primary path is /setup-styleguide. Navigates
+  // straight into the new variation to start designing.
   async function handleStartDesigning() {
     if (isStarting) return;
     setIsStarting(true);
     const newId = nextVariationId(variations);
     try {
-      await fetch("/api/variation/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceId: "v00", targetId: newId }),
-      }).catch(() => {});
-      const firstDesign: Variation = {
-        id: newId,
-        version: nextVersionTag(variations),
-        title: "Initial Design",
-        description: "Initial Design Concept, color and font variations.",
-        createdAt: formatNowDate(),
-        modifiedAt: formatNowDateTime(),
-        isBase: false,
+      await createVariation("v00", newId, {
+        ...defaultVariationMeta(newId),
         styleguideStatus: "needs-review",
         brandStatus: "needs-review",
-      };
-      const updated = [...variations, firstDesign];
-      saveVariations(updated);
+      });
       window.location.href = `/?v=${newId}`;
     } finally {
       setIsStarting(false);

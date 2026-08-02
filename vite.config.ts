@@ -77,6 +77,34 @@ function variationApiPlugin() {
           return
         }
 
+        // POST /api/variation/update — patch a variation's variation.json (status,
+        // removed, title…). The single source of truth for variation metadata, so
+        // "Mark established" / remove / rename all write here. Dev-only.
+        if (req.url === '/api/variation/update' && req.method === 'POST') {
+          const chunks: Buffer[] = []
+          req.on('data', (c: Buffer) => chunks.push(c))
+          req.on('end', async () => {
+            try {
+              const { id, patch } = JSON.parse(Buffer.concat(chunks).toString())
+              const { readFile, writeFile } = await import('fs/promises')
+              const file = path.resolve(__dirname, 'src/variations', id, 'variation.json')
+              let cur: any = {}
+              try { cur = JSON.parse(await readFile(file, 'utf8')) } catch {}
+              const d = new Date(), p = (n: number) => String(n).padStart(2, '0')
+              const modifiedAt = `${p(d.getMonth() + 1)}/${p(d.getDate())}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`
+              const nextMeta = { ...metaDefaults(id), ...cur, ...patch, modifiedAt }
+              await writeFile(file, JSON.stringify(nextMeta, null, 2) + '\n')
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ success: true, id, meta: nextMeta }))
+            } catch (err: any) {
+              res.statusCode = 500
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ error: err.message }))
+            }
+          })
+          return
+        }
+
         if (req.url !== '/api/variation/create' || req.method !== 'POST') {
           return next()
         }
@@ -84,8 +112,8 @@ function variationApiPlugin() {
         req.on('data', (chunk: Buffer) => chunks.push(chunk))
         req.on('end', async () => {
           try {
-            const { sourceId, targetId } = JSON.parse(Buffer.concat(chunks).toString())
-            const { cp, mkdir } = await import('fs/promises')
+            const { sourceId, targetId, meta } = JSON.parse(Buffer.concat(chunks).toString())
+            const { cp, mkdir, writeFile } = await import('fs/promises')
             const root = path.resolve(__dirname, 'src')
 
             const srcComponents = sourceId === 'v00'
@@ -101,8 +129,12 @@ function variationApiPlugin() {
             await cp(srcComponents, path.resolve(targetDir, 'components'), { recursive: true })
             await cp(srcStyles, path.resolve(targetDir, 'styles'), { recursive: true })
 
+            // Write the variation's metadata as its single source of truth.
+            const finalMeta = { ...metaDefaults(targetId), ...(meta || {}) }
+            await writeFile(path.resolve(targetDir, 'variation.json'), JSON.stringify(finalMeta, null, 2) + '\n')
+
             res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify({ success: true, targetId }))
+            res.end(JSON.stringify({ success: true, targetId, meta: finalMeta }))
           } catch (err: any) {
             res.statusCode = 500
             res.setHeader('Content-Type', 'application/json')
@@ -114,22 +146,43 @@ function variationApiPlugin() {
   }
 }
 
-// Variations manifest: the list of variation folders that actually exist on disk
-// under src/variations/ (plus base v00). The Dashboard reconciles its localStorage
-// records against this so a variation created by *files alone* — a skill scaffolding
-// v01, or a committed variation a client's fresh browser has no record of — still
-// shows up. Served live in dev (scan) AND emitted into the build output, so it works
-// on the static Vercel deploy too (fixing the old "client sees only base" gap).
-async function scanVariationIds(): Promise<string[]> {
-  const { readdir } = await import('fs/promises')
+// Server-side defaults for a variation lacking a variation.json (a legacy/edge
+// folder). Every variation created through the app writes its own variation.json;
+// this just keeps a bare folder from rendering blank.
+function metaDefaults(id: string) {
+  const n = parseInt(id.replace(/\D/g, ''), 10) || 0
+  const isFirst = n === 1
+  return {
+    version: `v${Math.floor(n / 10)}.${n % 10}`,
+    title: isFirst ? 'Initial Design' : `Design ${n}`,
+    description: isFirst ? 'Initial Design Concept, color and font variations.' : '',
+    styleguideStatus: 'updated',
+    brandStatus: 'established',
+  }
+}
+
+// Variations manifest: every on-disk variation under src/variations/ WITH its
+// committed metadata (read from each folder's variation.json — the single source of
+// truth). Base v00 is NOT here (it has no folder; the app seeds it from code).
+// Served live in dev AND emitted into the build output, so the dashboard reads
+// identical, correct data in every browser and on Vercel — no localStorage.
+async function scanVariations(): Promise<any[]> {
+  const { readdir, readFile } = await import('fs/promises')
+  const dir = path.resolve(__dirname, 'src/variations')
   let ids: string[] = []
   try {
-    ids = (await readdir(path.resolve(__dirname, 'src/variations'), { withFileTypes: true }))
+    ids = (await readdir(dir, { withFileTypes: true }))
       .filter((e: any) => e.isDirectory())
       .map((e: any) => e.name)
+      .filter((id: string) => id !== 'v00')
   } catch {}
-  // Base is always present; keep it first and de-duped.
-  return ['v00', ...ids.filter((id) => id !== 'v00')]
+  const out: any[] = []
+  for (const id of ids) {
+    let meta: any = {}
+    try { meta = JSON.parse(await readFile(path.resolve(dir, id, 'variation.json'), 'utf8')) } catch {}
+    out.push({ id, ...metaDefaults(id), ...meta })
+  }
+  return out
 }
 
 function variationsManifestPlugin() {
@@ -139,7 +192,7 @@ function variationsManifestPlugin() {
       server.middlewares.use(async (req: any, res: any, next: any) => {
         if (req.url === '/variations.json' && req.method === 'GET') {
           res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify({ ids: await scanVariationIds() }))
+          res.end(JSON.stringify({ variations: await scanVariations() }))
           return
         }
         next()
@@ -149,7 +202,7 @@ function variationsManifestPlugin() {
       this.emitFile({
         type: 'asset',
         fileName: 'variations.json',
-        source: JSON.stringify({ ids: await scanVariationIds() }),
+        source: JSON.stringify({ variations: await scanVariations() }),
       })
     },
   }

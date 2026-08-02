@@ -4,8 +4,8 @@ import type { Variation } from "@/data/variations";
 import {
   nextVariationId,
   nextVersionTag,
-  formatNowDate,
-  formatNowDateTime,
+  createVariation,
+  defaultVariationMeta,
 } from "@/data/variations";
 
 const SRC_THUMB_W = 80;
@@ -15,7 +15,7 @@ const SRC_SCALE = SRC_THUMB_W / 1280;
 interface Props {
   variations: Variation[];
   onClose: () => void;
-  onCreate: (variation: Variation) => void;
+  onCreate: () => void;
 }
 
 export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
@@ -56,37 +56,25 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
     setIsCreating(true);
     setApiError(null);
 
-    // Attempt dev-mode file copy; non-fatal if unavailable
+    // Create on disk: copy the source files + write the variation.json (its single
+    // source of truth). A duplicate inherits the source palette; flag it for review
+    // only if the designer said it needs its own styleguide.
     try {
-      const res = await fetch("/api/variation/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceId: selectedSource, targetId: newId }),
+      await createVariation(selectedSource!, newId, {
+        ...defaultVariationMeta(newId),
+        title: title.trim(),
+        description: description.trim(),
+        styleguideStatus: needsStyleguide ? "needs-review" : "updated",
+        brandStatus: needsStyleguide ? "needs-review" : "established",
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        console.warn("Variation file copy failed:", data.error);
-      }
     } catch {
-      console.warn("Variation file copy API not reachable — skipping.");
+      setApiError("Couldn't create the variation — is the dev server running?");
+      setIsCreating(false);
+      return;
     }
 
-    const newVariation: Variation = {
-      id: newId,
-      version: newVersion,
-      title: title.trim(),
-      description: description.trim(),
-      createdAt: formatNowDate(),
-      modifiedAt: formatNowDateTime(),
-      isBase: false,
-      styleguideStatus: needsStyleguide ? "needs-review" : "updated",
-      // A new variation inherits the source palette; flag it for review so its
-      // Colors read as inherited/default until its own brand is established.
-      brandStatus: needsStyleguide ? "needs-review" : "established",
-    };
-
     setIsCreating(false);
-    onCreate(newVariation);
+    onCreate();
   }
 
   return (

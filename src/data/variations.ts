@@ -1,4 +1,13 @@
 // ©2026 thinkany llc. All rights reserved.
+//
+// Variations are file-based. Each design variation carries its own metadata in
+// `src/variations/{id}/variation.json` (title, description, status, …) — the single
+// source of truth, committed with the design. The dashboard reads them via the
+// build/dev manifest (`/variations.json`); the base (v00) has no folder, so its
+// record lives in code (BASE). This replaces the old per-browser localStorage,
+// which collided across projects sharing localhost and couldn't be written by
+// setup/Claude. Now setup writes a variation.json directly and every browser (and
+// Vercel) sees identical, correct data.
 export interface Variation {
   id: string;         // "v00", "v01", … (v00 is the base)
   version: string;    // "v0.0", "v0.1", …
@@ -9,91 +18,28 @@ export interface Variation {
   isBase: boolean;
   label?: string;     // override for the filled blue tag; falls back to "Original" / "Client Edits"
   screenshot?: string; // static thumbnail image URL
-  // Per-variation styleguide state. "needs-review" shows the setup banner on
-  // this variation's styleguide until the designer marks it done ("updated").
-  // Base (v00) has no readiness state — it's the pristine template blueprint and
-  // never shows the banner.
+  removed?: boolean;   // hidden from the gallery (files kept); set by the remove action
+  // Per-variation styleguide state. "needs-review" shows the setup banner on this
+  // variation's styleguide until it's marked done ("updated"). Base has no state.
   styleguideStatus?: "needs-review" | "updated";
-  // Per-variation brand-palette state. "needs-review" flags this variation's
-  // Colors as template defaults until its brand palette is established for this
-  // variation only (via /setup-styleguide, then "Mark brand established").
-  // Base (v00) has no readiness state.
+  // Per-variation brand-palette state. "needs-review" flags Colors as template
+  // defaults until established. Base has no state.
   brandStatus?: "needs-review" | "established";
 }
 
-export const INITIAL_VARIATIONS: Variation[] = [
-  {
-    id: "v00",
-    version: "v00",
-    title: "Base",
-    description: "Base version.",
-    createdAt: "06/27/2026",
-    modifiedAt: "06/27/2026 12:00",
-    isBase: true,
-  },
-];
+/** The base blueprint (v00). Lives in code — it has no `src/variations/` folder. */
+export const BASE: Variation = {
+  id: "v00",
+  version: "v00",
+  title: "Base",
+  description: "Base version.",
+  createdAt: "06/27/2026",
+  modifiedAt: "06/27/2026 12:00",
+  isBase: true,
+};
 
-const STORAGE_KEY = "ta-variations-v2";
-// Ids the user has explicitly removed from the gallery. Disk reconciliation skips
-// these so a removed variation whose FILES still exist doesn't keep reappearing.
-const DISMISSED_KEY = "ta-variations-dismissed";
-
-export function loadVariations(): Variation[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const stored = JSON.parse(raw) as Variation[];
-      if (Array.isArray(stored) && stored.length > 0) {
-        const initialMap = new Map(INITIAL_VARIATIONS.map((v) => [v.id, v]));
-        let changed = false;
-
-        // Refresh version/title/description from code for any matching IDs
-        const updated = stored.map((v) => {
-          const src = initialMap.get(v.id);
-          if (src && (src.version !== v.version || src.title !== v.title || src.description !== v.description || src.label !== v.label)) {
-            changed = true;
-            return { ...v, version: src.version, title: src.title, description: src.description, label: src.label };
-          }
-          return v;
-        });
-
-        // Append any new entries from INITIAL_VARIATIONS not yet in localStorage
-        const storedIds = new Set(stored.map((v) => v.id));
-        const additions = INITIAL_VARIATIONS.filter((v) => !storedIds.has(v.id));
-        if (additions.length > 0) changed = true;
-
-        const merged = [...updated, ...additions];
-        if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-        return merged;
-      }
-    }
-  } catch {}
-  return [...INITIAL_VARIATIONS];
-}
-
-export function saveVariations(variations: Variation[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(variations));
-  } catch {}
-}
-
-export function loadDismissed(): string[] {
-  try {
-    const raw = localStorage.getItem(DISMISSED_KEY);
-    const arr = raw ? (JSON.parse(raw) as string[]) : [];
-    return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
-}
-
-export function dismissVariation(id: string): void {
-  try {
-    const set = new Set(loadDismissed());
-    set.add(id);
-    localStorage.setItem(DISMISSED_KEY, JSON.stringify([...set]));
-  } catch {}
-}
+/** The metadata fields persisted to a variation.json (everything but id/isBase). */
+export type VariationMeta = Omit<Variation, "id" | "isBase">;
 
 /** Version tag for an id ("v01" → "v0.1"), matching nextVersionTag's scheme. */
 function versionTagForId(id: string): string {
@@ -102,43 +48,68 @@ function versionTagForId(id: string): string {
 }
 
 /**
- * A default record for a variation discovered on disk (via /variations.json) that
- * has no localStorage record yet. Under Option A that means it was created by
- * FILES — i.e. `/setup-styleguide`'s Step 0 copy, which then configures it — or a
- * committed design a fresh browser hasn't seen. Either way it's already
- * configured, so it defaults to DONE (no setup banner). The two paths that create
- * an *un*configured variation write their own record instead: the "Start
- * designing" skip-setup button and the Make-Variation modal both set needs-review
- * explicitly, so they never reach this default.
+ * Default metadata for a NEW variation (written into its variation.json). `v01` is
+ * the initial design created by /setup-styleguide's Step 0, so it's titled and —
+ * since setup configures it — defaults to DONE. Callers that create an *un*configured
+ * variation (the skip-setup "Start designing" button, the Make-Variation modal)
+ * override `styleguideStatus`/`brandStatus` to "needs-review".
  */
-export function discoveredVariation(id: string): Variation {
+export function defaultVariationMeta(id: string): VariationMeta {
   const n = parseInt(id.replace(/\D/g, ""), 10) || 0;
-  const isFirst = n === 1; // v01 is the initial design created by /setup-styleguide
+  const isFirst = n === 1;
   return {
-    id,
     version: versionTagForId(id),
     title: isFirst ? "Initial Design" : `Design ${n}`,
     description: isFirst ? "Initial Design Concept, color and font variations." : "",
     createdAt: formatNowDate(),
     modifiedAt: formatNowDateTime(),
-    isBase: false,
     styleguideStatus: "updated",
     brandStatus: "established",
   };
 }
 
 /**
- * Merge on-disk variation ids into an existing record list: append a default
- * record for any id present on disk but neither already recorded nor dismissed.
- * Returns the (possibly unchanged) list; caller persists + re-renders if it grew.
+ * Read the full variation list: base (from code) + every on-disk variation with its
+ * committed metadata (via /variations.json, served in dev and emitted at build).
+ * Removed variations are filtered out. No localStorage — same result in every
+ * browser and on Vercel.
  */
-export function reconcileWithDisk(current: Variation[], diskIds: string[]): Variation[] {
-  const known = new Set(current.map((v) => v.id));
-  const dismissed = new Set(loadDismissed());
-  const additions = diskIds
-    .filter((id) => !known.has(id) && !dismissed.has(id))
-    .map((id) => discoveredVariation(id));
-  return additions.length ? [...current, ...additions] : current;
+export async function fetchVariations(): Promise<Variation[]> {
+  try {
+    const r = await fetch("/variations.json", { cache: "no-store" });
+    if (!r.ok) return [BASE];
+    const manifest = (await r.json()) as { variations?: (VariationMeta & { id: string })[] };
+    const disk = (manifest.variations ?? [])
+      .filter((v) => !v.removed)
+      .map((v) => ({ ...v, isBase: false }));
+    return [BASE, ...disk];
+  } catch {
+    return [BASE];
+  }
+}
+
+/** Fetch a single variation's metadata (base from code; others from the manifest). */
+export async function fetchVariation(id: string): Promise<Variation | undefined> {
+  if (id === "v00") return BASE;
+  return (await fetchVariations()).find((v) => v.id === id);
+}
+
+/** Create a variation on disk: copy source files + write its variation.json. Dev only. */
+export async function createVariation(sourceId: string, targetId: string, meta: VariationMeta): Promise<void> {
+  await fetch("/api/variation/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sourceId, targetId, meta }),
+  });
+}
+
+/** Patch fields in a variation's variation.json (status, removed, title…). Dev only. */
+export async function patchVariation(id: string, patch: Partial<VariationMeta>): Promise<void> {
+  await fetch("/api/variation/update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, patch }),
+  }).catch(() => {});
 }
 
 export function getVariationUrl(variation: Variation): string {
@@ -165,6 +136,7 @@ export function formatNowDateTime(): string {
   return `${mm}/${dd}/${d.getFullYear()} ${hh}:${min}`;
 }
 
+/** Next free id given the current list (e.g. [v00] → "v01"). */
 export function nextVariationId(variations: Variation[]): string {
   return `v${String(variations.length).padStart(2, "0")}`;
 }

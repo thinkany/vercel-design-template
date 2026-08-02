@@ -35,8 +35,8 @@ configures THAT variation, never the base.**
 **Check what's already there** (the `?v=` in the styleguide URL, or `ls src/variations`):
 - **A design variation already exists** (e.g. the designer arrived at
   `/?v=v01&styleguide`) → that's the scope. Skip to Step 1.
-- **Only base v00 exists** → create the working variation now by copying the base
-  files on disk (use the next free `vNN` — `v01` on a fresh project):
+- **Only base v00 exists** → create the working variation now (use the next free
+  `vNN` — `v01` on a fresh project). Copy the base files on disk:
 
   ```bash
   mkdir -p src/variations/v01
@@ -44,9 +44,24 @@ configures THAT variation, never the base.**
   cp -R src/styles src/variations/v01/styles
   ```
 
-  The dashboard auto-discovers it through the variations manifest — there's no
-  localStorage record to write from here. Tell the designer in one plain line that
-  you've set up their working design copy and the base stays the clean starting point.
+  Then **write its metadata file** `src/variations/v01/variation.json` (use the Write
+  tool, not a heredoc) — this is the variation's single source of truth, read by the
+  dashboard manifest. Because setup configures it, mark it **already done** (no setup
+  banner):
+
+  ```json
+  {
+    "version": "v0.1",
+    "title": "Initial Design",
+    "description": "Initial Design Concept, color and font variations.",
+    "styleguideStatus": "updated",
+    "brandStatus": "established"
+  }
+  ```
+
+  The dashboard reads this file directly — no localStorage, so it shows the right
+  title/status in every browser. Tell the designer in one plain line that you've set
+  up their working design copy and the base stays the clean starting point.
 
 **From here, `{id}` = that variation.** Everything this command writes goes to
 `src/variations/{id}/styles/…` (and its `components/` for the logo step) — **never the
@@ -67,9 +82,10 @@ first**, then fonts.
 
 **The scope is the working variation from Step 0** (`{id}`). Write to
 `src/variations/{id}/styles/…` **ONLY** — never the base, never a sibling. Each scope
-is fully siloed: a red-based variation and a blue-based one never cross. The
-brand-ready marker is that variation's `brandStatus` record field, cleared via the
-in-page "Mark brand established" button (a file edit can't reach localStorage).
+is fully siloed: a red-based variation and a blue-based one never cross. Its
+brand-ready marker lives in `src/variations/{id}/variation.json` — Step 0 already
+wrote it as `"established"`, so there's nothing to click; the styleguide shows no
+banner.
 
 The brand palette lives in **two coupled files that must stay in sync**, both in
 the scope's `styles/` folder:
@@ -223,10 +239,10 @@ new group and leaves existing ones intact.
   colors block (keep the slugs), leaving `--admin-*`, `--ta-font-*`, and the system
   palette untouched.
 
-**Clear the brand marker** so the variation's styleguide stops flagging its Colors as
-template defaults: the marker lives in the variation's localStorage record, which a
-file edit can't reach — tell the designer to click **"Mark brand established"** in that
-variation's styleguide Colors section.
+**The brand marker is already clear.** Step 0 wrote `"brandStatus": "established"` into
+`variation.json`, so the styleguide won't flag its Colors as template defaults —
+nothing to click. (If you ever need to re-flag/clear it by hand, edit that field in
+`src/variations/{id}/variation.json`.)
 
 ### 1b. Fonts
 
@@ -361,12 +377,11 @@ preview's header (and in the phone frame, where it should scale down cleanly).
 
 ## 2. The working variation's name (just inform)
 
-The dashboard lists each design as a **variation**. The working variation you created
-in Step 0 appears with an auto title (e.g. **"Design 1"**); the base keeps its **"Base"**
-blueprint label. Its title/description live in that variation's **localStorage record**
-— a file edit can't reach it — so there's nothing to write here. If the designer wants
-a specific name, that's a dashboard-side rename, not a setup step. Don't touch
-`INITIAL_VARIATIONS` (that's the base blueprint's seed, which stays "Base").
+The dashboard lists each design as a **variation**. Step 0 already titled the working
+variation **"Initial Design"** (in its `variation.json`); the base keeps its **"Base"**
+blueprint label (in code). To rename it, edit `title`/`description` in
+`src/variations/{id}/variation.json` — no need to during setup. The base seed lives in
+code (`BASE` in `src/data/variations.ts`) and stays "Base".
 
 ## 3. The example sections are flexible — just inform (no question)
 
@@ -385,16 +400,15 @@ unless there's a strong reason not to.
 
 ## 4. Readiness is automatic — nothing to mark
 
-You don't need to mark anything done. The working variation was created by Step 0's
-file copy, so the dashboard records it as **already configured** (that's the default
-for a disk-discovered variation under this flow) — its styleguide shows **no setup
-banner**. Base v00 never shows one either (it's the pristine blueprint).
+You don't need to mark anything done. Step 0 wrote `"styleguideStatus": "updated"` and
+`"brandStatus": "established"` into the variation's `variation.json`, so its styleguide
+shows **no setup banner**. Base v00 never shows one either (it's the pristine blueprint).
 
 The only time the "inherited the base styleguide" banner appears is when a designer
 later **duplicates** a variation via *Make New Variation* and checks "needs its own
 styleguide" — then that copy carries the banner + an in-page **Mark as updated** /
-**Mark brand established** button until they clear it. It never applies to the
-variation this setup just configured.
+**Mark brand established** button (which writes the variation's `variation.json`) until
+they clear it. It never applies to the variation this setup just configured.
 
 ## 5. Sign off — onboarding complete
 
@@ -459,8 +473,9 @@ that variation's `tokens.css`. So `/setup-styleguide` gathers and applies values
 **that variation alone**.
 
 Readiness is a per-variation concept only: each variation carries its own
-`styleguideStatus` and `brandStatus` in its record, cleared via the in-page buttons
-(no `.env` flags — those are retired). Base has no readiness state.
+`styleguideStatus` and `brandStatus` in its **`variation.json`** (set by Step 0, or
+via the in-page buttons for a later duplicate — no `.env` flags, those are retired).
+Base has no readiness state.
 
 ---
 

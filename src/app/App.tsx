@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 
 import { resolveComponent } from "./variationRegistry";
-import { loadVariations, saveVariations } from "../data/variations";
+import { fetchVariation, patchVariation, type Variation } from "../data/variations";
 import { siteConfig, previewConfig, previewWidths, projectType } from "../config/site";
 import type { View } from "../config/site";
 
@@ -63,15 +63,17 @@ export default function App() {
         : siteConfig.clientName;
       return;
     }
-    const variation = loadVariations().find(v => v.id === variationId);
-    if (variation) {
-      if (page === "styleguide") {
-        document.title = `${variation.version} Styles : ${siteConfig.clientName}`;
-      } else {
-        document.title = variation.isBase
-          ? `${variation.version} base - ${siteConfig.clientName}`
-          : `${variation.version} ${siteConfig.clientName}`;
-      }
+    // Version tag is derivable from the id (v00 → "v00", v01 → "v0.1"), so the
+    // title needs no data fetch.
+    const isBaseV = variationId === "v00";
+    const n = parseInt(variationId.replace(/\D/g, ""), 10) || 0;
+    const version = isBaseV ? "v00" : `v${Math.floor(n / 10)}.${n % 10}`;
+    if (page === "styleguide") {
+      document.title = `${version} Styles : ${siteConfig.clientName}`;
+    } else {
+      document.title = isBaseV
+        ? `${version} base - ${siteConfig.clientName}`
+        : `${version} ${siteConfig.clientName}`;
     }
   }, [variationId, page]);
 
@@ -99,36 +101,31 @@ export default function App() {
   // placeholder in place of the Home design preview (no device frames).
   const isBrandProject = projectType === "brand";
 
-  // Styleguide setup state is a per-variation concept. Base (v00) is the pristine
-  // template blueprint — the designer works in a variation, so base never shows a
-  // "needs setup" banner. A variation drives its banner from its own
-  // styleguideStatus record.
+  // Styleguide/brand setup state is per-variation, read from the variation's own
+  // variation.json (via the manifest). Base (v00) is the pristine blueprint — it
+  // never shows a banner. Marking done writes the file and reloads.
   const isBase = variationId === "v00";
-  const activeVariation = loadVariations().find(v => v.id === variationId);
+  const [activeVariation, setActiveVariation] = useState<Variation | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    fetchVariation(variationId).then((v) => { if (!cancelled) setActiveVariation(v); });
+    return () => { cancelled = true; };
+  }, [variationId]);
+
   const styleguideNeedsSetup = isBase
     ? false
     : activeVariation?.styleguideStatus === "needs-review";
 
   function markStyleguideUpdated() {
-    const updated = loadVariations().map(v =>
-      v.id === variationId ? { ...v, styleguideStatus: "updated" as const } : v,
-    );
-    saveVariations(updated);
-    window.location.reload();
+    patchVariation(variationId, { styleguideStatus: "updated" }).then(() => window.location.reload());
   }
 
-  // Brand-palette state, likewise per-variation. Base never flags its Colors as
-  // "template defaults" — it IS the template; a variation uses its brandStatus.
   const brandNeedsSetup = isBase
     ? false
     : activeVariation?.brandStatus === "needs-review";
 
   function markBrandEstablished() {
-    const updated = loadVariations().map(v =>
-      v.id === variationId ? { ...v, brandStatus: "established" as const } : v,
-    );
-    saveVariations(updated);
-    window.location.reload();
+    patchVariation(variationId, { brandStatus: "established" }).then(() => window.location.reload());
   }
 
   return (
