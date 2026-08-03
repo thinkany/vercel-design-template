@@ -447,9 +447,11 @@ options). **Do NOT duplicate that copy into this file; edit it there.**
 one continuous flow.
 
 - **[`/setup-project`](.claude/commands/setup-project.md)** — brand the scaffold:
-  preflight `npm install` (checks Node ≥ 20.19), write `VITE_*` names to `.env`,
-  choose project type, set the **company / admin** fonts (gate + `--admin-font-*`),
-  point to Vercel setup, then hand off to →
+  preflight `npm install` (checks Node ≥ 20.19), then gather the **company block
+  together** (logo → company name → **company / admin** fonts (gate + `--admin-font-*`),
+  steps 2a–2c) before the **client/project** values (client name, project type,
+  name, menu), point to Vercel setup, offer to save a reusable **company profile**,
+  then hand off to →
 - **[`/setup-styleguide`](.claude/commands/setup-styleguide.md)** — Phase II:
   **create the working design variation** (`v01`) so the base stays pristine, then
   set the **client** fonts/colors in that variation's `tokens.css` + `brand.ts`,

@@ -19,6 +19,14 @@ panel instead of a back-and-forth. Every question auto-includes a free-text
 there; the preset options are just fast paths and sensible defaults. Only fall
 back to a plain text prompt if a value truly has no reasonable presets.
 
+**Question order — gather COMPANY info together, then CLIENT/PROJECT info.** The
+company (agency) identity — logo, company name, admin/gate fonts — is set once and
+reused across every project, so it's collected as one block up front (steps 2a–2c),
+mirrored by the import at the very start (0.5) and the export at the very end
+(step 7). The client/project values (client name, project type, project name, menu)
+come after, in step 3. Keep that grouping — don't interleave a company question
+into the client block or vice-versa.
+
 Follow these steps:
 
 0. **Preflight — install dependencies.** Before any branding, make sure the
@@ -96,8 +104,8 @@ Follow these steps:
    - **On "Yes"** → run the **[`/import-company`](import-company.md)** flow (get the
      file via path or drop-it-in, then `node scripts/company-profile.mjs unpack --in
      <path>`, and finish any manual steps it reports). Once applied, the company
-     name, admin/gate fonts, and logo are set — so **SKIP steps 2a (logo), 2b
-     (company name), and 7 (company fonts)** below, and pick up at step 3 (the
+     name, admin/gate fonts, and logo are set — so **SKIP the whole company block
+     (2a logo, 2b company name, 2c company fonts)** below, and pick up at step 3 (the
      *client* name). You can still let the designer override any imported value if
      they ask.
 
@@ -105,9 +113,10 @@ Follow these steps:
    `VITE_COMPANY_NAME`, `VITE_CLIENT_NAME`, and `VITE_PROJECT_NAME` (they may be
    blank on a fresh template pull).
 
-2. **Ask the opening brand questions — the logo FIRST, then the company name.**
-   These are the very first things the user sees. Ask the logo question (2a)
-   **before** the company name (2b).
+2. **The company block — logo, company name, then company fonts (2a → 2b → 2c).**
+   These are the agency's own identity and the very first things the user sees. Ask
+   them in order: the logo (2a), then the company name (2b), then the company/admin
+   fonts (2c) — all together, before moving on to the client in step 3.
 
    ### 2a. Logo on the login screen
 
@@ -192,6 +201,124 @@ Follow these steps:
 
    Show the current `VITE_COMPANY_NAME` if one is already set. If the user leaves
    it blank, keep the existing value (or re-ask if none is set).
+
+   ### 2c. Company / admin fonts
+
+   *(Skip 2c if a company profile was imported in step 0.5 — the gate + admin
+   fonts are already set.)*
+
+   The gate in `middleware.js` has its own inline `<style>`, independent of the
+   app's design system (it can't read the app's token layer). It uses two font
+   roles: the **wordmark** (`.brand-name`) and the **body font** — used by
+   everything else on the gate (subtitle, the "Preview Access" label, the password
+   input, the Enter button, and the footer).
+
+   Run this as an **interactive `AskUserQuestion` flow**:
+
+   **a. Opt-in gate.** One question. Header **"Your Company Fonts"**; `question`
+   text is the three paragraphs below, each separated by a **blank line** (real
+   `\n\n` in the string) so it isn't one run-on block:
+
+   > Would you like to apply your brand fonts to this project's admin screens?
+   >
+   > The login preview uses two font families: one for your brand name and
+   > headings, and another for all other text (subtitles, labels, password field,
+   > and the Enter button). The interior Styleguide page will use the brand font
+   > in the header and the secondary font for all body copy.
+   >
+   > These settings apply only to the admin experience. You will choose separate
+   > fonts for the client design a little later, and your company fonts will not
+   > affect that design.
+
+   Options — exactly two:
+   - **"Use default fonts"** — keeps the template's default admin typefaces:
+     **DM Sans (700)** for the brand name / headings and **Inter (300)** for body
+     text (these are the default admin font families). Put those names/weights on
+     the option itself so the designer sees what they'd get.
+   - **"Use my company or custom fonts"** — set your own.
+   - If **"Use default fonts"**, make **no** font changes: the template already
+     ships DM Sans / Inter for both the gate and the interior admin chrome. Skip
+     the rest of this step and continue to step 3.
+
+   **b. Gather the values.** If **Yes**, ask these in a single `AskUserQuestion`
+   call (three questions in one panel):
+   1. Header **"Font Location"**. Question: "Where are your fonts located?"
+      Three options:
+      - **Google Fonts** — paste the share / `<link>` URL.
+      - **URL** — paste any other CSS `<link>` stylesheet URL (Adobe Fonts,
+        Typography.com, or any host).
+      - **Import my own fonts** — place font files in the project (exact location
+        handled below).
+      (`AskUserQuestion` still auto-appends an "Other → type your own" field; these
+      three cover the real cases.) For a Google / URL choice, follow up for the
+      exact URL if the user didn't paste one, and show the current
+      `<link rel="stylesheet">` href if one is set.
+   2. Header "Primary font". `question` (blank line before the example — a real
+      `\n\n` in the string):
+
+      > Your **primary / wordmark** font — used for the brand name and headings,
+      > across the login screen and the interior Styleguide + dashboard.
+      >
+      > Enter the family and weight, e.g. `'Vitesse A', 'Vitesse B', sans-serif` at 700.
+
+      Give 1–2 example families as preset options; the designer types their own in
+      the free-text field.
+   3. Header "Body font". `question` (blank line before the example):
+
+      > Your **secondary / body** font — used for all other admin text: on the
+      > login screen (the subtitle, the "Preview Access" label, the password field,
+      > the Enter button, and the footer) and throughout the Styleguide + dashboard
+      > body copy.
+      >
+      > Enter the family and weight, e.g. `"Forza A", "Forza B", sans-serif` at 400.
+
+   **If the designer chose "Import my own fonts":** have them place the font files
+   in **`public/fonts/`** (create the folder if missing) — e.g.
+   `public/fonts/Acme-Bold.woff2` and `public/fonts/Acme-Regular.woff2` (prefer
+   `.woff2`). Files in `public/` are served at the site root, so reference them as
+   `url('/fonts/Acme-Bold.woff2')`. Then:
+   - Add an `@font-face` block per weight to **`src/styles/fonts.css`** (for the
+     app + interior admin chrome).
+   - Add the same `@font-face` blocks to the gate's inline `<style>` in
+     **`middleware.js`**, AND **allowlist the folder** so the login page can fetch
+     the files *before* the user is authenticated: change the matcher from
+     `'/((?!_vercel).*)'` to `'/((?!_vercel|fonts).*)'`. (Font files aren't
+     sensitive — this just lets `/fonts/*` pass through the gate.) If a logo
+     allowlist entry already exists from step 2a (`brand`), **merge** into one
+     group rather than adding a second — e.g. `'/((?!_vercel|brand|fonts).*)'`.
+   - There is no external stylesheet URL in this case, so **skip the `<link>` edits
+     below** and go straight to the `font-family` swaps + the admin-chrome tokens.
+
+   Then edit `middleware.js` (for a Google Fonts / URL choice):
+   - If a stylesheet URL was given, set the `<link rel="stylesheet">` href to it,
+     and set the `<link rel="preconnect">` href to that URL's origin (scheme +
+     host). If the user wants no external font, remove both `<link>` lines.
+   - Replace the `font-family` on the `.brand-name` rule with the wordmark value.
+   - Replace **all** occurrences of the current body `font-family` value (the one
+     on the `body` rule — the same string is repeated on `.brand-subtitle`,
+     `.label`, `.pw-wrap input`, and `button[type="submit"]`) with the body value.
+   - Warn that font services like Typography.com / Adobe Fonts are **domain-locked**:
+     the fonts load only on whitelisted domains, so the user must add their Vercel
+     domain to the service's allowlist or the gate falls back to the stack's
+     system font (`sans-serif`).
+
+   Then apply the **same two fonts to the interior admin chrome** (the Styleguide
+   page + dashboard), so the gate and the admin chrome share one typographic
+   identity — that chrome reads the `--admin-font-*` tokens, NOT the gate's inline
+   `<style>`:
+   - **Load the fonts for the app too.** The gate loads its own copy via
+     `middleware.js`; the React app loads fonts in `src/styles/fonts.css`. If the
+     stylesheet is a **Google Fonts** URL, add its families to the existing
+     `@import` there (or add a second `@import`). For a **non-Google** provider
+     (Adobe / Typography.com), add a `<link rel="stylesheet">` (+ `preconnect`) to
+     `index.html`'s `<head>` instead.
+   - In `src/styles/tokens.css`, set **`--admin-font-heading`** to the wordmark
+     family and **`--admin-font-body`** to the secondary family (keep a system
+     fallback in each stack, e.g. `'Wordmark', system-ui, sans-serif`). Leave
+     `--admin-font-mono` and every `--admin-*` **color** token untouched.
+   - These two `--admin-font-*` roles are the ONE part of `--admin-*` that project
+     branding sets — they carry the company / agency fonts (see CLAUDE.md). On
+     **"No"** above, leave them at their template defaults (DM Sans / Inter).
 
 3. **Determine the remaining brand values.**
    - If the user passed arguments in `$ARGUMENTS`, parse them as
@@ -313,133 +440,19 @@ Follow these steps:
    Give them the exact values to paste. Unset, `CLIENT_NAME` falls back to
    "Preview" and `PROJECT_TITLE` to "A Design System".
 
-7. **Configure the preview-gate fonts.** *(Skip step 7 if a company profile was
-   imported in step 0.5 — the gate + admin fonts are already set.)* The gate in
-   `middleware.js` has its own
-   inline `<style>`, independent of the app's design system (it can't read the
-   app's token layer). It uses two font roles: the **wordmark** (`.brand-name`)
-   and the **body font** — used by everything else on the gate (subtitle, the
-   "Preview Access" label, the password input, the Enter button, and the footer).
+   Do **not** put secrets (ADMIN_PASS / AUTH_PASS for the preview gate) in `.env`
+   — those belong in Vercel's Environment Variables or a local `.env.local`.
 
-   Run this as an **interactive `AskUserQuestion` flow**:
+   Note for later: the preview gate shows a text wordmark (name + subtitle) — a
+   logo could be added via an optional `SITE_LOGO` env var in `middleware.js`. This
+   is out of scope for this command; flag it if the user wants a full rebrand.
 
-   **6a. Opt-in gate.** One question. Header **"Your Company Fonts"**; `question`
-   text is the three paragraphs below, each separated by a **blank line** (real
-   `\n\n` in the string) so it isn't one run-on block:
-
-   > Would you like to apply your brand fonts to this project's admin screens?
-   >
-   > The login preview uses two font families: one for your brand name and
-   > headings, and another for all other text (subtitles, labels, password field,
-   > and the Enter button). The interior Styleguide page will use the brand font
-   > in the header and the secondary font for all body copy.
-   >
-   > These settings apply only to the admin experience. You will choose separate
-   > fonts for the client design in a few moments, and your company fonts will not
-   > affect that design.
-
-   Options — exactly two:
-   - **"Use default fonts"** — keeps the template's default admin typefaces:
-     **DM Sans (700)** for the brand name / headings and **Inter (300)** for body
-     text (these are the default admin font families). Put those names/weights on
-     the option itself so the designer sees what they'd get.
-   - **"Use my company or custom fonts"** — set your own.
-   - If **"Use default fonts"**, make **no** font changes: the template already
-     ships DM Sans / Inter for both the gate and the interior admin chrome. Skip
-     the rest of this step and finish.
-
-   **6b. Gather the values.** If **Yes**, ask these in a single `AskUserQuestion`
-   call (three questions in one panel):
-   1. Header **"Font Location"**. Question: "Where are your fonts located?"
-      Three options:
-      - **Google Fonts** — paste the share / `<link>` URL.
-      - **URL** — paste any other CSS `<link>` stylesheet URL (Adobe Fonts,
-        Typography.com, or any host).
-      - **Import my own fonts** — place font files in the project (exact location
-        handled below).
-      (`AskUserQuestion` still auto-appends an "Other → type your own" field; these
-      three cover the real cases.) For a Google / URL choice, follow up for the
-      exact URL if the user didn't paste one, and show the current
-      `<link rel="stylesheet">` href if one is set.
-   2. Header "Primary font". `question` (blank line before the example — a real
-      `\n\n` in the string):
-
-      > Your **primary / wordmark** font — used for the brand name and headings,
-      > across the login screen and the interior Styleguide + dashboard.
-      >
-      > Enter the family and weight, e.g. `'Vitesse A', 'Vitesse B', sans-serif` at 700.
-
-      Give 1–2 example families as preset options; the designer types their own in
-      the free-text field.
-   3. Header "Body font". `question` (blank line before the example):
-
-      > Your **secondary / body** font — used for all other admin text: on the
-      > login screen (the subtitle, the "Preview Access" label, the password field,
-      > the Enter button, and the footer) and throughout the Styleguide + dashboard
-      > body copy.
-      >
-      > Enter the family and weight, e.g. `"Forza A", "Forza B", sans-serif` at 400.
-
-   **If the designer chose "Import my own fonts":** have them place the font files
-   in **`public/fonts/`** (create the folder if missing) — e.g.
-   `public/fonts/Acme-Bold.woff2` and `public/fonts/Acme-Regular.woff2` (prefer
-   `.woff2`). Files in `public/` are served at the site root, so reference them as
-   `url('/fonts/Acme-Bold.woff2')`. Then:
-   - Add an `@font-face` block per weight to **`src/styles/fonts.css`** (for the
-     app + interior admin chrome).
-   - Add the same `@font-face` blocks to the gate's inline `<style>` in
-     **`middleware.js`**, AND **allowlist the folder** so the login page can fetch
-     the files *before* the user is authenticated: change the matcher from
-     `'/((?!_vercel).*)'` to `'/((?!_vercel|fonts).*)'`. (Font files aren't
-     sensitive — this just lets `/fonts/*` pass through the gate.) If a logo
-     allowlist entry already exists from step 2a (`brand`), **merge** into one
-     group rather than adding a second — e.g. `'/((?!_vercel|brand|fonts).*)'`.
-   - There is no external stylesheet URL in this case, so **skip the `<link>` edits
-     below** and go straight to the `font-family` swaps + the admin-chrome tokens.
-
-   Then edit `middleware.js` (for a Google Fonts / URL choice):
-   - If a stylesheet URL was given, set the `<link rel="stylesheet">` href to it,
-     and set the `<link rel="preconnect">` href to that URL's origin (scheme +
-     host). If the user wants no external font, remove both `<link>` lines.
-   - Replace the `font-family` on the `.brand-name` rule with the wordmark value.
-   - Replace **all** occurrences of the current body `font-family` value (the one
-     on the `body` rule — the same string is repeated on `.brand-subtitle`,
-     `.label`, `.pw-wrap input`, and `button[type="submit"]`) with the body value.
-   - Warn that font services like Typography.com / Adobe Fonts are **domain-locked**:
-     the fonts load only on whitelisted domains, so the user must add their Vercel
-     domain to the service's allowlist or the gate falls back to the stack's
-     system font (`sans-serif`).
-
-   Then apply the **same two fonts to the interior admin chrome** (the Styleguide
-   page + dashboard), so the P7 promise holds — that chrome reads the
-   `--admin-font-*` tokens, NOT the gate's inline `<style>`:
-   - **Load the fonts for the app too.** The gate loads its own copy via
-     `middleware.js`; the React app loads fonts in `src/styles/fonts.css`. If the
-     stylesheet is a **Google Fonts** URL, add its families to the existing
-     `@import` there (or add a second `@import`). For a **non-Google** provider
-     (Adobe / Typography.com), add a `<link rel="stylesheet">` (+ `preconnect`) to
-     `index.html`'s `<head>` instead.
-   - In `src/styles/tokens.css`, set **`--admin-font-heading`** to the wordmark
-     family and **`--admin-font-body`** to the secondary family (keep a system
-     fallback in each stack, e.g. `'Wordmark', system-ui, sans-serif`). Leave
-     `--admin-font-mono` and every `--admin-*` **color** token untouched.
-   - These two `--admin-font-*` roles are the ONE part of `--admin-*` that project
-     branding sets — they carry the company / agency fonts (see CLAUDE.md). On
-     **"No"** above, leave them at their template defaults (DM Sans / Inter).
-
-Do **not** put secrets (ADMIN_PASS / AUTH_PASS for the preview gate) in `.env`
-— those belong in Vercel's Environment Variables or a local `.env.local`.
-
-Note for later: the preview gate shows a text wordmark (name + subtitle) — a
-logo could be added via an optional `SITE_LOGO` env var in `middleware.js`. This
-is out of scope for this command; flag it if the user wants a full rebrand.
-
-7b. **Offer to save these company settings for reuse.** The company name, admin
-   fonts, and logo just configured are the **same for every project** this designer
-   will do — so offer to export them as a portable **company profile** they can
-   import into the next fresh copy with `/import-company`. (Skip this offer if a
-   profile was *imported* in 0.5 and nothing was changed — there's nothing new to
-   save. If they tweaked an imported value, still offer, so they can save the
+7. **Offer to save these company settings for reuse.** The company name, admin
+   fonts, and logo just configured (steps 2a–2c) are the **same for every project**
+   this designer will do — so offer to export them as a portable **company profile**
+   they can import into the next fresh copy with `/import-company`. (Skip this offer
+   if a profile was *imported* in 0.5 and nothing was changed — there's nothing new
+   to save. If they tweaked an imported value, still offer, so they can save the
    updated version.)
 
    Ask with `AskUserQuestion`, header **"Save profile"**; `question`:
@@ -457,14 +470,14 @@ is out of scope for this command; flag it if the user wants a full rebrand.
 ## 8. Continue straight into Phase II — the styleguide
 
 Branding + company fonts are done, but onboarding isn't — **don't leave the
-designer at a dead end.** The company-fonts prompt (P7) told them they'd choose the
-client's design fonts "in a few moments," so flow directly into it and keep it
+designer at a dead end.** The company-fonts step (2c) told them they'd choose the
+client's design fonts "a little later," so flow directly into it and keep it
 feeling like one continuous setup, not a second disconnected command:
 
 - Give a **one-line bridge** — e.g. *"Your brand and company fonts are set. Now
   let's define the client's design foundation: colors and fonts."* — then
   **invoke the `/setup-styleguide` skill** to continue Phase II. That fulfils the
-  "in a few moments" promise.
+  "a little later" promise.
 - **Off-ramp:** if the designer would rather pause (wants to set up Vercel first,
   or says "not now"), respect it — tell them they can run **`/setup-styleguide`**
   whenever they're ready, and give the `npm run dev` preview reminder (from step

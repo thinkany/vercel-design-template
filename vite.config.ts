@@ -4,6 +4,32 @@ import { pathToFileURL } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
+// A bulk file operation (upgrade / revert) rewrites many project files at once. Vite
+// watches the project, so left alone it fires one HMR reload PER file — the browser
+// flashes repeatedly mid-operation and it feels glitchy even though it works. This
+// detaches Vite's watcher change-handlers for the duration of the write, lets chokidar
+// drain any trailing fs events (so those don't trigger a late reload either), then
+// restores normal watching. The dashboard's own "Refresh" button does the single,
+// intentional reload afterward. Only wrap operations that actually write.
+async function withWatcherPaused<T>(server: any, fn: () => Promise<T>): Promise<T> {
+  const w = server?.watcher
+  if (!w) return fn()
+  const events = ['change', 'add', 'unlink', 'addDir', 'unlinkDir']
+  const saved: Record<string, ((...a: any[]) => void)[]> = {}
+  for (const e of events) {
+    saved[e] = w.listeners(e)
+    w.removeAllListeners(e)
+  }
+  try {
+    return await fn()
+  } finally {
+    // Drain trailing events (emitted with no listener → dropped) BEFORE reattaching,
+    // so the just-written files don't cause one last reload after we resume watching.
+    await new Promise((r) => setTimeout(r, 300))
+    for (const e of events) saved[e].forEach((l) => w.on(e, l))
+  }
+}
+
 // Dev-only plugin: handles POST /api/variation/create to copy files for new variations
 function variationApiPlugin() {
   return {
@@ -61,12 +87,16 @@ function variationApiPlugin() {
               const { runUpgrade } = await import(
                 pathToFileURL(path.resolve(__dirname, 'scripts/upgrade.mjs')).href
               )
-              const report = await runUpgrade({
+              const doUpgrade = () => runUpgrade({
                 targetDir: __dirname,
                 url: body.url || 'https://create.thinkany.design/template-latest.zip',
                 dryRun: !!body.dryRun,
                 force: !!body.force,
               })
+              // A dry run writes nothing, so only pause the watcher for a real apply.
+              const report = body.dryRun
+                ? await doUpgrade()
+                : await withWatcherPaused(server, doUpgrade)
               res.setHeader('Content-Type', 'application/json')
               res.end(JSON.stringify(report))
             } catch (err: any) {
@@ -83,8 +113,10 @@ function variationApiPlugin() {
         if (req.url === '/api/upgrade/revert' && (req.method === 'GET' || req.method === 'POST')) {
           const run = async () => {
             const mod = await import(pathToFileURL(path.resolve(__dirname, 'scripts/upgrade.mjs')).href)
+            // A revert rewrites many files too — pause the watcher so it doesn't flash.
+            // GET (status only) writes nothing, so leave the watcher alone for it.
             const result = req.method === 'POST'
-              ? await mod.runRevert(__dirname)
+              ? await withWatcherPaused(server, () => mod.runRevert(__dirname))
               : await mod.revertStatus(__dirname)
             res.setHeader('Content-Type', 'application/json')
             res.end(JSON.stringify(result))

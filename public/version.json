@@ -1,6 +1,6 @@
 {
-  "version": "0.2.3",
-  "notes": "Company profiles: export your agency identity — company name, admin/login fonts, and logo — to one portable file with /export-company, then restore it into any fresh copy with /import-company (offered as the first and last steps of /setup-project too). Saves re-entering your own branding on every new project.",
+  "version": "0.2.4",
+  "notes": "Applying an update (or reverting one) is now smooth — the preview no longer flashes repeatedly while files are written; it settles, then you refresh once. Setup polish: /setup-project now gathers all of your company info together up front (logo, company name, admin fonts) before the client/project questions.",
   "date": "2026-08-02",
   "zipUrl": "https://create.thinkany.design/template-latest.zip"
 }
