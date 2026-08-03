@@ -10,8 +10,9 @@ const projname = el("projname");
 
 // Sidebar + modal
 const railHelp = el("rail-help");
-const railSettings = el("rail-settings");
-const railAccount = el("rail-account");
+const railProjects = el("rail-projects");
+const railCompany = el("rail-company");
+const railClaude = el("rail-claude");
 const modal = el("modal");
 const modalTitle = el("modal-title");
 const modalBody = el("modal-body");
@@ -309,15 +310,20 @@ createproject.addEventListener("click", () => chooseProject("create"));
 openproject.addEventListener("click", () => chooseProject("open"));
 
 // ---- Sidebar panels ----------------------------------------------------------
-const RAILS = { help: railHelp, settings: railSettings, account: railAccount };
+const RAILS = { help: railHelp, projects: railProjects, company: railCompany, claude: railClaude };
+const PANELS = {
+  help: { title: "Commands", render: renderHelp },
+  projects: { title: "Switch project", render: renderProjects },
+  company: { title: "Company profile", render: renderCompany },
+  claude: { title: "Claude settings", render: renderClaude },
+};
 
 function closeModal() {
   modal.hidden = true;
   Object.values(RAILS).forEach((b) => b.classList.remove("active"));
 }
 async function openModal(kind) {
-  const render = { help: renderHelp, settings: renderSettings, account: renderAccount }[kind];
-  const title = { help: "Commands", settings: "Settings", account: "API key" }[kind];
+  const { title, render } = PANELS[kind];
   modalTitle.textContent = title;
   modalBody.innerHTML = "";
   Object.values(RAILS).forEach((b) => b.classList.remove("active"));
@@ -327,8 +333,9 @@ async function openModal(kind) {
 }
 
 railHelp.addEventListener("click", () => openModal("help"));
-railSettings.addEventListener("click", () => openModal("settings"));
-railAccount.addEventListener("click", () => openModal("account"));
+railProjects.addEventListener("click", () => openModal("projects"));
+railCompany.addEventListener("click", () => openModal("company"));
+railClaude.addEventListener("click", () => openModal("claude"));
 modalClose.addEventListener("click", closeModal);
 modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
 document.addEventListener("keydown", (e) => {
@@ -365,7 +372,6 @@ function renderHelp(body) {
   });
 }
 
-// --- Settings: project + company profile ---
 function setRow(k, valueText) {
   const row = document.createElement("div");
   row.className = "setrow";
@@ -378,42 +384,61 @@ function setRow(k, valueText) {
   row.append(kk, vv);
   return row;
 }
-async function renderSettings(body) {
+
+// --- Switch project: current project + switch ---
+async function renderProjects(body) {
   const proj = await window.desktop.getProjectStatus();
   if (!proj.hasProject) {
     body.appendChild(setRow("Project", "None open"));
     const note = document.createElement("div");
     note.className = "muted";
-    note.textContent = "Create or open a project from the chooser to see project settings.";
+    note.textContent = "Create or open a project from the chooser to get started.";
     body.appendChild(note);
     return;
   }
   body.appendChild(setRow("Current project", proj.name || "—"));
   body.appendChild(setRow("Folder", proj.path || "—"));
-
-  const actions = document.createElement("div");
   const switchBtn = document.createElement("button");
   switchBtn.className = "panelbtn";
   switchBtn.textContent = "Switch project…";
   switchBtn.addEventListener("click", switchProject);
+  body.appendChild(switchBtn);
+}
+
+// --- Company profile: export the agency identity ---
+async function renderCompany(body) {
+  const proj = await window.desktop.getProjectStatus();
+  if (!proj.hasProject) {
+    const note = document.createElement("div");
+    note.className = "muted";
+    note.style.marginTop = "0";
+    note.textContent = "Open a project to manage its company profile.";
+    body.appendChild(note);
+    return;
+  }
+  const intro = document.createElement("p");
+  intro.className = "muted";
+  intro.style.margin = "0 0 12px";
+  intro.textContent = "Your agency identity (name, admin fonts, logo) as a portable file to reuse across projects.";
+  body.appendChild(intro);
+
   const exportBtn = document.createElement("button");
-  exportBtn.className = "panelbtn";
+  exportBtn.className = "panelbtn primary";
   exportBtn.textContent = "⬇ Export company profile";
   exportBtn.disabled = !proj.companyProfile;
   exportBtn.addEventListener("click", () => exportCompany(exportBtn));
-  actions.append(switchBtn, exportBtn);
-  body.appendChild(actions);
+  body.appendChild(exportBtn);
 
   if (!proj.companyProfile) {
     const note = document.createElement("div");
     note.className = "muted";
-    note.textContent = "No company-profile.json yet — run /export-company to create one.";
+    note.textContent = "No company-profile.json yet — run /export-company in the chat to create one.";
     body.appendChild(note);
   }
 }
 
-// --- Account: API key + model ---
-async function renderAccount(body) {
+// --- Claude settings: API key + model ---
+async function renderClaude(body) {
   const status = await window.desktop.getKeyStatus();
   const row = document.createElement("div");
   row.className = "setrow";
