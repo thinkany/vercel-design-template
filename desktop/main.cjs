@@ -248,19 +248,51 @@ ipcMain.handle("key:clear", () => {
 });
 
 // ---- Project IPC ------------------------------------------------------------
+function companyProfilePath(projectDir) {
+  return path.join(projectDir, "company-profile.json");
+}
+function hasCompanyProfile(projectDir) {
+  return !!projectDir && fs.existsSync(companyProfilePath(projectDir));
+}
+
 ipcMain.handle("project:status", () => ({
   hasProject: !!currentProject,
   path: currentProject,
   name: currentProject ? path.basename(currentProject) : null,
   viteUrl,
   design: currentProject ? detectDesign(currentProject) : { active: false, variationId: null },
+  companyProfile: hasCompanyProfile(currentProject),
 }));
 
-// Lightweight re-check the renderer polls after each agent turn, so the preview
-// swaps from the welcome placeholder to the live design the moment it exists.
+// Lightweight re-checks the renderer polls after each agent turn, so the preview
+// swaps from the welcome placeholder to the live design, and the company-profile
+// download button appears, the moment each exists.
 ipcMain.handle("project:design", () =>
   currentProject ? detectDesign(currentProject) : { active: false, variationId: null }
 );
+ipcMain.handle("company:status", () => ({ exists: hasCompanyProfile(currentProject) }));
+
+// Save the project's company-profile.json out to a location the user picks —
+// it's a portable artifact meant to move between projects.
+ipcMain.handle("company:download", async () => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const src = companyProfilePath(currentProject);
+  if (!fs.existsSync(src)) {
+    return { ok: false, error: "No company-profile.json yet — run /export-company first." };
+  }
+  const res = await dialog.showSaveDialog(mainWindow, {
+    title: "Save company profile",
+    defaultPath: "company-profile.json",
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+  if (res.canceled || !res.filePath) return { ok: false, canceled: true };
+  try {
+    fs.copyFileSync(src, res.filePath);
+  } catch (e) {
+    return { ok: false, error: `Could not save: ${e.message}` };
+  }
+  return { ok: true, path: res.filePath };
+});
 
 ipcMain.handle("project:create", async () => {
   const res = await dialog.showOpenDialog(mainWindow, {

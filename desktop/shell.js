@@ -7,6 +7,7 @@ const el = (id) => document.getElementById(id);
 // Bar
 const status = el("status");
 const projname = el("projname");
+const exportcompany = el("exportcompany");
 const switchproject = el("switchproject");
 const resetkey = el("resetkey");
 
@@ -86,10 +87,15 @@ function showStage(stage) {
   chatmain.hidden = stage !== "workspace";
   resetkey.hidden = stage === "key";
   switchproject.hidden = stage !== "workspace";
+  if (stage !== "workspace") exportcompany.hidden = true;
   status.textContent =
     stage === "key" ? "not connected" : stage === "project" ? "no project" : "ready";
   if (stage === "key") keyinput.focus();
   if (stage === "workspace") input.focus();
+}
+
+function refreshCompanyButton(exists) {
+  exportcompany.hidden = !exists || chatmain.hidden;
 }
 
 function noProjectPlaceholder() {
@@ -120,6 +126,7 @@ async function boot() {
   design = proj.design || { active: false, variationId: null };
   showStage("workspace");
   refreshPreview();
+  refreshCompanyButton(proj.companyProfile);
 }
 
 // Vite may become ready after the project is chosen.
@@ -184,6 +191,7 @@ async function chooseProject(kind) {
       design = await window.desktop.getDesignState();
       showStage("workspace");
       refreshPreview();
+      refreshCompanyButton((await window.desktop.getCompanyStatus()).exists);
     } else {
       projecterror.textContent = res.error || "Could not open the project.";
     }
@@ -196,6 +204,18 @@ async function chooseProject(kind) {
 }
 createproject.addEventListener("click", () => chooseProject("create"));
 openproject.addEventListener("click", () => chooseProject("open"));
+
+exportcompany.addEventListener("click", async () => {
+  try {
+    const res = await window.desktop.downloadCompany();
+    if (res.canceled) return;
+    if (res.ok) addMsg("system", `✓ Company profile saved to ${res.path}`);
+    else addMsg("error", res.error || "Could not save the company profile.");
+  } catch (e) {
+    addMsg("error", String(e));
+  }
+});
+
 switchproject.addEventListener("click", async () => {
   await window.desktop.resetProject();
   sessionId = null;
@@ -245,6 +265,8 @@ window.desktop.onAgentEvent((evt) => {
           }
         });
       }
+      // A turn may have run /export-company — reveal the download button.
+      window.desktop.getCompanyStatus().then((c) => refreshCompanyButton(c.exists));
       break;
     case "error":
       assistantEl = null;

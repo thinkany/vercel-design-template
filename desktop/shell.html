@@ -91,6 +91,7 @@
       .msg.assistant { color: #111; }
       .msg.tool { color: #7c3aed; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
       .msg.error { color: #c0261e; }
+      .msg.system { color: #888; font-style: italic; }
 
       #composer { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #e3e3e3; }
       #input {
@@ -129,6 +130,7 @@
           <span>Agent</span>
           <span id="barright">
             <span id="projname"></span>
+            <button id="exportcompany" class="barbtn" hidden>⬇ company profile</button>
             <button id="switchproject" class="barbtn" hidden>switch project</button>
             <span id="status">…</span>
             <button id="resetkey" class="barbtn" hidden>reset key</button>
