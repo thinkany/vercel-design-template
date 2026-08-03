@@ -1,35 +1,89 @@
-// Renderer logic: point the preview iframe at Vite, gate the chat behind an
-// API-key connect screen, and pipe messages through window.desktop to the agent.
+// Renderer logic: a three-stage flow — connect key → choose project → workspace
+// (chat + live preview). The preview points at the project's Vite server; the
+// agent operates on the project folder (both wired in main.cjs).
 
-const params = new URLSearchParams(location.search);
-const viteUrl = params.get("viteUrl") || "about:blank";
-document.getElementById("frame").src = viteUrl;
+const el = (id) => document.getElementById(id);
 
-const status = document.getElementById("status");
-const resetkey = document.getElementById("resetkey");
-const keygate = document.getElementById("keygate");
-const keyinput = document.getElementById("keyinput");
-const keysave = document.getElementById("keysave");
-const keyerror = document.getElementById("keyerror");
-const chatmain = document.getElementById("chatmain");
-const log = document.getElementById("log");
-const input = document.getElementById("input");
-const send = document.getElementById("send");
+// Bar
+const status = el("status");
+const projname = el("projname");
+const switchproject = el("switchproject");
+const resetkey = el("resetkey");
+
+// Gates
+const keygate = el("keygate");
+const keyinput = el("keyinput");
+const keysave = el("keysave");
+const keyerror = el("keyerror");
+const projectgate = el("projectgate");
+const createproject = el("createproject");
+const openproject = el("openproject");
+const projecterror = el("projecterror");
+
+// Workspace
+const chatmain = el("chatmain");
+const log = el("log");
+const input = el("input");
+const send = el("send");
+
+// Preview
+const frame = el("frame");
+const previewph = el("previewph");
 
 let sessionId = null;
-let assistantEl = null; // the streaming assistant bubble we're appending into
+let assistantEl = null;
 
-// ---- Key gate ----------------------------------------------------------------
-async function refreshKeyState() {
-  const { hasKey } = await window.desktop.getKeyStatus();
-  keygate.hidden = hasKey;
-  chatmain.hidden = !hasKey;
-  resetkey.hidden = !hasKey;
-  status.textContent = hasKey ? "ready" : "not connected";
-  if (hasKey) input.focus();
-  else keyinput.focus();
+// ---- Stage routing -----------------------------------------------------------
+function showStage(stage) {
+  keygate.hidden = stage !== "key";
+  projectgate.hidden = stage !== "project";
+  chatmain.hidden = stage !== "workspace";
+  resetkey.hidden = stage === "key";
+  switchproject.hidden = stage !== "workspace";
+  status.textContent =
+    stage === "key" ? "not connected" : stage === "project" ? "no project" : "ready";
+  if (stage === "key") keyinput.focus();
+  if (stage === "workspace") input.focus();
 }
 
+function setPreview(url) {
+  if (!url) return;
+  frame.src = url;
+  frame.hidden = false;
+  previewph.hidden = true;
+}
+function clearPreview(message) {
+  frame.hidden = true;
+  frame.src = "about:blank";
+  previewph.hidden = false;
+  previewph.textContent = message || "The live preview appears here once a project is open.";
+}
+
+async function boot() {
+  const { hasKey } = await window.desktop.getKeyStatus();
+  if (!hasKey) {
+    clearPreview();
+    showStage("key");
+    return;
+  }
+  const proj = await window.desktop.getProjectStatus();
+  if (!proj.hasProject) {
+    clearPreview();
+    showStage("project");
+    return;
+  }
+  projname.textContent = proj.name || "";
+  showStage("workspace");
+  if (proj.viteUrl) setPreview(proj.viteUrl);
+  else clearPreview("Starting the project preview…");
+}
+
+// Vite may become ready after the project is chosen — swap in the preview then.
+window.desktop.onViteReady((url) => {
+  if (!chatmain.hidden) setPreview(url);
+});
+
+// ---- Key gate ----------------------------------------------------------------
 async function saveKey() {
   keyerror.textContent = "";
   const key = keyinput.value.trim();
@@ -43,7 +97,7 @@ async function saveKey() {
     const res = await window.desktop.saveKey(key);
     if (res.ok) {
       keyinput.value = "";
-      await refreshKeyState();
+      await boot();
     } else {
       keyerror.textContent = res.error || "Could not save the key.";
     }
@@ -54,7 +108,6 @@ async function saveKey() {
     keysave.textContent = "Save & connect";
   }
 }
-
 keysave.addEventListener("click", saveKey);
 keyinput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
@@ -62,10 +115,48 @@ keyinput.addEventListener("keydown", (e) => {
     saveKey();
   }
 });
-
 resetkey.addEventListener("click", async () => {
   await window.desktop.clearKey();
-  await refreshKeyState();
+  await boot();
+});
+
+// ---- Project gate ------------------------------------------------------------
+async function chooseProject(kind) {
+  projecterror.textContent = "";
+  createproject.disabled = openproject.disabled = true;
+  const busyBtn = kind === "create" ? createproject : openproject;
+  const label = busyBtn.textContent;
+  busyBtn.textContent = kind === "create" ? "Creating…" : "Opening…";
+  clearPreview(kind === "create" ? "Scaffolding & starting your project…" : "Starting the project…");
+  try {
+    const res = kind === "create"
+      ? await window.desktop.createProject()
+      : await window.desktop.openProject();
+    if (res.canceled) return;
+    if (res.ok) {
+      projname.textContent = res.name || "";
+      showStage("workspace");
+      setPreview(res.viteUrl);
+    } else {
+      projecterror.textContent = res.error || "Could not open the project.";
+      clearPreview();
+    }
+  } catch (e) {
+    projecterror.textContent = String(e);
+    clearPreview();
+  } finally {
+    createproject.disabled = openproject.disabled = false;
+    busyBtn.textContent = label;
+  }
+}
+createproject.addEventListener("click", () => chooseProject("create"));
+openproject.addEventListener("click", () => chooseProject("open"));
+switchproject.addEventListener("click", async () => {
+  await window.desktop.resetProject();
+  sessionId = null;
+  log.innerHTML = "";
+  clearPreview();
+  showStage("project");
 });
 
 // External links open in the real browser, not an Electron window.
@@ -78,12 +169,12 @@ document.querySelectorAll("a[data-external]").forEach((a) =>
 
 // ---- Chat --------------------------------------------------------------------
 function addMsg(cls, text) {
-  const el = document.createElement("div");
-  el.className = "msg " + cls;
-  el.textContent = text;
-  log.appendChild(el);
+  const node = document.createElement("div");
+  node.className = "msg " + cls;
+  node.textContent = text;
+  log.appendChild(node);
   log.scrollTop = log.scrollHeight;
-  return el;
+  return node;
 }
 
 window.desktop.onAgentEvent((evt) => {
@@ -124,11 +215,9 @@ async function submit() {
     input.focus();
   }
 }
-
 send.addEventListener("click", submit);
 input.addEventListener("keydown", (e) => {
-  // Enter sends; Shift+Enter inserts a newline (standard chat convention).
-  // ⌘/Ctrl+Enter also sends, for muscle memory.
+  // Enter sends; Shift+Enter inserts a newline.
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     submit();
@@ -136,4 +225,4 @@ input.addEventListener("keydown", (e) => {
 });
 
 // ---- Boot --------------------------------------------------------------------
-refreshKeyState();
+boot();

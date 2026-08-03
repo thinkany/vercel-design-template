@@ -3,22 +3,31 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("desktop", {
-  // Send a prompt to the agent; resolves with { sessionId } when the turn ends.
+  // ---- Agent ----
   sendPrompt: (prompt, sessionId) =>
     ipcRenderer.invoke("agent:prompt", { prompt, sessionId }),
-
-  // Subscribe to streamed agent events. Returns an unsubscribe fn.
   onAgentEvent: (cb) => {
     const listener = (_e, evt) => cb(evt);
     ipcRenderer.on("agent:event", listener);
     return () => ipcRenderer.removeListener("agent:event", listener);
   },
 
-  // API key: check status, save (validated + persisted), or clear.
+  // ---- API key ----
   getKeyStatus: () => ipcRenderer.invoke("key:status"),
   saveKey: (key) => ipcRenderer.invoke("key:save", { key }),
   clearKey: () => ipcRenderer.invoke("key:clear"),
 
-  // Open a URL in the user's real browser (not an Electron window).
+  // ---- Project (workspace) ----
+  getProjectStatus: () => ipcRenderer.invoke("project:status"),
+  createProject: () => ipcRenderer.invoke("project:create"),
+  openProject: () => ipcRenderer.invoke("project:open"),
+  resetProject: () => ipcRenderer.invoke("project:reset"),
+  onViteReady: (cb) => {
+    const listener = (_e, url) => cb(url);
+    ipcRenderer.on("vite:ready", listener);
+    return () => ipcRenderer.removeListener("vite:ready", listener);
+  },
+
+  // ---- Misc ----
   openExternal: (url) => ipcRenderer.invoke("open:external", url),
 });
