@@ -52,12 +52,18 @@
 
 import { readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(__dirname, "..");
+// Project root the exporter reads/writes. Defaults to this script's parent (run
+// in-repo). When the Electron app runs the exporter from its own bundle against
+// an external scaffolded project, `--project-root <dir>` retargets it — set in
+// main() before any ROOT read. NB: distinct from `--project` (a Figma folder
+// URL for the team destination). The builder plugin body still loads from
+// __dirname (it ships with the script, not the project).
+let ROOT = join(__dirname, "..");
 
 function parseArgs(argv) {
   const args = {
@@ -82,6 +88,7 @@ function parseArgs(argv) {
     else if (a === "--plan") args.plan = argv[++i];
     else if (a === "--plan-name") args.planName = argv[++i];
     else if (a === "--project") args.project = argv[++i];
+    else if (a === "--project-root") args.projectRoot = argv[++i]; // scaffolded project root (app-run)
     else if (a === "--help" || a === "-h") args.help = true;
   }
   return args;
@@ -351,7 +358,7 @@ function printSummary(m, styleDir) {
     console.log(`    Reuse it (update in place) unless the user wants a new one.`);
   } else {
     console.log(`\n  ✎ No Figma file recorded for ${m.variationId} yet — a new one will be`);
-    console.log(`    created and recorded (npm run export:brand -- --record …).`);
+    console.log(`    created and recorded (ta-export brand --record …).`);
   }
   if (m.target?.planKey) {
     const where = m.target.scope === "team"
@@ -360,7 +367,7 @@ function printSummary(m, styleDir) {
     console.log(`  ⌂ New files go to: ${where}`);
   } else {
     console.log(`  ⌂ No export destination set — Claude will ask (Individual vs Team)`);
-    console.log(`    and record it (npm run export:brand -- --set-target …).`);
+    console.log(`    and record it (ta-export brand --set-target …).`);
   }
   console.log(`\n  Figma file structure (one file for this variation):`);
   for (const p of m.designPages) console.log(`    ▸ ${p.name}   (Page — design frames per breakpoint)`);
@@ -412,11 +419,15 @@ async function emitBrandCalls(manifest, outDir) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.projectRoot) ROOT = resolvePath(args.projectRoot);
   if (args.help) {
     console.log(`Usage: node scripts/export-brand-to-figma.mjs [options]
 
   -v, --variation <id>   Variation to export (default: v00)
   --out <dir>            Output dir (default: figma-export)
+  --project-root <dir>   Scaffolded project to read/write (default: this repo).
+                         Used when the app runs the exporter against a project.
+                         (Distinct from --project, a Figma folder URL below.)
   --print                Print the manifest instead of writing it
   --emit-calls           Also write ready-to-submit use_figma payloads, one
                          brand-{phase}.js per phase (scaffold/variables/textstyles/

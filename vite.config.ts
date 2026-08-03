@@ -287,11 +287,23 @@ function templateZipPlugin() {
         pathToFileURL(path.resolve(__dirname, 'scripts/lib/zip.mjs')).href
       )
 
-      // git-tracked files = exactly the distributable template source.
+      // git-tracked files = the distributable template source, MINUS
+      // app-internal IP that must never ship: the licensed cloud-export logic
+      // AND the export-to-Figma tooling (app-owned, runs from the Electron app).
+      // This is the single choke point: the upgrade overlay can only write files
+      // present in this zip, so excluding them here plugs both the public download
+      // AND the upgrade-push. Also enforced via .gitattributes export-ignore (for
+      // git-archive consumers) and the Electron scaffold's TEMPLATE_EXCLUDE.
+      const EXCLUDE_PREFIXES = ['cloud-export/']
+      // Export tooling: the 4 `export-*.mjs` exporters + 3 `figma-*.plugin.js`
+      // builder bodies. Spares the infra scripts (company-profile/upgrade/lib).
+      const EXCLUDE_PATTERNS = [/^scripts\/export-.*\.mjs$/, /^scripts\/figma-.*\.plugin\.js$/]
       let files: string[]
       try {
         files = execSync('git ls-files', { cwd: __dirname, encoding: 'utf8' })
           .split('\n').map((s) => s.trim()).filter(Boolean)
+          .filter((rel) => !EXCLUDE_PREFIXES.some((p) => rel.startsWith(p))
+                        && !EXCLUDE_PATTERNS.some((re) => re.test(rel)))
       } catch {
         this.warn('template-zip: `git ls-files` failed; skipping archive')
         return

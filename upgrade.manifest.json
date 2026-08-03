@@ -34,5 +34,7 @@
     ".claude/settings.json": "Hybrid: template allowlist + any permissions the designer added."
   },
 
-  "coreNotes": "Everything else is CORE and overwritten: build config (vite.config.ts, vercel.json, middleware.js, index.html, postcss.config.*), scripts/**, cloud-export/**, .claude/commands/**, .claude/launch.json, .claude/hooks/**, CLAUDE.md, README.md, the app machinery + base chrome + tooling under src/app/** (except the two KEEP data files), src/config/**, src/data/**, src/styles/** (base tokens.css/brand.ts are template DEFAULTS under Option A — the designer's palette lives in their variation), src/version.ts, and public/version.json (so the local version marker advances and the update pill clears)."
+  "coreNotes": "Everything else is CORE and overwritten: build config (vite.config.ts, vercel.json, middleware.js, index.html, postcss.config.*), scripts/**, .claude/commands/**, .claude/launch.json, .claude/hooks/**, CLAUDE.md, README.md, the app machinery + base chrome + tooling under src/app/** (except the two KEEP data files), src/config/**, src/data/**, src/styles/** (base tokens.css/brand.ts are template DEFAULTS under Option A — the designer's palette lives in their variation), src/version.ts, and public/version.json (so the local version marker advances and the update pill clears).",
+
+  "excludedNotes": "cloud-export/ is app-internal IP and is NOT distributed at all — the template ZIP plugin (vite.config.ts) filters it out of `git ls-files`, so it never enters template-latest.zip and the overlay never has it to write. Also .gitattributes export-ignore keeps it out of `git archive`."
 }

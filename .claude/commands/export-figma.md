@@ -9,6 +9,13 @@ re-deriving the mechanics: the two runnable parts, the scope/destination prompts
 ask **first**, the offline script pairs, and the step-by-step live flow you
 orchestrate through the Figma MCP.
 
+**Invocations use `ta-export`** — the app-provided CLI (`ta-export <brand|library|
+reconstruct|figma> [args]`) that runs the app-owned export tooling against the
+current project. The exporters are app IP and **do not ship inside a project**, so
+`ta-export` replaces the old in-project `node scripts/export-*` / `npm run export:*`
+calls; it auto-passes `--project-root` to the filesystem exporters. It's on PATH only
+inside the desktop app — export is an app feature.
+
 **Load the Figma skills as MCP RESOURCES — not via the `Skill` tool.** In this
 setup `figma-use` + `figma-generate-library` are served by the Figma MCP server as
 resources, **not** local Skill-tool skills, so `Skill(figma-use)` fails and costs a
@@ -64,7 +71,7 @@ clear. Don't otherwise touch the locked P15–P17 copy below.
   split is checkpointing + cheap Part-2 re-runs, not a shorter first pass.
 
 (A raw **pixel snapshot** of pages — the old html.to.design page-CAPTURE via
-[export-to-figma.mjs](../../scripts/export-to-figma.mjs), "Exporting designs to Figma" below —
+`ta-export figma`, "Exporting designs to Figma" below —
 is still available but is NOT what "Pages" means here; reach for it only when the user
 explicitly wants flat screenshots instead of editable, variable-bound block instances.)
 
@@ -97,7 +104,7 @@ P17 if intent is genuinely unclear.
 ## Exporting designs to Figma
 
 When the user asks to export/send designs to Figma, capture each design page at
-each active breakpoint via [scripts/export-to-figma.mjs](../../scripts/export-to-figma.mjs)
+each active breakpoint via `ta-export figma`
 (driven by the [pages.ts](../../src/app/pages.ts) manifest + `previewConfig.views`). The
 script renders the isolated route `?v={id}&{route}&capture={view}` — a bare design
 surface (no `ViewToggle`/bezel) via [DesignSurface](../../src/app/DesignSurface.tsx).
@@ -111,15 +118,15 @@ unlisted deps; and `--no-optional` in the install command breaks the build by
 stripping Rollup's native binary. Keeping puppeteer entirely out of the deploy is
 what keeps Vercel green. Two modes:
 
-- **Dry-run** (offline PNGs, no Figma): `npm run export:figma` (`-- -v {id}`,
-  `-- --pages a,b`, `-- --views desktop,mobile`). Use to preview.
-- **Live send** — you orchestrate it (a plain `npm run` can't mint Figma capture
+- **Dry-run** (offline PNGs, no Figma): `ta-export figma` (`-v {id}`,
+  `--pages a,b`, `--views desktop,mobile`). Use to preview.
+- **Live send** — you orchestrate it (a plain `ta-export` run can't mint Figma capture
   IDs):
   1. Read the active views/pages from the script's manifest (or run dry-run).
   2. Get a target `fileKey` (`create_new_file`, or the user's Figma URL).
   3. For **each page × active breakpoint**, call `generate_figma_design(fileKey)`
      to mint a `captureId` + submit `endpoint`; write a JSON keyed `"{page}-{view}"`.
-  4. `npm run export:figma -- --captures captures.json` — the script submits each.
+  4. `ta-export figma --captures captures.json` — the script submits each.
   5. Poll each `captureId` via `generate_figma_design(fileKey, captureId)` until
      `completed`.
 
@@ -158,7 +165,7 @@ flow's steps 1–6: scaffold → variables → textstyles → specimen → compo
 and **Part 2 = Pages from blocks** (step 7's `compose`). The "Both" scope just runs
 1→2 back-to-back. Part 2 is **standalone**: it resolves each block's component **by
 name** off the Block Library page, so it can run any time after Part 1 without re-doing
-the expensive block builds — `npm run export:reconstruct -- --emit-calls` writes a
+the expensive block builds — `ta-export reconstruct --emit-calls` writes a
 ready-to-submit **`_compose-{pageId}.js`** per page (in `reconstruct-calls/{variation}/`,
 listed in `_plan.json`'s `compose[]`) alongside the block calls.
 
@@ -167,11 +174,11 @@ pattern) drive the design-system half. Read the Figma skill **MCP resources**
 (`skill://figma/figma-use/SKILL.md` + `…/figma-generate-library/SKILL.md` via
 `ReadMcpResourceTool`, **not** `Skill(...)` — see top) before any builder call:
 
-- **Brand tokens** → the Styleguide Page. `scripts/export-brand-to-figma.mjs` +
-  `scripts/figma-brand-library.plugin.js` (phases `scaffold`/`variables`/
+- **Brand tokens** → the Styleguide Page. `ta-export brand` +
+  `figma-brand-library.plugin.js` (phases `scaffold`/`variables`/
   `textstyles`/`specimen`). Detailed below.
-- **Components** → the Components Page. `scripts/export-library-to-figma.mjs` +
-  `scripts/figma-component-library.plugin.js` (PHASE `components`). **Usage-driven,
+- **Components** → the Components Page. `ta-export library` +
+  `figma-component-library.plugin.js` (PHASE `components`). **Usage-driven,
   not a default set:** the manifest step **statically scans the variation's design
   surface** — the [pages.ts](../../src/app/pages.ts) page components + the global
   Header/Footer, variation overrides resolved like
@@ -187,10 +194,10 @@ pattern) drive the design-system half. Read the Figma skill **MCP resources**
   (Alert, Switch, Checkbox, Card — fixed multi-child structures). The builder also
   **prunes** any known-catalog set the design no longer uses, so re-exports leave
   nothing stale. Composite/behavioral components (navigation-menu, sidebar, dialog,
-  table) need a richer model and are excluded. `npm run export:library`
-  (`-- -v {id}`, `-- --all`).
-- **Blocks** → the Block Library Page. `scripts/export-reconstruct-to-figma.mjs` +
-  `scripts/figma-reconstruct-library.plugin.js` (PHASE `reconstruct`).
+  table) need a richer model and are excluded. `ta-export library`
+  (`-v {id}`, `--all`).
+- **Blocks** → the Block Library Page. `ta-export reconstruct` +
+  `figma-reconstruct-library.plugin.js` (PHASE `reconstruct`).
   **RECONSTRUCT, not capture — NO html.to.design, NO `generate_figma_design`
   mint/poll.** A designer marks a section with `data-block="{id}"` +
   `data-block-name="{Name}"` (Header/Footer too); the extractor walks each
@@ -206,7 +213,7 @@ pattern) drive the design-system half. Read the Figma skill **MCP resources**
   **returns** so Claude sets the photo via `upload_assets(nodeId)`. It **binds**
   each fill to the nearest **Brand** `--ta-*` variable (opacity-preserving) and
   **componentizes** each block into a `View=…` set. So the block LIST is the union
-  of `[data-block]` markers (no `blocks.ts`); `npm run export:reconstruct` builds
+  of `[data-block]` markers (no `blocks.ts`); `ta-export reconstruct` builds
   the whole manifest (specs + palette + assets) offline in one pass. Add a block by
   marking a new `[data-block]` section — nothing else. (Interaction states like an
   open mobile menu aren't captured yet — default rendered state per breakpoint.)
@@ -226,7 +233,7 @@ pattern) drive the design-system half. Read the Figma skill **MCP resources**
 
 The brand-tokens pair in detail:
 
-- **[scripts/export-brand-to-figma.mjs](../../scripts/export-brand-to-figma.mjs)** — the
+- **`ta-export brand`** — the
   deterministic, offline manifest. Reads a variation's `brand.ts` (names/roles, via
   esbuild transpile) + `tokens.css` (live `--ta-*` values), plus the shared
   [pages.ts](../../src/app/pages.ts) design-page list, and emits
@@ -234,9 +241,9 @@ The brand-tokens pair in detail:
   Styleguide → scaffold sections), colors (inferred **scopes** + `var(--ta-*)` code
   syntax), and type roles. Variation-aware/siloed like
   [brandRegistry.ts](../../src/app/brandRegistry.ts) (v00 → base; `vNN` → its own
-  `styles/`, else base). Touches no Figma account. `npm run export:brand`
-  (`-- -v {id}`, `-- --print`).
-- **[scripts/figma-brand-library.plugin.js](../../scripts/figma-brand-library.plugin.js)**
+  `styles/`, else base). Touches no Figma account. `ta-export brand`
+  (`-v {id}`, `--print`).
+- **`figma-brand-library.plugin.js`**
   — the Plugin API **builder**. NOT run by node; its body is embedded into a
   `use_figma` call (prepend `const MANIFEST = {…}; const PHASE = "…";`). **Idempotent**
   phases (find-by-name update, never duplicate): `scaffold` (the Pages panel;
@@ -245,8 +252,8 @@ The brand-tokens pair in detail:
   `figma-generate-library` **MCP resources** first (`ReadMcpResourceTool`, not
   `Skill(...)` — see top).
 
-**Live flow** (you orchestrate — a plain `npm run` can't call the Figma MCP):
-  1. `npm run export:brand -- -v {id}` and read the manifest.
+**Live flow** (you orchestrate — a plain `ta-export` run can't call the Figma MCP):
+  1. `ta-export brand -v {id}` and read the manifest.
   2. **Target file — reuse the recorded one, else create + record** (one file per
      variation; no duplicate files):
      - **Read `existingFile` + `target` from the `export:brand` summary** — it prints
@@ -264,7 +271,7 @@ The brand-tokens pair in detail:
        Team first** (see destination resolution below), then
        `create_new_file({ fileName: "…{Variation}", planKey, projectId? })` and
        **record it** so the next export reuses it:
-       `npm run export:brand -- -v {id} --record --file-key {key} --file-url {url}
+       `ta-export brand -v {id} --record --file-key {key} --file-url {url}
        --file-name {name}` (`--file-key` also accepts a full `/design/` URL).
        `--forget` drops the mapping.
 
@@ -279,13 +286,12 @@ The brand-tokens pair in detail:
     - **Team** → the chosen plan's `planKey` **+ a `projectId`** from a Figma
       project/folder URL the user provides. Without a URL the file lands in that
       team's **private drafts** (not shared) — say so and let them decide.
-    - Persist it: `npm run export:brand -- --set-target --scope {individual|team}
+    - Persist it: `ta-export brand --set-target --scope {individual|team}
       --plan {planKey} [--plan-name {name}] [--project {url}]` (`--forget-target`
       resets). Reused files (`existingFile`) keep their own home — destination
       only governs newly-created files.
      **Emit the phase payloads with the script — don't hand-assemble.** Run
-     `npm run export:brand -- -v {id} --emit-calls` (or
-     `node scripts/export-brand-to-figma.mjs -v {id} --emit-calls`) and it writes
+     `ta-export brand -v {id} --emit-calls` and it writes
      `figma-export/brand-calls/{variation}/brand-{phase}.js` (MANIFEST + PHASE + builder body,
      ready to submit) + `_plan.json`. Submit those files as the `use_figma` `code`
      param — **never improvise a `node -e` to build the payloads** (unallowlistable
@@ -300,7 +306,7 @@ The brand-tokens pair in detail:
      size-only text styles (`textstyles` phase). The `specimen` frame documents all
      of them — spacing bars bind their **width** and radius squares their **corner
      radius** to the FLOAT variables, so editing a token reflows the swatch.
-  5. **Fill the Components Page (design's components):** `npm run export:library -- -v {id}`,
+  5. **Fill the Components Page (design's components):** `ta-export library -v {id}`,
      which scans the design surface and emits a manifest of **only the ui components
      this design uses** (check its `coverage` report — a warned `unsupported` entry
      means the design uses a ui atom with no spec yet). Then run the component builder
@@ -310,7 +316,7 @@ The brand-tokens pair in detail:
      catalog set. If the design uses no shadcn components the page is (correctly) left
      empty — pass `--all` to force the whole catalog instead.
   6. **Fill the Block Library Page (blocks) — reconstruct from the real page:**
-     a. `npm run export:reconstruct -- -v {id}` → `figma-export/reconstruct-{id}.json`
+     a. `ta-export reconstruct -v {id}` → `figma-export/reconstruct-{id}.json`
         in one offline pass: for **every** `[data-block]` × active breakpoint, the
         full build spec (uniform ordered nodes), plus the brand palette + font roles
         (read live from `:root`), `pages` (per-page block ORDER for step 7),
@@ -349,7 +355,7 @@ The brand-tokens pair in detail:
         views:{[view]:spec}}], pages, assets }` — but treat that as opaque). To see
         block structure, sizes, compose order, or **the full ordered list of call
         files to submit** (block calls → `_combine.js` → compose, with sizes), run
-        `node scripts/export-reconstruct-to-figma.mjs --print` — so you never read
+        `ta-export reconstruct --print` — so you never read
         `_plan.json` or `ls` the calls dir yourself. To diagnose **why a block is
         oversized** (node composition + per-kind weight + heaviest inline SVGs per
         view), run `… --block {id}`. Both are read-only (no capture, no dev server).
@@ -416,7 +422,7 @@ Figma Pages and so fan out in parallel, and the `upload_assets` POSTs in step 6c
 The `components` phase is self-contained — safe to re-run after a `cva`/token change
 (idempotent find-by-name). The `reconstruct` phase is idempotent per block name (it
 removes + rebuilds each block's set and prunes stale ones); re-run
-`npm run export:reconstruct` (offline, cheap — no minting) whenever the page design
+`ta-export reconstruct` (offline, cheap — no minting) whenever the page design
 changes, then re-run the builder. `compose` is idempotent per page (it clears its
 prior `{Page} — {View}` frames) and cheap to re-run after blocks change.
 

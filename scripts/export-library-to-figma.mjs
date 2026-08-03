@@ -49,8 +49,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(__dirname, "..");
-const SRC = join(ROOT, "src");
+// Project root the exporter reads/writes. Defaults to this script's parent (run
+// in-repo). When the Electron app runs the exporter from its own bundle against
+// an external scaffolded project, `--project-root <dir>` retargets it — set in
+// main() before any ROOT/SRC read. The builder plugin body still loads from
+// __dirname (it ships with the script, not the project).
+let ROOT = join(__dirname, "..");
+let SRC = join(ROOT, "src");
 
 function parseArgs(argv) {
   const args = { variation: "v00", out: "figma-export", print: false, all: false };
@@ -60,6 +65,7 @@ function parseArgs(argv) {
     else if (a === "--out") args.out = argv[++i];
     else if (a === "--print") args.print = true;
     else if (a === "--all") args.all = true; // ignore usage scan → export the whole catalog
+    else if (a === "--project-root") args.projectRoot = argv[++i]; // scaffolded project root (app-run)
     else if (a === "--help" || a === "-h") args.help = true;
   }
   return args;
@@ -588,11 +594,14 @@ function printSummary(m, styleDir) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.projectRoot) { ROOT = resolvePath(args.projectRoot); SRC = join(ROOT, "src"); }
   if (args.help) {
     console.log(`Usage: node scripts/export-library-to-figma.mjs [options]
 
   -v, --variation <id>   Variation to export (default: v00)
   --out <dir>            Output dir (default: figma-export)
+  --project-root <dir>   Scaffolded project to read/write (default: this repo).
+                         Used when the app runs the exporter against a project.
   --all                  Export the whole catalog (skip the usage scan)
   --print                Print the manifest instead of writing it
 
