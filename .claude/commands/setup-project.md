@@ -75,6 +75,32 @@ Follow these steps:
       locally with **`npm run dev`** (http://localhost:5173) for instant feedback,
       separate from the Vercel preview deploy.
 
+0.5. **Import a saved company profile? (the very first branding question.)** If the
+   designer has branded a previous copy of this template, they may have exported a
+   **company profile** — their agency name, admin/gate fonts, and login logo — with
+   `/export-company`. Importing it here fills all of that in one step, so ask this
+   *before* the logo/name/font questions.
+
+   Ask with `AskUserQuestion`, header **"Company profile"**; `question`:
+
+   > Do you have a saved company profile from a previous project to import?
+   >
+   > It restores your company name, admin fonts, and login logo so you don't have
+   > to re-enter them. (This is separate from the *client's* design, which you'll
+   > set up next.)
+
+   Two options: **"No — set it up fresh"** (default, first) and **"Yes — import my
+   profile"**.
+
+   - **On "No"** → continue to step 1 and run branding normally.
+   - **On "Yes"** → run the **[`/import-company`](import-company.md)** flow (get the
+     file via path or drop-it-in, then `node scripts/company-profile.mjs unpack --in
+     <path>`, and finish any manual steps it reports). Once applied, the company
+     name, admin/gate fonts, and logo are set — so **SKIP steps 2a (logo), 2b
+     (company name), and 7 (company fonts)** below, and pick up at step 3 (the
+     *client* name). You can still let the designer override any imported value if
+     they ask.
+
 1. **Read the current values.** Open `.env` and note the current
    `VITE_COMPANY_NAME`, `VITE_CLIENT_NAME`, and `VITE_PROJECT_NAME` (they may be
    blank on a fresh template pull).
@@ -83,7 +109,10 @@ Follow these steps:
    These are the very first things the user sees. Ask the logo question (2a)
    **before** the company name (2b).
 
-   ### 2a. Logo on the login screen (the very first question)
+   ### 2a. Logo on the login screen
+
+   *(Skip 2a entirely if a company profile was imported in step 0.5 — the logo is
+   already wired.)*
 
    Ask this with `AskUserQuestion`. Header (the short chip label) is **"Your
    Logo"**. Provide exactly two options — **"Yes — add my logo"** (list it first)
@@ -141,6 +170,9 @@ Follow these steps:
         not commit their logo into this project, skip the wiring.
 
    ### 2b. Company name
+
+   *(Skip 2b if a company profile was imported in step 0.5 — the company name is
+   already set.)*
 
    `VITE_COMPANY_NAME` fills the dashboard header wordmark.
 
@@ -281,7 +313,9 @@ Follow these steps:
    Give them the exact values to paste. Unset, `CLIENT_NAME` falls back to
    "Preview" and `PROJECT_TITLE` to "A Design System".
 
-7. **Configure the preview-gate fonts.** The gate in `middleware.js` has its own
+7. **Configure the preview-gate fonts.** *(Skip step 7 if a company profile was
+   imported in step 0.5 — the gate + admin fonts are already set.)* The gate in
+   `middleware.js` has its own
    inline `<style>`, independent of the app's design system (it can't read the
    app's token layer). It uses two font roles: the **wordmark** (`.brand-name`)
    and the **body font** — used by everything else on the gate (subtitle, the
@@ -399,6 +433,26 @@ Do **not** put secrets (ADMIN_PASS / AUTH_PASS for the preview gate) in `.env`
 Note for later: the preview gate shows a text wordmark (name + subtitle) — a
 logo could be added via an optional `SITE_LOGO` env var in `middleware.js`. This
 is out of scope for this command; flag it if the user wants a full rebrand.
+
+7b. **Offer to save these company settings for reuse.** The company name, admin
+   fonts, and logo just configured are the **same for every project** this designer
+   will do — so offer to export them as a portable **company profile** they can
+   import into the next fresh copy with `/import-company`. (Skip this offer if a
+   profile was *imported* in 0.5 and nothing was changed — there's nothing new to
+   save. If they tweaked an imported value, still offer, so they can save the
+   updated version.)
+
+   Ask with `AskUserQuestion`, header **"Save profile"**; `question`:
+
+   > Want to save these company settings — your name, admin fonts, and logo — so you
+   > can reuse them on your next project without setting them up again?
+
+   Options: **"Yes — save my company profile"** (default, first) / **"No thanks"**.
+
+   - **On "Yes"** → run the **[`/export-company`](export-company.md)** flow
+     (`node scripts/company-profile.mjs pack`) and tell them where
+     `company-profile.json` landed + to keep it somewhere reusable.
+   - **On "No"** → continue.
 
 ## 8. Continue straight into Phase II — the styleguide
 

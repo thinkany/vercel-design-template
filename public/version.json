@@ -1,6 +1,6 @@
 {
-  "version": "0.2.2",
-  "notes": "One-click revert: every update now snapshots what it changes first, so you can roll it back from the dashboard (or `scripts/upgrade.mjs --revert`) if anything looks wrong — works with or without git. Applying rarely needs a dev-server restart now; a refresh usually does it.",
+  "version": "0.2.3",
+  "notes": "Company profiles: export your agency identity — company name, admin/login fonts, and logo — to one portable file with /export-company, then restore it into any fresh copy with /import-company (offered as the first and last steps of /setup-project too). Saves re-entering your own branding on every new project.",
   "date": "2026-08-02",
   "zipUrl": "https://create.thinkany.design/template-latest.zip"
 }

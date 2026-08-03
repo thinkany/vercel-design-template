@@ -349,6 +349,37 @@ own repo, and connect that to their own Vercel. So pushing a new version is a
   makes the CORE/KEEP split clean** — the designer's work is siloed in
   `src/variations/**` (KEEP), so base chrome + `Home` are safely CORE.
 
+### Company profile (reuse the agency identity across projects)
+
+The **company layer** — the things `/setup-project` sets that are the *same for
+every project a designer does*, as opposed to the per-client design — can be
+exported once and imported into every future fresh copy, so the designer never
+re-enters it. Concretely that layer is: **company name** (`VITE_COMPANY_NAME`),
+**admin/gate fonts** (`--admin-font-heading`/`--admin-font-body`, the gate's inline
+fonts + `<link>` in [middleware.js](middleware.js), self-hosted font files), and the
+**login logo** (`public/brand/*` + its middleware wiring). Explicitly **not** the
+client design (`VITE_CLIENT_NAME`, project name/type, `--ta-*`, `brand.ts`, menus) —
+that changes per project.
+
+- **The engine** — [scripts/company-profile.mjs](scripts/company-profile.mjs) (pure
+  Node, zero-dep, mirrors `upgrade.mjs`): `pack` reads the layer out of a branded
+  project → one portable **`company-profile.json`**; `unpack` applies it onto a
+  target. Exports `runPack()`/`runUnpack()` for future dev endpoints; also a CLI.
+- **One self-contained file.** The logo + any font files are **base64-embedded** in
+  the JSON — no zip, no loose assets. Base64 round-trips any binary losslessly, so
+  the image format (PNG/WebP/JPG/SVG) never matters.
+- **Import is deterministic + safe.** It targets the template's **known pristine
+  CORE files** (`middleware.js`/`tokens.css`/`.env`/`fonts.css`), so wiring is
+  anchored string substitution; anything that doesn't match the expected anchor is
+  **skipped and reported** in `manualSteps`, never clobbered. Idempotent (re-running
+  won't duplicate insertions). The common `manualStep` is app-side font loading for
+  external stylesheets (the gate loads its own copy; the app `@import`/`<link>` is
+  left for the command to finish).
+- **Two front doors + onboarding.** `/export-company` & `/import-company` are
+  standalone commands; `/setup-project` also offers **import as its first branding
+  question** (skipping the logo/name/font steps when applied) and **export at the
+  end** (so a first-timer's settings are saved, or an edited profile re-saved).
+
 ## Reuse what's already here — don't rebuild
 
 Before hand-rolling UI, use the resources already installed:
@@ -439,6 +470,11 @@ one continuous flow.
   the transparent front door to the overlay engine (dry-run → apply → walk sidecars +
   git diff). Same engine the dashboard's one-click Update button drives. See
   **Distribution & upgrades** above.
+- **[`/export-company`](.claude/commands/export-company.md)** /
+  **[`/import-company`](.claude/commands/import-company.md)** — save & reuse the
+  **company (agency) layer** across fresh template copies. See **Company profile**
+  below. `/setup-project` offers import as its first branding step and export at the
+  end, so the two also run inside onboarding — not only as standalone commands.
 - **[`/export-figma`](.claude/commands/export-figma.md)** — the **Figma export
   phase**: the cohesive two-part pipeline (Part 1 Styleguide + Blocks, Part 2
   Pages/App from blocks), the offline script pairs + `use_figma` builders, and the

@@ -11,6 +11,12 @@ the preview/stop note. Use roughly this content, lightly adapted to the moment:
 
 - **/setup-project** — brand the template: set the client/project name and the
   company (admin) fonts. Run this first on a fresh copy.
+- **/import-company** — reuse your agency identity: restore your company name,
+  admin fonts, and login logo from a saved company profile (from a past project),
+  so you don't re-enter them. `/setup-project` also offers this as its first step.
+- **/export-company** — save your agency identity (name, admin fonts, logo) as one
+  portable file to import into future projects. `/setup-project` offers this at the
+  end too.
 - **/setup-styleguide** — Phase II: set the client fonts & colors and finish the
   styleguide. `/setup-project` hands off into this automatically.
 - **/design** — build or edit a design page (a hero, sections, a full landing).

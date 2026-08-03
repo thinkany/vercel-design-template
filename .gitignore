@@ -16,3 +16,7 @@ figma-export/
 
 # Pre-update snapshots for one-click revert (local, throwaway)
 .upgrade-backup/
+
+# Exported company (agency) profile — a personal, portable artifact the designer
+# moves elsewhere to reuse; not meant to be committed into a client project.
+company-profile.json
