@@ -228,7 +228,7 @@ async function main() {
     // `npm run export:reconstruct` + figma-reconstruct-library.plugin.js instead
     // (no html.to.design, no mint/poll). This script now only does PAGE captures. ──
     if (args.blocks) {
-      throw new Error("--blocks is removed. Blocks are reconstructed offline now: run `npm run export:reconstruct -- -v {id}` and the figma-reconstruct-library.plugin.js builder. See CLAUDE.md → 'Exporting to Figma as ONE cohesive file'.");
+      throw new Error("--blocks is removed. Blocks are reconstructed offline now: run `ta-export reconstruct -v {id}` and the figma-reconstruct-library.plugin.js builder. See CLAUDE.md → 'Exporting to Figma as ONE cohesive file'.");
     }
 
     console.log(

@@ -6,11 +6,7 @@
   "packageManager": "pnpm@11.9.0",
   "scripts": {
     "build": "vite build",
-    "dev": "vite",
-    "export:figma": "node scripts/export-to-figma.mjs",
-    "export:brand": "node scripts/export-brand-to-figma.mjs",
-    "export:library": "node scripts/export-library-to-figma.mjs",
-    "export:reconstruct": "node scripts/export-reconstruct-to-figma.mjs"
+    "dev": "vite"
   },
   "engines": {
     "node": ">=20.19.0"

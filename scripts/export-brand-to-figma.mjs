@@ -358,7 +358,7 @@ function printSummary(m, styleDir) {
     console.log(`    Reuse it (update in place) unless the user wants a new one.`);
   } else {
     console.log(`\n  ✎ No Figma file recorded for ${m.variationId} yet — a new one will be`);
-    console.log(`    created and recorded (npm run export:brand -- --record …).`);
+    console.log(`    created and recorded (ta-export brand --record …).`);
   }
   if (m.target?.planKey) {
     const where = m.target.scope === "team"
@@ -367,7 +367,7 @@ function printSummary(m, styleDir) {
     console.log(`  ⌂ New files go to: ${where}`);
   } else {
     console.log(`  ⌂ No export destination set — Claude will ask (Individual vs Team)`);
-    console.log(`    and record it (npm run export:brand -- --set-target …).`);
+    console.log(`    and record it (ta-export brand --set-target …).`);
   }
   console.log(`\n  Figma file structure (one file for this variation):`);
   for (const p of m.designPages) console.log(`    ▸ ${p.name}   (Page — design frames per breakpoint)`);
