@@ -24,6 +24,11 @@ contextBridge.exposeInMainWorld("desktop", {
   saveKey: (key) => ipcRenderer.invoke("key:save", { key }),
   clearKey: () => ipcRenderer.invoke("key:clear"),
 
+  // ---- Model ----
+  getModels: () => ipcRenderer.invoke("models:list"),
+  getModel: () => ipcRenderer.invoke("model:get"),
+  setModel: (model) => ipcRenderer.invoke("model:set", { model }),
+
   // ---- Project (workspace) ----
   getProjectStatus: () => ipcRenderer.invoke("project:status"),
   getDesignState: () => ipcRenderer.invoke("project:design"),

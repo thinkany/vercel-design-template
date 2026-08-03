@@ -121,18 +121,17 @@ function lastDir(key) {
   const v = loadUiState()[key];
   return v && fs.existsSync(v) ? v : undefined;
 }
-// Remember the *parent* folder of a chosen path, so the dialog reopens where
-// the user was browsing.
-function rememberDir(key, chosenPath) {
-  if (!chosenPath) return;
+function setUiState(patch) {
   try {
-    fs.writeFileSync(
-      uiStatePath(),
-      JSON.stringify({ ...loadUiState(), [key]: path.dirname(chosenPath) }, null, 2)
-    );
+    fs.writeFileSync(uiStatePath(), JSON.stringify({ ...loadUiState(), ...patch }, null, 2));
   } catch {
     /* best effort */
   }
+}
+// Remember the *parent* folder of a chosen path, so the dialog reopens where
+// the user was browsing.
+function rememberDir(key, chosenPath) {
+  if (chosenPath) setUiState({ [key]: path.dirname(chosenPath) });
 }
 
 // A project has an "active design" once setup has created a working variation
@@ -184,9 +183,27 @@ function scaffoldProject(targetDir) {
 }
 
 let currentProject = null;
+let currentModel = null; // agent model override; null = SDK default
 let viteProc = null;
 let viteUrl = null;
 let mainWindow = null;
+
+// List the models this API key can use (same endpoint as key validation).
+async function fetchModels() {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return { ok: false, error: "No API key." };
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/models?limit=100", {
+      headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
+    });
+    if (!res.ok) return { ok: false, error: `Models request failed (${res.status}).` };
+    const json = await res.json();
+    const models = (json.data || []).map((m) => ({ id: m.id, name: m.display_name || m.id }));
+    return { ok: true, models };
+  } catch (e) {
+    return { ok: false, error: `Couldn't reach the API: ${e.message}` };
+  }
+}
 
 function stopVite() {
   if (viteProc) {
@@ -267,7 +284,7 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
       if (!event.sender.isDestroyed()) event.sender.send("agent:ask", { id, questions });
       else reject(new Error("window closed"));
     });
-  return runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion });
+  return runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, model: currentModel });
 });
 
 ipcMain.handle("agent:answer", (_event, { id, answers }) => {
@@ -289,7 +306,17 @@ ipcMain.handle("agent:cancelAsk", (_event, { id }) => {
 });
 
 // ---- Key IPC ----------------------------------------------------------------
-ipcMain.handle("key:status", () => ({ hasKey: !!process.env.ANTHROPIC_API_KEY }));
+ipcMain.handle("key:status", () => {
+  const key = process.env.ANTHROPIC_API_KEY || "";
+  return { hasKey: !!key, keyHint: key ? key.slice(-4) : null };
+});
+ipcMain.handle("models:list", () => fetchModels());
+ipcMain.handle("model:get", () => ({ model: currentModel }));
+ipcMain.handle("model:set", (_event, { model }) => {
+  currentModel = model || null;
+  setUiState({ model: currentModel });
+  return { ok: true, model: currentModel };
+});
 ipcMain.handle("key:save", async (_event, { key }) => {
   const k = (key || "").trim();
   if (!k) return { ok: false, error: "Paste your key first." };
@@ -471,6 +498,7 @@ app.whenReady().then(async () => {
   const stored = loadStoredKey(); // in-app key wins if present
   if (stored) process.env.ANTHROPIC_API_KEY = stored;
   currentProject = loadProjectPath();
+  currentModel = loadUiState().model || null;
   createWindow();
   if (currentProject) {
     startViteFor(currentProject).catch((e) => console.error("[main] Vite failed:", e.message));

@@ -19,7 +19,7 @@ async function getQuery() {
   return _query;
 }
 
-export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion }) {
+export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, model }) {
   let resolvedSession = sessionId;
 
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -52,6 +52,7 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion }
         cwd,
         includePartialMessages: true,
         permissionMode: "default",
+        ...(model ? { model } : {}),
         // Spike: auto-allow the core toolset so we can drive /setup-project
         // end-to-end. The canUseTool approval UI is a deliberate later step.
         allowedTools: [

@@ -412,32 +412,87 @@ async function renderSettings(body) {
   }
 }
 
-// --- Account: API key ---
+// --- Account: API key + model ---
 async function renderAccount(body) {
-  const { hasKey } = await window.desktop.getKeyStatus();
+  const status = await window.desktop.getKeyStatus();
   const row = document.createElement("div");
   row.className = "setrow";
   const k = document.createElement("div");
   k.className = "k";
   k.textContent = "Claude API key";
   const badge = document.createElement("span");
-  badge.className = "badge " + (hasKey ? "ok" : "off");
-  badge.textContent = hasKey ? "Connected" : "Not connected";
+  badge.className = "badge " + (status.hasKey ? "ok" : "off");
+  badge.textContent = status.hasKey ? "Connected" : "Not connected";
   row.append(k, badge);
   body.appendChild(row);
 
-  if (hasKey) {
-    const disc = document.createElement("button");
-    disc.className = "panelbtn danger";
-    disc.textContent = "Disconnect / change key";
-    disc.addEventListener("click", disconnectKey);
-    body.appendChild(disc);
+  if (!status.hasKey) {
+    const note = document.createElement("div");
+    note.className = "muted";
+    note.textContent = "Close this and paste your key on the connect screen.";
+    body.appendChild(note);
+    return;
   }
+
+  body.appendChild(setRow("Key", `sk-ant-…${status.keyHint || "????"}`));
+
+  // Model picker — populated from the models this key can use.
+  const modelRow = document.createElement("div");
+  modelRow.className = "setrow";
+  const mk = document.createElement("div");
+  mk.className = "k";
+  mk.textContent = "Model";
+  const select = document.createElement("select");
+  select.className = "field";
+  const loadingOpt = document.createElement("option");
+  loadingOpt.textContent = "Loading models…";
+  select.appendChild(loadingOpt);
+  modelRow.append(mk, select);
+  body.appendChild(modelRow);
+
+  const modelNote = document.createElement("div");
+  modelNote.className = "muted";
+  modelNote.textContent = "Applies to your next message; switching keeps the conversation.";
+  body.appendChild(modelNote);
+
+  const [{ model: current }, res] = await Promise.all([
+    window.desktop.getModel(),
+    window.desktop.getModels(),
+  ]);
+  select.innerHTML = "";
+  const def = document.createElement("option");
+  def.value = "";
+  def.textContent = "Default (Claude Code picks)";
+  select.appendChild(def);
+  if (res.ok) {
+    res.models.forEach((m) => {
+      const o = document.createElement("option");
+      o.value = m.id;
+      o.textContent = m.name;
+      select.appendChild(o);
+    });
+  } else {
+    const o = document.createElement("option");
+    o.disabled = true;
+    o.textContent = res.error || "Couldn't load models";
+    select.appendChild(o);
+  }
+  select.value = current || "";
+  select.addEventListener("change", async () => {
+    await window.desktop.setModel(select.value || null);
+    const label = select.options[select.selectedIndex].textContent;
+    addMsg("system", select.value ? `✓ Model set to ${label}` : "✓ Model set to default");
+  });
+
+  const disc = document.createElement("button");
+  disc.className = "panelbtn danger";
+  disc.textContent = "Disconnect / change key";
+  disc.addEventListener("click", disconnectKey);
+  body.appendChild(disc);
+
   const note = document.createElement("div");
   note.className = "muted";
-  note.textContent = hasKey
-    ? "Stored encrypted in your OS keychain. Disconnecting returns to the connect screen to enter a new key."
-    : "Close this and paste your key on the connect screen.";
+  note.textContent = "Key stored encrypted in your OS keychain.";
   body.appendChild(note);
 }
 
