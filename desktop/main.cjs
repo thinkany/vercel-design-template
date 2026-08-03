@@ -105,6 +105,36 @@ function clearProjectPath() {
   }
 }
 
+// ---- UI state: remember the last-used folder per dialog ----------------------
+function uiStatePath() {
+  return path.join(app.getPath("userData"), "ui-state.json");
+}
+function loadUiState() {
+  try {
+    return JSON.parse(fs.readFileSync(uiStatePath(), "utf8")) || {};
+  } catch {
+    return {};
+  }
+}
+// Directory to open a dialog in (the remembered one, if it still exists).
+function lastDir(key) {
+  const v = loadUiState()[key];
+  return v && fs.existsSync(v) ? v : undefined;
+}
+// Remember the *parent* folder of a chosen path, so the dialog reopens where
+// the user was browsing.
+function rememberDir(key, chosenPath) {
+  if (!chosenPath) return;
+  try {
+    fs.writeFileSync(
+      uiStatePath(),
+      JSON.stringify({ ...loadUiState(), [key]: path.dirname(chosenPath) }, null, 2)
+    );
+  } catch {
+    /* best effort */
+  }
+}
+
 // A project has an "active design" once setup has created a working variation
 // (src/variations/<id>/). Before that, a fresh scaffold has only the base
 // blueprint — which the app hides behind a welcome placeholder rather than
@@ -304,6 +334,7 @@ function attachToProject(srcPath) {
     const destDir = subdir ? path.join(currentProject, subdir) : currentProject;
     if (subdir) fs.mkdirSync(destDir, { recursive: true });
     fs.copyFileSync(srcPath, path.join(destDir, name));
+    rememberDir("attachDir", srcPath);
     const rel = "./" + (subdir ? `${subdir}/${name}` : name);
     return { ok: true, name, rel, kind: isImage ? "image" : "file" };
   } catch (e) {
@@ -336,12 +367,14 @@ ipcMain.handle("company:download", async () => {
   if (!fs.existsSync(src)) {
     return { ok: false, error: "No company-profile.json yet — run /export-company first." };
   }
+  const saveDir = lastDir("saveDir");
   const res = await dialog.showSaveDialog(mainWindow, {
     title: "Save company profile",
-    defaultPath: "company-profile.json",
+    defaultPath: saveDir ? path.join(saveDir, "company-profile.json") : "company-profile.json",
     filters: [{ name: "JSON", extensions: ["json"] }],
   });
   if (res.canceled || !res.filePath) return { ok: false, canceled: true };
+  rememberDir("saveDir", res.filePath);
   try {
     fs.copyFileSync(src, res.filePath);
   } catch (e) {
@@ -353,11 +386,13 @@ ipcMain.handle("company:download", async () => {
 ipcMain.handle("project:create", async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
     title: "Choose an empty folder for your new project",
+    defaultPath: lastDir("projectDir"),
     properties: ["openDirectory", "createDirectory"],
     buttonLabel: "Create project here",
   });
   if (res.canceled || !res.filePaths[0]) return { ok: false, canceled: true };
   const dir = res.filePaths[0];
+  rememberDir("projectDir", dir);
   const entries = fs.readdirSync(dir).filter((e) => e !== ".DS_Store");
   if (entries.length) return { ok: false, error: "That folder isn't empty — pick a fresh, empty folder." };
   try {
@@ -378,11 +413,13 @@ ipcMain.handle("project:create", async () => {
 ipcMain.handle("project:open", async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
     title: "Open a project folder",
+    defaultPath: lastDir("projectDir"),
     properties: ["openDirectory"],
     buttonLabel: "Open project",
   });
   if (res.canceled || !res.filePaths[0]) return { ok: false, canceled: true };
   const dir = res.filePaths[0];
+  rememberDir("projectDir", dir);
   if (!fs.existsSync(path.join(dir, "package.json"))) {
     return { ok: false, error: "That folder has no package.json — it doesn't look like a project." };
   }
@@ -418,6 +455,7 @@ ipcMain.handle("file:attach", async () => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   const res = await dialog.showOpenDialog(mainWindow, {
     title: "Attach a file to the project",
+    defaultPath: lastDir("attachDir"),
     properties: ["openFile"],
     buttonLabel: "Attach",
   });
