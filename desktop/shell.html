@@ -112,9 +112,14 @@
       #previewph {
         position: absolute; inset: 0;
         display: flex; align-items: center; justify-content: center;
-        color: #999; font-size: 14px; text-align: center; padding: 24px;
+        text-align: center; padding: 32px;
+        background: linear-gradient(180deg, #fbfbfd, #f4f4f7);
       }
       #previewph[hidden] { display: none; }
+      .ph-inner { max-width: 380px; }
+      .ph-emoji { font-size: 40px; line-height: 1; margin-bottom: 16px; }
+      #ph-title { font-size: 19px; margin: 0 0 10px; color: #1a1a1a; }
+      #ph-text { font-size: 14px; line-height: 1.6; color: #666; margin: 0; }
     </style>
   </head>
   <body>
@@ -167,7 +172,13 @@
 
       <div id="preview">
         <iframe id="frame" title="Live preview" hidden></iframe>
-        <div id="previewph">The live preview appears here once a project is open.</div>
+        <div id="previewph">
+          <div class="ph-inner">
+            <div class="ph-emoji">👋</div>
+            <h2 id="ph-title">The live preview appears here</h2>
+            <p id="ph-text">Open or create a project to begin.</p>
+          </div>
+        </div>
       </div>
     </div>
     <script src="./shell.js"></script>

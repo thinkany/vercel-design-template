@@ -105,6 +105,24 @@ function clearProjectPath() {
   }
 }
 
+// A project has an "active design" once setup has created a working variation
+// (src/variations/<id>/). Before that, a fresh scaffold has only the base
+// blueprint — which the app hides behind a welcome placeholder rather than
+// showing the template's blueprint dashboard mid-setup.
+function detectDesign(projectDir) {
+  try {
+    const ids = fs
+      .readdirSync(path.join(projectDir, "src", "variations"), { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .sort();
+    if (ids.length) return { active: true, variationId: ids[0] };
+  } catch {
+    /* no variations dir yet = fresh */
+  }
+  return { active: false, variationId: null };
+}
+
 // Point a project folder at the app's installed deps so Vite runs without a
 // per-project `npm install`. (A packaged build would run a real install.)
 function linkNodeModules(projectDir) {
@@ -235,7 +253,14 @@ ipcMain.handle("project:status", () => ({
   path: currentProject,
   name: currentProject ? path.basename(currentProject) : null,
   viteUrl,
+  design: currentProject ? detectDesign(currentProject) : { active: false, variationId: null },
 }));
+
+// Lightweight re-check the renderer polls after each agent turn, so the preview
+// swaps from the welcome placeholder to the live design the moment it exists.
+ipcMain.handle("project:design", () =>
+  currentProject ? detectDesign(currentProject) : { active: false, variationId: null }
+);
 
 ipcMain.handle("project:create", async () => {
   const res = await dialog.showOpenDialog(mainWindow, {

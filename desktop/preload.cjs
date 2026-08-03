@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld("desktop", {
 
   // ---- Project (workspace) ----
   getProjectStatus: () => ipcRenderer.invoke("project:status"),
+  getDesignState: () => ipcRenderer.invoke("project:design"),
   createProject: () => ipcRenderer.invoke("project:create"),
   openProject: () => ipcRenderer.invoke("project:open"),
   resetProject: () => ipcRenderer.invoke("project:reset"),

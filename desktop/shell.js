@@ -1,6 +1,6 @@
 // Renderer logic: a three-stage flow — connect key → choose project → workspace
-// (chat + live preview). The preview points at the project's Vite server; the
-// agent operates on the project folder (both wired in main.cjs).
+// (chat + live preview). The preview shows a welcome placeholder for a fresh
+// project and swaps to the live design (/?v=<id>) once setup creates a variation.
 
 const el = (id) => document.getElementById(id);
 
@@ -29,9 +29,55 @@ const send = el("send");
 // Preview
 const frame = el("frame");
 const previewph = el("previewph");
+const phEmoji = previewph.querySelector(".ph-emoji");
+const phTitle = el("ph-title");
+const phText = el("ph-text");
 
 let sessionId = null;
 let assistantEl = null;
+
+// Preview state
+let viteUrl = null;
+let design = { active: false, variationId: null };
+let previewShownFor = null; // URL currently loaded, so we don't reload each turn
+
+// ---- Preview -----------------------------------------------------------------
+function showPlaceholder({ emoji, title, text }) {
+  phEmoji.textContent = emoji;
+  phTitle.textContent = title;
+  phText.textContent = text;
+  frame.hidden = true;
+  frame.src = "about:blank";
+  previewph.hidden = false;
+  previewShownFor = null;
+}
+
+function showDesign() {
+  const url = design.variationId ? `${viteUrl}/?v=${design.variationId}` : viteUrl;
+  if (previewShownFor === url) return; // already loaded; let Vite HMR do the rest
+  frame.src = url;
+  frame.hidden = false;
+  previewph.hidden = true;
+  previewShownFor = url;
+}
+
+function refreshPreview() {
+  if (!viteUrl) {
+    showPlaceholder({
+      emoji: "⏳",
+      title: "Starting the preview…",
+      text: "Spinning up the project's dev server.",
+    });
+  } else if (design.active) {
+    showDesign();
+  } else {
+    showPlaceholder({
+      emoji: "👋",
+      title: "Say hello to get started",
+      text: "Message the agent to set up and design your project. This preview becomes your live design the moment it's ready.",
+    });
+  }
+}
 
 // ---- Stage routing -----------------------------------------------------------
 function showStage(stage) {
@@ -46,41 +92,40 @@ function showStage(stage) {
   if (stage === "workspace") input.focus();
 }
 
-function setPreview(url) {
-  if (!url) return;
-  frame.src = url;
-  frame.hidden = false;
-  previewph.hidden = true;
-}
-function clearPreview(message) {
-  frame.hidden = true;
-  frame.src = "about:blank";
-  previewph.hidden = false;
-  previewph.textContent = message || "The live preview appears here once a project is open.";
+function noProjectPlaceholder() {
+  viteUrl = null;
+  design = { active: false, variationId: null };
+  showPlaceholder({
+    emoji: "👋",
+    title: "The live preview appears here",
+    text: "Open or create a project to begin.",
+  });
 }
 
 async function boot() {
   const { hasKey } = await window.desktop.getKeyStatus();
   if (!hasKey) {
-    clearPreview();
+    noProjectPlaceholder();
     showStage("key");
     return;
   }
   const proj = await window.desktop.getProjectStatus();
   if (!proj.hasProject) {
-    clearPreview();
+    noProjectPlaceholder();
     showStage("project");
     return;
   }
   projname.textContent = proj.name || "";
+  viteUrl = proj.viteUrl || null;
+  design = proj.design || { active: false, variationId: null };
   showStage("workspace");
-  if (proj.viteUrl) setPreview(proj.viteUrl);
-  else clearPreview("Starting the project preview…");
+  refreshPreview();
 }
 
-// Vite may become ready after the project is chosen — swap in the preview then.
+// Vite may become ready after the project is chosen.
 window.desktop.onViteReady((url) => {
-  if (!chatmain.hidden) setPreview(url);
+  viteUrl = url;
+  if (!chatmain.hidden) refreshPreview();
 });
 
 // ---- Key gate ----------------------------------------------------------------
@@ -127,23 +172,23 @@ async function chooseProject(kind) {
   const busyBtn = kind === "create" ? createproject : openproject;
   const label = busyBtn.textContent;
   busyBtn.textContent = kind === "create" ? "Creating…" : "Opening…";
-  clearPreview(kind === "create" ? "Scaffolding & starting your project…" : "Starting the project…");
   try {
-    const res = kind === "create"
-      ? await window.desktop.createProject()
-      : await window.desktop.openProject();
+    const res =
+      kind === "create"
+        ? await window.desktop.createProject()
+        : await window.desktop.openProject();
     if (res.canceled) return;
     if (res.ok) {
       projname.textContent = res.name || "";
+      viteUrl = res.viteUrl || null;
+      design = await window.desktop.getDesignState();
       showStage("workspace");
-      setPreview(res.viteUrl);
+      refreshPreview();
     } else {
       projecterror.textContent = res.error || "Could not open the project.";
-      clearPreview();
     }
   } catch (e) {
     projecterror.textContent = String(e);
-    clearPreview();
   } finally {
     createproject.disabled = openproject.disabled = false;
     busyBtn.textContent = label;
@@ -155,7 +200,7 @@ switchproject.addEventListener("click", async () => {
   await window.desktop.resetProject();
   sessionId = null;
   log.innerHTML = "";
-  clearPreview();
+  noProjectPlaceholder();
   showStage("project");
 });
 
@@ -190,6 +235,16 @@ window.desktop.onAgentEvent((evt) => {
       break;
     case "result":
       assistantEl = null;
+      // A turn may have created the working variation — swap the placeholder
+      // for the live design as soon as it exists.
+      if (!design.active) {
+        window.desktop.getDesignState().then((d) => {
+          if (d.active) {
+            design = d;
+            refreshPreview();
+          }
+        });
+      }
       break;
     case "error":
       assistantEl = null;
@@ -217,7 +272,6 @@ async function submit() {
 }
 send.addEventListener("click", submit);
 input.addEventListener("keydown", (e) => {
-  // Enter sends; Shift+Enter inserts a newline.
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     submit();
