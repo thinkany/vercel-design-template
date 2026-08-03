@@ -7,9 +7,15 @@ const el = (id) => document.getElementById(id);
 // Bar
 const status = el("status");
 const projname = el("projname");
-const exportcompany = el("exportcompany");
-const switchproject = el("switchproject");
-const resetkey = el("resetkey");
+
+// Sidebar + modal
+const railHelp = el("rail-help");
+const railSettings = el("rail-settings");
+const railAccount = el("rail-account");
+const modal = el("modal");
+const modalTitle = el("modal-title");
+const modalBody = el("modal-body");
+const modalClose = el("modal-close");
 
 // Gates
 const keygate = el("keygate");
@@ -193,17 +199,10 @@ function showStage(stage) {
   keygate.hidden = stage !== "key";
   projectgate.hidden = stage !== "project";
   chatmain.hidden = stage !== "workspace";
-  resetkey.hidden = stage === "key";
-  switchproject.hidden = stage !== "workspace";
-  if (stage !== "workspace") exportcompany.hidden = true;
   status.textContent =
     stage === "key" ? "not connected" : stage === "project" ? "no project" : "ready";
   if (stage === "key") keyinput.focus();
   if (stage === "workspace") input.focus();
-}
-
-function refreshCompanyButton(exists) {
-  exportcompany.hidden = !exists || chatmain.hidden;
 }
 
 function noProjectPlaceholder() {
@@ -235,7 +234,6 @@ async function boot() {
   design = proj.design || { active: false, variationId: null };
   showStage("workspace");
   refreshPreview();
-  refreshCompanyButton(proj.companyProfile);
 }
 
 // Vite may become ready after the project is chosen.
@@ -276,10 +274,6 @@ keyinput.addEventListener("keydown", (e) => {
     saveKey();
   }
 });
-resetkey.addEventListener("click", async () => {
-  await window.desktop.clearKey();
-  await boot();
-});
 
 // ---- Project gate ------------------------------------------------------------
 async function chooseProject(kind) {
@@ -301,7 +295,6 @@ async function chooseProject(kind) {
       design = await window.desktop.getDesignState();
       showStage("workspace");
       refreshPreview();
-      refreshCompanyButton((await window.desktop.getCompanyStatus()).exists);
     } else {
       projecterror.textContent = res.error || "Could not open the project.";
     }
@@ -315,24 +308,168 @@ async function chooseProject(kind) {
 createproject.addEventListener("click", () => chooseProject("create"));
 openproject.addEventListener("click", () => chooseProject("open"));
 
-exportcompany.addEventListener("click", async () => {
-  try {
-    const res = await window.desktop.downloadCompany();
-    if (res.canceled) return;
-    if (res.ok) addMsg("system", `✓ Company profile saved to ${res.path}`);
-    else addMsg("error", res.error || "Could not save the company profile.");
-  } catch (e) {
-    addMsg("error", String(e));
-  }
+// ---- Sidebar panels ----------------------------------------------------------
+const RAILS = { help: railHelp, settings: railSettings, account: railAccount };
+
+function closeModal() {
+  modal.hidden = true;
+  Object.values(RAILS).forEach((b) => b.classList.remove("active"));
+}
+async function openModal(kind) {
+  const render = { help: renderHelp, settings: renderSettings, account: renderAccount }[kind];
+  const title = { help: "Commands", settings: "Settings", account: "API key" }[kind];
+  modalTitle.textContent = title;
+  modalBody.innerHTML = "";
+  Object.values(RAILS).forEach((b) => b.classList.remove("active"));
+  RAILS[kind].classList.add("active");
+  modal.hidden = false;
+  await render(modalBody);
+}
+
+railHelp.addEventListener("click", () => openModal("help"));
+railSettings.addEventListener("click", () => openModal("settings"));
+railAccount.addEventListener("click", () => openModal("account"));
+modalClose.addEventListener("click", closeModal);
+modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !modal.hidden) closeModal();
 });
 
-switchproject.addEventListener("click", async () => {
+// --- Help: the project's commands ---
+const COMMANDS = [
+  ["/setup-project", "Brand the template — client/company name, project type, fonts, logo, menu style."],
+  ["/setup-styleguide", "Set the client's fonts, colors, and example styleguide sections."],
+  ["/design", "Build or edit a page (hero, sections, landing) — the design phase."],
+  ["/guide", "Show the list of commands."],
+  ["/export-company", "Save your agency identity (name, admin fonts, logo) as a portable file."],
+  ["/import-company", "Apply a saved company profile into this project."],
+  ["export to Figma", "Ask in plain language to push the styleguide, blocks, or pages to Figma."],
+  ["/upgrade", "Apply the latest template version (keeps your design work)."],
+];
+function renderHelp(body) {
+  const intro = document.createElement("p");
+  intro.className = "muted";
+  intro.style.margin = "0 0 12px";
+  intro.textContent = "Type these in the chat. Setup runs first, then design freely.";
+  body.appendChild(intro);
+  COMMANDS.forEach(([cmd, desc]) => {
+    const row = document.createElement("div");
+    row.className = "cmd";
+    const c = document.createElement("code");
+    c.textContent = cmd;
+    const d = document.createElement("div");
+    d.className = "d";
+    d.textContent = desc;
+    row.append(c, d);
+    body.appendChild(row);
+  });
+}
+
+// --- Settings: project + company profile ---
+function setRow(k, valueText) {
+  const row = document.createElement("div");
+  row.className = "setrow";
+  const kk = document.createElement("div");
+  kk.className = "k";
+  kk.textContent = k;
+  const vv = document.createElement("div");
+  vv.className = "v";
+  vv.textContent = valueText;
+  row.append(kk, vv);
+  return row;
+}
+async function renderSettings(body) {
+  const proj = await window.desktop.getProjectStatus();
+  if (!proj.hasProject) {
+    body.appendChild(setRow("Project", "None open"));
+    const note = document.createElement("div");
+    note.className = "muted";
+    note.textContent = "Create or open a project from the chooser to see project settings.";
+    body.appendChild(note);
+    return;
+  }
+  body.appendChild(setRow("Current project", proj.name || "—"));
+  body.appendChild(setRow("Folder", proj.path || "—"));
+
+  const actions = document.createElement("div");
+  const switchBtn = document.createElement("button");
+  switchBtn.className = "panelbtn";
+  switchBtn.textContent = "Switch project…";
+  switchBtn.addEventListener("click", switchProject);
+  const exportBtn = document.createElement("button");
+  exportBtn.className = "panelbtn";
+  exportBtn.textContent = "⬇ Export company profile";
+  exportBtn.disabled = !proj.companyProfile;
+  exportBtn.addEventListener("click", () => exportCompany(exportBtn));
+  actions.append(switchBtn, exportBtn);
+  body.appendChild(actions);
+
+  if (!proj.companyProfile) {
+    const note = document.createElement("div");
+    note.className = "muted";
+    note.textContent = "No company-profile.json yet — run /export-company to create one.";
+    body.appendChild(note);
+  }
+}
+
+// --- Account: API key ---
+async function renderAccount(body) {
+  const { hasKey } = await window.desktop.getKeyStatus();
+  const row = document.createElement("div");
+  row.className = "setrow";
+  const k = document.createElement("div");
+  k.className = "k";
+  k.textContent = "Claude API key";
+  const badge = document.createElement("span");
+  badge.className = "badge " + (hasKey ? "ok" : "off");
+  badge.textContent = hasKey ? "Connected" : "Not connected";
+  row.append(k, badge);
+  body.appendChild(row);
+
+  if (hasKey) {
+    const disc = document.createElement("button");
+    disc.className = "panelbtn danger";
+    disc.textContent = "Disconnect / change key";
+    disc.addEventListener("click", disconnectKey);
+    body.appendChild(disc);
+  }
+  const note = document.createElement("div");
+  note.className = "muted";
+  note.textContent = hasKey
+    ? "Stored encrypted in your OS keychain. Disconnecting returns to the connect screen to enter a new key."
+    : "Close this and paste your key on the connect screen.";
+  body.appendChild(note);
+}
+
+// --- Moved actions ---
+async function switchProject() {
+  closeModal();
   await window.desktop.resetProject();
   sessionId = null;
   log.innerHTML = "";
   noProjectPlaceholder();
   showStage("project");
-});
+}
+async function disconnectKey() {
+  closeModal();
+  await window.desktop.clearKey();
+  await boot();
+}
+async function exportCompany(btn) {
+  try {
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+    const res = await window.desktop.downloadCompany();
+    if (!res.canceled) {
+      if (res.ok) addMsg("system", `✓ Company profile saved to ${res.path}`);
+      else addMsg("error", res.error || "Could not save the company profile.");
+    }
+  } catch (e) {
+    addMsg("error", String(e));
+  } finally {
+    closeModal();
+  }
+}
 
 // External links open in the real browser, not an Electron window.
 document.querySelectorAll("a[data-external]").forEach((a) =>
@@ -429,8 +566,6 @@ window.desktop.onAgentEvent((evt) => {
           }
         });
       }
-      // A turn may have run /export-company — reveal the download button.
-      window.desktop.getCompanyStatus().then((c) => refreshCompanyButton(c.exists));
       break;
     case "error":
       finalizeAssistant();
