@@ -27,8 +27,14 @@ const log = el("log");
 const input = el("input");
 const send = el("send");
 
-// Preview
-const frame = el("frame");
+// Preview / embedded browser
+const browser = el("browser");
+const tabbar = el("tabbar");
+const views = el("views");
+const urlbar = el("urlbar");
+const navback = el("navback");
+const navfwd = el("navfwd");
+const navreload = el("navreload");
 const previewph = el("previewph");
 const phEmoji = previewph.querySelector(".ph-emoji");
 const phTitle = el("ph-title");
@@ -40,26 +46,127 @@ let assistantEl = null;
 // Preview state
 let viteUrl = null;
 let design = { active: false, variationId: null };
-let previewShownFor = null; // URL currently loaded, so we don't reload each turn
+let tabs = [];
+let activeTab = null;
+let tabSeq = 0;
+let tabsOpened = false; // whether default tabs were opened for the active design
 
-// ---- Preview -----------------------------------------------------------------
+// ---- Preview: embedded tabbed browser ---------------------------------------
+function quickUrl(kind) {
+  const v = design.variationId;
+  if (kind === "styleguide") return v ? `${viteUrl}/?v=${v}&styleguide` : `${viteUrl}/?styleguide`;
+  if (kind === "dashboard") return `${viteUrl}/`;
+  return v ? `${viteUrl}/?v=${v}` : `${viteUrl}/`; // home
+}
+
+function renderTabs() {
+  tabbar.innerHTML = "";
+  tabs.forEach((t) => {
+    const tabEl = document.createElement("div");
+    tabEl.className = "tab" + (t === activeTab ? " active" : "");
+    const label = document.createElement("span");
+    label.className = "tablabel";
+    label.textContent = t.title || "Tab";
+    tabEl.appendChild(label);
+    const x = document.createElement("button");
+    x.className = "tabclose";
+    x.textContent = "×";
+    x.addEventListener("click", (e) => { e.stopPropagation(); closeTab(t); });
+    tabEl.appendChild(x);
+    tabEl.addEventListener("click", () => setActiveTab(t));
+    tabbar.appendChild(tabEl);
+  });
+  const add = document.createElement("button");
+  add.className = "tabadd";
+  add.textContent = "+";
+  add.title = "New tab";
+  add.addEventListener("click", () => openTab(quickUrl("home"), "Home"));
+  tabbar.appendChild(add);
+}
+
+function setActiveTab(tab) {
+  activeTab = tab;
+  tabs.forEach((t) => { t.wv.style.display = t === tab ? "flex" : "none"; });
+  renderTabs();
+  syncNav();
+}
+
+function openTab(url, title) {
+  const wv = document.createElement("webview");
+  wv.setAttribute("src", url);
+  wv.setAttribute("partition", "persist:preview");
+  const tab = { id: ++tabSeq, wv, title: title || "Loading…", fixedTitle: !!title };
+  wv.addEventListener("page-title-updated", (e) => {
+    if (!tab.fixedTitle) { tab.title = e.title; renderTabs(); }
+  });
+  const onNav = () => { if (tab === activeTab) syncNav(); };
+  wv.addEventListener("did-navigate", onNav);
+  wv.addEventListener("did-navigate-in-page", onNav);
+  views.appendChild(wv);
+  tabs.push(tab);
+  setActiveTab(tab);
+  return tab;
+}
+
+function closeTab(tab) {
+  const i = tabs.indexOf(tab);
+  if (i === -1) return;
+  tab.wv.remove();
+  tabs.splice(i, 1);
+  if (activeTab === tab) setActiveTab(tabs[Math.min(i, tabs.length - 1)] || null);
+  else renderTabs();
+}
+
+function closeAllTabs() {
+  tabs.forEach((t) => t.wv.remove());
+  tabs = [];
+  activeTab = null;
+  tabsOpened = false;
+  renderTabs();
+}
+
+function syncNav() {
+  if (!activeTab) { urlbar.value = ""; return; }
+  let u = activeTab.wv.getAttribute("src") || "";
+  try { u = activeTab.wv.getURL() || u; } catch { /* not ready yet */ }
+  urlbar.value = u;
+}
+
+navback.addEventListener("click", () => { if (activeTab && activeTab.wv.canGoBack()) activeTab.wv.goBack(); });
+navfwd.addEventListener("click", () => { if (activeTab && activeTab.wv.canGoForward()) activeTab.wv.goForward(); });
+navreload.addEventListener("click", () => { if (activeTab) activeTab.wv.reload(); });
+urlbar.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || !activeTab) return;
+  let u = urlbar.value.trim();
+  if (!/^https?:\/\//.test(u)) u = viteUrl + (u.startsWith("/") ? u : "/" + u);
+  activeTab.wv.loadURL(u);
+});
+document.querySelectorAll(".qlink").forEach((b) =>
+  b.addEventListener("click", () => {
+    if (!viteUrl) return;
+    const url = quickUrl(b.dataset.nav);
+    if (activeTab) activeTab.wv.loadURL(url);
+    else openTab(url);
+  })
+);
+
 function showPlaceholder({ emoji, title, text }) {
   phEmoji.textContent = emoji;
   phTitle.textContent = title;
   phText.textContent = text;
-  frame.hidden = true;
-  frame.src = "about:blank";
+  browser.hidden = true;
   previewph.hidden = false;
-  previewShownFor = null;
 }
 
-function showDesign() {
-  const url = design.variationId ? `${viteUrl}/?v=${design.variationId}` : viteUrl;
-  if (previewShownFor === url) return; // already loaded; let Vite HMR do the rest
-  frame.src = url;
-  frame.hidden = false;
+function showBrowser() {
   previewph.hidden = true;
-  previewShownFor = url;
+  browser.hidden = false;
+  if (!tabsOpened) {
+    tabsOpened = true;
+    openTab(quickUrl("styleguide"), "Style guide");
+    const home = openTab(quickUrl("home"), "Home");
+    setActiveTab(home);
+  }
 }
 
 function refreshPreview() {
@@ -70,7 +177,7 @@ function refreshPreview() {
       text: "Spinning up the project's dev server.",
     });
   } else if (design.active) {
-    showDesign();
+    showBrowser();
   } else {
     showPlaceholder({
       emoji: "👋",
@@ -101,6 +208,7 @@ function refreshCompanyButton(exists) {
 function noProjectPlaceholder() {
   viteUrl = null;
   design = { active: false, variationId: null };
+  closeAllTabs();
   showPlaceholder({
     emoji: "👋",
     title: "The live preview appears here",
@@ -186,6 +294,7 @@ async function chooseProject(kind) {
         : await window.desktop.openProject();
     if (res.canceled) return;
     if (res.ok) {
+      closeAllTabs(); // fresh browser tabs for the new project
       projname.textContent = res.name || "";
       viteUrl = res.viteUrl || null;
       design = await window.desktop.getDesignState();
@@ -242,6 +351,36 @@ function addMsg(cls, text) {
   return node;
 }
 
+// Turn hex codes in a finished message into inline color chips, so a palette
+// the agent lists as text actually shows its colors.
+function colorizeSwatches(elm) {
+  const text = elm.textContent;
+  const re = /#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/g;
+  if (!re.test(text)) return;
+  re.lastIndex = 0;
+  const frag = document.createDocumentFragment();
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+    const chip = document.createElement("span");
+    chip.className = "swatch";
+    chip.style.background = m[0];
+    frag.appendChild(chip);
+    frag.appendChild(document.createTextNode(m[0]));
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+  elm.textContent = "";
+  elm.appendChild(frag);
+}
+
+function finalizeAssistant() {
+  if (assistantEl) {
+    colorizeSwatches(assistantEl);
+    assistantEl = null;
+  }
+}
+
 window.desktop.onAgentEvent((evt) => {
   switch (evt.type) {
     case "text":
@@ -250,11 +389,11 @@ window.desktop.onAgentEvent((evt) => {
       log.scrollTop = log.scrollHeight;
       break;
     case "tool":
-      assistantEl = null;
+      finalizeAssistant();
       addMsg("tool", `⚙ ${evt.name}${evt.input ? " " + JSON.stringify(evt.input) : ""}`);
       break;
     case "result":
-      assistantEl = null;
+      finalizeAssistant();
       // A turn may have created the working variation — swap the placeholder
       // for the live design as soon as it exists.
       if (!design.active) {
@@ -269,7 +408,7 @@ window.desktop.onAgentEvent((evt) => {
       window.desktop.getCompanyStatus().then((c) => refreshCompanyButton(c.exists));
       break;
     case "error":
-      assistantEl = null;
+      finalizeAssistant();
       addMsg("error", "✖ " + evt.message);
       break;
   }

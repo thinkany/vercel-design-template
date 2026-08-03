@@ -208,6 +208,7 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       // contextIsolation + sandbox stay at their secure defaults (true).
+      webviewTag: true, // the preview pane uses <webview> for a real tabbed browser
     },
   });
   mainWindow.loadFile(path.join(__dirname, "shell.html"));
