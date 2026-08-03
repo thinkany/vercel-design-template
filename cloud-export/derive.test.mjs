@@ -16,6 +16,21 @@ console.assert(c5 && c5.a === 0, "transparent");
 const c6 = parseColor("hsl(120, 100%, 50%)"); // green
 console.assert(c6 && approx(c6.g, 1) && approx(c6.r, 0), `hsl green (got ${JSON.stringify(c6)})`);
 
+// ── named-color parity (a brand --ta-* token declared as a keyword must resolve,
+//    not drop to null the way it did before color.mjs learned the keyword set) ──
+const nBlack = parseColor("black");
+console.assert(nBlack && nBlack.r === 0 && nBlack.a === 1, `named black (got ${JSON.stringify(nBlack)})`);
+const nWhite = parseColor("WHITE"); // case-insensitive
+console.assert(nWhite && approx(nWhite.r, 1) && approx(nWhite.g, 1), `named white (got ${JSON.stringify(nWhite)})`);
+const nRebecca = parseColor("rebeccapurple");
+console.assert(nRebecca && approx(nRebecca.r, 0.4) && approx(nRebecca.b, 0.6), `rebeccapurple (got ${JSON.stringify(nRebecca)})`);
+const nGrey = parseColor("grey"); // British spelling alias
+console.assert(nGrey && approx(nGrey.r, 0.502), `grey alias (got ${JSON.stringify(nGrey)})`);
+// deliberate nulls (unresolvable off-browser) — graceful fill-omission, not a crash
+console.assert(parseColor("currentcolor") === null, "currentcolor → null");
+console.assert(parseColor("var(--x)") === null, "unresolved var() → null");
+console.assert(parseColor("notacolor") === null, "garbage → null");
+
 // ── synthetic CaptureBundle exercising fills, gradient, border, radius, text, svg, img ──
 const bundle = {
   contract: 1, variation: "v00",
