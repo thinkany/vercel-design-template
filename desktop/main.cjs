@@ -162,8 +162,23 @@ function linkNodeModules(projectDir) {
 }
 
 // Paths tracked on `main` but NEVER shipped into a scaffolded project —
-// app-internal IP (e.g. the licensed cloud-export logic). Extend as needed.
-const TEMPLATE_EXCLUDE = ["cloud-export"];
+// app-internal IP. `git archive main` already strips these via .gitattributes
+// export-ignore; listing them here is defense-in-depth (belt-and-suspenders
+// tar --exclude + post-extract rm) and documents intent. Directories or exact
+// files. The export-to-Figma tooling is app-owned — the app runs it against a
+// project via `--project`, so it must not live inside the project. Mirrors the
+// .gitattributes globs (scripts/export-*.mjs, scripts/figma-*.plugin.js) and
+// the template-zip filter on main.
+const TEMPLATE_EXCLUDE = [
+  "cloud-export",
+  "scripts/export-to-figma.mjs",
+  "scripts/export-brand-to-figma.mjs",
+  "scripts/export-library-to-figma.mjs",
+  "scripts/export-reconstruct-to-figma.mjs",
+  "scripts/figma-brand-library.plugin.js",
+  "scripts/figma-component-library.plugin.js",
+  "scripts/figma-reconstruct-library.plugin.js",
+];
 
 // Scaffold a pristine project: export the clean `main` branch template into
 // targetDir (no desktop/, no Electron deps — those live only on this branch),
