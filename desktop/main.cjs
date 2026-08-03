@@ -19,6 +19,16 @@ const path = require("node:path");
 
 const appRoot = path.resolve(__dirname, ".."); // the Electron app / template source (git worktree)
 
+// Put desktop/bin on PATH so the agent's Bash finds `ta-export` — the stable
+// CLI for the app-owned export tooling, which the exporters resolve from the
+// app bundle (appRoot/scripts) and run against the current project. The agent
+// (agent.mjs) runs in this process, so its tool subprocesses inherit this env.
+// Idempotent across reloads.
+const BIN_DIR = path.join(__dirname, "bin");
+if (!(process.env.PATH || "").split(path.delimiter).includes(BIN_DIR)) {
+  process.env.PATH = `${BIN_DIR}${path.delimiter}${process.env.PATH || ""}`;
+}
+
 // Minimal zero-dep loader for desktop/.env.local (untracked) so a dev key never
 // has to be exported into the shell that launches the app.
 function loadEnvLocal() {

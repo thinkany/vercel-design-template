@@ -1,0 +1,73 @@
+#!/usr/bin/env node
+// ta-export — the app-provided CLI for the export-to-Figma tooling.
+//
+// The exporters are app-owned IP: they live in the app bundle (appRoot/scripts)
+// and are deliberately NOT shipped inside a scaffolded project (see the IP
+// protection plan, step 1). So the designer/agent invokes this one stable
+// command against the current project instead of `node scripts/...`:
+//
+//   ta-export <brand|library|reconstruct|figma> [exporter args…]
+//
+// It resolves the bundled exporter, forwards every arg, and streams its output.
+// `brand`/`library` read the project filesystem, so we inject `--project-root
+// <cwd>` (the project being exported) unless the caller passed one. `reconstruct`
+// and `figma` capture the running dev server over HTTP and write cwd-relative
+// output, so they just inherit cwd — no retargeting needed.
+//
+// PATH wiring: the Electron main process prepends desktop/bin so the agent's
+// Bash finds this. The `#!/usr/bin/env node` shebang runs it under the same
+// Node the app uses, and we re-spawn the exporter with that same binary
+// (process.execPath) so version/toolchain stays consistent.
+
+import { spawn } from "node:child_process";
+import { dirname, resolve, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SCRIPTS = resolve(__dirname, "..", "..", "scripts"); // appRoot/scripts
+
+const MAP = {
+  brand: "export-brand-to-figma.mjs",
+  library: "export-library-to-figma.mjs",
+  reconstruct: "export-reconstruct-to-figma.mjs",
+  figma: "export-to-figma.mjs",
+};
+const NEEDS_PROJECT_ROOT = new Set(["brand", "library"]);
+
+const [sub, ...rest] = process.argv.slice(2);
+const script = MAP[sub];
+
+if (!script) {
+  const usage = `Usage: ta-export <${Object.keys(MAP).join("|")}> [exporter args…]
+
+  brand        styleguide brand tokens → Figma variables/text styles
+  library      shadcn component library → Figma components
+  reconstruct  page blocks derived from the rendered DOM → Figma
+  figma        per-breakpoint page screenshots (dry-run/live)
+
+Runs the app-owned exporter against the current project (cwd).
+brand/library get --project-root <cwd> unless you pass one.`;
+  const help = !sub || sub === "-h" || sub === "--help";
+  (help ? console.log : console.error)(
+    help ? usage : `ta-export: unknown subcommand "${sub}"\n\n${usage}`
+  );
+  process.exit(help ? 0 : 1);
+}
+
+const args = [...rest];
+if (NEEDS_PROJECT_ROOT.has(sub) && !args.includes("--project-root")) {
+  args.push("--project-root", process.cwd());
+}
+
+const child = spawn(process.execPath, [join(SCRIPTS, script), ...args], {
+  stdio: "inherit",
+  cwd: process.cwd(),
+});
+child.on("exit", (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  else process.exit(code ?? 0);
+});
+child.on("error", (err) => {
+  console.error(`ta-export: failed to run ${script} — ${err.message}`);
+  process.exit(1);
+});
