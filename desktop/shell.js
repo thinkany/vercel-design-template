@@ -74,6 +74,18 @@ function quickUrl(kind) {
   return v ? `${viteUrl}/?v=${v}` : `${viteUrl}/`; // home
 }
 
+// Resolve URL-bar input: local paths/routes go to the project's dev server,
+// bare domains and full URLs navigate externally.
+function resolveUrl(input) {
+  const u = (input || "").trim();
+  if (!u) return null;
+  if (/^https?:\/\//i.test(u)) return u; // full URL → as typed
+  if (/^localhost(:\d+)?([/?#]|$)/i.test(u)) return "http://" + u; // localhost[:port]
+  if (/^[/?#]/.test(u)) return viteUrl + (u[0] === "/" ? u : "/" + u); // /path, ?query, #hash → local
+  if (/^[^\s/]+\.[^\s/]+/.test(u)) return "https://" + u; // bare domain (has a dot) → external
+  return `${viteUrl}/${u}`; // bare route name (e.g. "styleguide") → local
+}
+
 // Navigate a tab robustly (loadURL, falling back to the src attribute).
 // loadURL rejects with -3 when a load is superseded — swallow that.
 function navigate(tab, url) {
@@ -175,9 +187,8 @@ navfwd.addEventListener("click", () => { if (activeTab && activeTab.wv.canGoForw
 navreload.addEventListener("click", () => { if (activeTab) navigate(activeTab, activeTab.url); });
 urlbar.addEventListener("keydown", (e) => {
   if (e.key !== "Enter" || !activeTab) return;
-  let u = urlbar.value.trim();
-  if (!/^https?:\/\//.test(u)) u = viteUrl + (u.startsWith("/") ? u : "/" + u);
-  navigate(activeTab, u);
+  const u = resolveUrl(urlbar.value);
+  if (u) navigate(activeTab, u);
 });
 document.querySelectorAll(".qlink").forEach((b) =>
   b.addEventListener("click", () => {
