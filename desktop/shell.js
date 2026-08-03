@@ -442,14 +442,42 @@ window.desktop.onAgentEvent((evt) => {
 // AskUserQuestion → render clickable choices in the chat and answer via IPC.
 window.desktop.onAgentAsk(({ id, questions }) => renderQuestionCard(id, questions));
 
+// A question wants a file (the company-profile import, or any option that reads
+// like "upload/attach a file") → we inject a 📎 Upload choice. While such a card
+// is open, an attach (button or drag-drop) fulfills it instead of prefilling.
+let pendingFileFulfill = null;
+function isFileQuestion(q) {
+  const h = (q.header || "").toLowerCase();
+  const t = (q.question || "").toLowerCase();
+  if (h.includes("company profile") || t.includes("company profile")) return true;
+  return (q.options || []).some((o) => /upload|attach|choose a file/i.test(o.label || ""));
+}
+
 function renderQuestionCard(id, questions) {
+  pendingFileFulfill = null;
   const card = document.createElement("div");
   card.className = "qcard";
 
   // Per-question state: single-select → string | {other} | null; multi → Set.
   const state = questions.map((q) => (q.multiSelect ? new Set() : null));
+  const fileAnswer = questions.map(() => null); // uploaded value per question
+  const uploadRefs = [];
   const otherInputs = [];
   const optButtonsByQ = [];
+
+  function applyFile(res, qi) {
+    fileAnswer[qi] =
+      res.name === "company-profile.json"
+        ? `Yes — import the company profile I just uploaded (${res.rel})`
+        : res.rel;
+    optButtonsByQ[qi]?.forEach((b) => b.classList.remove("selected"));
+    const refs = uploadRefs[qi];
+    if (refs) {
+      refs.uploadBtn.classList.add("selected");
+      refs.uploadNote.textContent = `✓ ${res.name} attached`;
+    }
+    maybeComplete();
+  }
 
   const submitBtn = document.createElement("button");
   submitBtn.className = "qsubmit";
@@ -457,6 +485,7 @@ function renderQuestionCard(id, questions) {
   submitBtn.disabled = true;
 
   function valueFor(qi) {
+    if (fileAnswer[qi]) return fileAnswer[qi];
     const q = questions[qi];
     const otherVal = otherInputs[qi] && !otherInputs[qi].hidden ? otherInputs[qi].value.trim() : "";
     if (q.multiSelect) {
@@ -478,6 +507,7 @@ function renderQuestionCard(id, questions) {
   }
   async function doSubmit() {
     if (card.classList.contains("answered")) return;
+    pendingFileFulfill = null;
     card.classList.add("answered");
     submitBtn.remove();
     const answers = {};
@@ -503,6 +533,35 @@ function renderQuestionCard(id, questions) {
     otherInput.placeholder = "Type your own answer";
     otherInput.hidden = true;
     otherInputs[qi] = otherInput;
+
+    // Injected first option for file questions: 📎 Upload (opens the picker;
+    // a dropped file fulfills it too).
+    if (isFileQuestion(q)) {
+      const uploadBtn = document.createElement("button");
+      uploadBtn.className = "qopt qupload";
+      const ul = document.createElement("div");
+      ul.className = "lbl";
+      ul.textContent = "📎 Upload a file…";
+      const ud = document.createElement("div");
+      ud.className = "desc";
+      ud.textContent = "Choose or drag a file (e.g. company-profile.json)";
+      uploadBtn.append(ul, ud);
+      const uploadNote = document.createElement("div");
+      uploadNote.className = "qupload-note";
+      uploadBtn.addEventListener("click", async () => {
+        if (card.classList.contains("answered")) return;
+        try {
+          const res = await window.desktop.attachFile();
+          if (res && res.ok) applyFile(res, qi);
+          else if (res && !res.canceled && res.error) uploadNote.textContent = res.error;
+        } catch (e) {
+          uploadNote.textContent = String(e);
+        }
+      });
+      uploadRefs[qi] = { uploadBtn, uploadNote };
+      pendingFileFulfill = (res) => applyFile(res, qi);
+      block.append(uploadBtn, uploadNote);
+    }
 
     q.options.forEach((opt) => {
       const btn = document.createElement("button");
@@ -603,10 +662,15 @@ function attachPrefill(res) {
   return res.rel;
 }
 
-function handleAttachResult(res) {
+function consumeAttach(res) {
   if (!res || res.canceled) return;
   if (!res.ok) {
     addMsg("error", res.error || "Could not attach the file.");
+    return;
+  }
+  // If a file-question card is open, fulfill it instead of prefilling the input.
+  if (pendingFileFulfill) {
+    pendingFileFulfill(res);
     return;
   }
   addMsg("system", `📎 ${res.name} added as ${res.rel}`);
@@ -616,7 +680,7 @@ function handleAttachResult(res) {
 
 attach.addEventListener("click", async () => {
   try {
-    handleAttachResult(await window.desktop.attachFile());
+    consumeAttach(await window.desktop.attachFile());
   } catch (e) {
     addMsg("error", String(e));
   }
@@ -642,7 +706,7 @@ log.addEventListener("drop", async (e) => {
     const src = window.desktop.pathForFile(f);
     if (!src) continue;
     try {
-      handleAttachResult(await window.desktop.attachFilePath(src));
+      consumeAttach(await window.desktop.attachFilePath(src));
     } catch (err) {
       addMsg("error", String(err));
     }
