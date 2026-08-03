@@ -47,6 +47,7 @@ const previewph = el("previewph");
 const phEmoji = previewph.querySelector(".ph-emoji");
 const phTitle = el("ph-title");
 const phText = el("ph-text");
+const phProgress = el("ph-progress");
 
 let sessionId = null;
 let assistantEl = null;
@@ -54,17 +55,36 @@ let assistantEl = null;
 // Preview state
 let viteUrl = null;
 let design = { active: false, variationId: null };
+let agentBusy = false;
 let tabs = [];
 let activeTab = null;
 let tabSeq = 0;
 let tabsOpened = false; // whether default tabs were opened for the active design
+let designJustActivated = false; // design went active this session (freshly created)
+let workingTimer = null;
 
 // ---- Preview: embedded tabbed browser ---------------------------------------
+// The browser stays CLOSED until a design exists AND Vite is serving — so it
+// never shows a "server not ready" error page. Webviews auto-retry failed loads
+// so they can't get wedged.
 function quickUrl(kind) {
   const v = design.variationId;
   if (kind === "styleguide") return v ? `${viteUrl}/?v=${v}&styleguide` : `${viteUrl}/?styleguide`;
   if (kind === "dashboard") return `${viteUrl}/`;
   return v ? `${viteUrl}/?v=${v}` : `${viteUrl}/`; // home
+}
+
+// Navigate a tab robustly (loadURL, falling back to the src attribute).
+// loadURL rejects with -3 when a load is superseded — swallow that.
+function navigate(tab, url) {
+  tab.url = url;
+  tab.retries = 0;
+  try {
+    const p = tab.wv.loadURL(url);
+    if (p && typeof p.catch === "function") p.catch(() => {});
+  } catch {
+    tab.wv.setAttribute("src", url);
+  }
 }
 
 function renderTabs() {
@@ -101,15 +121,25 @@ function setActiveTab(tab) {
 
 function openTab(url, title) {
   const wv = document.createElement("webview");
-  wv.setAttribute("src", url);
   wv.setAttribute("partition", "persist:preview");
-  const tab = { id: ++tabSeq, wv, title: title || "Loading…", fixedTitle: !!title };
+  wv.setAttribute("src", url);
+  const tab = { id: ++tabSeq, wv, title: title || "Loading…", fixedTitle: !!title, url, retries: 0 };
   wv.addEventListener("page-title-updated", (e) => {
     if (!tab.fixedTitle) { tab.title = e.title; renderTabs(); }
   });
   const onNav = () => { if (tab === activeTab) syncNav(); };
   wv.addEventListener("did-navigate", onNav);
   wv.addEventListener("did-navigate-in-page", onNav);
+  wv.addEventListener("did-finish-load", () => { tab.retries = 0; });
+  // Vite may still be starting (ERR_CONNECTION_REFUSED) — retry so the webview
+  // can't get stuck on an error page and need a manual restart.
+  wv.addEventListener("did-fail-load", (e) => {
+    if (!e.isMainFrame || e.errorCode === -3) return; // -3 = aborted (superseded)
+    if (tab.retries < 15) {
+      tab.retries++;
+      setTimeout(() => navigate(tab, tab.url), 600);
+    }
+  });
   views.appendChild(wv);
   tabs.push(tab);
   setActiveTab(tab);
@@ -142,57 +172,99 @@ function syncNav() {
 
 navback.addEventListener("click", () => { if (activeTab && activeTab.wv.canGoBack()) activeTab.wv.goBack(); });
 navfwd.addEventListener("click", () => { if (activeTab && activeTab.wv.canGoForward()) activeTab.wv.goForward(); });
-navreload.addEventListener("click", () => { if (activeTab) activeTab.wv.reload(); });
+navreload.addEventListener("click", () => { if (activeTab) navigate(activeTab, activeTab.url); });
 urlbar.addEventListener("keydown", (e) => {
   if (e.key !== "Enter" || !activeTab) return;
   let u = urlbar.value.trim();
   if (!/^https?:\/\//.test(u)) u = viteUrl + (u.startsWith("/") ? u : "/" + u);
-  activeTab.wv.loadURL(u);
+  navigate(activeTab, u);
 });
 document.querySelectorAll(".qlink").forEach((b) =>
   b.addEventListener("click", () => {
     if (!viteUrl) return;
     const url = quickUrl(b.dataset.nav);
-    if (activeTab) activeTab.wv.loadURL(url);
+    if (activeTab) navigate(activeTab, url);
     else openTab(url);
   })
 );
 
+// Rotating status shown in the preview while the agent works and the browser
+// is still closed (during setup).
+const WORKING_MESSAGES = [
+  "Setting up your project…",
+  "This can take a moment…",
+  "Working through the setup…",
+  "Your live preview opens automatically when it's ready…",
+  "Hang tight…",
+];
+function startWorking() {
+  if (workingTimer) return;
+  let i = 0;
+  phText.textContent = WORKING_MESSAGES[0];
+  workingTimer = setInterval(() => {
+    i = (i + 1) % WORKING_MESSAGES.length;
+    phText.textContent = WORKING_MESSAGES[i];
+  }, 2600);
+}
+function stopWorking() {
+  if (workingTimer) { clearInterval(workingTimer); workingTimer = null; }
+}
+
 function showPlaceholder({ emoji, title, text }) {
+  stopWorking();
   phEmoji.textContent = emoji;
   phTitle.textContent = title;
   phText.textContent = text;
+  phProgress.hidden = true;
   browser.hidden = true;
   previewph.hidden = false;
 }
 
+function showWorking() {
+  browser.hidden = true;
+  previewph.hidden = false;
+  phEmoji.textContent = "⚙️";
+  phTitle.textContent = "Working…";
+  phProgress.hidden = false;
+  startWorking();
+}
+
 function showBrowser() {
+  if (!viteUrl) return;
+  stopWorking();
   previewph.hidden = true;
   browser.hidden = false;
   if (!tabsOpened) {
     tabsOpened = true;
-    openTab(quickUrl("styleguide"), "Style guide");
-    const home = openTab(quickUrl("home"), "Home");
-    setActiveTab(home);
+    const style = openTab(quickUrl("styleguide"), "Style guide");
+    openTab(quickUrl("home"), "Home");
+    setActiveTab(style); // default to the styleguide — that's where the swatches are
+    // Only when the styleguide was just created this session: reload once so its
+    // fresh swatches show without a manual refresh (avoids churn on reopen).
+    if (designJustActivated) {
+      designJustActivated = false;
+      setTimeout(() => { if (tabs.includes(style)) navigate(style, quickUrl("styleguide")); }, 1200);
+    }
   }
 }
 
 function refreshPreview() {
+  // Open the live browser only when there's a design AND the server is up.
+  if (design.active && viteUrl) return showBrowser();
+  // Otherwise the browser stays closed.
+  if (agentBusy) return showWorking();
   if (!viteUrl) {
-    showPlaceholder({
+    return showPlaceholder({
       emoji: "⏳",
       title: "Starting the preview…",
       text: "Spinning up the project's dev server.",
     });
-  } else if (design.active) {
-    showBrowser();
-  } else {
-    showPlaceholder({
-      emoji: "👋",
-      title: "Say hello to get started",
-      text: "Message the agent to set up and design your project. This preview becomes your live design the moment it's ready.",
-    });
   }
+  showPlaceholder({
+    emoji: "👋",
+    title: "Say hello to get started",
+    text: "Message the agent to set up and design your project. The live preview opens automatically once your design is ready.",
+  });
 }
 
 // ---- Stage routing -----------------------------------------------------------
@@ -209,6 +281,7 @@ function showStage(stage) {
 function noProjectPlaceholder() {
   viteUrl = null;
   design = { active: false, variationId: null };
+  agentBusy = false;
   closeAllTabs();
   showPlaceholder({
     emoji: "👋",
@@ -633,23 +706,33 @@ window.desktop.onAgentEvent((evt) => {
     case "tool":
       finalizeAssistant();
       addMsg("tool", `⚙ ${evt.name}${evt.input ? " " + JSON.stringify(evt.input) : ""}`);
+      // A tool call may have just created the working variation — open the
+      // preview mid-turn as soon as it exists (browser takes priority over busy).
+      if (!design.active) {
+        window.desktop.getDesignState().then((d) => {
+          if (d.active) { design = d; designJustActivated = true; refreshPreview(); }
+        });
+      }
       break;
     case "result":
       finalizeAssistant();
-      // A turn may have created the working variation — swap the placeholder
-      // for the live design as soon as it exists.
+      agentBusy = false;
+      // A turn may have created the working variation — open the live preview
+      // as soon as it exists; otherwise revert the working placeholder.
       if (!design.active) {
         window.desktop.getDesignState().then((d) => {
-          if (d.active) {
-            design = d;
-            refreshPreview();
-          }
+          if (d.active) { design = d; designJustActivated = true; }
+          refreshPreview();
         });
+      } else {
+        refreshPreview();
       }
       break;
     case "error":
       finalizeAssistant();
+      agentBusy = false;
       addMsg("error", "✖ " + evt.message);
+      refreshPreview();
       break;
   }
 });
@@ -847,12 +930,16 @@ async function submit() {
   addMsg("user", text);
   input.value = "";
   assistantEl = null;
+  agentBusy = true;
+  refreshPreview(); // show the working placeholder while the browser is closed
   send.disabled = true;
   try {
     const res = await window.desktop.sendPrompt(text, sessionId);
     if (res && res.sessionId) sessionId = res.sessionId;
   } catch (e) {
+    agentBusy = false;
     addMsg("error", String(e));
+    refreshPreview();
   } finally {
     send.disabled = false;
     input.focus();

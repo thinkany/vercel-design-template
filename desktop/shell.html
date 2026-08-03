@@ -246,6 +246,10 @@
       .ph-emoji { font-size: 40px; line-height: 1; margin-bottom: 16px; }
       #ph-title { font-size: 19px; margin: 0 0 10px; color: #1a1a1a; }
       #ph-text { font-size: 14px; line-height: 1.6; color: #666; margin: 0; }
+      .ph-progress { width: 220px; height: 4px; background: #e4e4ea; border-radius: 4px; margin: 18px auto 0; overflow: hidden; }
+      .ph-progress[hidden] { display: none; }
+      .ph-progress-bar { width: 40%; height: 100%; background: #7c3aed; border-radius: 4px; animation: ph-indet 1.15s ease-in-out infinite; }
+      @keyframes ph-indet { 0% { transform: translateX(-110%); } 100% { transform: translateX(320%); } }
     </style>
   </head>
   <body>
@@ -329,6 +333,7 @@
             <div class="ph-emoji">👋</div>
             <h2 id="ph-title">The live preview appears here</h2>
             <p id="ph-text">Open or create a project to begin.</p>
+            <div class="ph-progress" id="ph-progress" hidden><div class="ph-progress-bar"></div></div>
           </div>
         </div>
       </div>
