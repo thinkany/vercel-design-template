@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Design Studio (spike)</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; font-family: -apple-system, system-ui, sans-serif; }
+      #app { display: flex; height: 100vh; }
+
+      #chat {
+        width: 40%;
+        min-width: 340px;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid #e3e3e3;
+        background: #fafafa;
+      }
+      #bar {
+        padding: 8px 14px;
+        font-size: 12px;
+        background: #111;
+        color: #fff;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      #barright { display: flex; gap: 10px; align-items: center; }
+      #status { opacity: 0.6; }
+      #resetkey {
+        background: none;
+        border: 1px solid #444;
+        color: #ccc;
+        font-size: 11px;
+        border-radius: 5px;
+        padding: 2px 7px;
+        cursor: pointer;
+      }
+      #resetkey[hidden] { display: none; }
+
+      /* ---- Connect (key) gate ---- */
+      #keygate { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; }
+      #keygate[hidden] { display: none; }
+      .gate-inner { max-width: 340px; }
+      .gate-inner h2 { font-size: 17px; margin: 0 0 8px; }
+      .gate-inner p { font-size: 13px; line-height: 1.5; color: #555; margin: 0 0 14px; }
+      #keyinput {
+        width: 100%;
+        padding: 10px;
+        font: inherit;
+        font-size: 13px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        margin-bottom: 10px;
+      }
+      #keysave {
+        width: 100%;
+        padding: 10px;
+        border: none;
+        background: #111;
+        color: #fff;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+      #keysave:disabled { opacity: 0.5; cursor: default; }
+      #keyerror { color: #c0261e; font-size: 12px; min-height: 16px; margin: 8px 0 0; }
+      .gate-link { display: inline-block; margin-top: 12px; font-size: 12px; color: #2563eb; text-decoration: none; }
+      .gate-note { font-size: 11px; color: #888; margin-top: 14px; }
+
+      /* ---- Chat ---- */
+      #chatmain { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+      #chatmain[hidden] { display: none; }
+      #log { flex: 1; overflow-y: auto; padding: 16px; font-size: 13px; line-height: 1.55; }
+      .msg { margin-bottom: 12px; white-space: pre-wrap; word-break: break-word; }
+      .msg.user { color: #0a7; font-weight: 600; }
+      .msg.assistant { color: #111; }
+      .msg.tool { color: #7c3aed; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
+      .msg.error { color: #c0261e; }
+
+      #composer { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #e3e3e3; }
+      #input {
+        flex: 1;
+        resize: none;
+        padding: 9px 10px;
+        font: inherit;
+        font-size: 13px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+      }
+      #send { padding: 0 16px; border: none; background: #111; color: #fff; border-radius: 8px; cursor: pointer; font-size: 13px; }
+      #send:disabled { opacity: 0.4; cursor: default; }
+
+      #preview { flex: 1; background: #fff; }
+      #frame { width: 100%; height: 100%; border: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="chat">
+        <div id="bar">
+          <span>Agent</span>
+          <span id="barright">
+            <span id="status">…</span>
+            <button id="resetkey" hidden>reset key</button>
+          </span>
+        </div>
+
+        <div id="keygate" hidden>
+          <div class="gate-inner">
+            <h2>Connect your Claude API key</h2>
+            <p>The studio runs on the Claude Agent SDK, which authenticates with an API key. Paste yours to begin.</p>
+            <input id="keyinput" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false" />
+            <button id="keysave">Save &amp; connect</button>
+            <div id="keyerror"></div>
+            <a class="gate-link" href="https://platform.claude.com/" data-external>Get a key at platform.claude.com →</a>
+            <p class="gate-note">Stored encrypted in your OS keychain — never written into the project.</p>
+          </div>
+        </div>
+
+        <div id="chatmain" hidden>
+          <div id="log"></div>
+          <div id="composer">
+            <textarea id="input" rows="2" placeholder="Message the agent…  (⌘/Ctrl+Enter to send · try /setup-project)"></textarea>
+            <button id="send">Send</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="preview"><iframe id="frame" title="Live preview"></iframe></div>
+    </div>
+    <script src="./shell.js"></script>
+  </body>
+</html>
