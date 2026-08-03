@@ -127,7 +127,9 @@ async function submit() {
 
 send.addEventListener("click", submit);
 input.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+  // Enter sends; Shift+Enter inserts a newline (standard chat convention).
+  // ⌘/Ctrl+Enter also sends, for muscle memory.
+  if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     submit();
   }
