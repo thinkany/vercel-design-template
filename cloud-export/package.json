@@ -1,0 +1,10 @@
+{
+  "name": "thinkany-derive",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Licensed Figma-derive service — the Layer-1 IP. Deploys as a Vercel API-only project (POST /api/derive). Zero runtime deps.",
+  "scripts": {
+    "test": "node derive.test.mjs && node conformance.test.mjs && node handler.test.mjs"
+  }
+}
