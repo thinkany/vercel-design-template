@@ -1,6 +1,15 @@
 # App-internal IP — excluded from `git archive` exports (e.g. the Electron
 # desktop app's project scaffold, which runs `git archive main`). The template
-# ZIP plugin (vite.config.ts templateZipPlugin) filters the same prefix out of
-# its `git ls-files` list, so cloud-export/ ships through no distribution path.
+# ZIP plugin (vite.config.ts templateZipPlugin) filters the same paths out of
+# its `git ls-files` list, so these ship through no distribution path.
 cloud-export export-ignore
 cloud-export/** export-ignore
+
+# Export-to-Figma tooling — app-owned (runs from the Electron app against a
+# project via `--project`), never shipped inside a scaffolded project. The two
+# globs cover the 4 `export-*.mjs` exporters and the 3 `figma-*.plugin.js`
+# builder bodies, and deliberately spare the project infrastructure scripts
+# (company-profile.mjs, upgrade.mjs, lib/zip.mjs). Mirrored by the template-zip
+# filter (vite.config.ts) and the scaffold's TEMPLATE_EXCLUDE (desktop/main.cjs).
+scripts/export-*.mjs export-ignore
+scripts/figma-*.plugin.js export-ignore
