@@ -126,8 +126,17 @@
         display: inline-block; width: 11px; height: 11px; border-radius: 3px;
         border: 1px solid rgba(0,0,0,.18); margin: 0 3px -1px 0; vertical-align: baseline;
       }
+      /* Inline markdown in chat messages */
+      .msg strong { font-weight: 700; }
+      .msg code {
+        font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px;
+        background: #f0f0f3; padding: 1px 4px; border-radius: 4px;
+      }
 
       #composer { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #e3e3e3; }
+      #attach { border: 1px solid #ccc; background: #fff; border-radius: 8px; padding: 0 11px; cursor: pointer; font-size: 15px; }
+      #attach:hover { background: #f4f4f7; }
+      #log.dragover { outline: 2px dashed #7c3aed; outline-offset: -6px; background: #faf7ff; }
       #input {
         flex: 1;
         resize: none;
@@ -220,6 +229,7 @@
         <div id="chatmain" hidden>
           <div id="log"></div>
           <div id="composer">
+            <button id="attach" title="Attach a file (or drag one onto the chat)">📎</button>
             <textarea id="input" rows="2" placeholder="Message the agent…  (Enter to send · Shift+Enter for newline)"></textarea>
             <button id="send">Send</button>
           </div>

@@ -287,6 +287,30 @@ function hasCompanyProfile(projectDir) {
   return !!projectDir && fs.existsSync(companyProfilePath(projectDir));
 }
 
+// Copy an attached file into the project (cwd = project) so the agent can act
+// on it instead of the user pasting a path. Routed by type: images land in
+// public/images/ (the design-image bucket); everything else in the root. A
+// login logo still needs agent wiring (public/brand/ + middleware), so the
+// agent relocates/wires that from wherever it lands.
+const IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif"];
+
+function attachToProject(srcPath) {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!srcPath || !fs.existsSync(srcPath)) return { ok: false, error: "File not found." };
+  try {
+    const name = path.basename(srcPath);
+    const isImage = IMAGE_EXTS.includes(path.extname(name).toLowerCase());
+    const subdir = isImage ? "public/images" : "";
+    const destDir = subdir ? path.join(currentProject, subdir) : currentProject;
+    if (subdir) fs.mkdirSync(destDir, { recursive: true });
+    fs.copyFileSync(srcPath, path.join(destDir, name));
+    const rel = "./" + (subdir ? `${subdir}/${name}` : name);
+    return { ok: true, name, rel, kind: isImage ? "image" : "file" };
+  } catch (e) {
+    return { ok: false, error: `Could not attach: ${e.message}` };
+  }
+}
+
 ipcMain.handle("project:status", () => ({
   hasProject: !!currentProject,
   path: currentProject,
@@ -388,6 +412,21 @@ ipcMain.handle("project:reset", () => {
 ipcMain.handle("open:external", (_event, url) => {
   if (typeof url === "string" && /^https?:\/\//.test(url)) shell.openExternal(url);
 });
+
+// Attach a file via the native picker (📎 button).
+ipcMain.handle("file:attach", async () => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: "Attach a file to the project",
+    properties: ["openFile"],
+    buttonLabel: "Attach",
+  });
+  if (res.canceled || !res.filePaths[0]) return { ok: false, canceled: true };
+  return attachToProject(res.filePaths[0]);
+});
+
+// Attach a file by path (from a drag-and-drop in the renderer).
+ipcMain.handle("file:attachPath", (_event, { srcPath }) => attachToProject(srcPath));
 
 app.whenReady().then(async () => {
   loadEnvLocal(); // dev fallback

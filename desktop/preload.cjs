@@ -1,6 +1,6 @@
 // Preload — the only bridge between the sandboxed renderer and the main process.
 // CommonJS (.cjs) so it loads regardless of sandbox/ESM settings.
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("desktop", {
   // ---- Agent ----
@@ -36,6 +36,17 @@ contextBridge.exposeInMainWorld("desktop", {
     const listener = (_e, url) => cb(url);
     ipcRenderer.on("vite:ready", listener);
     return () => ipcRenderer.removeListener("vite:ready", listener);
+  },
+
+  // ---- File attach ----
+  attachFile: () => ipcRenderer.invoke("file:attach"),
+  attachFilePath: (srcPath) => ipcRenderer.invoke("file:attachPath", { srcPath }),
+  pathForFile: (file) => {
+    try {
+      return webUtils.getPathForFile(file);
+    } catch {
+      return null;
+    }
   },
 
   // ---- Misc ----

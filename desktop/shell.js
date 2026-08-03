@@ -26,6 +26,7 @@ const chatmain = el("chatmain");
 const log = el("log");
 const input = el("input");
 const send = el("send");
+const attach = el("attach");
 
 // Preview / embedded browser
 const browser = el("browser");
@@ -351,32 +352,56 @@ function addMsg(cls, text) {
   return node;
 }
 
-// Turn hex codes in a finished message into inline color chips, so a palette
-// the agent lists as text actually shows its colors.
-function colorizeSwatches(elm) {
-  const text = elm.textContent;
+// Render a finished assistant message with lightweight inline markdown:
+// **bold**, `code`, and hex color chips. Built with DOM nodes (never innerHTML)
+// so message text can't inject markup. Applied on finalize — text streams in
+// raw, then resolves to formatting when the block completes.
+function appendSwatchText(parent, text) {
   const re = /#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/g;
-  if (!re.test(text)) return;
-  re.lastIndex = 0;
-  const frag = document.createDocumentFragment();
   let last = 0, m;
   while ((m = re.exec(text))) {
-    if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+    if (m.index > last) parent.appendChild(document.createTextNode(text.slice(last, m.index)));
     const chip = document.createElement("span");
     chip.className = "swatch";
     chip.style.background = m[0];
-    frag.appendChild(chip);
-    frag.appendChild(document.createTextNode(m[0]));
+    parent.appendChild(chip);
+    parent.appendChild(document.createTextNode(m[0]));
     last = m.index + m[0].length;
   }
-  if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
-  elm.textContent = "";
-  elm.appendChild(frag);
+  if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+}
+
+function appendCodeSpans(parent, text) {
+  const re = /`([^`]+?)`/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) appendSwatchText(parent, text.slice(last, m.index));
+    const code = document.createElement("code");
+    code.textContent = m[1];
+    parent.appendChild(code);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) appendSwatchText(parent, text.slice(last));
+}
+
+function renderMarkdownInto(parent, text) {
+  const re = /\*\*([\s\S]+?)\*\*/g; // **bold** (may wrap a `code` span)
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) appendCodeSpans(parent, text.slice(last, m.index));
+    const strong = document.createElement("strong");
+    appendCodeSpans(strong, m[1]);
+    parent.appendChild(strong);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) appendCodeSpans(parent, text.slice(last));
 }
 
 function finalizeAssistant() {
   if (assistantEl) {
-    colorizeSwatches(assistantEl);
+    const text = assistantEl.textContent;
+    assistantEl.textContent = "";
+    renderMarkdownInto(assistantEl, text);
     assistantEl = null;
   }
 }
@@ -566,6 +591,66 @@ input.addEventListener("keydown", (e) => {
     submit();
   }
 });
+
+// ---- File attach -------------------------------------------------------------
+function attachPrefill(res) {
+  if (res.name === "company-profile.json") {
+    return `Import the company profile I just added (${res.rel}).`;
+  }
+  if (res.kind === "image" && /logo/i.test(res.name)) {
+    return `Use ${res.rel} as the login logo — place it in public/brand and wire it into middleware.`;
+  }
+  return res.rel;
+}
+
+function handleAttachResult(res) {
+  if (!res || res.canceled) return;
+  if (!res.ok) {
+    addMsg("error", res.error || "Could not attach the file.");
+    return;
+  }
+  addMsg("system", `📎 ${res.name} added as ${res.rel}`);
+  input.value = input.value.trim() ? `${input.value.trim()} ${res.rel}` : attachPrefill(res);
+  input.focus();
+}
+
+attach.addEventListener("click", async () => {
+  try {
+    handleAttachResult(await window.desktop.attachFile());
+  } catch (e) {
+    addMsg("error", String(e));
+  }
+});
+
+// Drag & drop a file onto the chat log.
+["dragenter", "dragover"].forEach((t) =>
+  log.addEventListener(t, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    log.classList.add("dragover");
+  })
+);
+["dragleave", "drop"].forEach((t) =>
+  log.addEventListener(t, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    log.classList.remove("dragover");
+  })
+);
+log.addEventListener("drop", async (e) => {
+  for (const f of [...(e.dataTransfer?.files || [])]) {
+    const src = window.desktop.pathForFile(f);
+    if (!src) continue;
+    try {
+      handleAttachResult(await window.desktop.attachFilePath(src));
+    } catch (err) {
+      addMsg("error", String(err));
+    }
+  }
+});
+// Don't let the window navigate when a file is dropped outside the chat.
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", (e) => e.preventDefault());
 
 // ---- Boot --------------------------------------------------------------------
 boot();
