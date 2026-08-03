@@ -19,7 +19,7 @@ async function getQuery() {
   return _query;
 }
 
-export async function runPrompt({ prompt, sessionId, cwd, onEvent }) {
+export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion }) {
   let resolvedSession = sessionId;
 
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -58,6 +58,22 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent }) {
           "Read", "Write", "Edit", "Glob", "Grep", "Bash", "WebFetch", "WebSearch",
         ],
         ...(sessionId ? { resume: sessionId } : {}),
+
+        // AskUserQuestion surfaces through canUseTool with the full structured
+        // input (questions + options). We render it as clickable buttons in the
+        // renderer and return the choices via updatedInput.answers so the tool
+        // resolves with the user's selection instead of falling back to text.
+        canUseTool: async (toolName, input) => {
+          if (toolName === "AskUserQuestion" && askQuestion) {
+            try {
+              const answers = await askQuestion(input.questions);
+              return { behavior: "allow", updatedInput: { ...input, answers } };
+            } catch {
+              return { behavior: "deny", message: "The user dismissed the question." };
+            }
+          }
+          return { behavior: "allow", updatedInput: input };
+        },
       },
     });
 

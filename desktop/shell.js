@@ -275,6 +275,134 @@ window.desktop.onAgentEvent((evt) => {
   }
 });
 
+// AskUserQuestion → render clickable choices in the chat and answer via IPC.
+window.desktop.onAgentAsk(({ id, questions }) => renderQuestionCard(id, questions));
+
+function renderQuestionCard(id, questions) {
+  const card = document.createElement("div");
+  card.className = "qcard";
+
+  // Per-question state: single-select → string | {other} | null; multi → Set.
+  const state = questions.map((q) => (q.multiSelect ? new Set() : null));
+  const otherInputs = [];
+  const optButtonsByQ = [];
+
+  const submitBtn = document.createElement("button");
+  submitBtn.className = "qsubmit";
+  submitBtn.textContent = "Submit";
+  submitBtn.disabled = true;
+
+  function valueFor(qi) {
+    const q = questions[qi];
+    const otherVal = otherInputs[qi] && !otherInputs[qi].hidden ? otherInputs[qi].value.trim() : "";
+    if (q.multiSelect) {
+      const labels = [...state[qi]];
+      if (otherVal) labels.push(otherVal);
+      return labels.length ? labels.join(", ") : null;
+    }
+    if (state[qi] && typeof state[qi] === "object") return otherVal || null; // "Other" chosen
+    return state[qi];
+  }
+  const isComplete = () => questions.every((_, qi) => {
+    const v = valueFor(qi);
+    return v != null && v !== "";
+  });
+  function maybeComplete() {
+    submitBtn.disabled = !isComplete();
+    // Snappy: a single single-select question auto-submits on choice.
+    if (!submitBtn.disabled && questions.length === 1 && !questions[0].multiSelect) doSubmit();
+  }
+  async function doSubmit() {
+    if (card.classList.contains("answered")) return;
+    card.classList.add("answered");
+    submitBtn.remove();
+    const answers = {};
+    questions.forEach((q, qi) => (answers[q.question] = valueFor(qi)));
+    await window.desktop.answerAgent(id, answers);
+    addMsg("system", "✓ " + questions.map((q) => `${q.header}: ${answers[q.question]}`).join(" · "));
+  }
+
+  questions.forEach((q, qi) => {
+    const block = document.createElement("div");
+    block.className = "qblock";
+    const hdr = document.createElement("span");
+    hdr.className = "qheader";
+    hdr.textContent = q.header || "Question";
+    const txt = document.createElement("div");
+    txt.className = "qtext";
+    txt.textContent = q.question;
+    block.append(hdr, txt);
+
+    const optButtons = [];
+    const otherInput = document.createElement("input");
+    otherInput.className = "qother-input";
+    otherInput.placeholder = "Type your own answer";
+    otherInput.hidden = true;
+    otherInputs[qi] = otherInput;
+
+    q.options.forEach((opt) => {
+      const btn = document.createElement("button");
+      btn.className = "qopt";
+      const lbl = document.createElement("div");
+      lbl.className = "lbl";
+      lbl.textContent = opt.label;
+      btn.appendChild(lbl);
+      if (opt.description) {
+        const desc = document.createElement("div");
+        desc.className = "desc";
+        desc.textContent = opt.description;
+        btn.appendChild(desc);
+      }
+      btn.addEventListener("click", () => {
+        if (card.classList.contains("answered")) return;
+        if (q.multiSelect) {
+          if (state[qi].has(opt.label)) { state[qi].delete(opt.label); btn.classList.remove("selected"); }
+          else { state[qi].add(opt.label); btn.classList.add("selected"); }
+        } else {
+          state[qi] = opt.label;
+          optButtons.forEach((b) => b.classList.remove("selected"));
+          otherBtn.classList.remove("selected");
+          otherInput.hidden = true;
+          btn.classList.add("selected");
+        }
+        maybeComplete();
+      });
+      optButtons.push(btn);
+      block.appendChild(btn);
+    });
+    optButtonsByQ[qi] = optButtons;
+
+    const otherBtn = document.createElement("button");
+    otherBtn.className = "qopt";
+    const olbl = document.createElement("div");
+    olbl.className = "lbl";
+    olbl.textContent = "Other…";
+    otherBtn.appendChild(olbl);
+    otherBtn.addEventListener("click", () => {
+      if (card.classList.contains("answered")) return;
+      otherInput.hidden = false;
+      otherInput.focus();
+      if (!q.multiSelect) {
+        optButtons.forEach((b) => b.classList.remove("selected"));
+        state[qi] = { other: true };
+      }
+      otherBtn.classList.add("selected");
+      maybeComplete();
+    });
+    otherInput.addEventListener("input", maybeComplete);
+    otherInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !submitBtn.disabled) { e.preventDefault(); doSubmit(); }
+    });
+    block.append(otherBtn, otherInput);
+    card.appendChild(block);
+  });
+
+  submitBtn.addEventListener("click", doSubmit);
+  card.appendChild(submitBtn);
+  log.appendChild(card);
+  log.scrollTop = log.scrollHeight;
+}
+
 async function submit() {
   const text = input.value.trim();
   if (!text) return;

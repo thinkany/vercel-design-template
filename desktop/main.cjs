@@ -214,6 +214,11 @@ function createWindow() {
 }
 
 // ---- Agent IPC (cwd = current project) --------------------------------------
+// Pending AskUserQuestion prompts: the agent's canUseTool awaits a renderer
+// answer through these. Keyed by an incrementing id.
+const pendingAsks = new Map();
+let askSeq = 0;
+
 ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
   if (!currentProject) {
     event.sender.send("agent:event", { type: "error", message: "No project is open." });
@@ -223,7 +228,33 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
   const onEvent = (evt) => {
     if (!event.sender.isDestroyed()) event.sender.send("agent:event", evt);
   };
-  return runPrompt({ prompt, sessionId, cwd: currentProject, onEvent });
+  // Bridge: send the questions to the renderer, resolve when it answers.
+  const askQuestion = (questions) =>
+    new Promise((resolve, reject) => {
+      const id = ++askSeq;
+      pendingAsks.set(id, { resolve, reject });
+      if (!event.sender.isDestroyed()) event.sender.send("agent:ask", { id, questions });
+      else reject(new Error("window closed"));
+    });
+  return runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion });
+});
+
+ipcMain.handle("agent:answer", (_event, { id, answers }) => {
+  const p = pendingAsks.get(id);
+  if (p) {
+    pendingAsks.delete(id);
+    p.resolve(answers);
+  }
+  return { ok: true };
+});
+
+ipcMain.handle("agent:cancelAsk", (_event, { id }) => {
+  const p = pendingAsks.get(id);
+  if (p) {
+    pendingAsks.delete(id);
+    p.reject(new Error("cancelled"));
+  }
+  return { ok: true };
 });
 
 // ---- Key IPC ----------------------------------------------------------------
