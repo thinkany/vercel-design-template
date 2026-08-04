@@ -56,6 +56,7 @@ let assistantEl = null;
 let viteUrl = null;
 let design = { active: false, variationId: null, previewReady: false };
 let agentBusy = false;
+let conversationStarted = false; // once true, don't re-show the fresh-start welcome
 let tabs = [];
 let activeTab = null;
 let tabSeq = 0;
@@ -120,7 +121,9 @@ function renderTabs() {
   add.className = "tabadd";
   add.textContent = "+";
   add.title = "New tab";
-  add.addEventListener("click", () => openTab(quickUrl("home"), "Home"));
+  // New user tab: no fixed title, so it reflects the real page (and updates as
+  // they navigate) instead of always reading "Home".
+  add.addEventListener("click", () => openTab(quickUrl("home")));
   tabbar.appendChild(add);
 }
 
@@ -320,6 +323,16 @@ function refreshPreview() {
       text: "Just a moment while your dev server starts up.",
     });
   }
+  // Idle, preview not open yet. Only greet on a TRULY fresh start — once the
+  // conversation has begun or a design exists, setup is underway, so show a
+  // gentle "in progress" line instead of re-welcoming.
+  if (conversationStarted || design.active) {
+    return showPlaceholder({
+      emoji: "✨",
+      title: "Setting up your project",
+      text: "Your live preview opens on its own once your design's ready — pick up in the chat.",
+    });
+  }
   showPlaceholder({
     emoji: "👋",
     title: "Say hello and we'll get started",
@@ -342,6 +355,7 @@ function noProjectPlaceholder() {
   viteUrl = null;
   design = { active: false, variationId: null, previewReady: false };
   agentBusy = false;
+  conversationStarted = false; // a new/blank project greets fresh again
   closeAllTabs();
   showPlaceholder({
     emoji: "👋",
@@ -1136,6 +1150,7 @@ async function submit() {
   input.value = "";
   assistantEl = null;
   agentBusy = true;
+  conversationStarted = true;
   refreshPreview(); // show the working placeholder while the browser is closed
   send.disabled = true;
   try {
