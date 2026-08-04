@@ -64,6 +64,49 @@ let tabsOpened = false; // whether default tabs were opened for the active desig
 let designJustActivated = false; // design went active this session (freshly created)
 let workingTimer = null;
 
+// ---- Resizable chat | preview divider (min 400px, remembered) ---------------
+(function initChatResize() {
+  const dragbar = el("dragbar");
+  const chatPanel = el("chat");
+  const preview = el("preview");
+  if (!dragbar || !chatPanel) return;
+  const KEY = "chatWidth";
+  const clampWidth = (w) => {
+    const min = 400;
+    const max = Math.max(min, window.innerWidth - 460); // leave room for rail + preview
+    return Math.min(Math.max(Math.round(w), min), max);
+  };
+  const saved = parseInt(localStorage.getItem(KEY) || "", 10);
+  if (saved) chatPanel.style.width = clampWidth(saved) + "px";
+
+  let dragging = false;
+  dragbar.addEventListener("mousedown", (e) => {
+    dragging = true;
+    dragbar.classList.add("dragging");
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    if (preview) preview.style.pointerEvents = "none"; // don't let the webview eat the drag
+    e.preventDefault();
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    chatPanel.style.width = clampWidth(e.clientX - chatPanel.getBoundingClientRect().left) + "px";
+  });
+  window.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    dragbar.classList.remove("dragging");
+    document.body.style.userSelect = "";
+    document.body.style.cursor = "";
+    if (preview) preview.style.pointerEvents = "";
+    localStorage.setItem(KEY, String(parseInt(chatPanel.style.width, 10) || 400));
+  });
+  // Keep within bounds when the window resizes.
+  window.addEventListener("resize", () => {
+    if (chatPanel.style.width) chatPanel.style.width = clampWidth(parseInt(chatPanel.style.width, 10) || 400) + "px";
+  });
+})();
+
 // ---- Preview: embedded tabbed browser ---------------------------------------
 // The browser stays CLOSED until a design exists AND Vite is serving — so it
 // never shows a "server not ready" error page. Webviews auto-retry failed loads

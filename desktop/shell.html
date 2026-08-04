@@ -71,12 +71,21 @@
 
       #chat {
         width: 40%;
-        min-width: 360px;
+        min-width: 400px;
+        flex: none;               /* width is authoritative (set by the drag handle) */
         display: flex;
         flex-direction: column;
-        border-right: 1px solid #e3e3e3;
         background: #fafafa;
       }
+      /* Draggable divider between chat and preview. */
+      #dragbar {
+        flex: none;
+        width: 6px;
+        cursor: col-resize;
+        background: #e3e3e3;
+        transition: background .12s;
+      }
+      #dragbar:hover, #dragbar.dragging { background: #7c3aed; }
       #bar {
         padding: 8px 14px;
         font-size: 12px;
@@ -313,6 +322,8 @@
           </div>
         </div>
       </div>
+
+      <div id="dragbar" title="Drag to resize the chat"></div>
 
       <div id="preview">
         <div id="browser" hidden>
