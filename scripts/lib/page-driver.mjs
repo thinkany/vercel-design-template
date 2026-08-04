@@ -79,6 +79,29 @@ class RemotePageDriver {
     return out.result;
   }
 
+  // Full-page PNG (dry-run review). The bridge rasterizes via CDP
+  // captureBeyondViewport, so it works on the hidden window (no visible frame
+  // needed) — the same mechanism puppeteer uses under the hood.
+  async screenshot({ fullPage = false } = {}) {
+    const out = await this._rpc({ op: "screenshot", fullPage });
+    return Buffer.from(out.dataUrl, "base64");
+  }
+
+  // Live html.to.design capture. The inject-capture.js → wait → fire → watch the
+  // /submit response sequence lives in main (the webRequest hook it needs is a
+  // main-process API), so this is one coarse op. Returns the submit outcome string.
+  async liveCapture(entry, selector, captureJsUrl) {
+    const out = await this._rpc({
+      op: "liveCapture",
+      captureId: entry.captureId,
+      endpoint: entry.endpoint,
+      selector,
+      captureJsUrl,
+      submitPath: `/capture/${entry.captureId}/submit`,
+    });
+    return out.outcome;
+  }
+
   async close() {
     try { await this._rpc({ op: "close" }); } catch { /* window teardown is best-effort */ }
   }
@@ -112,6 +135,30 @@ class PuppeteerPageDriver {
   setViewport(v) { return this.page.setViewport({ deviceScaleFactor: 2, ...v }); }
   waitForSelector(sel, opts) { return this.page.waitForSelector(sel, opts); }
   evaluate(fn, ...args) { return this.page.evaluate(fn, ...args); }
+  screenshot(opts) { return this.page.screenshot(opts); }
+
+  // Same live-capture sequence the script used to inline: inject Figma's
+  // capture.js, wait for captureForDesign, fire it, and resolve on the actual
+  // /submit POST (not captureForDesign's own promise, which hangs after the
+  // capture lands — see the note kept from the original). Bounded fallback.
+  async liveCapture(entry, selector, captureJsUrl) {
+    const page = this.page;
+    await page.addScriptTag({ url: captureJsUrl });
+    await page.waitForFunction(() => typeof window.figma?.captureForDesign === "function", { timeout: 15000 });
+    const submitPath = `/capture/${entry.captureId}/submit`;
+    let settle;
+    const posted = new Promise((res) => { settle = res; });
+    const onResp = (resp) => { if (resp.url().includes(submitPath)) settle(`posted ${resp.status()}`); };
+    page.on("response", onResp);
+    page
+      .evaluate(({ captureId, endpoint, sel }) => { window.figma.captureForDesign({ captureId, endpoint, selector: sel }); },
+        { captureId: entry.captureId, endpoint: entry.endpoint, sel: selector })
+      .catch(() => {});
+    const outcome = await Promise.race([posted, new Promise((r) => setTimeout(() => r("no-post-15s"), 15000))]);
+    page.off("response", onResp);
+    return outcome;
+  }
+
   async close() { try { await this.browser.close(); } catch { /* ignore teardown noise */ } }
 }
 

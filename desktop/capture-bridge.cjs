@@ -31,6 +31,9 @@ function getWindow() {
     height: 900,
     webPreferences: {
       backgroundThrottling: false, // a hidden window must keep laying out / painting
+      // Isolated in-memory session (not "persist:") so the liveCapture webRequest
+      // hook sees ONLY this window's traffic — never the main app's requests.
+      partition: "capture-bridge",
       // executeJavaScript runs in the page's main world regardless of isolation;
       // no preload needed. Defaults (contextIsolation, sandbox) stay secure.
     },
@@ -82,6 +85,58 @@ async function handleOp(op) {
       // gesture-gated APIs (e.g. clipboard) available; harmless otherwise.
       const result = await wc.executeJavaScript(op.code, true);
       return { ok: true, result };
+    }
+    case "screenshot": {
+      // Rasterize via CDP with captureBeyondViewport → a true full-page PNG even
+      // though the window is hidden (the same path puppeteer uses internally).
+      const wc = getWindow().webContents;
+      const dbg = wc.debugger;
+      try { if (!dbg.isAttached()) dbg.attach("1.3"); } catch { /* already attached */ }
+      const params = { format: "png", captureBeyondViewport: !!op.fullPage };
+      if (op.fullPage) {
+        const m = await dbg.sendCommand("Page.getLayoutMetrics");
+        const size = m.cssContentSize || m.contentSize;
+        params.clip = { x: 0, y: 0, width: Math.ceil(size.width), height: Math.ceil(size.height), scale: 1 };
+      }
+      const shot = await dbg.sendCommand("Page.captureScreenshot", params);
+      return { ok: true, dataUrl: shot.data }; // CDP returns base64
+    }
+    case "liveCapture": {
+      const wc = getWindow().webContents;
+      // 1. Inject Figma's html.to.design capture.js.
+      await wc.executeJavaScript(
+        `new Promise((res, rej) => { const s = document.createElement("script"); s.src = ${JSON.stringify(op.captureJsUrl)}; s.onload = () => res(true); s.onerror = () => rej(new Error("capture.js load failed")); document.head.appendChild(s); })`,
+        true,
+      );
+      // 2. Wait for captureForDesign to exist (bounded).
+      const t0 = Date.now();
+      for (;;) {
+        const ready = await wc.executeJavaScript("typeof window.figma?.captureForDesign === 'function'", true);
+        if (ready) break;
+        if (Date.now() - t0 > 15000) return { ok: false, error: "captureForDesign never appeared" };
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      // 3. Fire it, and resolve on the real /submit POST (captureForDesign's own
+      //    promise hangs after the capture lands). Watch via this session's
+      //    webRequest — isolated to the capture partition. Bounded fallback.
+      const outcome = await new Promise((resolve) => {
+        let done = false;
+        const finish = (v) => {
+          if (done) return;
+          done = true;
+          try { wc.session.webRequest.onCompleted({ urls: ["*://*/*"] }, null); } catch { /* detach */ }
+          resolve(v);
+        };
+        wc.session.webRequest.onCompleted({ urls: ["*://*/*"] }, (details) => {
+          if (details.url.includes(op.submitPath)) finish(`posted ${details.statusCode}`);
+        });
+        wc.executeJavaScript(
+          `window.figma.captureForDesign(${JSON.stringify({ captureId: op.captureId, endpoint: op.endpoint, selector: op.selector })})`,
+          true,
+        ).catch(() => {});
+        setTimeout(() => finish("no-post-15s"), 15000);
+      });
+      return { ok: true, outcome };
     }
     case "close": {
       destroyWindow();

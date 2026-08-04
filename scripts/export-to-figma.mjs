@@ -37,14 +37,18 @@
  *       "home-mobile":  { "captureId": "...", "endpoint": "..." },
  *       "about-mobile": { "captureId": "...", "endpoint": "..." } }
  *
- * PREREQUISITE: none to run manually. puppeteer is auto-installed locally on the
- *   first export (npm i puppeteer --no-save). It is deliberately NOT a project
- *   dependency, so it never installs on Vercel — the deploy never runs this.
+ * PREREQUISITE: none to run manually. Capture goes through
+ *   scripts/lib/page-driver.mjs — the app's native Electron bridge when
+ *   TA_CAPTURE_ENDPOINT is set (works in a packaged .dmg), else puppeteer
+ *   (auto-installed on first export; never a project dep, never on Vercel).
  */
 
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
+// Pluggable capture page: native Electron bridge in the app (works in a packaged
+// .dmg), puppeteer standalone. Same puppeteer-Page API either way.
+import { createPage } from "./lib/page-driver.mjs";
 
 // ── Lightweight profiling (opt-in via --timing) ───────────────────────────────
 // Prints per-step + phase timings to STDERR so stdout stays clean (the block/page
@@ -84,7 +88,7 @@ const VIEWPORT_HEIGHTS = { desktop: 900, tablet: 900, mobile: 780 };
 const viewHeight = (view) => VIEWPORT_HEIGHTS[view] ?? VIEWPORT_HEIGHT;
 
 function parseArgs(argv) {
-  const args = { url: "http://localhost:5173", variation: "v00", out: "figma-export", captures: null, views: null, pages: null, blocks: false, timing: false, fast: false };
+  const args = { url: process.env.TA_PREVIEW_URL || "http://localhost:5173", variation: "v00", out: "figma-export", captures: null, views: null, pages: null, blocks: false, timing: false, fast: false };
   const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -124,76 +128,27 @@ export-to-figma — capture each active breakpoint of a design into Figma (or PN
   --captures does a live per-page capture. Requires a running dev server.
 
   BLOCKS are no longer captured here — they are RECONSTRUCTED offline:
-    npm run export:reconstruct -- -v {id}   (+ figma-reconstruct-library.plugin.js)
+    ta-export reconstruct -v {id}   (+ figma-reconstruct-library.plugin.js)
 
-  One-time setup: puppeteer auto-installs on first run (npm i -D puppeteer).
+  Capture uses the app's native Electron bridge (TA_CAPTURE_ENDPOINT) when run
+  inside the app; standalone it auto-installs puppeteer on first run.
 `);
-}
-
-async function loadPuppeteer() {
-  try {
-    return (await import("puppeteer")).default;
-  } catch {
-    // Not installed yet — provision it locally on FIRST export (one-time). This
-    // path only runs when you actually export, so puppeteer never enters
-    // package.json or the Vercel deploy (which never invokes this script).
-    console.log("→ First export: installing puppeteer locally (one-time; downloads a headless Chromium)…\n");
-    try {
-      const { execSync } = await import("node:child_process");
-      const { fileURLToPath } = await import("node:url");
-      // Install into the app's OWN package (where this script resolves puppeteer
-      // from), NOT the project cwd — the app-owned tooling runs against a
-      // separate project folder, so a cwd install lands where import() can't
-      // find it. --prefix targets this script's package root.
-      const appRoot = fileURLToPath(new URL("..", import.meta.url));
-      execSync(`npm install puppeteer@25.3.0 --no-save --prefix "${appRoot}"`, { stdio: "inherit" });
-    } catch {
-      console.error("\n✗ Couldn't auto-install puppeteer. Install it manually, then retry:\n  npm install puppeteer\n");
-      process.exit(1);
-    }
-    try {
-      return (await import("puppeteer")).default;
-    } catch {
-      console.error("\n✗ puppeteer installed but failed to load. Try `npm install puppeteer`, then retry.\n");
-      process.exit(1);
-    }
-  }
 }
 
 async function readManifest(page, url, viewsOverride) {
   // Any route sets window.__PREVIEW_CONFIG__ via App's effect; load the app once.
   await page.goto(`${url}/?v=v00`, { waitUntil: "networkidle0" });
-  const cfg = await page.evaluate(() => window.__PREVIEW_CONFIG__ ?? null);
+  // Poll until the app publishes __PREVIEW_CONFIG__ (native bridge's goto
+  // resolves on load, not network-idle; immediate for puppeteer).
+  let cfg = null;
+  for (let i = 0; i < 80 && !cfg; i++) {
+    cfg = await page.evaluate(() => window.__PREVIEW_CONFIG__ ?? null);
+    if (!cfg) await new Promise((r) => setTimeout(r, 100));
+  }
   const widths = { ...FALLBACK_WIDTHS, ...(cfg?.widths ?? {}) };
   const views = viewsOverride ?? cfg?.views ?? ["desktop", "mobile"];
   const pages = cfg?.pages?.length ? cfg.pages : [{ id: "home", route: "", name: "Home" }];
   return { views, widths, pages };
-}
-
-// Fire html.to.design's captureForDesign and return as soon as the /submit POST
-// actually completes on the network — DON'T await captureForDesign's own promise,
-// which hangs indefinitely after the capture lands (measured: 45s+ every time, the
-// dominant cost of the whole export). The capture processes server-side once the
-// POST fires; we poll the captureId afterward to collect the node. A bounded
-// fallback guards against a missed event (correctness still holds — polling
-// confirms), but we wait long enough that we never navigate away mid-submit.
-async function submitCapture(page, entry, selector) {
-  const submitPath = `/capture/${entry.captureId}/submit`;
-  let settle;
-  const posted = new Promise((res) => { settle = res; });
-  const onResp = (resp) => { if (resp.url().includes(submitPath)) settle(`posted ${resp.status()}`); };
-  page.on("response", onResp);
-  // Fire-and-forget: the inner promise never settles, so we don't await it here.
-  page
-    .evaluate(({ captureId, endpoint, sel }) => { window.figma.captureForDesign({ captureId, endpoint, selector: sel }); },
-      { captureId: entry.captureId, endpoint: entry.endpoint, sel: selector })
-    .catch(() => {});
-  const outcome = await Promise.race([
-    posted,
-    new Promise((r) => setTimeout(() => r("no-post-15s"), 15000)),
-  ]);
-  page.off("response", onResp);
-  return outcome;
 }
 
 async function main() {
@@ -201,20 +156,16 @@ async function main() {
   if (args.help) return help();
   TIMING = args.timing;
 
-  let d = mark();
-  const puppeteer = await loadPuppeteer();
-  terr(`⏱ puppeteer load: ${r0(d())}ms`);
   const live = Boolean(args.captures);
   let capturesMap = {};
   if (live) {
     capturesMap = JSON.parse(await readFile(args.captures, "utf8"));
   }
 
-  d = mark();
-  const browser = await puppeteer.launch({ headless: "new", protocolTimeout: 600000 });
-  terr(`⏱ browser launch: ${r0(d())}ms`);
+  let d = mark();
+  const page = await createPage();
+  terr(`⏱ page open: ${r0(d())}ms`);
   try {
-    const page = await browser.newPage();
     d = mark();
     let { views, widths, pages: allPages } = await readManifest(page, args.url, args.views);
     terr(`⏱ readManifest (initial app load): ${r0(d())}ms`);
@@ -261,12 +212,11 @@ async function main() {
             console.warn(`  · ${label}: no captureId/endpoint for "${pg.id}-${view}" in ${args.captures} — skipped`);
             continue;
           }
-          await page.addScriptTag({ url: CAPTURE_JS });
-          await page.waitForFunction(() => typeof window.figma?.captureForDesign === "function", { timeout: 15000 });
-          // Resolve on the actual /submit POST, not captureForDesign's hanging
-          // promise (see submitCapture). The capture lands server-side; poll to finish.
+          // Inject capture.js, fire captureForDesign, and resolve on the real
+          // /submit POST (its own promise hangs after the capture lands). The
+          // driver owns that sequence — native bridge or puppeteer.
           const dsub = mark();
-          const outcome = await submitCapture(page, entry, "[data-capture-ready]");
+          const outcome = await page.liveCapture(entry, "[data-capture-ready]", CAPTURE_JS);
           terr(`  ⏱ ${label}: submit ${r0(dsub())}ms [${outcome}]`);
           console.log(`  ✓ ${label}: submitted capture ${entry.captureId} (${outcome}) — poll it to finish`);
         } else {
@@ -286,7 +236,7 @@ async function main() {
   } finally {
     // Swallow teardown errors: a dangling capture evaluate can make close() emit a
     // ProtocolError even though every capture already submitted.
-    try { await browser.close(); } catch { /* ignore teardown noise */ }
+    await page.close();
   }
 }
 
