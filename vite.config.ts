@@ -294,7 +294,7 @@ function templateZipPlugin() {
       // present in this zip, so excluding them here plugs both the public download
       // AND the upgrade-push. Also enforced via .gitattributes export-ignore (for
       // git-archive consumers) and the Electron scaffold's TEMPLATE_EXCLUDE.
-      const EXCLUDE_PREFIXES = ['cloud-export/']
+      const EXCLUDE_PREFIXES = ['cloud-export/', 'docs/']
       // Export tooling: the 4 `export-*.mjs` exporters + 3 `figma-*.plugin.js`
       // builder bodies. Spares the infra scripts (company-profile/upgrade/lib).
       const EXCLUDE_PATTERNS = [/^scripts\/export-.*\.mjs$/, /^scripts\/figma-.*\.plugin\.js$/]

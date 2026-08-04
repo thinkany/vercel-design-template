@@ -5,6 +5,10 @@
 cloud-export export-ignore
 cloud-export/** export-ignore
 
+# Internal planning / design docs — never ship to a scaffolded project.
+docs export-ignore
+docs/** export-ignore
+
 # Export-to-Figma tooling — app-owned (runs from the Electron app against a
 # project via `--project`), never shipped inside a scaffolded project. The two
 # globs cover the 4 `export-*.mjs` exporters and the 3 `figma-*.plugin.js`
