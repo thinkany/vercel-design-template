@@ -17,6 +17,7 @@ const { pathToFileURL } = require("node:url");
 const fs = require("node:fs");
 const path = require("node:path");
 const { TEMPLATE_EXCLUDE } = require("./template-exclude.cjs");
+const { startCaptureBridge, stopCaptureBridge } = require("./capture-bridge.cjs");
 
 const appRoot = path.resolve(__dirname, ".."); // the Electron app / template source (git worktree in dev; Resources/app when packaged)
 
@@ -381,6 +382,10 @@ function startViteFor(projectDir) {
       if (m && !settled) {
         settled = true;
         viteUrl = m[0];
+        // The native capture bridge loads whatever URL the export scripts pass,
+        // so hand them THIS project's actual Vite base (port varies) instead of
+        // the hardcoded :5173 default.
+        process.env.TA_PREVIEW_URL = viteUrl;
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send("vite:ready", viteUrl);
         }
@@ -747,6 +752,18 @@ app.whenReady().then(async () => {
   if (stored) process.env.ANTHROPIC_API_KEY = stored;
   const storedLicense = loadStoredLicense(); // in-app license wins over .env.local
   if (storedLicense) process.env.DERIVE_LICENSE_KEY = storedLicense;
+  // Native capture bridge: a hidden BrowserWindow the app-owned export scripts
+  // drive over loopback (see capture-bridge.cjs). Injecting these into the env
+  // makes `ta-export reconstruct` capture with the app's own Chromium instead of
+  // puppeteer — the fix for block export in a packaged .dmg. Set before the agent
+  // can spawn Bash so its tool subprocesses inherit them.
+  try {
+    const bridge = await startCaptureBridge();
+    process.env.TA_CAPTURE_ENDPOINT = `http://127.0.0.1:${bridge.port}`;
+    process.env.TA_CAPTURE_TOKEN = bridge.token;
+  } catch (e) {
+    console.error("[main] capture bridge failed to start:", e.message);
+  }
   currentProject = loadProjectPath();
   currentModel = loadUiState().model || null;
   createWindow();
@@ -755,8 +772,9 @@ app.whenReady().then(async () => {
   }
 });
 
-app.on("before-quit", stopVite);
+app.on("before-quit", () => { stopVite(); stopCaptureBridge(); });
 app.on("window-all-closed", () => {
   stopVite();
+  stopCaptureBridge();
   app.quit();
 });

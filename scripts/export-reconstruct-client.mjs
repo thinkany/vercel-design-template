@@ -26,13 +26,17 @@
  * CLOUD CONFIG (injected by the app; see main.cjs): DERIVE_ENDPOINT +
  *   DERIVE_LICENSE_KEY env, overridable with --endpoint / --key.
  *
- * PREREQUISITE: dev server running (npm run dev). puppeteer auto-installs on
- *   first run (never a project dep, never on Vercel).
+ * PREREQUISITE: dev server running (npm run dev). Capture goes through
+ *   scripts/lib/page-driver.mjs — the app's native Electron bridge when
+ *   TA_CAPTURE_ENDPOINT is set (works in a packaged .dmg), else puppeteer
+ *   (auto-installed on first run; never a project dep, never on Vercel).
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
+// Pluggable capture page: native Electron bridge in the app (works in a packaged
+// .dmg), puppeteer standalone. Same puppeteer-Page API either way.
+import { createPage } from "./lib/page-driver.mjs";
 // Build layer (local) — the derive IP is NOT here; it runs in the cloud.
 import { emitCalls, printManifest } from "./export-reconstruct-to-figma.mjs";
 
@@ -66,7 +70,9 @@ const CAPTURED_STYLE_PROPS = [
 
 function parseArgs(argv) {
   const args = {
-    url: "http://localhost:5173", variation: "v00", out: "figma-export", views: null, pages: null, only: null, fast: false, menus: "first",
+    // In the app, main.cjs injects TA_PREVIEW_URL (the project's real Vite base,
+    // whose port varies); fall back to the conventional dev port standalone.
+    url: process.env.TA_PREVIEW_URL || "http://localhost:5173", variation: "v00", out: "figma-export", views: null, pages: null, only: null, fast: false, menus: "first",
     // Cloud derive is the default: capture → POST → BuildSpec. Endpoint + key
     // default to env (app-injected); flags override. --capture-only skips the
     // cloud (writes just the CaptureBundle, for fixtures/debug).
@@ -135,24 +141,17 @@ export-reconstruct-client — capture [data-block]s → cloud derive → BuildSp
 `);
 }
 
-async function loadPuppeteer() {
-  try { return (await import("puppeteer")).default; }
-  catch {
-    console.log("→ First run: installing puppeteer locally (one-time)…\n");
-    const { execSync } = await import("node:child_process");
-    // Install into the app's OWN package (where this script resolves puppeteer
-    // from), NOT the project cwd. The export tooling is app-owned and runs
-    // against a SEPARATE project folder, so a cwd install lands where `import()`
-    // can't find it. `--prefix` targets this script's package root.
-    const appRoot = fileURLToPath(new URL("..", import.meta.url));
-    execSync(`npm install puppeteer@25.3.0 --no-save --prefix "${appRoot}"`, { stdio: "inherit" });
-    return (await import("puppeteer")).default;
-  }
-}
-
 async function readManifest(page, url, viewsOverride) {
   await page.goto(`${url}/?v=v00`, { waitUntil: "networkidle0" });
-  const cfg = await page.evaluate(() => window.__PREVIEW_CONFIG__ ?? null);
+  // App publishes __PREVIEW_CONFIG__ from its mount effect. The native bridge's
+  // goto resolves on load (not network-idle), so poll until it appears rather
+  // than assuming it's there on the first read (harmless for puppeteer — it's
+  // already set, so this returns immediately).
+  let cfg = null;
+  for (let i = 0; i < 80 && !cfg; i++) {
+    cfg = await page.evaluate(() => window.__PREVIEW_CONFIG__ ?? null);
+    if (!cfg) await new Promise((r) => setTimeout(r, 100));
+  }
   const widths = { ...FALLBACK_WIDTHS, ...(cfg?.widths ?? {}) };
   const views = viewsOverride ?? cfg?.views ?? ["desktop", "mobile"];
   const pages = cfg?.pages?.length ? cfg.pages : [{ id: "home", route: "", name: "Home" }];
@@ -295,10 +294,8 @@ async function main() {
   if (args.print || args.block) return printManifest(args);
   const outDir = args.out;
   const t0 = performance.now();
-  const puppeteer = await loadPuppeteer();
-  const browser = await puppeteer.launch({ headless: "new", protocolTimeout: 600000 });
+  const page = await createPage();
   try {
-    const page = await browser.newPage();
     let { views, widths, pages: allPages } = await readManifest(page, args.url, args.views);
     if (args.fast && views.length > 1) views = views.slice(0, 1);
     const pages = args.pages ? allPages.filter((p) => args.pages.includes(p.id)) : allPages;
@@ -472,7 +469,7 @@ async function main() {
     console.error(`  ${((performance.now() - t0) / 1000).toFixed(1)}s.${next}`);
     console.log(JSON.stringify({ outPath, specPath, emitCalls: !!plan, blocks: uniqueBlocks, captures: captured.length, views, assets: assets.length, brandVars: Object.keys(brand.colorVars).length }, null, 2));
   } finally {
-    try { await browser.close(); } catch {}
+    await page.close();
   }
 }
 
