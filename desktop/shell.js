@@ -540,32 +540,86 @@ async function renderProjects(body) {
 
 // --- Company profile: export the agency identity ---
 async function renderCompany(body) {
+  // --- App DEFAULT profile: your agency identity, auto-applied to new projects ---
+  const def = await window.desktop.getDefaultCompany();
+  const row = document.createElement("div");
+  row.className = "setrow";
+  const k = document.createElement("div");
+  k.className = "k";
+  k.textContent = "Default company profile";
+  const badge = document.createElement("span");
+  badge.className = "badge " + (def.has ? "ok" : "off");
+  badge.textContent = def.has ? (def.companyName ? `Active · ${def.companyName}` : "Active") : "Not set";
+  row.append(k, badge);
+  body.appendChild(row);
+
+  const defNote = document.createElement("div");
+  defNote.className = "muted";
+  defNote.textContent = "Applied automatically to every new project — set your agency identity once and skip it on every future setup.";
+  body.appendChild(defNote);
+
   const proj = await window.desktop.getProjectStatus();
+
+  if (proj.hasProject) {
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "panelbtn primary";
+    saveBtn.textContent = "Save this project's identity as my default";
+    const msg = document.createElement("div");
+    msg.className = "muted";
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Saving…";
+      msg.textContent = "";
+      const res = await window.desktop.saveDefaultCompany();
+      if (res.ok) {
+        openModal("company"); // refresh → Active
+      } else {
+        msg.textContent = res.error || "Could not save.";
+        msg.style.color = "#e5484d";
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save this project's identity as my default";
+      }
+    });
+    body.append(saveBtn, msg);
+  }
+  if (def.has) {
+    const clearBtn = document.createElement("button");
+    clearBtn.className = "panelbtn danger";
+    clearBtn.textContent = "Clear default";
+    clearBtn.addEventListener("click", async () => {
+      await window.desktop.clearDefaultCompany();
+      openModal("company");
+    });
+    body.appendChild(clearBtn);
+  }
+
+  // --- Export THIS project's profile to a portable file (move between machines) ---
+  const hr = document.createElement("div");
+  hr.style.cssText = "height:1px;background:var(--border,#2a2a2a);margin:14px 0;";
+  body.appendChild(hr);
+
   if (!proj.hasProject) {
     const note = document.createElement("div");
     note.className = "muted";
-    note.style.marginTop = "0";
-    note.textContent = "Open a project to manage its company profile.";
+    note.textContent = "Open a project to export its company profile to a file.";
     body.appendChild(note);
     return;
   }
   const intro = document.createElement("p");
   intro.className = "muted";
   intro.style.margin = "0 0 12px";
-  intro.textContent = "Your agency identity (name, admin fonts, logo) as a portable file to reuse across projects.";
+  intro.textContent = "Export this project's agency identity as a portable file (to move between machines or share).";
   body.appendChild(intro);
-
   const exportBtn = document.createElement("button");
-  exportBtn.className = "panelbtn primary";
-  exportBtn.textContent = "⬇ Export company profile";
+  exportBtn.className = "panelbtn";
+  exportBtn.textContent = "⬇ Export company profile to a file";
   exportBtn.disabled = !proj.companyProfile;
   exportBtn.addEventListener("click", () => exportCompany(exportBtn));
   body.appendChild(exportBtn);
-
   if (!proj.companyProfile) {
     const note = document.createElement("div");
     note.className = "muted";
-    note.textContent = "No company-profile.json yet — run /export-company in the chat to create one.";
+    note.textContent = "No company-profile.json yet — run /export-company in the chat to create one first.";
     body.appendChild(note);
   }
 }

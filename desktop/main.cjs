@@ -481,6 +481,21 @@ function hasCompanyProfile(projectDir) {
   return !!projectDir && fs.existsSync(companyProfilePath(projectDir));
 }
 
+// The app's DEFAULT company profile — the agency identity (name, admin/gate
+// fonts, login logo) saved once and auto-applied to every new project, like the
+// API key + license. It's the designer's public identity, not a secret, so plain
+// JSON in userData (no keychain). Packed/applied by scripts/company-profile.mjs.
+function defaultCompanyProfilePath() {
+  return path.join(app.getPath("userData"), "company-profile-default.json");
+}
+function hasDefaultCompanyProfile() {
+  return fs.existsSync(defaultCompanyProfilePath());
+}
+// Load the pack/unpack engine from the app's bundled scripts (ESM → dynamic import).
+function companyProfileEngine() {
+  return import(pathToFileURL(path.join(appRoot, "scripts", "company-profile.mjs")).href);
+}
+
 // Copy an attached file into the project (cwd = project) so the agent can act
 // on it instead of the user pasting a path. Routed by type: images land in
 // public/images/ (the design-image bucket); everything else in the root. A
@@ -559,6 +574,37 @@ ipcMain.handle("company:download", async () => {
   return { ok: true, path: res.filePath };
 });
 
+// ---- Default company profile (auto-applied to new projects) ------------------
+ipcMain.handle("company:defaultStatus", () => {
+  if (!hasDefaultCompanyProfile()) return { has: false };
+  try {
+    const profile = JSON.parse(fs.readFileSync(defaultCompanyProfilePath(), "utf8"));
+    return { has: true, companyName: profile.companyName || "" };
+  } catch {
+    return { has: true, companyName: "" };
+  }
+});
+// Pack the CURRENT project's company identity and store it as the app default.
+ipcMain.handle("company:saveDefault", async () => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  try {
+    const { runPack } = await companyProfileEngine();
+    const res = await runPack({ project: currentProject, out: defaultCompanyProfilePath() });
+    const name = res?.summary?.companyName || "";
+    if (!name || name === "(none set)") {
+      try { fs.unlinkSync(defaultCompanyProfilePath()); } catch {}
+      return { ok: false, error: "This project has no company name set yet — set up the company first, then save it as your default." };
+    }
+    return { ok: true, companyName: name };
+  } catch (e) {
+    return { ok: false, error: `Could not save the profile: ${e.message}` };
+  }
+});
+ipcMain.handle("company:clearDefault", () => {
+  try { fs.unlinkSync(defaultCompanyProfilePath()); } catch { /* already gone */ }
+  return { ok: true };
+});
+
 ipcMain.handle("project:create", async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
     title: "Choose an empty folder for your new project",
@@ -575,6 +621,17 @@ ipcMain.handle("project:create", async () => {
     scaffoldProject(dir);
   } catch (e) {
     return { ok: false, error: `Could not scaffold the template: ${e.message}` };
+  }
+  // Auto-apply the saved default company profile so the new project starts
+  // already company-branded (setup then skips the whole company block). Best
+  // effort — a bad/absent profile never blocks project creation.
+  if (hasDefaultCompanyProfile()) {
+    try {
+      const { runUnpack } = await companyProfileEngine();
+      await runUnpack({ project: dir, input: defaultCompanyProfilePath() });
+    } catch (e) {
+      console.error("[main] company-profile auto-apply failed:", e.message);
+    }
   }
   currentProject = dir;
   saveProjectPath(dir);
