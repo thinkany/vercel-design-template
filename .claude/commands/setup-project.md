@@ -86,7 +86,9 @@ Follow these steps:
       locally with **`npm run dev`** (http://localhost:5173) for instant feedback,
       separate from the Vercel preview deploy.
 
-0.5. **Import a saved company profile? (the very first branding question.)** If the
+0.5. **Import a saved company profile? (the mandatory FIRST branding question.)**
+   **Always ask this — never skip it, and don't assume a first-timer has no
+   profile** (they may have one saved from another project or machine). If the
    designer has branded a previous copy of this template, they may have exported a
    **company profile** — their agency name, admin/gate fonts, and login logo — with
    `/export-company`. Importing it here fills all of that in one step, so ask this
