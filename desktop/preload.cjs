@@ -51,6 +51,13 @@ contextBridge.exposeInMainWorld("desktop", {
     ipcRenderer.on("vite:ready", listener);
     return () => ipcRenderer.removeListener("vite:ready", listener);
   },
+  // A preview page opened a new window (target=_blank / window.open) — the main
+  // process routes the URL here so the shell can open it as a new browser tab.
+  onPreviewOpenUrl: (cb) => {
+    const listener = (_e, url) => cb(url);
+    ipcRenderer.on("preview:open-url", listener);
+    return () => ipcRenderer.removeListener("preview:open-url", listener);
+  },
 
   // ---- File attach ----
   attachFile: () => ipcRenderer.invoke("file:attach"),

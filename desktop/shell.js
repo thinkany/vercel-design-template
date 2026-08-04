@@ -12,6 +12,7 @@ const projname = el("projname");
 const railHelp = el("rail-help");
 const railProjects = el("rail-projects");
 const railCompany = el("rail-company");
+const railFigma = el("rail-figma");
 const railClaude = el("rail-claude");
 const modal = el("modal");
 const modalTitle = el("modal-title");
@@ -180,6 +181,7 @@ function setActiveTab(tab) {
 function openTab(url, title) {
   const wv = document.createElement("webview");
   wv.setAttribute("partition", "persist:preview");
+  wv.setAttribute("allowpopups", "true"); // let target=_blank reach the window-open handler (→ new tab)
   wv.setAttribute("src", url);
   const tab = { id: ++tabSeq, wv, title: title || "Loading…", fixedTitle: !!title, url, retries: 0 };
   wv.addEventListener("page-title-updated", (e) => {
@@ -234,16 +236,31 @@ navreload.addEventListener("click", () => { if (activeTab) navigate(activeTab, a
 urlbar.addEventListener("keydown", (e) => {
   if (e.key !== "Enter" || !activeTab) return;
   const u = resolveUrl(urlbar.value);
-  if (u) navigate(activeTab, u);
+  // A typed URL should show the real page title, even if this tab was pinned to a
+  // nav label (Home/Style guide/Dashboard) by a quick-link earlier.
+  if (u) { activeTab.fixedTitle = false; navigate(activeTab, u); }
 });
+const NAV_LABEL = { home: "Home", styleguide: "Style guide", dashboard: "Dashboard" };
 document.querySelectorAll(".qlink").forEach((b) =>
   b.addEventListener("click", () => {
     if (!viteUrl) return;
-    const url = quickUrl(b.dataset.nav);
-    if (activeTab) navigate(activeTab, url);
-    else openTab(url);
+    const kind = b.dataset.nav;
+    const url = quickUrl(kind);
+    const label = NAV_LABEL[kind];
+    if (activeTab) {
+      navigate(activeTab, url);
+      // Pin the tab label to the destination so the title reflects where we
+      // navigated. Without this the startup Home/Style-guide tabs (fixed-title)
+      // keep their original label forever when moved via the quick-links.
+      if (label) { activeTab.title = label; activeTab.fixedTitle = true; renderTabs(); }
+    } else {
+      openTab(url, label);
+    }
   })
 );
+// A preview page's target=_blank / window.open (e.g. dashboard "View Design ↗")
+// → open it as a new tab in this browser.
+window.desktop.onPreviewOpenUrl((url) => openTab(url));
 
 // Rotating status shown in the preview while the agent works and the browser
 // is still closed (during setup).
@@ -515,17 +532,21 @@ createproject.addEventListener("click", () => chooseProject("create"));
 openproject.addEventListener("click", () => chooseProject("open"));
 
 // ---- Sidebar panels ----------------------------------------------------------
-const RAILS = { help: railHelp, projects: railProjects, company: railCompany, claude: railClaude };
+const RAILS = { help: railHelp, projects: railProjects, company: railCompany, figma: railFigma, claude: railClaude };
 const PANELS = {
   help: { title: "Commands", render: renderHelp },
   projects: { title: "Switch project", render: renderProjects },
   company: { title: "Company profile", render: renderCompany },
+  figma: { title: "Figma export", render: renderFigma },
   claude: { title: "Claude settings", render: renderClaude },
 };
 
 function closeModal() {
-  modal.hidden = true;
   Object.values(RAILS).forEach((b) => b.classList.remove("active"));
+  if (modal.hidden) return;
+  modal.classList.remove("open"); // slide out
+  // Hide after the slide-out finishes — unless it was reopened in the meantime.
+  setTimeout(() => { if (!modal.classList.contains("open")) modal.hidden = true; }, 240);
 }
 async function openModal(kind) {
   const { title, render } = PANELS[kind];
@@ -533,14 +554,27 @@ async function openModal(kind) {
   modalBody.innerHTML = "";
   Object.values(RAILS).forEach((b) => b.classList.remove("active"));
   RAILS[kind].classList.add("active");
-  modal.hidden = false;
+  // Slide in on a fresh open (or if interrupted mid-close). When a drawer is
+  // already open, switching panels just re-renders the body — no re-animation.
+  if (modal.hidden || !modal.classList.contains("open")) {
+    modal.hidden = false;
+    void modal.offsetWidth; // commit the closed transform, then transition to open
+    modal.classList.add("open");
+  }
   await render(modalBody);
 }
+// Rail click: if this panel's drawer is already open, close it; else open/switch.
+function toggleModal(kind) {
+  const alreadyOpen = !modal.hidden && modal.classList.contains("open") && RAILS[kind].classList.contains("active");
+  if (alreadyOpen) closeModal();
+  else openModal(kind);
+}
 
-railHelp.addEventListener("click", () => openModal("help"));
-railProjects.addEventListener("click", () => openModal("projects"));
-railCompany.addEventListener("click", () => openModal("company"));
-railClaude.addEventListener("click", () => openModal("claude"));
+railHelp.addEventListener("click", () => toggleModal("help"));
+railProjects.addEventListener("click", () => toggleModal("projects"));
+railCompany.addEventListener("click", () => toggleModal("company"));
+railFigma.addEventListener("click", () => toggleModal("figma"));
+railClaude.addEventListener("click", () => toggleModal("claude"));
 modalClose.addEventListener("click", closeModal);
 modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
 document.addEventListener("keydown", (e) => {
@@ -562,17 +596,27 @@ function renderHelp(body) {
   const intro = document.createElement("p");
   intro.className = "muted";
   intro.style.margin = "0 0 12px";
-  intro.textContent = "Type these in the chat. Setup runs first, then design freely.";
+  intro.textContent = "Click a command to run it in the chat — or type it yourself. Setup runs first, then design freely.";
   body.appendChild(intro);
   COMMANDS.forEach(([cmd, desc]) => {
     const row = document.createElement("div");
     row.className = "cmd";
-    const c = document.createElement("code");
-    c.textContent = cmd;
+    // The command itself IS the button: click → paste + run it in the chat
+    // (same as typing it and hitting enter), then reveal the chat.
+    const btn = document.createElement("button");
+    btn.className = "cmdbtn";
+    btn.title = `Run: ${cmd}`;
+    const label = document.createElement("span");
+    label.textContent = cmd;
+    const run = document.createElement("span");
+    run.className = "run";
+    run.textContent = "▸ run";
+    btn.append(label, run);
+    btn.addEventListener("click", () => { closeModal(); sendText(cmd); });
     const d = document.createElement("div");
     d.className = "d";
     d.textContent = desc;
-    row.append(c, d);
+    row.append(btn, d);
     body.appendChild(row);
   });
 }
@@ -696,8 +740,8 @@ async function renderCompany(body) {
   }
 }
 
-// --- Figma export license (cloud derive) ---
-async function renderLicenseSection(body) {
+// --- Figma export: license (cloud derive) — its own panel, separate from Claude ---
+async function renderFigma(body) {
   const lic = await window.desktop.getLicenseStatus();
   const row = document.createElement("div");
   row.className = "setrow";
@@ -717,7 +761,7 @@ async function renderLicenseSection(body) {
     rm.textContent = "Remove license";
     rm.addEventListener("click", async () => {
       await window.desktop.clearLicense();
-      openModal("claude");
+      openModal("figma");
     });
     body.appendChild(rm);
   } else {
@@ -738,7 +782,7 @@ async function renderLicenseSection(body) {
       msg.textContent = "";
       const res = await window.desktop.saveLicense(key);
       if (res.ok) {
-        openModal("claude"); // refresh → shows Active
+        openModal("figma"); // refresh → shows Active
       } else {
         msg.textContent = res.error || "Could not save the license.";
         msg.style.color = "#e5484d";
@@ -755,10 +799,6 @@ async function renderLicenseSection(body) {
   note.className = "muted";
   note.textContent = "Unlocks Figma export. Validated with the derive service; stored encrypted in your OS keychain.";
   body.appendChild(note);
-
-  const hr = document.createElement("div");
-  hr.style.cssText = "height:1px;background:var(--border,#2a2a2a);margin:14px 0;";
-  body.appendChild(hr);
 }
 
 // --- Claude settings: API key + model ---
@@ -774,9 +814,6 @@ async function renderClaude(body) {
   badge.textContent = status.hasKey ? "Connected" : "Not connected";
   row.append(k, badge);
   body.appendChild(row);
-
-  // Figma-export license (gates the cloud derive) — shown regardless of API key.
-  await renderLicenseSection(body);
 
   if (!status.hasKey) {
     const note = document.createElement("div");

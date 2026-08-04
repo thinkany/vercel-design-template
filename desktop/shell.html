@@ -13,6 +13,10 @@
       #sidebar {
         width: 52px; flex-shrink: 0; background: #17171b;
         display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0;
+        /* Above the drawer backdrop so the rail stays visible + clickable while a
+           drawer is open (switch panels without closing) — the drawer slides out
+           from behind it. */
+        position: relative; z-index: 110;
       }
       .railbtn {
         width: 36px; height: 36px; border: none; background: transparent; color: #fff;
@@ -22,8 +26,14 @@
       .railbtn svg { width: 20px; height: 20px; display: block; }
       .railbtn:hover { background: #2a2a31; opacity: 1; }
       .railbtn.active { background: #2a2a31; opacity: 1; }
-      /* Claude icon: brand-orange, pinned to the bottom of the rail */
-      #rail-claude { margin-top: auto; color: #d97757; opacity: 1; }
+      /* Claude icon: brand-orange (sits inline in the rail, not pinned) */
+      #rail-claude { color: #d97757; opacity: 1; }
+      /* Rail order (visual, top→bottom): Switch Project · Claude · Figma · Company · Help */
+      #rail-projects { order: 1; }
+      #rail-claude   { order: 2; }
+      #rail-figma    { order: 3; }
+      #rail-company  { order: 4; }
+      #rail-help     { order: 5; }
       .railbtn::after {
         content: attr(data-tip);
         position: absolute; left: 46px; top: 50%; transform: translateY(-50%);
@@ -33,26 +43,44 @@
       }
       .railbtn:hover::after { opacity: 1; }
 
-      /* ---- Modal / panels ---- */
+      /* ---- Slide-out drawer (left, beside the rail) ---- */
       #modal {
-        position: fixed; inset: 0; background: rgba(0,0,0,.35);
-        display: flex; align-items: center; justify-content: center; z-index: 100;
+        position: fixed; inset: 0; z-index: 100;
+        background: rgba(0,0,0,0); transition: background .22s ease;
+        pointer-events: none;
       }
       #modal[hidden] { display: none; }
+      #modal.open { background: rgba(0,0,0,.32); pointer-events: auto; }
       #modal-card {
-        background: #fff; width: 480px; max-width: 90vw; max-height: 82vh; border-radius: 12px;
-        overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,.3);
+        position: absolute; top: 0; bottom: 0; left: 52px;    /* flush against the rail */
+        width: 360px; max-width: calc(92vw - 52px);
+        background: #fff; overflow: hidden; display: flex; flex-direction: column;
+        box-shadow: 12px 0 44px rgba(0,0,0,.22);
+        transform: translateX(-110%);                          /* hidden behind the rail */
+        transition: transform .24s cubic-bezier(.4, 0, .2, 1);
       }
+      #modal.open #modal-card { transform: translateX(0); }    /* slide out */
       #modal-head {
         display: flex; align-items: center; justify-content: space-between;
         padding: 14px 16px; border-bottom: 1px solid #eee;
       }
       #modal-title { font-size: 15px; font-weight: 600; }
       #modal-close { border: none; background: none; font-size: 20px; cursor: pointer; color: #888; line-height: 1; }
-      #modal-body { padding: 16px; overflow-y: auto; font-size: 13px; line-height: 1.5; color: #333; }
-      .cmd { margin-bottom: 13px; }
+      #modal-body { flex: 1; padding: 16px; overflow-y: auto; font-size: 13px; line-height: 1.5; color: #333; }
+      .cmd { margin-bottom: 21px; }
       .cmd code { background: #f0f0f3; padding: 1px 6px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
       .cmd .d { color: #666; margin-top: 3px; font-size: 12.5px; }
+      /* Clickable command → paste + run it in the chat (Help drawer) */
+      .cmdbtn {
+        display: inline-flex; align-items: center; gap: 6px;
+        font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12.5px; font-weight: 600;
+        background: #f5f5f7; border: 1px solid #e3e3e8; color: #1a1a1a;
+        padding: 8px 12px; border-radius: 7px; cursor: pointer;
+        transition: background .12s, border-color .12s;
+      }
+      .cmdbtn:hover { background: #ececf1; border-color: #b9a4f0; }
+      .cmdbtn:active { transform: translateY(1px); }
+      .cmdbtn .run { color: #b9a4f0; font-size: 11px; }
       .setrow { margin-bottom: 16px; }
       .setrow .k { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #999; margin-bottom: 4px; }
       .setrow .v { word-break: break-all; }
@@ -289,6 +317,9 @@
         </button>
         <button class="railbtn" id="rail-company" aria-label="Company Profile" data-tip="Company Profile">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </button>
+        <button class="railbtn" id="rail-figma" aria-label="Figma export" data-tip="Figma export">
+          <svg viewBox="0 0 38 57" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" fill="#1abcfe"/><path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z" fill="#0acf83"/><path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z" fill="#ff7262"/><path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z" fill="#f24e1e"/><path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z" fill="#a259ff"/></svg>
         </button>
         <button class="railbtn" id="rail-claude" aria-label="Claude Settings" data-tip="Claude Settings">
           <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z" fill="#D97757" fill-rule="nonzero"></path></svg>

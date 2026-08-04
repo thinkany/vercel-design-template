@@ -407,6 +407,18 @@ function startViteFor(projectDir) {
   });
 }
 
+// Preview webviews (the embedded tabbed browser) block popups by default, so a
+// dashboard link with target="_blank" (e.g. "View Design ↗") does nothing. Route
+// those new-window requests to the renderer, which opens them as a new app tab —
+// keeping the template's standard-web links working inside the app browser.
+app.on("web-contents-created", (_e, contents) => {
+  if (contents.getType() !== "webview") return;
+  contents.setWindowOpenHandler(({ url }) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("preview:open-url", url);
+    return { action: "deny" };
+  });
+});
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
