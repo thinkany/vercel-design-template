@@ -229,12 +229,18 @@ function detectDesign(projectDir) {
       .sort();
     if (ids.length) {
       const id = ids[0];
-      let previewReady = true; // default: ready unless a variation.json says otherwise
+      // Default NOT ready. A variation folder can exist for a moment during setup
+      // (`mkdir v01 && cp -R base…`) BEFORE its variation.json is written — opening
+      // then pops a blank preview. Only a READABLE variation.json makes it ready
+      // (and only if it doesn't say previewReady:false). Every real, set-up
+      // variation has a variation.json, so an already-configured design with the
+      // field absent still reads as ready.
+      let previewReady = false;
       try {
         const meta = JSON.parse(fs.readFileSync(path.join(projectDir, "src", "variations", id, "variation.json"), "utf8"));
         previewReady = meta.previewReady !== false;
       } catch {
-        /* no/unreadable variation.json → treat as ready */
+        /* folder exists but no/unreadable variation.json yet → still being created */
       }
       return { active: true, variationId: id, previewReady };
     }
