@@ -113,7 +113,21 @@ if (PHASE === "reconstruct") {
   const familyRole = {};
   for (const role of ["display", "serif", "sans", "mono"]) if (F[role] && F[role].family) familyRole[F[role].family] = role;
   const roleFromFamily = (fam) => { if (familyRole[fam]) return familyRole[fam]; const f = (fam || "").toLowerCase(); if (/mono|courier|consol/.test(f)) return "mono"; if (/times|georgia|serif|garamond|playfair|lora|merri|book|fraunces/.test(f)) return "serif"; return "sans"; };
-  const styleForWeight = (fam, w) => { const styles = famStyles[fam] || new Set(); const names = { 300: ["Light"], 400: ["Regular"], 500: ["Medium"], 600: ["SemiBold", "Semi Bold", "DemiBold"], 700: ["Bold"], 800: ["ExtraBold", "Extra Bold"] }; for (const cand of (names[w] || ["Regular"])) if (styles.has(cand)) return cand; return styles.has("Regular") ? "Regular" : [...styles][0]; };
+  // Numeric weight → the nearest AVAILABLE named style for this family. Exact
+  // named match first; else the closest non-italic weight (heavier wins ties). The
+  // old code fell back to "Regular" whenever the exact style was missing, so a
+  // 600/700 request on a family that only ships {Regular, Bold} rendered as
+  // Regular — headings came out too light. Nearest-weight keeps them heavy.
+  const STYLE_WEIGHT = { Thin: 100, Hairline: 100, ExtraLight: 200, "Extra Light": 200, UltraLight: 200, Light: 300, Regular: 400, Normal: 400, Book: 400, Medium: 500, SemiBold: 600, "Semi Bold": 600, DemiBold: 600, Demi: 600, Bold: 700, ExtraBold: 800, "Extra Bold": 800, UltraBold: 800, Black: 900, Heavy: 900 };
+  const styleForWeight = (fam, w) => {
+    const styles = [...(famStyles[fam] || new Set())];
+    const names = { 100: ["Thin"], 200: ["ExtraLight", "Extra Light", "UltraLight"], 300: ["Light"], 400: ["Regular", "Normal", "Book"], 500: ["Medium"], 600: ["SemiBold", "Semi Bold", "DemiBold"], 700: ["Bold"], 800: ["ExtraBold", "Extra Bold"], 900: ["Black", "Heavy"] };
+    for (const cand of (names[w] || [])) if (styles.includes(cand)) return cand;
+    const nearest = styles
+      .filter((s) => !/italic/i.test(s) && STYLE_WEIGHT[s] != null)
+      .sort((a, b) => Math.abs(STYLE_WEIGHT[a] - w) - Math.abs(STYLE_WEIGHT[b] - w) || STYLE_WEIGHT[b] - STYLE_WEIGHT[a])[0];
+    return nearest || (styles.includes("Regular") ? "Regular" : styles[0]);
+  };
   const proxies = new Set();
   const resolveFont = (fam, w) => {
     let useFam = fam;
@@ -425,12 +439,25 @@ if (PHASE === "reconstruct") {
           // needs one; a hugging-punctuation start (…into|", and") does not.
           if (chars && /\w$/.test(chars) && /^[\w(\[{“‘"'@#]/.test(s.chars)) chars += " ";
           const st = chars.length; chars += s.chars;
-          if (s.i || s.b) ranges.push({ s: st, e: chars.length, i: s.i, b: s.b });
+          // Record EVERY segment (carrying its own s.text weight+color), not just
+          // <em>/<strong>. An inline <span class="text-ta-primary font-semibold">
+          // sets a different color/weight via class — re-apply BOTH as character
+          // ranges below so the merged node keeps them (color was dropped before).
+          ranges.push({ s: st, e: chars.length, seg: s });
         }
         const base = tsegs[0].text, anchor = textRuns[0];
         const merged = { kind: "text", x: anchor ? (anchor.x || 0) : 0, y: anchor ? (anchor.y || 0) : 0, w: anchor ? (anchor.w || node.w) : node.w, h: node.h, text: { ...base, chars } };
         const child = await build(merged, frame, false, photos);
-        for (const r of ranges) { const font = styledFont(base, r.i, r.b); try { await figma.loadFontAsync(font); child.setRangeFontName(r.s, r.e, font); } catch (e) {} }
+        const sameColor = (a, b) => a && b && a.r === b.r && a.g === b.g && a.b === b.b && (a.a == null ? 1 : a.a) === (b.a == null ? 1 : b.a);
+        for (const r of ranges) {
+          const t = (r.seg.text && typeof r.seg.text === "object") ? r.seg.text : base;
+          // Per-range FONT from the segment's own weight (styleForWeight now snaps to
+          // the nearest available), plus italic/bold.
+          const font = styledFont({ family: t.family || base.family, weight: t.weight || base.weight }, r.seg.i, r.seg.b);
+          try { await figma.loadFontAsync(font); child.setRangeFontName(r.s, r.e, font); } catch (e) {}
+          // Per-range FILL — the missing piece — only where the color diverges.
+          if (t.color && !sameColor(t.color, base.color)) { try { child.setRangeFills(r.s, r.e, [solid(t.color)]); } catch (e) {} }
+        }
         placeChild(child, merged);
         return frame;
       }
