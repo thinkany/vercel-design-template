@@ -224,7 +224,9 @@ export async function handler(req, res) {
   const send = (code, obj) => { res.statusCode = code; res.setHeader("content-type", "application/json"); res.end(JSON.stringify(obj)); };
   // Missing server key is a MISCONFIG (503), not a client auth failure (401) —
   // keeps the two indistinguishable-from-outside cases apart for debugging.
-  const expected = process.env.DERIVE_LICENSE_KEY;
+  // Trim BOTH sides — a pasted Vercel env value often carries a trailing newline
+  // that would otherwise 401 a correct key.
+  const expected = (process.env.DERIVE_LICENSE_KEY || "").trim();
   if (!expected) return send(503, { error: "service not configured: DERIVE_LICENSE_KEY unset (add it in Vercel env, then redeploy)" });
   // Accept `x-license-key: <k>` or `authorization: [Bearer] <k>`; trim stray ws.
   const provided = (req.headers["x-license-key"] || req.headers["authorization"] || "").replace(/^Bearer\s+/i, "").trim();
