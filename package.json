@@ -12,7 +12,7 @@
     "build": "vite build",
     "dev": "vite",
     "desktop": "electron desktop/main.cjs",
-    "predist": "node desktop/build/make-template.cjs",
+    "predist": "npm version patch --no-git-tag-version && node desktop/build/make-template.cjs",
     "dist": "electron-builder --mac"
   },
   "engines": {
