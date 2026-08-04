@@ -16,8 +16,9 @@ const { spawn, execSync } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 const fs = require("node:fs");
 const path = require("node:path");
+const { TEMPLATE_EXCLUDE } = require("./template-exclude.cjs");
 
-const appRoot = path.resolve(__dirname, ".."); // the Electron app / template source (git worktree)
+const appRoot = path.resolve(__dirname, ".."); // the Electron app / template source (git worktree in dev; Resources/app when packaged)
 
 // Put desktop/bin on PATH so the agent's Bash finds `ta-export` — the stable
 // CLI for the app-owned export tooling, which the exporters resolve from the
@@ -259,36 +260,28 @@ function linkNodeModules(projectDir) {
   }
 }
 
-// Paths tracked on `main` but NEVER shipped into a scaffolded project —
-// app-internal IP. `git archive main` already strips these via .gitattributes
-// export-ignore; listing them here is defense-in-depth (belt-and-suspenders
-// tar --exclude + post-extract rm) and documents intent. Directories or exact
-// files. The export-to-Figma tooling is app-owned — the app runs it against a
-// project via `--project`, so it must not live inside the project. Mirrors the
-// .gitattributes globs (scripts/export-*.mjs, scripts/figma-*.plugin.js) and
-// the template-zip filter on main.
-const TEMPLATE_EXCLUDE = [
-  "cloud-export",
-  "scripts/export-to-figma.mjs",
-  "scripts/export-brand-to-figma.mjs",
-  "scripts/export-library-to-figma.mjs",
-  "scripts/export-reconstruct-to-figma.mjs",
-  "scripts/figma-brand-library.plugin.js",
-  "scripts/figma-component-library.plugin.js",
-  "scripts/figma-reconstruct-library.plugin.js",
-];
-
-// Scaffold a pristine project: export the clean `main` branch template into
-// targetDir (no desktop/, no Electron deps — those live only on this branch),
-// minus the app-internal IP in TEMPLATE_EXCLUDE, then link node_modules.
-// Packaged builds would ship a bundled template dir instead.
+// Scaffold a pristine project into targetDir, then link node_modules.
+//
+// Two sources, same result (identical file-for-file):
+//   • Dev (unpackaged): export the clean `main` branch with `git archive main`
+//     — the worktree has the git repo, no snapshot needed.
+//   • Packaged (.app): a bundled template snapshot at desktop/template/ (built
+//     by build/make-template.cjs before electron-builder) — a packaged app has
+//     no git repo, so we copy that pristine dir instead.
+// TEMPLATE_EXCLUDE (app-internal IP) is stripped in dev via tar --exclude and,
+// in both modes, re-stripped as belt-and-suspenders after materializing.
 function scaffoldProject(targetDir) {
-  const excludes = TEMPLATE_EXCLUDE
-    .map((p) => `--exclude="${p}" --exclude="${p}/*"`)
-    .join(" ");
-  execSync(`git -C "${appRoot}" archive main | tar -x ${excludes} -C "${targetDir}"`, { stdio: "pipe" });
-  // Belt-and-suspenders: guarantee nothing on the exclude list survived,
-  // regardless of tar variant.
+  const bundledTemplate = path.join(appRoot, "desktop", "template");
+  if (app.isPackaged || fs.existsSync(bundledTemplate)) {
+    // Copy from the bundled snapshot (packaged, or dev after a `predist` build).
+    fs.cpSync(bundledTemplate, targetDir, { recursive: true });
+  } else {
+    const excludes = TEMPLATE_EXCLUDE
+      .map((p) => `--exclude="${p}" --exclude="${p}/*"`)
+      .join(" ");
+    execSync(`git -C "${appRoot}" archive main | tar -x ${excludes} -C "${targetDir}"`, { stdio: "pipe" });
+  }
+  // Guarantee nothing on the exclude list survived, regardless of source/variant.
   for (const p of TEMPLATE_EXCLUDE) {
     fs.rmSync(path.join(targetDir, p), { recursive: true, force: true });
   }
@@ -330,13 +323,34 @@ let viteHealing = false;
 
 // Start Vite for a project dir; resolve with the URL Vite prints (parsed, not
 // hardcoded, since the port varies) and push a 'vite:ready' event to the UI.
+// How to launch Vite depends on whether we're packaged:
+//   • Dev: `npm run dev` — the launching shell has npm + node on PATH.
+//   • Packaged (.app from Finder): there is NO npm and often NO system node on
+//     PATH. Electron ships its own Node, so run Vite's JS entry directly with
+//     the Electron binary in Node mode (ELECTRON_RUN_AS_NODE=1, set ONLY for
+//     this child so the main process stays a normal Electron app). Vite +
+//     esbuild resolve from the project's node_modules (a symlink to the app's).
+function viteLaunch(projectDir) {
+  if (!app.isPackaged) {
+    return { cmd: "npm", args: ["run", "dev"], env: process.env, shell: process.platform === "win32" };
+  }
+  const viteBin = path.join(appRoot, "node_modules", "vite", "bin", "vite.js");
+  return {
+    cmd: process.execPath,
+    args: [viteBin],
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+    shell: false,
+  };
+}
+
 function startViteFor(projectDir) {
   stopVite();
   return new Promise((resolve, reject) => {
-    viteProc = spawn("npm", ["run", "dev"], {
+    const launch = viteLaunch(projectDir);
+    viteProc = spawn(launch.cmd, launch.args, {
       cwd: projectDir,
-      env: process.env,
-      shell: process.platform === "win32",
+      env: launch.env,
+      shell: launch.shell,
     });
     let settled = false;
     // Tailwind v4's IN-PROCESS config reload can fail in this spawned Vite on an
@@ -382,7 +396,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
-    title: "Design Studio (spike)",
+    title: "thinkany design",
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       // contextIsolation + sandbox stay at their secure defaults (true).

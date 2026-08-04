@@ -11,12 +11,46 @@
 // The SDK is imported dynamically so a missing install (or missing API key)
 // surfaces as a friendly chat error instead of crashing the app at boot.
 
+import os from "node:os";
+import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+
 let _query = null;
 async function getQuery() {
   if (_query) return _query;
   const mod = await import("@anthropic-ai/claude-agent-sdk");
   _query = mod.query;
   return _query;
+}
+
+// The SDK spawns a SELF-CONTAINED native `claude` binary (bundled per-platform
+// in @anthropic-ai/claude-agent-sdk-<platform>-<arch>) — NOT `node` on PATH. In
+// dev the SDK auto-resolves it; but a PACKAGED .app launched from Finder has a
+// minimal PATH and a rearranged layout, so we point the SDK at the binary
+// explicitly. Two locations, checked in order:
+//   • Dev: <appRoot>/desktop/agent.mjs → ../node_modules/<platform pkg>/claude
+//   • Packaged: electron-builder's node_modules PRUNING drops the optional
+//     platform package, so the binary is shipped via extraResources to
+//     Contents/Resources/claude-bin/ — found via process.resourcesPath.
+// Guarded by existsSync: if nothing resolves we return null and let the SDK fall
+// back to its own auto-resolution (dev behavior unchanged).
+function resolveClaudeExecutable() {
+  try {
+    const dir = path.dirname(fileURLToPath(import.meta.url));
+    const pkg = `@anthropic-ai/claude-agent-sdk-${os.platform()}-${os.arch()}`;
+    const binName = os.platform() === "win32" ? "claude.exe" : "claude";
+    const candidates = [
+      path.resolve(dir, "..", "node_modules", pkg, binName), // dev / bundled node_modules
+      process.resourcesPath && path.join(process.resourcesPath, "claude-bin", binName), // packaged extraResources
+    ];
+    for (const c of candidates) {
+      if (c && fs.existsSync(c)) return c;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // A compact, non-sensitive hint about what a tool is acting on — a file path or
@@ -61,12 +95,14 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
   }
 
   try {
+    const claudeExe = resolveClaudeExecutable();
     const iterator = query({
       prompt,
       options: {
         cwd,
         includePartialMessages: true,
         permissionMode: "default",
+        ...(claudeExe ? { pathToClaudeCodeExecutable: claudeExe } : {}),
         ...(model ? { model } : {}),
         // Spike: auto-allow the core toolset so we can drive /setup-project
         // end-to-end. The canUseTool approval UI is a deliberate later step.

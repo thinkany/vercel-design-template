@@ -3,11 +3,17 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
+  "main": "desktop/main.cjs",
+  "description": "a thinkany AI based design studio",
+  "author": "thinkany <contact@thinkany.co> (https://thinkany.design)",
+  "homepage": "https://thinkany.design",
   "packageManager": "pnpm@11.9.0",
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "desktop": "electron desktop/main.cjs"
+    "desktop": "electron desktop/main.cjs",
+    "predist": "node desktop/build/make-template.cjs",
+    "dist": "electron-builder --mac"
   },
   "engines": {
     "node": ">=20.19.0"
@@ -64,14 +70,17 @@
     "sonner": "2.0.3",
     "tailwind-merge": "3.2.0",
     "tw-animate-css": "1.3.8",
-    "vaul": "1.1.2"
-  },
-  "devDependencies": {
+    "vaul": "1.1.2",
     "@tailwindcss/vite": "4.1.12",
     "@vitejs/plugin-react": "4.7.0",
-    "electron": "^43.2.0",
     "tailwindcss": "4.1.12",
-    "vite": "6.3.5"
+    "vite": "6.3.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "electron": "^43.2.0",
+    "electron-builder": "^25.1.8"
   },
   "peerDependencies": {
     "react": "18.3.1",
@@ -88,6 +97,34 @@
   "pnpm": {
     "overrides": {
       "vite": "6.3.5"
+    }
+  },
+  "build": {
+    "appId": "design.thinkany.app",
+    "productName": "thinkany design",
+    "copyright": "Copyright © 2026 thinkany",
+    "asar": false,
+    "directories": {
+      "output": "dist-app"
+    },
+    "files": [
+      "desktop/**/*",
+      "scripts/**/*",
+      "package.json",
+      "!desktop/.env.local",
+      "!desktop/**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude",
+        "to": "claude-bin/claude"
+      }
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.developer-tools",
+      "icon": "desktop/build/icon.png",
+      "identity": null
     }
   }
 }
