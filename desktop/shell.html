@@ -78,14 +78,16 @@
         background: #fafafa;
       }
       /* Draggable divider between chat and preview. */
+      /* A thin gray line like the original chat border, with a slim grab zone. */
       #dragbar {
         flex: none;
-        width: 3px;
+        width: 5px;
         cursor: col-resize;
-        background: #111;
-        transition: background .12s;
+        background: transparent;
+        border-left: 1px solid #e3e3e3;
+        transition: border-color .12s;
       }
-      #dragbar:hover, #dragbar.dragging { background: #7c3aed; }
+      #dragbar:hover, #dragbar.dragging { border-left-color: #c2c2c8; }
       #bar {
         padding: 8px 14px;
         font-size: 12px;
