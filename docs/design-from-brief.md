@@ -39,6 +39,25 @@ decision:
 Implementation touchpoints: the SessionStart hook context + a routing rule in
 `/setup-project` (or a new `/design-brief` skill the hook points to).
 
+## Welcome entry point — two chips (BUILT 2026-08-04)
+The Electron app's fresh-start chat opens with **two clickable option cards**
+instead of guessing intent from a typed "hello" (which was ~50/50). Modeled on
+Claude Desktop's design-direction chips; reuses the app's `.qcard`/`.qopt`
+styling. Clicking a chip **is** that path's "hello":
+- **Client Setup** → sends `/setup-project` (deterministic — no hook guessing).
+  Fully live today.
+- **Get Designing** → the **natural-language brief** entry: focuses the composer
+  with a brief-oriented placeholder + an invite ("Tell me about the site — vibe
+  + any style/color/font links"); the designer's next message is the brief.
+  Wired now with `designBriefMode`; the brief is sent as a normal message until
+  the pipeline below lands (see the `TODO(design-from-brief)` in `sendText`).
+
+Implementation (in `desktop/shell.js`): `renderWelcomeChips()` (self-guarded to
+a truly fresh start — project open, no design, nothing said), `enterDesignBriefMode()`,
+and a shared `sendText()` both the composer and the chips call. The chips are the
+**front door**; the extraction/orchestration below is what "Get Designing"
+upgrades into.
+
 ## Pipeline
 ```
 Brief + links
