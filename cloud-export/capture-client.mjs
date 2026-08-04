@@ -13,10 +13,12 @@
  * bytes NEVER leave the machine — the bundle carries only asset names/urls; the
  * builder uploads the bytes locally via upload_assets.
  *
- * OUTPUT (POC, disk-based so #1 and #2 run independently of a live endpoint):
- *   cloud-export/out/capture-{variation}.json   ← the CaptureBundle
+ * OUTPUT:
+ *   cloud-export/out/capture-{variation}.json   ← the CaptureBundle (always)
  *   cloud-export/out/assets/*.png               ← local image bytes
- * A later --post flag will POST the bundle to the cloud endpoint instead.
+ * With --post, it also POSTs the bundle to the cloud derive endpoint (license in
+ * the x-license-key header) and writes back the returned BuildSpec as
+ * reconstruct-{variation}.json — the same shape the local path produced.
  *
  * USAGE
  *   node cloud-export/capture-client.mjs -v v00            # all blocks × active views
