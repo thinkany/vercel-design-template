@@ -102,6 +102,59 @@ async function validateKey(key) {
   }
 }
 
+// ---- Derive license (Figma export) ------------------------------------------
+// Same shape as the API key: entered in-app, persisted encrypted via the OS
+// keychain, and injected as DERIVE_LICENSE_KEY so `ta-export reconstruct` (run by
+// the agent) can present it to the cloud derive. Gates the crown-jewel IP.
+function licenseFilePath() {
+  return path.join(app.getPath("userData"), "derive-license.enc");
+}
+function loadStoredLicense() {
+  try {
+    const p = licenseFilePath();
+    if (!fs.existsSync(p)) return null;
+    const buf = fs.readFileSync(p);
+    if (safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(buf);
+    return buf.toString("utf8");
+  } catch {
+    return null;
+  }
+}
+function storeLicense(key) {
+  const data = safeStorage.isEncryptionAvailable()
+    ? safeStorage.encryptString(key)
+    : Buffer.from(key, "utf8");
+  fs.writeFileSync(licenseFilePath(), data);
+}
+function removeStoredLicense() {
+  try {
+    fs.unlinkSync(licenseFilePath());
+  } catch {
+    /* already gone */
+  }
+}
+// Validate against the live derive service without a dedicated endpoint: POST a
+// minimal (empty) CaptureBundle. A valid key derives it (200); a bad key is
+// rejected before the body is read (401); an unconfigured server is 503.
+async function validateLicense(key) {
+  const endpoint = process.env.DERIVE_ENDPOINT;
+  if (!endpoint) return { ok: false, error: "No derive endpoint is configured." };
+  const probe = { contract: 1, variation: "v00", views: [], widths: {}, brand: { colorVars: {}, fontVars: {} }, pages: [], blocks: [], assets: [] };
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-license-key": key },
+      body: JSON.stringify(probe),
+    });
+    if (res.ok) return { ok: true };
+    if (res.status === 401) return { ok: false, error: "That license key was rejected." };
+    if (res.status === 503) return { ok: false, error: "The license service isn't configured yet." };
+    return { ok: false, error: `Unexpected response from the license service (${res.status}).` };
+  } catch (e) {
+    return { ok: false, error: `Couldn't reach the license service: ${e.message}` };
+  }
+}
+
 // ---- Project (workspace) storage --------------------------------------------
 function projectConfigPath() {
   return path.join(app.getPath("userData"), "project.json");
@@ -372,6 +425,30 @@ ipcMain.handle("key:clear", () => {
   return { ok: true };
 });
 
+// ---- License IPC ------------------------------------------------------------
+ipcMain.handle("license:status", () => {
+  const key = (process.env.DERIVE_LICENSE_KEY || "").trim();
+  return { hasLicense: !!key, hint: key ? key.slice(-4) : null };
+});
+ipcMain.handle("license:save", async (_event, { key }) => {
+  const k = (key || "").trim();
+  if (!k) return { ok: false, error: "Enter your license key first." };
+  const v = await validateLicense(k);
+  if (!v.ok) return v;
+  try {
+    storeLicense(k);
+  } catch (e) {
+    return { ok: false, error: `Could not save the license: ${e.message}` };
+  }
+  process.env.DERIVE_LICENSE_KEY = k;
+  return { ok: true };
+});
+ipcMain.handle("license:clear", () => {
+  removeStoredLicense();
+  delete process.env.DERIVE_LICENSE_KEY;
+  return { ok: true };
+});
+
 // ---- Project IPC ------------------------------------------------------------
 function companyProfilePath(projectDir) {
   return path.join(projectDir, "company-profile.json");
@@ -533,6 +610,8 @@ app.whenReady().then(async () => {
   loadEnvLocal(); // dev fallback
   const stored = loadStoredKey(); // in-app key wins if present
   if (stored) process.env.ANTHROPIC_API_KEY = stored;
+  const storedLicense = loadStoredLicense(); // in-app license wins over .env.local
+  if (storedLicense) process.env.DERIVE_LICENSE_KEY = storedLicense;
   currentProject = loadProjectPath();
   currentModel = loadUiState().model || null;
   createWindow();

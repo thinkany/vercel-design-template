@@ -521,6 +521,71 @@ async function renderCompany(body) {
   }
 }
 
+// --- Figma export license (cloud derive) ---
+async function renderLicenseSection(body) {
+  const lic = await window.desktop.getLicenseStatus();
+  const row = document.createElement("div");
+  row.className = "setrow";
+  const k = document.createElement("div");
+  k.className = "k";
+  k.textContent = "Figma export license";
+  const badge = document.createElement("span");
+  badge.className = "badge " + (lic.hasLicense ? "ok" : "off");
+  badge.textContent = lic.hasLicense ? "Active" : "Not set";
+  row.append(k, badge);
+  body.appendChild(row);
+
+  if (lic.hasLicense) {
+    body.appendChild(setRow("Key", `…${lic.hint || "????"}`));
+    const rm = document.createElement("button");
+    rm.className = "panelbtn danger";
+    rm.textContent = "Remove license";
+    rm.addEventListener("click", async () => {
+      await window.desktop.clearLicense();
+      openModal("claude");
+    });
+    body.appendChild(rm);
+  } else {
+    const input = document.createElement("input");
+    input.className = "field";
+    input.type = "password";
+    input.placeholder = "Paste your license key";
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "panelbtn primary";
+    saveBtn.textContent = "Save license";
+    const msg = document.createElement("div");
+    msg.className = "muted";
+    const doSave = async () => {
+      const key = input.value.trim();
+      if (!key) return;
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Validating…";
+      msg.textContent = "";
+      const res = await window.desktop.saveLicense(key);
+      if (res.ok) {
+        openModal("claude"); // refresh → shows Active
+      } else {
+        msg.textContent = res.error || "Could not save the license.";
+        msg.style.color = "#e5484d";
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save license";
+      }
+    };
+    saveBtn.addEventListener("click", doSave);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") doSave(); });
+    body.append(input, saveBtn, msg);
+  }
+
+  const note = document.createElement("div");
+  note.className = "muted";
+  note.textContent = "Unlocks Figma export. Validated with the derive service; stored encrypted in your OS keychain.";
+  body.appendChild(note);
+
+  const hr = document.createElement("div");
+  hr.style.cssText = "height:1px;background:var(--border,#2a2a2a);margin:14px 0;";
+  body.appendChild(hr);
+}
+
 // --- Claude settings: API key + model ---
 async function renderClaude(body) {
   const status = await window.desktop.getKeyStatus();
@@ -534,6 +599,9 @@ async function renderClaude(body) {
   badge.textContent = status.hasKey ? "Connected" : "Not connected";
   row.append(k, badge);
   body.appendChild(row);
+
+  // Figma-export license (gates the cloud derive) — shown regardless of API key.
+  await renderLicenseSection(body);
 
   if (!status.hasKey) {
     const note = document.createElement("div");

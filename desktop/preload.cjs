@@ -24,6 +24,11 @@ contextBridge.exposeInMainWorld("desktop", {
   saveKey: (key) => ipcRenderer.invoke("key:save", { key }),
   clearKey: () => ipcRenderer.invoke("key:clear"),
 
+  // ---- Derive license (Figma export) ----
+  getLicenseStatus: () => ipcRenderer.invoke("license:status"),
+  saveLicense: (key) => ipcRenderer.invoke("license:save", { key }),
+  clearLicense: () => ipcRenderer.invoke("license:clear"),
+
   // ---- Model ----
   getModels: () => ipcRenderer.invoke("models:list"),
   getModel: () => ipcRenderer.invoke("model:get"),
