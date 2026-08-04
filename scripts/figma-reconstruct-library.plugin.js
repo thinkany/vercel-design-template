@@ -387,7 +387,13 @@ if (PHASE === "reconstruct") {
     // center within — so it renders LEFT while the multi-line headline/body (which
     // merge to the full wrapper width) center correctly. Merging + filling it to the
     // wrapper width lets the alignment do its job.
-    const soloAligned = textRuns.length === 1 && (textRuns[0].text.align === "center" || textRuns[0].text.align === "right");
+    // NON-AUTO wrappers ONLY. In an AUTO (flex) frame — e.g. a <button>, which the UA
+    // gives `text-align:center` so its lone label counts as center-aligned — the merge
+    // rebuilds the label at the button's FULL height, tripping build()'s multi-line
+    // wrap heuristic, which fills it to the full button width; centered in that box it
+    // overflows the padding and shifts off-centre. Auto-layout already centers the hug
+    // label, so skip the merge and let the normal child path build it at its own height.
+    const soloAligned = !auto && textRuns.length === 1 && (textRuns[0].text.align === "center" || textRuns[0].text.align === "right");
     if (isTextBox && uniform && (textRuns.length > 1 || kids.some((c) => c.tag === "br") || soloAligned)) {
       let chars = "";
       for (const c of kids) { if (c.kind === "text") chars += c.text.chars; else if (c.tag === "br") chars += "\n"; }
