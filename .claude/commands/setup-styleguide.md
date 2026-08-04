@@ -56,12 +56,20 @@ configures THAT variation, never the base.**
     "description": "Initial Design Concept, color and font variations.",
     "createdAt": "MM/DD/YYYY",
     "styleguideStatus": "updated",
-    "brandStatus": "established"
+    "brandStatus": "established",
+    "previewReady": false
   }
   ```
 
   Set `createdAt` to **today's date** (`MM/DD/YYYY`, no time). `modifiedAt` is filled
   live from the design files' mtimes, so don't hardcode it.
+
+  **`previewReady: false` keeps the app's live preview CLOSED for now.** The variation
+  folder exists the instant you copy the base — but its styleguide has no client colors
+  yet, so opening the preview here would pop a blank/base page mid-setup. The app waits
+  for `previewReady: true`, which you flip **once the color palette is written** (Step
+  1a) — that's when there's real content to show. (Only the desktop app reads this
+  field; it's a harmless no-op elsewhere.)
 
   The dashboard reads this file directly — no localStorage, so it shows the right
   title/status in every browser. Tell the designer in one plain line that you've set
@@ -247,6 +255,14 @@ new group and leaves existing ones intact.
 `variation.json`, so the styleguide won't flag its Colors as template defaults —
 nothing to click. (If you ever need to re-flag/clear it by hand, edit that field in
 `src/variations/{id}/variation.json`.)
+
+**Now open the live preview — set `"previewReady": true`.** The palette is written, so
+this is the point where the styleguide has real swatches to show. Edit the
+`previewReady` field in `src/variations/{id}/variation.json` (Step 0 wrote it as
+`false`) to `true`. That flip is the signal the desktop app waits on: it holds the
+preview closed while the variation is created and the palette is being set, then opens
+the styleguide + home tabs on the real palette. Flip it **once, here** — not earlier,
+not per-color.
 
 ### 1b. Fonts
 

@@ -25,6 +25,12 @@ export interface Variation {
   // Per-variation brand-palette state. "needs-review" flags Colors as template
   // defaults until established. Base has no state.
   brandStatus?: "needs-review" | "established";
+  // Desktop-app only: gates when the live preview opens. `/setup-styleguide`
+  // writes `false` when it creates the variation and flips it `true` once the
+  // color palette is written, so the app's preview opens on real content instead
+  // of a blank/base styleguide mid-setup. Absent ⇒ treated as ready (the app
+  // opens normally for existing/cloned designs). Ignored outside the app.
+  previewReady?: boolean;
 }
 
 /** The base blueprint (v00). Lives in code — it has no `src/variations/` folder. */
