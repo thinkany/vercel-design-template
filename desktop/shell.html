@@ -78,16 +78,17 @@
         background: #fafafa;
       }
       /* Draggable divider between chat and preview. */
-      /* A thin gray line like the original chat border, with a slim grab zone. */
+      /* Slim grab zone that blends into the chat pane (#fafafa) — no white gap —
+         with the thin gray line sitting against the preview like the original. */
       #dragbar {
         flex: none;
         width: 5px;
         cursor: col-resize;
-        background: transparent;
-        border-left: 1px solid #e3e3e3;
+        background: #fafafa;
+        border-right: 1px solid #e3e3e3;
         transition: border-color .12s;
       }
-      #dragbar:hover, #dragbar.dragging { border-left-color: #c2c2c8; }
+      #dragbar:hover, #dragbar.dragging { border-right-color: #c2c2c8; }
       #bar {
         padding: 8px 14px;
         font-size: 12px;
