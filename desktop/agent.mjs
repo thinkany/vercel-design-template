@@ -108,6 +108,18 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
         // end-to-end. The canUseTool approval UI is a deliberate later step.
         allowedTools: [
           "Read", "Write", "Edit", "Glob", "Grep", "Bash", "WebFetch", "WebSearch",
+          // Pre-approve the Figma MCP tools (used by the export-to-Figma flow) so
+          // they clear at the allow-rules stage and never hit an interactive
+          // permission handshake this non-interactive session can't answer — that
+          // was surfacing as "Tool permission request failed: AbortError: Stream
+          // closed". Wildcard MUST be mcp__<server>__* (a bare "mcp__figma" is
+          // ignored with a warning). This keeps canUseTool intact for
+          // AskUserQuestion (unlike permissionMode:"bypassPermissions", which
+          // would skip it and break the clickable prompts). If the Figma OAuth
+          // token isn't available to the bundled CLI, the server reports
+          // needs-auth and its tools are simply skipped — a clean degrade, not an
+          // abort — which also tells us OAuth is the remaining piece.
+          "mcp__figma__*",
         ],
         ...(sessionId ? { resume: sessionId } : {}),
 
