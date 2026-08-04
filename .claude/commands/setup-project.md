@@ -9,15 +9,18 @@ live in the committed `.env` at the project root as `VITE_COMPANY_NAME`,
 consumed through `src/config/site.ts` and drive the dashboard header wordmark,
 the title lockup, the styleguide masthead, and the browser tab title.
 
-**Make this interactive.** Wherever a step says "ask" or "prompt," use the
-`AskUserQuestion` tool rather than plain conversational text — it renders
-clickable options plus an "Other → type your own" field and works the same in
-the IDE and Claude Desktop. Batch related questions into a single
-`AskUserQuestion` call (up to 4 questions per call) so the user answers one
-panel instead of a back-and-forth. Every question auto-includes a free-text
-"Other" field, so open-ended values (URLs, exact font-family strings) are typed
-there; the preset options are just fast paths and sensible defaults. Only fall
-back to a plain text prompt if a value truly has no reasonable presets.
+**Make this interactive — ONE question at a time.** Wherever a step says "ask" or
+"prompt," use the `AskUserQuestion` tool rather than plain conversational text — it
+renders clickable options plus an "Other → type your own" field and works the same
+in the IDE and Claude Desktop. **Ask EXACTLY ONE question per `AskUserQuestion`
+call, and WAIT for the answer before asking the next — never put two or more
+questions in a single call.** The designer must only ever see a single prompt on
+screen at a time; a follow-up (like tablet preview, or menu style) is its own
+separate call after the prior answer, never bundled alongside another. Every
+question auto-includes a free-text "Other" field, so open-ended values (URLs, exact
+font-family strings) are typed there; the preset options are just fast paths and
+sensible defaults. Only fall back to a plain text prompt if a value truly has no
+reasonable presets.
 
 **Question order — gather COMPANY info together, then CLIENT/PROJECT info.** The
 company (agency) identity — logo, company name, admin/gate fonts — is set once and
@@ -240,8 +243,9 @@ Follow these steps:
      ships DM Sans / Inter for both the gate and the interior admin chrome. Skip
      the rest of this step and continue to step 3.
 
-   **b. Gather the values.** If **Yes**, ask these in a single `AskUserQuestion`
-   call (three questions in one panel):
+   **b. Gather the values.** If **Yes**, ask these as **three SEPARATE
+   `AskUserQuestion` calls — one at a time, waiting for each answer before the
+   next** (never combine them into one panel):
    1. Header **"Font Location"**. Question: "Where are your fonts located?"
       Three options:
       - **Google Fonts** — paste the share / `<link>` URL.

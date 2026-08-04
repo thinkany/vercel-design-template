@@ -13,14 +13,16 @@ is the living reference every later design decision is checked against. It ships
 mostly-universal, with one **generic example** per component level as a
 copy-me pattern. Your job here is to make its foundation reflect *this* project.
 
-**Make this interactive.** Drive the designer's choices with the
-`AskUserQuestion` tool rather than plain text prompts — it renders clickable
-options plus an "Other → type your own" field and behaves identically in the IDE
-and Claude Desktop. Batch related questions into one call (max 4 per panel).
-Every question includes a free-text "Other", so open values (font-family
-strings, hex codes, stylesheet URLs) are typed there while presets stay one
-click away. Step 3 (the example sections) is the exception — it's a short
-**informational** heads-up, not a question.
+**Make this interactive — ONE question at a time.** Drive the designer's choices
+with the `AskUserQuestion` tool rather than plain text prompts — it renders
+clickable options plus an "Other → type your own" field and behaves identically in
+the IDE and Claude Desktop. **Ask EXACTLY ONE question per `AskUserQuestion` call
+and WAIT for the answer before the next — never bundle two or more questions into
+one call.** The designer only ever sees a single prompt at a time. Every question
+includes a free-text "Other", so open values (font-family strings, hex codes,
+stylesheet URLs) are typed there while presets stay one click away. Step 3 (the
+example sections) is the exception — it's a short **informational** heads-up, not a
+question.
 
 Walk the designer through these steps:
 
