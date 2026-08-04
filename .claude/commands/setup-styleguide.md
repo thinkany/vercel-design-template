@@ -187,11 +187,11 @@ inconsistent results; stay with plain HTTP fetches of the markup + stylesheets.
    drop near-duplicate shades and incidental one-off greys. Note the site's real
    `font-family` stacks too — offer them as suggested type roles (Display / body),
    though actual font wiring still follows the Fonts step (1b).
-3. **Preview + confirm before writing.** Assemble the named, described palette
-   (name + hex + role per color), **publish the swatch preview** (see *Swatch
-   preview* below) so the designer sees the actual colors, then confirm / rename /
-   drop entries via `AskUserQuestion`. **Never write a fetched palette without
-   confirmation.**
+3. **Assemble, then write + preview live.** Build the named palette (name + hex +
+   role per color), then write it (see "Map to the seven roles" + "Write both
+   files" below). The **live styleguide preview** shows the real swatches — that's
+   where the designer confirms and adjusts. Do NOT publish a claude.ai Artifact or
+   hold a text-only confirm first; write, let the preview render, then refine live.
 4. **If the site yields too little** (a JS-heavy SPA with no usable CSS in the
    fetched source), **do not escalate to a browser.** Say so plainly and fall back:
    ask the designer for the brand hex(es) or logo, or switch to **Method C** (derive
@@ -200,26 +200,25 @@ inconsistent results; stay with plain HTTP fetches of the markup + stylesheets.
 **Method C — From one primary color.**
 Ask for a single primary hex, then derive a coherent system from it with sensible
 color theory — typically one or two accents (e.g. a complementary/secondary), a
-neutral ramp (a near-black ink plus 2–3 greys), and a page background. **Publish the
-swatch preview** (see *Swatch preview* below) so the designer sees the actual
-colors, then present the derived palette (name + hex + role) via `AskUserQuestion`
-to confirm/tweak before writing.
+neutral ramp (a near-black ink plus 2–3 greys), and a page background. Write the
+derived palette (below); the **live styleguide preview** then shows the real
+colors and the designer confirms/tweaks from there. No artifact, no
+confirm-before-write.
 
-**Swatch preview (Artifact) — proposed palettes (Methods B & C only).**
-`AskUserQuestion` options are text-only (no color chips), so for a *proposed*
-palette, show the real colors as an **Artifact** first — it renders inline in
-Claude Desktop, before anything is written to disk. (Method A / manual entry skips
-this — the designer is supplying the hexes themselves.)
+**Swatch preview = the LIVE styleguide, NOT a claude.ai Artifact.** This scaffold
+has a live styleguide preview — the desktop app opens its **Style guide** tab
+automatically once the palette is written (in the IDE / Claude Desktop it's the
+running dev server at `/?v={id}&styleguide`). Its **Primitives → Colors** section
+renders every color as a real chip — that IS the swatch view. So **do NOT publish
+an Artifact** (a `claude.ai/…/artifact` link) for the palette; that's the wrong
+surface here. The flow is **write → preview → adjust live**:
 
-- Write a **self-contained HTML** file to the scratchpad: a responsive grid of
-  cards, each = a filled color block (`background:{hex}`) above its **name**, the
-  **hex** (mono), and the **role**. Theme-aware, favicon `🎨`. Load the
-  `artifact-design` skill first (the Artifact tool requires it) but keep the
-  investment **minimal** — this is a quick utility swatch card, not a showcase.
-- **Publish it** with the Artifact tool (private by default), then run the
-  `AskUserQuestion` confirm. If the designer renames/drops/re-tints a color, **edit
-  the same file and re-publish** (same path → same URL updates in place).
-- Only **after** they confirm do you write `tokens.css` + `brand.ts`.
+- Map the colors to the seven roles and **write** `tokens.css` + `brand.ts` (below).
+- Flip `previewReady: true` (below) — the Style guide tab opens on the real swatches.
+- Then invite adjustments in plain language ("Want the primary a touch warmer, the
+  surface lighter?"); each tweak is an edit to `brand.ts` / `tokens.css` and the
+  preview hot-reloads. Refine there instead of re-confirming a text list. (Manual
+  entry / Method A: the designer supplied the hexes, so just write + preview.)
 
 **Map to the seven roles (all methods) — do NOT invent slugs from color names.**
 The token slugs are FIXED: `--ta-primary`, `--ta-accent`, `--ta-surface`, `--ta-ink`,
