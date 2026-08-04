@@ -201,12 +201,15 @@ document.querySelectorAll(".qlink").forEach((b) =>
 
 // Rotating status shown in the preview while the agent works and the browser
 // is still closed (during setup).
+// Generic rotation shown between live-activity updates. Timer-based, NOT tied to
+// real progress — so keep every line progress-neutral (no "almost there" / "just
+// a moment" that would over-promise while setup is still going).
 const WORKING_MESSAGES = [
   "We're getting your workspace set up…",
-  "Setting things up — this'll just take a moment…",
-  "Getting everything ready for you…",
+  "Setting things up for you…",
+  "Getting everything ready…",
   "Your live preview will open on its own once it's ready…",
-  "Almost there…",
+  "Thanks for hanging in there with us…",
 ];
 function startWorking() {
   if (workingTimer) return;
