@@ -112,7 +112,8 @@
       "scripts/**/*",
       "package.json",
       "!desktop/.env.local",
-      "!desktop/**/*.map"
+      "!desktop/**/*.map",
+      "!**/@anthropic-ai/claude-agent-sdk-darwin-arm64/**"
     ],
     "extraResources": [
       {
