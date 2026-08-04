@@ -29,6 +29,17 @@ if (!(process.env.PATH || "").split(path.delimiter).includes(BIN_DIR)) {
   process.env.PATH = `${BIN_DIR}${path.delimiter}${process.env.PATH || ""}`;
 }
 
+// `ta-export reconstruct` POSTs the raw capture to the cloud derive (the IP runs
+// there, never in the app). Default the client to the production endpoint; the
+// agent's Bash inherits this env. A shell-provided DERIVE_ENDPOINT (set before
+// launch) wins, since this only fills when unset — handy for pointing at a local
+// derive. The license key is provided separately and stays unset here, so
+// desktop/.env.local (DERIVE_LICENSE_KEY) supplies it for now via loadEnvLocal;
+// app-managed license comes later (IP plan step 4).
+if (!process.env.DERIVE_ENDPOINT) {
+  process.env.DERIVE_ENDPOINT = "https://derive.thinkany.design/api/derive";
+}
+
 // Minimal zero-dep loader for desktop/.env.local (untracked) so a dev key never
 // has to be exported into the shell that launches the app.
 function loadEnvLocal() {

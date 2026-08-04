@@ -29,7 +29,9 @@ const SCRIPTS = resolve(__dirname, "..", "..", "scripts"); // appRoot/scripts
 const MAP = {
   brand: "export-brand-to-figma.mjs",
   library: "export-library-to-figma.mjs",
-  reconstruct: "export-reconstruct-to-figma.mjs",
+  // reconstruct = capture (local) → cloud derive (the IP) → build. The client
+  // entrypoint; export-reconstruct-to-figma.mjs is now just its build library.
+  reconstruct: "export-reconstruct-client.mjs",
   figma: "export-to-figma.mjs",
 };
 const NEEDS_PROJECT_ROOT = new Set(["brand", "library"]);
