@@ -28,5 +28,5 @@ fi
 
 # Unbranded → nudge Claude to run setup.
 cat <<'JSON'
-{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"This is a FRESH, UNBRANDED copy of the design template — VITE_CLIENT_NAME is empty in .env, so it has not been set up yet. Before other work, greet the designer and run the setup flow by invoking the setup-project skill (the /setup-project command) to brand the template. If the designer clearly opened this session for a different task, offer to run /setup-project first but respect their choice."}}
+{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"This is a FRESH, UNBRANDED copy of the design template (VITE_CLIENT_NAME is empty in .env) — it has not been set up for a client yet. The designer is prompted to say hello to begin. On their FIRST message, unless it is unmistakably a DIFFERENT task, reply with just ONE short welcome line and then IMMEDIATELY invoke the setup-project skill (run the /setup-project command) to start branding. A greeting like 'hello' IS the go-ahead — do NOT ask permission, do NOT offer it as a choice, do NOT wait for confirmation; start setup right away. Only skip setup if the first message is clearly a different, specific request, in which case handle that and offer /setup-project afterward."}}
 JSON
