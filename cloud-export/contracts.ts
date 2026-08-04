@@ -15,6 +15,16 @@
  * SEAM RULE: geometry (rects/offsets/text-run boxes) is measured LOCALLY because
  * it needs live layout; EVERY interpretation of a style string (parse, resolve,
  * compact, bind) happens in the CLOUD. Keep new fields on that side of the line.
+ *
+ * SEAM CARVE-OUTS (deliberate, don't "clean up"):
+ *  • The capture client reads `pointerEvents` and `fontStyle` IN-PAGE but never
+ *    serializes them — `pointerEvents` gates the hidden-subtree skip, `fontStyle`
+ *    feeds the line-height probe. So CAPTURED_STYLE_PROPS is NOT the full set of
+ *    props the client touches; it's the set that crosses the wire.
+ *  • `line-height:normal` → px is the one interpretation done LOCALLY, because it
+ *    needs the live browser; capture bakes the resolved px into the raw
+ *    `lineHeight` string and the cloud treats it as raw. The only exception to
+ *    "no interpretation locally".
  */
 
 /* ────────────────────────────── shared ────────────────────────────── */
@@ -131,6 +141,12 @@ export interface FontRole { family: string; role: "display" | "serif" | "sans" |
 export type Fill =
   | { type: "solid"; color: RGBA }
   | { type: "gradient"; angle: number; stops: { color: RGBA; pos: number }[] }
+  // IMAGE fill only when the client actually downloaded the bytes: `asset` is a
+  // manifest name, and the derive OMITS the fill when a src has no asset (no
+  // orphan gray placeholder). `data:` URLs are re-encoded to named assets and DO
+  // render. `size`/`pos` are carried but the builder currently IGNORES them
+  // (object-fit/position is applied out-of-band by upload_assets) — kept for a
+  // future builder that honors them; don't assume cover/center from the spec.
   | { type: "image"; asset: string; size?: string; pos?: string };
 
 export type Stroke =

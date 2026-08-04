@@ -1,29 +1,30 @@
 #!/usr/bin/env node
 // ©2026 thinkany llc. All rights reserved.
 /**
- * capture-client.mjs — the LOCAL half of the licensed cloud-export path.
+ * export-reconstruct-client.mjs — the reconstruct entrypoint (`ta-export
+ * reconstruct`). The LOCAL, commodity half of the licensed export path.
  *
- * The thin, commodity capture: drive a headless browser to each design page's
- * capture route, serialize every [data-block] into a RAW node tree (raw
- * computed-style strings + geometry — NO interpretation, NO color resolution),
- * download + PNG-reencode image bytes LOCALLY, and assemble a CaptureBundle.
+ * Drives a headless browser to each design page's capture route, serializes
+ * every [data-block] into a RAW node tree (raw computed-style strings + geometry
+ * — NO interpretation, NO color resolution), downloads + PNG-reencodes image
+ * bytes LOCALLY, assembles a CaptureBundle, and POSTs it to the cloud derive
+ * (license in the x-license-key header). The cloud returns the BuildSpec, written
+ * as reconstruct-{variation}.json — the exact shape the builder consumes.
  *
- * This intentionally holds NONE of the derive IP: it emits raw strings the cloud
- * turns into Figma-intent (see cloud-export/derive.mjs + contracts.ts). Image
- * bytes NEVER leave the machine — the bundle carries only asset names/urls; the
- * builder uploads the bytes locally via upload_assets.
+ * Holds NONE of the derive IP — that runs server-side (derive.thinkany.design;
+ * source lives only in the private derive repo). This client emits raw strings up
+ * and drives the build (emitCalls → use_figma) down. Image bytes NEVER leave the
+ * machine — the bundle carries only asset names/urls; the builder uploads bytes
+ * locally via upload_assets.
  *
- * OUTPUT:
- *   cloud-export/out/capture-{variation}.json   ← the CaptureBundle (always)
- *   cloud-export/out/assets/*.png               ← local image bytes
- * With --post, it also POSTs the bundle to the cloud derive endpoint (license in
- * the x-license-key header) and writes back the returned BuildSpec as
- * reconstruct-{variation}.json — the same shape the local path produced.
+ * MODES (mirrors the old local extractor's CLI 1:1):
+ *   -v {id}                 capture → cloud derive → figma-export/reconstruct-{id}.json
+ *   -v {id} --emit-calls    …then pack the use_figma build payloads (local)
+ *   --print [--block {id}]   inspect the existing manifest/plan (no capture)
+ *   --capture-only          write the CaptureBundle only, skip the cloud (fixtures/debug)
  *
- * USAGE
- *   node cloud-export/capture-client.mjs -v v00            # all blocks × active views
- *   node cloud-export/capture-client.mjs -v v00 --fast     # primary breakpoint only
- *   node cloud-export/capture-client.mjs -v v00 --only hero,footer
+ * CLOUD CONFIG (injected by the app; see main.cjs): DERIVE_ENDPOINT +
+ *   DERIVE_LICENSE_KEY env, overridable with --endpoint / --key.
  *
  * PREREQUISITE: dev server running (npm run dev). puppeteer auto-installs on
  *   first run (never a project dep, never on Vercel).
@@ -32,6 +33,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
+// Build layer (local) — the derive IP is NOT here; it runs in the cloud.
+import { emitCalls, printManifest } from "./export-reconstruct-to-figma.mjs";
 
 const FALLBACK_WIDTHS = { desktop: 1440, tablet: 664, mobile: 370 };
 const VIEWPORT_HEIGHT = 900;
@@ -63,11 +66,13 @@ const CAPTURED_STYLE_PROPS = [
 
 function parseArgs(argv) {
   const args = {
-    url: "http://localhost:5173", variation: "v00", out: null, views: null, pages: null, only: null, fast: false, menus: "first",
-    // --post sends the bundle to the cloud derive and writes back the BuildSpec.
-    // Endpoint + key default to env; flags override. No key is required to WRITE
-    // the bundle to disk — only to POST it.
-    post: false, endpoint: process.env.DERIVE_ENDPOINT || "", key: process.env.DERIVE_LICENSE_KEY || "",
+    url: "http://localhost:5173", variation: "v00", out: "figma-export", views: null, pages: null, only: null, fast: false, menus: "first",
+    // Cloud derive is the default: capture → POST → BuildSpec. Endpoint + key
+    // default to env (app-injected); flags override. --capture-only skips the
+    // cloud (writes just the CaptureBundle, for fixtures/debug).
+    endpoint: process.env.DERIVE_ENDPOINT || "", key: process.env.DERIVE_LICENSE_KEY || "", captureOnly: false,
+    // Build layer + inspection (delegated to the local build library).
+    emitCalls: false, print: false, block: null, limit: 48000,
   };
   const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
@@ -80,7 +85,11 @@ function parseArgs(argv) {
     else if (a === "--only") args.only = list(argv[++i]);
     else if (a === "--menus") args.menus = argv[++i] === "all" ? "all" : "first";
     else if (a === "--fast") args.fast = true;
-    else if (a === "--post") args.post = true;
+    else if (a === "--capture-only") args.captureOnly = true;
+    else if (a === "--emit-calls") args.emitCalls = true;
+    else if (a === "--print") args.print = true;
+    else if (a === "--block") args.block = argv[++i];
+    else if (a === "--limit") args.limit = parseInt(argv[++i], 10) || 48000;
     else if (a === "--endpoint") args.endpoint = argv[++i];
     else if (a === "--key") args.key = argv[++i];
     else if (a === "--help" || a === "-h") args.help = true;
@@ -92,8 +101,8 @@ function parseArgs(argv) {
 // a missing endpoint/key or any non-200 so the pipeline never silently proceeds
 // with a bad/absent spec.
 async function postBundle(bundle, endpoint, key) {
-  if (!endpoint) throw new Error("--post needs an endpoint (set DERIVE_ENDPOINT or pass --endpoint <url>)");
-  if (!key) throw new Error("--post needs a license key (set DERIVE_LICENSE_KEY or pass --key <k>)");
+  if (!endpoint) throw new Error("reconstruct needs a cloud derive endpoint (set DERIVE_ENDPOINT or pass --endpoint <url>)");
+  if (!key) throw new Error("reconstruct needs a license key (set DERIVE_LICENSE_KEY or pass --key <k>)");
   const res = await fetch(endpoint, {
     method: "POST",
     headers: { "content-type": "application/json", "x-license-key": key },
@@ -107,9 +116,9 @@ async function postBundle(bundle, endpoint, key) {
 
 function help() {
   console.log(`
-capture-client — serialize every [data-block] into a raw CaptureBundle.
+export-reconstruct-client — capture [data-block]s → cloud derive → BuildSpec.
 
-  node cloud-export/capture-client.mjs [options]
+  node scripts/export-reconstruct-client.mjs [options]
   -v, --variation <id>   Variation (default v00)
       --url <url>        Dev server (default http://localhost:5173)
       --views <list>     Override active breakpoints (e.g. desktop,mobile)
@@ -117,9 +126,11 @@ capture-client — serialize every [data-block] into a raw CaptureBundle.
       --only <list>      Only these block ids (e.g. menu-products for one panel)
       --menus <first|all> Desktop open-menu panels: first (default) or all
       --fast             Primary (first active) breakpoint only
-      --out <dir>        Output dir (default cloud-export/out)
-      --post             POST the bundle to the cloud derive → write BuildSpec
-      --endpoint <url>   Derive endpoint (default env DERIVE_ENDPOINT)
+      --out <dir>        Output dir (default figma-export)
+      --emit-calls       …then pack the use_figma build payloads (local)
+      --print [--block {id}]  Inspect the existing manifest/plan (no capture)
+      --capture-only     Write the CaptureBundle only; skip the cloud derive
+      --endpoint <url>   Cloud derive endpoint (default env DERIVE_ENDPOINT)
       --key <k>          License key (default env DERIVE_LICENSE_KEY)
 `);
 }
@@ -275,7 +286,9 @@ async function settlePage(page) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) return help();
-  const outDir = args.out || fileURLToPath(new URL("./out", import.meta.url));
+  // Inspection modes read the EXISTING manifest/plan — no capture, no browser.
+  if (args.print || args.block) return printManifest(args);
+  const outDir = args.out;
   const t0 = performance.now();
   const puppeteer = await loadPuppeteer();
   const browser = await puppeteer.launch({ headless: "new", protocolTimeout: 600000 });
@@ -431,19 +444,28 @@ async function main() {
     const uniqueBlocks = new Set(captured.map((b) => b.blockId)).size;
     console.error(`✓ CaptureBundle: ${uniqueBlocks} block(s) × [${views.join(", ")}] (${captured.length} captures), ${assets.length} asset(s), ${Object.keys(brand.colorVars).length} brand var(s) → ${outPath}`);
 
-    // --post: send to the cloud derive, write back the BuildSpec under the name
-    // the builder expects (reconstruct-{variation}.json). Bytes stay local: the
-    // BuildSpec references assets by name; assets/ holds the PNGs for upload_assets.
-    let specPath = null;
-    if (args.post) {
-      console.error(`  → POST ${(JSON.stringify(bundle).length / 1024).toFixed(0)}KB → ${args.endpoint}`);
+    // Cloud derive (default): POST the raw bundle, write back the BuildSpec under
+    // the name the builder expects (reconstruct-{variation}.json). Bytes stay
+    // local: the BuildSpec references assets by name; assets/ holds the PNGs for
+    // upload_assets. --capture-only skips this (fixtures/debug).
+    let specPath = null, plan = null;
+    if (!args.captureOnly) {
+      console.error(`  → POST ${(JSON.stringify(bundle).length / 1024).toFixed(0)}KB → ${args.endpoint || "(no endpoint!)"}`);
       const spec = await postBundle(bundle, args.endpoint, args.key);
       specPath = join(outDir, `reconstruct-${args.variation}.json`);
       await writeFile(specPath, JSON.stringify(spec));
       console.error(`✓ BuildSpec ← cloud: ${spec.blocks?.length ?? 0} block(s), ${spec.brandColors?.length ?? 0} brand colors → ${specPath}`);
+      // Build layer (local): pack the use_figma payloads.
+      if (args.emitCalls) {
+        plan = await emitCalls(spec, outDir, args.limit);
+        console.error(`✓ emit-calls: ${plan?.calls?.length ?? 0} payload(s) → ${outDir}/reconstruct-calls/${args.variation}`);
+      }
     }
-    console.error(`  ${((performance.now() - t0) / 1000).toFixed(1)}s.${args.post ? " Next: build via use_figma." : " Next: derive (cloud/--post or offline) → BuildSpec, then build."}`);
-    console.log(JSON.stringify({ outPath, specPath, blocks: uniqueBlocks, captures: captured.length, views, assets: assets.length, brandVars: Object.keys(brand.colorVars).length }, null, 2));
+    const next = args.captureOnly ? " Next: derive (--capture-only wrote the bundle only)."
+      : args.emitCalls ? " Next: submit the call payloads via use_figma."
+      : " Next: --emit-calls to pack the build payloads.";
+    console.error(`  ${((performance.now() - t0) / 1000).toFixed(1)}s.${next}`);
+    console.log(JSON.stringify({ outPath, specPath, emitCalls: !!plan, blocks: uniqueBlocks, captures: captured.length, views, assets: assets.length, brandVars: Object.keys(brand.colorVars).length }, null, 2));
   } finally {
     try { await browser.close(); } catch {}
   }
