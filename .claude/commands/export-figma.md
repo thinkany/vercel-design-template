@@ -339,7 +339,19 @@ The brand-tokens pair in detail:
         deletion) **+** a shared `_combine.js` (PHASE `combine`) that merges the temps
         into the `View=` set (photos set on temp nodes survive the combine). Submit
         each `calls[].file` verbatim as the `code` param (with your fileKey), collect
-        `photos[]` from each return, then submit `_combine.js`. **Every call file
+        `photos[]` from each return, then submit `_combine.js`.
+
+        **⚠ RE-READ each call file from disk immediately before submitting it —
+        NEVER reuse a builder body you read earlier in this conversation.**
+        `--emit-calls` REGENERATES these files from the current builder source, so
+        on a **re-export** (e.g. after a fix to `figma-reconstruct-library.plugin.js`
+        or a re-run of a single block) the freshly-written file carries the NEW
+        body, while a body still cached in your context ships the OLD code and the
+        build silently reverts. So the loop is always: read the `.js` file fresh →
+        submit its exact contents as `code` → next file. One read per submit, every
+        time — even if you "already saw" that file earlier in the session.
+
+        **Every call file
         embeds a byte-identical builder body by construction — they differ ONLY in
         their leading `MANIFEST`/`PHASE` lines. Trust that; do NOT diff/md5 the files
         to "verify" it** (a wasted, prompt-triggering check — the `_plan.json` note
