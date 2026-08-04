@@ -378,8 +378,8 @@ function refreshPreview() {
   }
   showPlaceholder({
     emoji: "👋",
-    title: "Say hello and we'll get started",
-    text: "Send a message and we'll set up and design your project together — your live preview opens on its own once it's ready.",
+    title: "Pick a starting point to your left",
+    text: "Choose Client Setup or Get Designing in the chat — your live preview opens here on its own once your design is ready.",
   });
 }
 
@@ -425,6 +425,7 @@ async function boot() {
   design = proj.design || { active: false, variationId: null, previewReady: false };
   showStage("workspace");
   refreshPreview();
+  renderWelcomeChips(); // fresh project → offer the two starting paths
 }
 
 // Vite may become ready after the project is chosen — or re-ready after a
@@ -499,6 +500,7 @@ async function chooseProject(kind) {
       design = await window.desktop.getDesignState();
       showStage("workspace");
       refreshPreview();
+      renderWelcomeChips(); // fresh project → offer the two starting paths
     } else {
       projecterror.textContent = res.error || "Could not open the project.";
     }
@@ -1186,11 +1188,89 @@ function renderQuestionCard(id, questions) {
   log.scrollTop = log.scrollHeight;
 }
 
-async function submit() {
-  const text = input.value.trim();
+// ---- Welcome path picker (fresh-start chips) --------------------------------
+// On a truly fresh project the chat opens with two choices instead of guessing
+// from a typed "hello": "Client Setup" (deterministic /setup-project) and "Get
+// Designing" (the natural-language brief entry — the front door to the
+// design-from-brief feature). Clicking a chip is that path's "hello".
+const DEFAULT_PLACEHOLDER = input.placeholder;
+const BRIEF_PLACEHOLDER = "Describe the site you want — paste links for style, colors, or fonts…";
+let welcomeCard = null;
+let designBriefMode = false; // set by "Get Designing"; the next message is the brief
+
+function dismissWelcome() {
+  if (welcomeCard) { welcomeCard.remove(); welcomeCard = null; }
+}
+
+function renderWelcomeChips() {
+  // Only greet on a truly fresh start: a project is open, no design yet, and
+  // nothing has been said. Self-guards so callers can fire it freely.
+  if (conversationStarted || (design && design.active)) return;
+  if (welcomeCard || log.children.length) return;
+
+  const card = document.createElement("div");
+  card.className = "qcard welcome-card";
+  const title = document.createElement("div");
+  title.className = "welcome-title";
+  title.textContent = "How would you like to start?";
+  card.appendChild(title);
+
+  const opts = [
+    {
+      label: "Client Setup",
+      desc: "Brand a new project step by step — logo, fonts, colors — then design.",
+      onClick: () => sendText("/setup-project"),
+    },
+    {
+      label: "Get Designing",
+      desc: "Jump straight in — describe the site (paste style, color, or font links) and I'll design it.",
+      onClick: enterDesignBriefMode,
+    },
+  ];
+  for (const o of opts) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "qopt";
+    const lbl = document.createElement("div");
+    lbl.className = "lbl";
+    lbl.textContent = o.label;
+    const desc = document.createElement("div");
+    desc.className = "desc";
+    desc.textContent = o.desc;
+    btn.append(lbl, desc);
+    btn.addEventListener("click", o.onClick);
+    card.appendChild(btn);
+  }
+  log.appendChild(card);
+  welcomeCard = card;
+}
+
+// "Get Designing" — collect the brief rather than firing a generic message.
+// Focus the composer with a brief-oriented placeholder and invite the details;
+// the next message the designer sends is their brief.
+function enterDesignBriefMode() {
+  dismissWelcome();
+  designBriefMode = true;
+  addMsg(
+    "system",
+    "Tell me about the site you want — the vibe, plus any links for style, colors, or fonts — and I'll start designing."
+  );
+  input.placeholder = BRIEF_PLACEHOLDER;
+  input.focus();
+}
+
+// One send path for both typed messages and chip-fired prompts.
+async function sendText(text) {
+  text = (text || "").trim();
   if (!text) return;
+  dismissWelcome();
+  // TODO(design-from-brief): when designBriefMode, route `text` through the brief
+  // pipeline (extract brand → non-interactive v01 setup → design) instead of a
+  // raw send. Until that lands, the brief goes to the agent as a normal message.
+  designBriefMode = false;
   addMsg("user", text);
   input.value = "";
+  input.placeholder = DEFAULT_PLACEHOLDER;
   assistantEl = null;
   agentBusy = true;
   conversationStarted = true;
@@ -1207,6 +1287,10 @@ async function submit() {
     send.disabled = false;
     input.focus();
   }
+}
+
+function submit() {
+  return sendText(input.value);
 }
 send.addEventListener("click", submit);
 input.addEventListener("keydown", (e) => {
