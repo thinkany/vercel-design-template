@@ -19,6 +19,21 @@ async function getQuery() {
   return _query;
 }
 
+// A compact, non-sensitive hint about what a tool is acting on — a file path or
+// the head of a shell command — so the UI can narrate setup in plain language
+// ("Applying your color palette…") from the target rather than the tool name.
+function toolTarget(input) {
+  if (!input || typeof input !== "object") return "";
+  return (
+    input.file_path ||
+    input.path ||
+    input.notebook_path ||
+    (input.command ? String(input.command).slice(0, 120) : "") ||
+    input.pattern ||
+    ""
+  );
+}
+
 export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, model }) {
   let resolvedSession = sessionId;
 
@@ -95,6 +110,20 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
             ev.content_block?.type === "tool_use"
           ) {
             onEvent({ type: "tool", name: ev.content_block.name });
+          }
+          break;
+        }
+
+        // The complete assistant message carries full tool inputs — emit a
+        // plain-language "activity" hint (from the target file/command) for the
+        // setup placeholder. Separate from the "tool" event above so chat and the
+        // preview-timing polling are unaffected if this stream ever changes.
+        case "assistant": {
+          const content = message.message?.content || message.content || [];
+          for (const block of content) {
+            if (block?.type === "tool_use") {
+              onEvent({ type: "activity", name: block.name, target: toolTarget(block.input) });
+            }
           }
           break;
         }

@@ -221,6 +221,43 @@ function stopWorking() {
   if (workingTimer) { clearInterval(workingTimer); workingTimer = null; }
 }
 
+// Plain-language description of the agent's current activity for the preview
+// placeholder during setup — derived from the tool + the file/command it's
+// touching, so it says WHAT is happening with no technical detail. Returns null
+// for anything without a friendly phrase (leaves the current message as-is).
+function friendlyActivity(name, target) {
+  const t = (target || "").toLowerCase();
+  if (name === "Bash") {
+    if (/mkdir\b[^|]*variations|cp\b[^|]*variations|variations\/v\d/.test(t)) return "Creating your working design copy…";
+    if (/npm (run )?dev\b|vite\b/.test(t)) return "Starting your live preview…";
+    if (/npm (ci|install|i)\b/.test(t)) return "Getting things ready…";
+    if (/curl\b/.test(t)) return "Fetching what you referenced…";
+    return null;
+  }
+  if (name === "Write" || name === "Edit" || name === "MultiEdit") {
+    if (/(^|\/)\.env$/.test(t)) return "Branding your project…";
+    if (t.includes("variation.json")) return "Setting up your working design copy…";
+    if (t.includes("brand.ts")) return "Applying your color palette…";
+    if (t.includes("fonts.css")) return "Choosing your fonts…";
+    if (t.includes("tokens.css")) return "Setting your colors and fonts…";
+    if (t.includes("middleware.js") || t.includes("/brand/")) return "Setting up your login screen…";
+    if (t.includes("/components/") || t.endsWith("home.tsx")) return "Building your page…";
+    if (t.includes("styleguide")) return "Building your styleguide…";
+    return null;
+  }
+  if (name === "WebFetch") return "Reading the reference you shared…";
+  return null;
+}
+
+// Show a live activity in the preview placeholder during setup. Once a real
+// activity is shown it takes over from the generic rotation and persists until
+// the next one (no jarring switch back to "Hang tight…").
+function setWorkingMessage(text) {
+  if (!text) return;
+  if (workingTimer) { clearInterval(workingTimer); workingTimer = null; }
+  phText.textContent = text;
+}
+
 function showPlaceholder({ emoji, title, text }) {
   stopWorking();
   phEmoji.textContent = emoji;
@@ -804,6 +841,11 @@ window.desktop.onAgentEvent((evt) => {
           if (flipped) { designJustActivated = true; refreshPreview(); }
         });
       }
+      break;
+    case "activity":
+      // Narrate what's happening in plain language in the preview placeholder
+      // while the preview is still closed during setup; ignore once it's open.
+      if (!tabsOpened) setWorkingMessage(friendlyActivity(evt.name, evt.target));
       break;
     case "result":
       finalizeAssistant();
