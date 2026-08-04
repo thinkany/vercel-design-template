@@ -54,7 +54,7 @@ let assistantEl = null;
 
 // Preview state
 let viteUrl = null;
-let design = { active: false, variationId: null };
+let design = { active: false, variationId: null, previewReady: false };
 let agentBusy = false;
 let tabs = [];
 let activeTab = null;
@@ -240,28 +240,37 @@ function showWorking() {
   startWorking();
 }
 
-function showBrowser() {
-  if (!viteUrl) return;
+async function showBrowser() {
+  if (!viteUrl || tabsOpened) return;
+  tabsOpened = true; // claim immediately so re-entrant calls don't double-open
+  // Keep the "Working…" placeholder up until the server actually SERVES the
+  // styleguide (200). Vite may be up but still compiling the just-created
+  // variation, so opening now would flash blank tabs. Bounded (~10s) — the
+  // webview's own connection-refused retry is the backstop.
+  const styleUrl = quickUrl("styleguide");
+  for (let i = 0; i < 20; i++) {
+    const { ok } = await window.desktop.probePreview(styleUrl);
+    if (ok) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
   stopWorking();
   previewph.hidden = true;
   browser.hidden = false;
-  if (!tabsOpened) {
-    tabsOpened = true;
-    const style = openTab(quickUrl("styleguide"), "Style guide");
-    openTab(quickUrl("home"), "Home");
-    setActiveTab(style); // default to the styleguide — that's where the swatches are
-    // Only when the styleguide was just created this session: reload once so its
-    // fresh swatches show without a manual refresh (avoids churn on reopen).
-    if (designJustActivated) {
-      designJustActivated = false;
-      setTimeout(() => { if (tabs.includes(style)) navigate(style, quickUrl("styleguide")); }, 1200);
-    }
+  const style = openTab(styleUrl, "Style guide");
+  openTab(quickUrl("home"), "Home");
+  setActiveTab(style); // default to the styleguide — that's where the swatches are
+  // Only when the styleguide was just created this session: reload once so its
+  // fresh swatches show without a manual refresh (avoids churn on reopen).
+  if (designJustActivated) {
+    designJustActivated = false;
+    setTimeout(() => { if (tabs.includes(style)) navigate(style, quickUrl("styleguide")); }, 1200);
   }
 }
 
 function refreshPreview() {
-  // Open the live browser only when there's a design AND the server is up.
-  if (design.active && viteUrl) return showBrowser();
+  // Open the live browser only when the design's styleguide is READY (palette
+  // written — not just the variation folder created) AND the server is up.
+  if (design.previewReady && viteUrl) return showBrowser();
   // Otherwise the browser stays closed.
   if (agentBusy) return showWorking();
   if (!viteUrl) {
@@ -291,7 +300,7 @@ function showStage(stage) {
 
 function noProjectPlaceholder() {
   viteUrl = null;
-  design = { active: false, variationId: null };
+  design = { active: false, variationId: null, previewReady: false };
   agentBusy = false;
   closeAllTabs();
   showPlaceholder({
@@ -316,7 +325,7 @@ async function boot() {
   }
   projname.textContent = proj.name || "";
   viteUrl = proj.viteUrl || null;
-  design = proj.design || { active: false, variationId: null };
+  design = proj.design || { active: false, variationId: null, previewReady: false };
   showStage("workspace");
   refreshPreview();
 }
@@ -785,22 +794,27 @@ window.desktop.onAgentEvent((evt) => {
     case "tool":
       finalizeAssistant();
       addMsg("tool", `⚙ ${evt.name}${evt.input ? " " + JSON.stringify(evt.input) : ""}`);
-      // A tool call may have just created the working variation — open the
-      // preview mid-turn as soon as it exists (browser takes priority over busy).
-      if (!design.active) {
+      // A tool call may have just written the color palette — poll until the
+      // styleguide is preview-ready (not merely when the variation folder
+      // appears), then open the live preview mid-turn.
+      if (!design.previewReady) {
         window.desktop.getDesignState().then((d) => {
-          if (d.active) { design = d; designJustActivated = true; refreshPreview(); }
+          const flipped = d.previewReady && !design.previewReady;
+          design = d;
+          if (flipped) { designJustActivated = true; refreshPreview(); }
         });
       }
       break;
     case "result":
       finalizeAssistant();
       agentBusy = false;
-      // A turn may have created the working variation — open the live preview
-      // as soon as it exists; otherwise revert the working placeholder.
-      if (!design.active) {
+      // A turn may have written the palette — re-check readiness and open the
+      // live preview when it flips; otherwise revert the working placeholder.
+      if (!design.previewReady) {
         window.desktop.getDesignState().then((d) => {
-          if (d.active) { design = d; designJustActivated = true; }
+          const flipped = d.previewReady && !design.previewReady;
+          design = d;
+          if (flipped) designJustActivated = true;
           refreshPreview();
         });
       } else {

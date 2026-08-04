@@ -212,6 +212,14 @@ function rememberDir(key, chosenPath) {
 // (src/variations/<id>/). Before that, a fresh scaffold has only the base
 // blueprint — which the app hides behind a welcome placeholder rather than
 // showing the template's blueprint dashboard mid-setup.
+//
+// `previewReady` gates when the LIVE PREVIEW opens. The variation folder exists
+// from the moment setup copies the base (before the styleguide has any client
+// colors), so opening on folder-existence pops a blank preview mid-setup. Instead
+// the styleguide flow writes `previewReady:false` when it creates the variation
+// and flips it to true once the color palette is written — so the browser opens
+// on real content. Backward-compatible: an existing variation.json with no field
+// (or true) reads as ready, so already-set-up designs open normally.
 function detectDesign(projectDir) {
   try {
     const ids = fs
@@ -219,11 +227,21 @@ function detectDesign(projectDir) {
       .filter((e) => e.isDirectory())
       .map((e) => e.name)
       .sort();
-    if (ids.length) return { active: true, variationId: ids[0] };
+    if (ids.length) {
+      const id = ids[0];
+      let previewReady = true; // default: ready unless a variation.json says otherwise
+      try {
+        const meta = JSON.parse(fs.readFileSync(path.join(projectDir, "src", "variations", id, "variation.json"), "utf8"));
+        previewReady = meta.previewReady !== false;
+      } catch {
+        /* no/unreadable variation.json → treat as ready */
+      }
+      return { active: true, variationId: id, previewReady };
+    }
   } catch {
     /* no variations dir yet = fresh */
   }
-  return { active: false, variationId: null };
+  return { active: false, variationId: null, previewReady: false };
 }
 
 // Point a project folder at the app's installed deps so Vite runs without a
@@ -495,8 +513,20 @@ ipcMain.handle("project:status", () => ({
 // swaps from the welcome placeholder to the live design, and the company-profile
 // download button appears, the moment each exists.
 ipcMain.handle("project:design", () =>
-  currentProject ? detectDesign(currentProject) : { active: false, variationId: null }
+  currentProject ? detectDesign(currentProject) : { active: false, variationId: null, previewReady: false }
 );
+// Probe whether the dev server is actually SERVING a route yet (200) — Vite may
+// be up (viteUrl set) but still compiling the just-created variation. The
+// renderer waits on this before opening the preview tabs so they never flash
+// blank. Done in main to avoid renderer CORS to localhost.
+ipcMain.handle("preview:probe", async (_event, { url }) => {
+  try {
+    const res = await fetch(url, { method: "GET" });
+    return { ok: res.ok };
+  } catch {
+    return { ok: false };
+  }
+});
 ipcMain.handle("company:status", () => ({ exists: hasCompanyProfile(currentProject) }));
 
 // Save the project's company-profile.json out to a location the user picks —
