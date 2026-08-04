@@ -370,10 +370,23 @@ async function boot() {
   refreshPreview();
 }
 
-// Vite may become ready after the project is chosen.
+// Vite may become ready after the project is chosen — or re-ready after a
+// self-heal restart. Reload any open preview tabs onto the fresh server so they
+// don't sit on stale/broken content; otherwise re-evaluate whether to open.
 window.desktop.onViteReady((url) => {
+  const prev = viteUrl;
   viteUrl = url;
-  if (!chatmain.hidden) refreshPreview();
+  if (chatmain.hidden) return;
+  if (tabs.length && prev) {
+    tabs.forEach((t) => {
+      const fresh = /https?:\/\/localhost:\d+/.test(t.url || "")
+        ? t.url.replace(/https?:\/\/localhost:\d+/, url)
+        : (t.url || url);
+      navigate(t, fresh);
+    });
+  } else {
+    refreshPreview();
+  }
 });
 
 // ---- Key gate ----------------------------------------------------------------

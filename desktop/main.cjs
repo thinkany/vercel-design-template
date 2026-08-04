@@ -326,6 +326,8 @@ function stopVite() {
   viteUrl = null;
 }
 
+let viteHealing = false;
+
 // Start Vite for a project dir; resolve with the URL Vite prints (parsed, not
 // hardcoded, since the port varies) and push a 'vite:ready' event to the UI.
 function startViteFor(projectDir) {
@@ -337,6 +339,17 @@ function startViteFor(projectDir) {
       shell: process.platform === "win32",
     });
     let settled = false;
+    // Tailwind v4's IN-PROCESS config reload can fail in this spawned Vite on an
+    // .env change ("failed to load config … createResolver"), leaving the server
+    // stuck so the live preview never updates mid-setup. A FRESH start always
+    // works, so when Vite reports a failed restart, kill it and respawn clean.
+    // Guarded so a burst of failure lines triggers a single heal.
+    const heal = (text) => {
+      if (viteHealing || !/server restart failed|failed to load config from/i.test(text)) return;
+      viteHealing = true;
+      console.error("[main] Vite config-reload failed — restarting it cleanly.");
+      startViteFor(projectDir).finally(() => { viteHealing = false; });
+    };
     viteProc.stdout.on("data", (buf) => {
       const text = buf.toString();
       process.stdout.write(`[vite] ${text}`);
@@ -349,8 +362,13 @@ function startViteFor(projectDir) {
         }
         resolve(viteUrl);
       }
+      heal(text);
     });
-    viteProc.stderr.on("data", (b) => process.stderr.write(`[vite] ${b}`));
+    viteProc.stderr.on("data", (b) => {
+      const text = b.toString();
+      process.stderr.write(`[vite] ${text}`);
+      heal(text);
+    });
     viteProc.on("exit", (code) => {
       if (!settled) reject(new Error(`Vite exited before it was ready (code ${code})`));
     });
