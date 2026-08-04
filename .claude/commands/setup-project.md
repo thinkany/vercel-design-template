@@ -86,13 +86,21 @@ Follow these steps:
       locally with **`npm run dev`** (http://localhost:5173) for instant feedback,
       separate from the Vercel preview deploy.
 
-0.5. **Import a saved company profile? (the mandatory FIRST branding question.)**
-   **Always ask this — never skip it, and don't assume a first-timer has no
-   profile** (they may have one saved from another project or machine). If the
-   designer has branded a previous copy of this template, they may have exported a
-   **company profile** — their agency name, admin/gate fonts, and login logo — with
-   `/export-company`. Importing it here fills all of that in one step, so ask this
-   *before* the logo/name/font questions.
+0.5. **Company identity — is it already applied? Else, import or set fresh.**
+   **First, read `.env`.** If **`VITE_COMPANY_NAME` is already set** (and a login
+   logo is wired), the desktop app **auto-applied the designer's saved *default*
+   company profile** when it created this project — the agency identity is already
+   done. In that case tell them so in one line ("Your company identity's already
+   in place — {name}."), then **SKIP this question AND the entire company block
+   (2a–2c)** and go straight to the client in **step 3**. Don't re-ask any of it.
+
+   **Otherwise (company not set), this is the mandatory FIRST branding question —
+   always ask it**, and don't assume a first-timer has no profile (they may have
+   one saved from another project or machine). If the designer has branded a
+   previous copy of this template, they may have exported a **company profile** —
+   their agency name, admin/gate fonts, and login logo — with `/export-company`.
+   Importing it here fills all of that in one step, so ask this *before* the
+   logo/name/font questions.
 
    Ask with `AskUserQuestion`, header **"Company profile"**; `question`:
 
