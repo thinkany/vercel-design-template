@@ -1264,10 +1264,13 @@ async function sendText(text) {
   text = (text || "").trim();
   if (!text) return;
   dismissWelcome();
-  // TODO(design-from-brief): when designBriefMode, route `text` through the brief
-  // pipeline (extract brand → non-interactive v01 setup → design) instead of a
-  // raw send. Until that lands, the brief goes to the agent as a normal message.
+  // "Get Designing" brief → route to the /design-brief orchestrator (parse →
+  // extract palette/fonts → apply into v01 → design). Show the designer's own
+  // words in chat, but send the command. A slash-command the user typed
+  // themselves (or the Client Setup chip) passes through untouched.
+  const asBrief = designBriefMode && !text.startsWith("/");
   designBriefMode = false;
+  const toSend = asBrief ? `/design-brief ${text}` : text;
   addMsg("user", text);
   input.value = "";
   input.placeholder = DEFAULT_PLACEHOLDER;
@@ -1277,7 +1280,7 @@ async function sendText(text) {
   refreshPreview(); // show the working placeholder while the browser is closed
   send.disabled = true;
   try {
-    const res = await window.desktop.sendPrompt(text, sessionId);
+    const res = await window.desktop.sendPrompt(toSend, sessionId);
     if (res && res.sessionId) sessionId = res.sessionId;
   } catch (e) {
     agentBusy = false;

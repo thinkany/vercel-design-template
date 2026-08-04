@@ -25,6 +25,16 @@ const appRoot = path.resolve(__dirname, ".."); // the Electron app / template so
 // app bundle (appRoot/scripts) and run against the current project. The agent
 // (agent.mjs) runs in this process, so its tool subprocesses inherit this env.
 // Idempotent across reloads.
+// Give the agent's Bash a `node`. A Finder-launched packaged app has NO node on
+// PATH, so `ta-export` (shebang `#!/usr/bin/env node`) and the design-from-brief
+// scripts (`node scripts/*.mjs`) would fail. The `node` shim in BIN_DIR uses the
+// app's own Electron binary as Node — but PREFERS a real node from the original
+// PATH when present, so dev behavior (nvm node) is unchanged. Set the two env
+// vars the shim reads BEFORE we prepend BIN_DIR (so TA_ORIG_PATH is node-free of
+// our shim).
+process.env.TA_NODE_BIN = process.execPath; // the Electron binary (run as Node via the shim)
+if (!process.env.TA_ORIG_PATH) process.env.TA_ORIG_PATH = process.env.PATH || "";
+
 const BIN_DIR = path.join(__dirname, "bin");
 if (!(process.env.PATH || "").split(path.delimiter).includes(BIN_DIR)) {
   process.env.PATH = `${BIN_DIR}${path.delimiter}${process.env.PATH || ""}`;

@@ -1,0 +1,11 @@
+#!/bin/bash
+# `node` shim for the agent's Bash. See main.cjs: a Finder-launched packaged app
+# has no system node, so agent-run tooling (ta-export, the design-from-brief
+# scripts) needs one. This prefers a REAL node from the original PATH (dev), and
+# falls back to the app's Electron binary run as Node (packaged, no system node).
+real="$(PATH="${TA_ORIG_PATH:-$PATH}" command -v node 2>/dev/null)"
+if [ -n "$real" ] && [ "$real" != "$0" ] && [ -x "$real" ]; then
+  exec "$real" "$@"
+fi
+# Fallback: the app's Electron binary in Node mode.
+ELECTRON_RUN_AS_NODE=1 exec "${TA_NODE_BIN:?no node runtime available}" "$@"
