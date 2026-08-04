@@ -140,7 +140,13 @@ async function loadPuppeteer() {
     console.log("→ First export: installing puppeteer locally (one-time; downloads a headless Chromium)…\n");
     try {
       const { execSync } = await import("node:child_process");
-      execSync("npm install puppeteer@25.3.0 --no-save", { stdio: "inherit" });
+      const { fileURLToPath } = await import("node:url");
+      // Install into the app's OWN package (where this script resolves puppeteer
+      // from), NOT the project cwd — the app-owned tooling runs against a
+      // separate project folder, so a cwd install lands where import() can't
+      // find it. --prefix targets this script's package root.
+      const appRoot = fileURLToPath(new URL("..", import.meta.url));
+      execSync(`npm install puppeteer@25.3.0 --no-save --prefix "${appRoot}"`, { stdio: "inherit" });
     } catch {
       console.error("\n✗ Couldn't auto-install puppeteer. Install it manually, then retry:\n  npm install puppeteer\n");
       process.exit(1);
