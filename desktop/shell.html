@@ -78,17 +78,24 @@
         background: #fafafa;
       }
       /* Draggable divider between chat and preview. */
-      /* Slim grab zone that blends into the chat pane (#fafafa) — no white gap —
-         with the thin gray line sitting against the preview like the original. */
+      /* Just a 1px line flush against the chat pane (like the original border);
+         the grab area is an INVISIBLE zone that overhangs into the chat, so it
+         adds no visible width and the line stays connected to the pane. */
       #dragbar {
         flex: none;
-        width: 5px;
+        width: 1px;
         cursor: col-resize;
-        background: #fafafa;
-        border-right: 1px solid #e3e3e3;
-        transition: border-color .12s;
+        background: #e3e3e3;
+        position: relative;
+        transition: background .12s;
       }
-      #dragbar:hover, #dragbar.dragging { border-right-color: #c2c2c8; }
+      #dragbar::before {
+        content: "";
+        position: absolute;
+        top: 0; bottom: 0; left: -4px; right: 0;  /* 5px grab, overhangs the chat */
+        cursor: col-resize;
+      }
+      #dragbar:hover, #dragbar.dragging { background: #c2c2c8; }
       #bar {
         padding: 8px 14px;
         font-size: 12px;
