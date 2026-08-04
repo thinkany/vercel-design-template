@@ -342,37 +342,45 @@ Follow these steps:
        below, not here. (If `$ARGUMENTS` already carried a project name, use it and
        skip that prompt.)
 
-3b. **Ask the project type & preview shape.** This decides the device-preview
-   matrix (`VITE_PROJECT_TYPE` + `VITE_ENABLE_TABLET`, consumed by `previewConfig`
-   in `src/config/site.ts`). Ask both in a single `AskUserQuestion` call:
+3b. **Ask the project type, THEN the tablet preview — as TWO SEPARATE
+   `AskUserQuestion` calls.** The tablet question depends on the type answer (and
+   doesn't apply at all to Brand), so **never bundle them in one call** — ask the
+   type, wait for the answer, then ask tablet only if it applies. Together they set
+   the device-preview matrix (`VITE_PROJECT_TYPE` + `VITE_ENABLE_TABLET`, consumed
+   by `previewConfig` in `src/config/site.ts`).
 
-   1. Header "Project Type". Question (blank line between the two sentences — a
-      real `\n\n` in the `question` string):
+   **Step 1 — Project Type** (its own `AskUserQuestion` call, this question only).
+   Header "Project Type". Question (blank line between the two sentences — a real
+   `\n\n` in the `question` string):
 
-      > What type of project are you designing for?
-      >
-      > This will determine which device previews (desktop, tablet, and/or
-      > mobile) are available in your workspace.
+   > What type of project are you designing for?
+   >
+   > This will determine which device previews (desktop, tablet, and/or mobile)
+   > are available in your workspace.
 
-      Three options:
-      - **"Web Site"** — the default (list first). Desktop + mobile are the
-        baseline. → writes `VITE_PROJECT_TYPE="website"`.
-      - **"App"** — mobile-first; the desktop preview is hidden (an app that
-        needs desktop is really a website). → `VITE_PROJECT_TYPE="app"`.
-      - **"Brand Guideline (coming soon)"** — parked; the home view shows a
-        "coming soon" Brand placeholder (`src/app/components/Brand.tsx`) instead
-        of a device preview. Set it if that's the intent, but tell the user it's
-        stubbed. → `VITE_PROJECT_TYPE="brand"`. (The tablet question below then
-        doesn't apply — brand mode has no device preview.)
-   2. Header "Tablet view". Question: "Include a tablet preview as well?" Both
-      Web Site and App default to **no** tablet unless asked. Options:
-      **"No — skip tablet"** (default, first) / **"Yes — add tablet"**. "Yes"
-      writes `VITE_ENABLE_TABLET="true"`; "No" leaves it blank.
+   Three options:
+   - **"Web Site"** — the default (list first). Desktop + mobile are the baseline.
+     → writes `VITE_PROJECT_TYPE="website"`.
+   - **"App"** — mobile-first; the desktop preview is hidden (an app that needs
+     desktop is really a website). → `VITE_PROJECT_TYPE="app"`.
+   - **"Brand Guideline (coming soon)"** — parked; the home view shows a "coming
+     soon" Brand placeholder (`src/app/components/Brand.tsx`) instead of a device
+     preview. Set it if that's the intent, but tell the user it's stubbed. →
+     `VITE_PROJECT_TYPE="brand"`.
 
-   Note the effect back to the user: an **App** opens on the phone preview with
-   no desktop button; a **Web Site** opens on desktop; tablet appears only if
-   they opted in. Keep the chosen type in mind — it tailors the project-name
-   options in the next step.
+   **Step 2 — Tablet preview** (a SEPARATE `AskUserQuestion` call, made only
+   *after* Step 1 is answered, and conditional on it):
+   - If they chose **Brand** → **skip this question entirely** (brand mode has no
+     device preview). Leave `VITE_ENABLE_TABLET=""`.
+   - If they chose **Web Site** or **App** → ask, header "Tablet view", question
+     "Include a tablet preview as well?" Both default to **no** tablet unless
+     asked. Options: **"No — skip tablet"** (default, first) / **"Yes — add
+     tablet"**. "Yes" writes `VITE_ENABLE_TABLET="true"`; "No" leaves it blank.
+
+   Note the effect back to the user: an **App** opens on the phone preview with no
+   desktop button; a **Web Site** opens on desktop; tablet appears only if they
+   opted in. Keep the chosen type in mind — it tailors the project-name options in
+   the next step.
 
 3c. **Ask the project name — tailored to the type.** `VITE_PROJECT_NAME` fills the
    secondary half of the title lockup. Use `AskUserQuestion`, header **"Project
