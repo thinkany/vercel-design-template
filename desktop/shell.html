@@ -248,8 +248,10 @@
       #ph-text { font-size: 14px; line-height: 1.6; color: #666; margin: 0; }
       .ph-progress { width: 220px; height: 4px; background: #e4e4ea; border-radius: 4px; margin: 18px auto 0; overflow: hidden; }
       .ph-progress[hidden] { display: none; }
-      .ph-progress-bar { width: 40%; height: 100%; background: #7c3aed; border-radius: 4px; animation: ph-indet 1.15s ease-in-out infinite; }
-      @keyframes ph-indet { 0% { transform: translateX(-110%); } 100% { transform: translateX(320%); } }
+      .ph-progress-bar { width: 40%; height: 100%; background: #7c3aed; border-radius: 4px; animation: ph-bounce 2.3s ease-in-out infinite alternate; }
+      /* Gentle back-and-forth (alternate + ease-in-out eases at each edge) — a
+         calm, unhurried feel instead of a fast one-way sweep. */
+      @keyframes ph-bounce { from { transform: translateX(0%); } to { transform: translateX(150%); } }
     </style>
   </head>
   <body>

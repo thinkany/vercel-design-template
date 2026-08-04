@@ -202,11 +202,11 @@ document.querySelectorAll(".qlink").forEach((b) =>
 // Rotating status shown in the preview while the agent works and the browser
 // is still closed (during setup).
 const WORKING_MESSAGES = [
-  "Setting up your project…",
-  "This can take a moment…",
-  "Working through the setup…",
-  "Your live preview opens automatically when it's ready…",
-  "Hang tight…",
+  "We're getting your workspace set up…",
+  "Setting things up — this'll just take a moment…",
+  "Getting everything ready for you…",
+  "Your live preview will open on its own once it's ready…",
+  "Almost there…",
 ];
 function startWorking() {
   if (workingTimer) return;
@@ -215,7 +215,7 @@ function startWorking() {
   workingTimer = setInterval(() => {
     i = (i + 1) % WORKING_MESSAGES.length;
     phText.textContent = WORKING_MESSAGES[i];
-  }, 2600);
+  }, 4200);
 }
 function stopWorking() {
   if (workingTimer) { clearInterval(workingTimer); workingTimer = null; }
@@ -228,24 +228,24 @@ function stopWorking() {
 function friendlyActivity(name, target) {
   const t = (target || "").toLowerCase();
   if (name === "Bash") {
-    if (/mkdir\b[^|]*variations|cp\b[^|]*variations|variations\/v\d/.test(t)) return "Creating your working design copy…";
-    if (/npm (run )?dev\b|vite\b/.test(t)) return "Starting your live preview…";
-    if (/npm (ci|install|i)\b/.test(t)) return "Getting things ready…";
-    if (/curl\b/.test(t)) return "Fetching what you referenced…";
+    if (/mkdir\b[^|]*variations|cp\b[^|]*variations|variations\/v\d/.test(t)) return "We're setting up your design workspace…";
+    if (/npm (run )?dev\b|vite\b/.test(t)) return "We're spinning up your live preview…";
+    if (/npm (ci|install|i)\b/.test(t)) return "We're getting a few things ready…";
+    if (/curl\b/.test(t)) return "We're taking a look at what you shared…";
     return null;
   }
   if (name === "Write" || name === "Edit" || name === "MultiEdit") {
-    if (/(^|\/)\.env$/.test(t)) return "Branding your project…";
-    if (t.includes("variation.json")) return "Setting up your working design copy…";
-    if (t.includes("brand.ts")) return "Applying your color palette…";
-    if (t.includes("fonts.css")) return "Choosing your fonts…";
-    if (t.includes("tokens.css")) return "Setting your colors and fonts…";
-    if (t.includes("middleware.js") || t.includes("/brand/")) return "Setting up your login screen…";
-    if (t.includes("/components/") || t.endsWith("home.tsx")) return "Building your page…";
-    if (t.includes("styleguide")) return "Building your styleguide…";
+    if (/(^|\/)\.env$/.test(t)) return "We're getting your brand set up…";
+    if (t.includes("variation.json")) return "We're setting up your design workspace…";
+    if (t.includes("brand.ts")) return "We're bringing your colors to life…";
+    if (t.includes("fonts.css")) return "We're getting your fonts in place…";
+    if (t.includes("tokens.css")) return "We're setting your colors and type…";
+    if (t.includes("middleware.js") || t.includes("/brand/")) return "We're setting up your sign-in screen…";
+    if (t.includes("/components/") || t.endsWith("home.tsx")) return "We're laying out your page…";
+    if (t.includes("styleguide")) return "We're building your style guide…";
     return null;
   }
-  if (name === "WebFetch") return "Reading the reference you shared…";
+  if (name === "WebFetch") return "We're taking a look at what you shared…";
   return null;
 }
 
@@ -271,8 +271,8 @@ function showPlaceholder({ emoji, title, text }) {
 function showWorking() {
   browser.hidden = true;
   previewph.hidden = false;
-  phEmoji.textContent = "⚙️";
-  phTitle.textContent = "Working…";
+  phEmoji.textContent = "✨";
+  phTitle.textContent = "Getting set up";
   phProgress.hidden = false;
   startWorking();
 }
@@ -313,14 +313,14 @@ function refreshPreview() {
   if (!viteUrl) {
     return showPlaceholder({
       emoji: "⏳",
-      title: "Starting the preview…",
-      text: "Spinning up the project's dev server.",
+      title: "We're spinning up your preview…",
+      text: "Just a moment while your dev server starts up.",
     });
   }
   showPlaceholder({
     emoji: "👋",
-    title: "Say hello to get started",
-    text: "Message the agent to set up and design your project. The live preview opens automatically once your design is ready.",
+    title: "Say hello and we'll get started",
+    text: "Send a message and we'll set up and design your project together — your live preview opens on its own once it's ready.",
   });
 }
 
