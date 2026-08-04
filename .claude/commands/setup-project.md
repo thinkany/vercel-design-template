@@ -87,12 +87,16 @@ Follow these steps:
       separate from the Vercel preview deploy.
 
 0.5. **Company identity — is it already applied? Else, import or set fresh.**
-   **First, read `.env`.** If **`VITE_COMPANY_NAME` is already set** (and a login
-   logo is wired), the desktop app **auto-applied the designer's saved *default*
-   company profile** when it created this project — the agency identity is already
-   done. In that case tell them so in one line ("Your company identity's already
-   in place — {name}."), then **SKIP this question AND the entire company block
-   (2a–2c)** and go straight to the client in **step 3**. Don't re-ask any of it.
+   **First, read `.env`.** If **`VITE_COMPANY_NAME` is set (non-empty)**, the
+   company identity is **already in place** — the desktop app auto-applied the
+   designer's saved *default* company profile when it created this project. **Treat
+   that as complete and skip ahead**, even if the logo and admin fonts are still
+   the template defaults — a **name-only profile is a valid, deliberate choice**,
+   NOT "incomplete." Do NOT reason yourself back into asking. Tell them in one line
+   ("Your company identity's already in place — {name}."), then **SKIP this
+   question AND the entire company block (2a–2c)** and go straight to the client in
+   **step 3**. (If they *want* to add a logo or change admin fonts, they can anytime
+   via the app's Company Profile panel or just by asking — but don't prompt for it.)
 
    **Otherwise (company not set), this is the mandatory FIRST branding question —
    always ask it**, and don't assume a first-timer has no profile (they may have
