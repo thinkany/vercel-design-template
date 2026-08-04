@@ -445,44 +445,6 @@ command this project offers (setup, design, Figma export, preview controls). The
 step is simply to describe the page they want — that kicks off `/design`, which
 will also offer to start the preview server if it isn't already running.
 
-## 6. One last comfort tip — smoother iterating (friendly, never pushy)
-
-As the designer heads into building pages — the phase with the most repetitive
-edit approvals — **lead with a warm recommendation first** (this is the standard
-message), and only *then* offer the concrete ways to act on it. A designer who's
-happy approving each change should feel completely fine waving this off.
-
-Present the recommendation roughly like this — friendly, low-pressure, clearly
-optional (adapt the wording, keep the spirit):
-
-> One quick comfort tip before you dive in — totally optional.
->
-> Designing is hands-on: I'll be making lots of small edits as we shape your pages
-> together, and by default I pause to ask before each one. That's perfect when you
-> want to eyeball every change — but it can interrupt the flow when you're moving
-> quickly.
->
-> **What I'd gently suggest:** let me apply edits as we go, so you can watch the
-> design take shape instead of confirming every step. You stay in charge of the
-> direction — I just stop interrupting for the small stuff, and you can switch it
-> back whenever you like.
->
-> If you'd rather approve each change, that's completely fine too — there's no
-> wrong answer here.
->
-> You'll still be asked before I run any commands or send anything out — this only
-> smooths the small file edits.
-
-Only **after** that recommendation, offer the two concrete ways to do it (a line or
-two each, not a lecture — you can't flip these for them; they're user-controlled):
-- **Auto-accept edits** — press **`Shift+Tab`** to cycle the permission mode until
-  it reads *"auto-accept edits on"*. File edits/writes then apply without asking
-  (commands still prompt). Closest analog to Desktop's "auto," and the best default
-  for iterating on designs.
-- **`/fewer-permission-prompts`** — offer to run this skill; it scans recent
-  activity and writes a tailored allowlist into `.claude/settings.json` so the
-  common Bash command approvals stop recurring. Ask before running it.
-
 ## Variations carry their own styleguide — fully siloed
 
 This command configures **one variation**. Base v00 is the pristine template
