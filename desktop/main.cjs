@@ -11,7 +11,7 @@
 // app itself. desktop/ lives only on the `electron` branch; the scaffolded
 // project comes from the clean `main` branch.
 
-const { app, BrowserWindow, ipcMain, safeStorage, shell, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, safeStorage, shell, dialog, Menu } = require("electron");
 
 // The package name is "@figma/my-make-file"; force the product name so the macOS
 // app menu (About / Hide / Quit …) and the About panel read "thinkany design".
@@ -818,7 +818,56 @@ ipcMain.handle("file:attach", async () => {
 // Attach a file by path (from a drag-and-drop in the renderer).
 ipcMain.handle("file:attachPath", (_event, { srcPath }) => attachToProject(srcPath));
 
+// A custom, branded "About" window (the native macOS About panel can't show a
+// logo file or a real button). Shows the logo, version, and a thinkany.co button.
+let aboutWindow = null;
+function openAboutWindow() {
+  if (aboutWindow && !aboutWindow.isDestroyed()) { aboutWindow.focus(); return; }
+  let version;
+  try { version = require(path.join(appRoot, "package.json")).version; }
+  catch { version = app.getVersion(); }
+  aboutWindow = new BrowserWindow({
+    width: 340, height: 384, resizable: false, minimizable: false, maximizable: false,
+    fullscreenable: false, title: "About thinkany design", backgroundColor: "#ffffff",
+    show: false,
+  });
+  aboutWindow.loadFile(path.join(__dirname, "about.html"), { search: "v=" + version });
+  aboutWindow.once("ready-to-show", () => aboutWindow.show());
+  // The "Visit thinkany.co" button opens with target=_blank → route it to the
+  // real browser instead of navigating the About window.
+  aboutWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) shell.openExternal(url);
+    return { action: "deny" };
+  });
+  aboutWindow.webContents.on("will-navigate", (e, url) => {
+    e.preventDefault();
+    if (/^https?:\/\//.test(url)) shell.openExternal(url);
+  });
+  aboutWindow.on("closed", () => { aboutWindow = null; });
+}
+
+// Application menu — mirrors the macOS default, but the app menu's "About" opens
+// our branded window instead of the native panel. editMenu/viewMenu/windowMenu
+// keep the standard shortcuts (copy/paste, etc.) so nothing regresses.
+function buildAppMenu() {
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { label: app.name, submenu: [
+      { label: "About thinkany design", click: openAboutWindow },
+      { type: "separator" },
+      { role: "services" },
+      { type: "separator" },
+      { role: "hide" }, { role: "hideOthers" }, { role: "unhide" },
+      { type: "separator" },
+      { role: "quit" },
+    ] },
+    { role: "editMenu" },
+    { role: "viewMenu" },
+    { role: "windowMenu" },
+  ]));
+}
+
 app.whenReady().then(async () => {
+  buildAppMenu();
   loadEnvLocal(); // dev fallback
   const stored = loadStoredKey(); // in-app key wins if present
   if (stored) process.env.ANTHROPIC_API_KEY = stored;
