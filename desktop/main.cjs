@@ -212,6 +212,112 @@ function clearProjectPath() {
   }
 }
 
+// ---- Session history (project-scoped) ---------------------------------------
+// New sessions start empty; when the user leaves a project or quits, the current
+// session is archived into the PROJECT (portable, self-contained) and listed in
+// the Claude drawer. Reopening one restores its chat (parsed transcript) AND
+// resumes its model context (SDK `resume: sessionId`). The SDK already persists
+// each session's transcript at ~/.claude/projects/<encoded-cwd>/<id>.jsonl; we
+// copy that into the project so history travels with it and survives ~/.claude
+// being cleared.
+let currentSessionId = null; // tracked from agent:prompt so quit can archive it
+
+function sessionsDir(project) { return path.join(project, ".thinkany", "sessions"); }
+function sessionsIndexPath(project) { return path.join(sessionsDir(project), "index.json"); }
+function loadSessionsIndex(project) {
+  try { return JSON.parse(fs.readFileSync(sessionsIndexPath(project), "utf8")) || []; }
+  catch { return []; }
+}
+function saveSessionsIndex(project, arr) {
+  fs.mkdirSync(sessionsDir(project), { recursive: true });
+  fs.writeFileSync(sessionsIndexPath(project), JSON.stringify(arr, null, 2));
+}
+
+// The SDK encodes a project dir as its cwd with every non-alphanumeric char → "-".
+function sdkProjectDir(cwd) {
+  return path.join(app.getPath("home"), ".claude", "projects", cwd.replace(/[^A-Za-z0-9]/g, "-"));
+}
+// Find a session's SDK transcript by id (scan project dirs — robust to encoding).
+function findSdkTranscript(sessionId) {
+  const base = path.join(app.getPath("home"), ".claude", "projects");
+  try {
+    for (const dir of fs.readdirSync(base)) {
+      const p = path.join(base, dir, sessionId + ".jsonl");
+      if (fs.existsSync(p)) return p;
+    }
+  } catch { /* none */ }
+  return null;
+}
+
+function extractText(content) {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) return content.filter((b) => b && b.type === "text").map((b) => b.text || "").join("");
+  return "";
+}
+// Turn a transcript JSONL into a clean chat: real user prompts + assistant prose.
+// Skips injected/meta user turns (isMeta, or <command-*>/<system-reminder>… wrappers,
+// all of which start with "<"), tool_result user turns, and thinking/tool_use blocks.
+function parseTranscript(jsonl) {
+  const messages = [];
+  let title = "";
+  for (const line of String(jsonl).split("\n")) {
+    if (!line.trim()) continue;
+    let o; try { o = JSON.parse(line); } catch { continue; }
+    if (o.type === "ai-title" && o.aiTitle) { title = o.aiTitle; continue; }
+    if (o.type === "user") {
+      if (o.isMeta) continue;
+      const text = extractText(o.message && o.message.content).trim();
+      if (!text || text.startsWith("<")) continue; // command/system wrappers + tool_results
+      messages.push({ role: "user", text });
+    } else if (o.type === "assistant") {
+      const text = extractText(o.message && o.message.content).trim();
+      if (!text) continue; // thinking/tool_use-only turns
+      messages.push({ role: "assistant", text });
+    }
+  }
+  if (!title) {
+    const firstUser = messages.find((m) => m.role === "user");
+    title = firstUser ? firstUser.text.replace(/\s+/g, " ").slice(0, 60) : "Untitled session";
+  }
+  return { title, messages };
+}
+
+// Archive the given session into the project. Idempotent per sessionId (refreshes
+// an existing entry); skips sessions with no real messages. Returns the record.
+function archiveSession(project, sessionId) {
+  if (!project || !sessionId) return null;
+  const src = findSdkTranscript(sessionId);
+  if (!src) return null;
+  let jsonl; try { jsonl = fs.readFileSync(src, "utf8"); } catch { return null; }
+  const { title, messages } = parseTranscript(jsonl);
+  if (!messages.length) return null; // nothing worth keeping
+  fs.mkdirSync(sessionsDir(project), { recursive: true });
+  const idx = loadSessionsIndex(project);
+  let rec = idx.find((s) => s.sessionId === sessionId);
+  if (!rec) {
+    const createdAt = new Date().toISOString();
+    const stamp = createdAt.replace(/[:.]/g, "-").replace("T", "_").slice(0, 17);
+    rec = { id: sessionId, sessionId, createdAt, title, file: `${stamp}-${sessionId.slice(0, 8)}.jsonl` };
+    idx.unshift(rec);
+  } else {
+    rec.title = title; // refresh title/content on re-archive
+  }
+  fs.copyFileSync(src, path.join(sessionsDir(project), rec.file));
+  saveSessionsIndex(project, idx);
+  return rec;
+}
+
+// Before resuming a copied-in session, make sure its transcript is where the SDK
+// looks (copy our portable copy back if ~/.claude was cleared / project moved).
+function ensureSdkTranscript(project, rec) {
+  const dest = path.join(sdkProjectDir(project), rec.sessionId + ".jsonl");
+  if (fs.existsSync(dest)) return;
+  const copy = path.join(sessionsDir(project), rec.file);
+  if (!fs.existsSync(copy)) return;
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.copyFileSync(copy, dest);
+}
+
 // ---- UI state: remember the last-used folder per dialog ----------------------
 function uiStatePath() {
   return path.join(app.getPath("userData"), "ui-state.json");
@@ -517,7 +623,27 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
       if (!event.sender.isDestroyed()) event.sender.send("agent:ask", { id, questions });
       else reject(new Error("window closed"));
     });
-  return runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, model: currentModel, copyVoice: effectiveVoice(currentProject) });
+  const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, model: currentModel, copyVoice: effectiveVoice(currentProject) });
+  if (result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it
+  return result;
+});
+
+// ---- Session history IPC ----------------------------------------------------
+ipcMain.handle("session:list", () => (currentProject ? loadSessionsIndex(currentProject) : []));
+ipcMain.handle("session:archive", (_e, { sessionId }) => {
+  const rec = currentProject ? archiveSession(currentProject, sessionId) : null;
+  if (sessionId && sessionId === currentSessionId) currentSessionId = null; // it's being closed out
+  return rec;
+});
+ipcMain.handle("session:load", (_e, { id }) => {
+  if (!currentProject) return null;
+  const rec = loadSessionsIndex(currentProject).find((s) => s.id === id);
+  if (!rec) return null;
+  ensureSdkTranscript(currentProject, rec); // so `resume` can find it
+  let jsonl; try { jsonl = fs.readFileSync(path.join(sessionsDir(currentProject), rec.file), "utf8"); } catch { return null; }
+  const { messages } = parseTranscript(jsonl);
+  currentSessionId = rec.sessionId; // we're now live in this session again
+  return { sessionId: rec.sessionId, messages, title: rec.title, createdAt: rec.createdAt };
 });
 
 // Read the app version from package.json directly — app.getVersion() falls back
@@ -805,6 +931,9 @@ ipcMain.handle("project:open", async () => {
 });
 
 ipcMain.handle("project:reset", () => {
+  // Leaving the project → archive the live session into it before we let go.
+  if (currentProject && currentSessionId) archiveSession(currentProject, currentSessionId);
+  currentSessionId = null;
   clearProjectPath();
   currentProject = null;
   stopVite();
@@ -907,7 +1036,12 @@ app.whenReady().then(async () => {
   }
 });
 
-app.on("before-quit", () => { stopVite(); stopCaptureBridge(); });
+app.on("before-quit", () => {
+  // Closing the app → archive the live session so it lands in the drawer next launch.
+  if (currentProject && currentSessionId) archiveSession(currentProject, currentSessionId);
+  stopVite();
+  stopCaptureBridge();
+});
 app.on("window-all-closed", () => {
   stopVite();
   stopCaptureBridge();

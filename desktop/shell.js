@@ -488,7 +488,22 @@ function noProjectPlaceholder() {
   });
 }
 
+// The Claude + Figma rail icons show their brand colors only once their key /
+// license is active; otherwise they stay monochrome white like the rest of the
+// rail. Toggled via the .activated class.
+async function refreshRailActivation() {
+  try {
+    const [k, l] = await Promise.all([
+      window.desktop.getKeyStatus(),
+      window.desktop.getLicenseStatus(),
+    ]);
+    railClaude.classList.toggle("activated", !!(k && k.hasKey));
+    railFigma.classList.toggle("activated", !!(l && l.hasLicense));
+  } catch {}
+}
+
 async function boot() {
+  refreshRailActivation(); // color the Claude/Figma icons per key + license state
   const { hasKey } = await window.desktop.getKeyStatus();
   if (!hasKey) {
     noProjectPlaceholder();
@@ -599,11 +614,11 @@ openproject.addEventListener("click", () => chooseProject("open"));
 const RAILS = { help: railHelp, projects: railProjects, company: railCompany, figma: railFigma, voice: railVoice, claude: railClaude };
 const PANELS = {
   help: { title: "Commands", render: renderHelp },
-  projects: { title: "Switch project", render: renderProjects },
-  company: { title: "Company profile", render: renderCompany },
-  figma: { title: "Figma export", render: renderFigma },
+  projects: { title: "Switch Project", render: renderProjects },
+  company: { title: "Company Profile", render: renderCompany },
+  figma: { title: "Figma Export", render: renderFigma },
   voice: { title: "Copy Voice", render: renderVoice },
-  claude: { title: "Claude settings", render: renderClaude },
+  claude: { title: "Claude Settings", render: renderClaude },
 };
 
 function closeModal() {
@@ -868,6 +883,8 @@ async function renderCompany(body) {
 // --- Figma export: license (cloud derive) — its own panel, separate from Claude ---
 async function renderFigma(body) {
   const lic = await window.desktop.getLicenseStatus();
+  railFigma.classList.toggle("activated", !!lic.hasLicense); // color the icon on save/clear
+
   const row = document.createElement("div");
   row.className = "setrow";
   const k = document.createElement("div");
@@ -1056,6 +1073,20 @@ async function renderVoice(body) {
 }
 
 // --- Claude settings: API key + model ---
+// Friendly relative timestamp for a session's saved date.
+function relTime(iso) {
+  const then = new Date(iso), now = new Date();
+  const time = then.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const days = Math.round(
+    (new Date(now.getFullYear(), now.getMonth(), now.getDate()) -
+      new Date(then.getFullYear(), then.getMonth(), then.getDate())) / 86400000
+  );
+  if (days === 0) return "Today " + time;
+  if (days === 1) return "Yesterday " + time;
+  if (days < 7) return then.toLocaleDateString([], { weekday: "short" }) + " " + time;
+  return then.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 async function renderClaude(body) {
   const status = await window.desktop.getKeyStatus();
   const row = document.createElement("div");
@@ -1137,6 +1168,50 @@ async function renderClaude(body) {
   note.className = "muted";
   note.textContent = "Key stored encrypted in your OS keychain.";
   body.appendChild(note);
+
+  // ── Sessions (project-scoped history) — called out at the bottom, under a rule,
+  // so the Key/Model/Disconnect group above stays together. ──
+  const sep = document.createElement("div");
+  sep.className = "sess-sep";
+  body.appendChild(sep);
+
+  const sh = document.createElement("div");
+  sh.className = "sess-label";
+  sh.textContent = "Sessions";
+  body.appendChild(sh);
+
+  const newBtn = document.createElement("button");
+  newBtn.className = "sess-new";
+  newBtn.textContent = "+ New";
+  newBtn.title = "Start a new session (saves the current one here)";
+  newBtn.addEventListener("click", async () => { closeModal(); await clearSession(); });
+  body.appendChild(newBtn);
+
+  const list = document.createElement("div");
+  list.className = "sesslist";
+  body.appendChild(list);
+  const sessions = await window.desktop.listSessions();
+  if (!sessions.length) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "No saved sessions yet, they appear here when you start a new one or leave the project.";
+    list.appendChild(empty);
+  } else {
+    sessions.forEach((s) => {
+      const b = document.createElement("button");
+      b.className = "sessrow";
+      b.title = "Reopen this session";
+      const t = document.createElement("div");
+      t.className = "sess-title";
+      t.textContent = s.title || "Untitled session";
+      const d = document.createElement("div");
+      d.className = "sess-date";
+      d.textContent = relTime(s.createdAt);
+      b.append(t, d);
+      b.addEventListener("click", async () => { closeModal(); await openSession(s.id); });
+      list.appendChild(b);
+    });
+  }
 }
 
 // --- Moved actions ---
@@ -1288,8 +1363,9 @@ function updateSessionGauge(usage, modelUsage) {
 
 // /clear — reset the conversation: drop the SDK session (next prompt starts
 // fresh), wipe the chat log, and zero the gauge/nudges. Files on disk untouched.
-function clearSession() {
-  sessionId = null;
+// Reset the visible chat + gauge state (no archive, no message). Shared by
+// starting a new session and reopening a past one.
+function resetChatUi() {
   assistantEl = null;
   thinkingEl = null;
   log.innerHTML = "";
@@ -1300,7 +1376,34 @@ function clearSession() {
   gauge.removeAttribute("data-level");
   gaugeProg.style.strokeDashoffset = String(GAUGE_CIRCUMFERENCE);
   gaugePct.textContent = "";
-  addMsg("system", "Started a fresh session — earlier messages are cleared. Your project and design work are saved on disk.");
+}
+
+// Start a fresh session. The current one is ARCHIVED into the project first (so
+// it lands in the Claude panel's Sessions list) — never discarded.
+async function clearSession() {
+  const old = sessionId;
+  if (old) { try { await window.desktop.archiveSession(old); } catch {} }
+  sessionId = null;
+  resetChatUi();
+  addMsg("system", "Started a fresh session — your previous one is saved in the Claude panel (Sessions).");
+}
+
+// Reopen a past session: replay its chat (Part B) and resume its model context
+// (Part A). Archives whatever's currently live before switching away.
+async function openSession(id) {
+  const data = await window.desktop.loadSession(id);
+  if (!data) return;
+  if (sessionId && sessionId !== data.sessionId) { try { await window.desktop.archiveSession(sessionId); } catch {} }
+  resetChatUi();
+  sessionId = data.sessionId;      // Part A — the next turn resumes this session
+  conversationStarted = true;
+  dismissWelcome();
+  for (const m of data.messages) { // Part B — replay the conversation
+    if (m.role === "assistant") { const elx = addMsg("assistant", ""); renderMarkdownInto(elx, m.text); }
+    else addMsg("user", m.text);
+  }
+  addMsg("system", "Resumed this session — pick up where you left off.");
+  log.scrollTop = log.scrollHeight;
 }
 
 // Clicking the gauge offers to clear the session. A centered confirm dialog
@@ -1308,10 +1411,11 @@ function clearSession() {
 // way the designer would (shows the command in chat, then executes it).
 function openClearConfirm() {
   confirmMsg.textContent =
-    "Clearing starts a fresh session: the chat history is wiped so replies stay fast and focused. " +
-    "Your project files, design work, and styleguide are saved on disk and are NOT affected.\n\n" +
+    "Starting a new session gives you a fresh, fast chat. Your current session is SAVED to the Claude " +
+    "panel's Sessions list (not lost) — reopen it anytime to pick up where you left off. Project files and " +
+    "design work are unaffected.\n\n" +
     `You're currently at about ${sessionTokens.toLocaleString()} tokens (${sessionPct}% of the context window). ` +
-    "It's a good time to clear when this climbs high (the ring turns amber, then red) or when you're moving on to a new task.";
+    "It's a good time to start fresh when this climbs high (the ring turns amber, then red) or you're moving to a new task.";
   confirmEl.hidden = false;
   confirmOk.focus();
 }
@@ -1727,7 +1831,7 @@ async function sendText(text) {
     input.value = "";
     input.placeholder = DEFAULT_PLACEHOLDER;
     dismissWelcome();
-    clearSession();
+    await clearSession();
     input.focus();
     return;
   }

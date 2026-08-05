@@ -30,8 +30,13 @@
       .railbtn svg { width: 20px; height: 20px; display: block; }
       .railbtn:hover { background: #2a2a31; opacity: 1; }
       .railbtn.active { background: #2a2a31; opacity: 1; }
-      /* Claude icon: brand-orange (sits inline in the rail, not pinned) */
-      #rail-claude { color: #d97757; opacity: 1; }
+      /* Claude + Figma icons are monochrome white (like the rest of the rail)
+         until their key/license is active — then their brand colors show and they
+         go full-opacity. The .activated class is toggled in shell.js from the
+         key-status / license-status. */
+      #rail-claude:not(.activated) svg path,
+      #rail-figma:not(.activated) svg path { fill: #fff; }
+      #rail-claude.activated, #rail-figma.activated { opacity: 1; }
       /* Rail order (visual, top→bottom): Switch Project · Claude · Figma · Company · Voice · Help */
       #rail-projects { order: 1; }
       #rail-claude   { order: 2; }
@@ -189,6 +194,16 @@
       .setrow { margin-bottom: 16px; }
       .setrow .k { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #999; margin-bottom: 4px; }
       .setrow .v { word-break: break-all; }
+      /* Session history (Claude drawer) — called out at the bottom under a rule */
+      .sess-sep { border-top: 1px solid #e3e3e8; margin: 20px 0 10px; }
+      .sess-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #999; }
+      .sess-new { display: inline-block; margin: 8px 0; border: 1px solid #d8d8de; background: #fafafb; color: #333; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: border-color .25s linear, background .25s linear; }
+      .sess-new:hover { border-color: #111; }
+      .sesslist { display: flex; flex-direction: column; gap: 6px; }
+      .sessrow { display: block; width: 100%; text-align: left; border: 1px solid #e3e3e8; background: #fafafb; border-radius: 8px; padding: 8px 10px; cursor: pointer; transition: border-color .25s linear, background .25s linear; }
+      .sessrow:hover { border-color: #111; }
+      .sess-title { font-size: 12.5px; font-weight: 600; color: #1a1a1a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .sess-date { font-size: 11px; color: #999; margin-top: 2px; }
       .panelbtn {
         border: 1px solid #ccc; background: #fafafb; border-radius: 8px; padding: 8px 12px;
         font-size: 13px; cursor: pointer; margin: 4px 8px 0 0;
@@ -438,7 +453,7 @@
   <body>
     <div id="app">
       <div id="sidebar">
-        <button class="railbtn" id="rail-help" aria-label="Help with commands" data-tip="Help with commands">
+        <button class="railbtn" id="rail-help" aria-label="Help with Commands" data-tip="Help with Commands">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/><circle cx="12" cy="12" r="4"/></svg>
         </button>
         <button class="railbtn" id="rail-projects" aria-label="Switch Projects" data-tip="Switch Projects">
@@ -450,7 +465,7 @@
         <button class="railbtn" id="rail-voice" aria-label="Copy Voice" data-tip="Copy Voice">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </button>
-        <button class="railbtn" id="rail-figma" aria-label="Figma export" data-tip="Figma export">
+        <button class="railbtn" id="rail-figma" aria-label="Figma Export" data-tip="Figma Export">
           <svg viewBox="0 0 38 57" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" fill="#1abcfe"/><path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z" fill="#0acf83"/><path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z" fill="#ff7262"/><path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z" fill="#f24e1e"/><path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z" fill="#a259ff"/></svg>
         </button>
         <button class="railbtn" id="rail-claude" aria-label="Claude Settings" data-tip="Claude Settings">
@@ -551,11 +566,11 @@
 
     <div id="confirm" hidden>
       <div id="confirm-card" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-        <h3 id="confirm-title">Clear this session?</h3>
+        <h3 id="confirm-title">Start a new session?</h3>
         <p id="confirm-msg"></p>
         <div id="confirm-actions">
           <button id="confirm-cancel" class="cbtn ghost">Cancel</button>
-          <button id="confirm-ok" class="cbtn primary">Clear session</button>
+          <button id="confirm-ok" class="cbtn primary">New session</button>
         </div>
       </div>
     </div>

@@ -24,6 +24,11 @@ contextBridge.exposeInMainWorld("desktop", {
   saveKey: (key) => ipcRenderer.invoke("key:save", { key }),
   clearKey: () => ipcRenderer.invoke("key:clear"),
 
+  // ---- Session history ----
+  listSessions: () => ipcRenderer.invoke("session:list"),
+  archiveSession: (sessionId) => ipcRenderer.invoke("session:archive", { sessionId }),
+  loadSession: (id) => ipcRenderer.invoke("session:load", { id }),
+
   // ---- Derive license (Figma export) ----
   getLicenseStatus: () => ipcRenderer.invoke("license:status"),
   saveLicense: (key) => ipcRenderer.invoke("license:save", { key }),
