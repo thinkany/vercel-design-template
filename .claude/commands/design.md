@@ -82,6 +82,30 @@ palette) for the live `--ta-*` colors and `--ta-font-*` families. Use those toke
 (via the Tailwind utilities below) — **never hardcode a hex or font stack.** That
 single read replaces crawling six files.
 
+## 2b. Research the field (licensed + gated — usually SKIP)
+**Run `echo $TA_DESIGN_RESEARCH` once at the start of a build.** If it prints
+anything other than `on`, **skip this step entirely** (the default — it's a licensed
+add-on, per the active variation's toggle). Don't mention it when off.
+
+When it prints `on`, apply research **only to a SUBSTANTIAL (re)design** — a whole
+page, a fresh hero, a major new/re-imagined section ("re-imagine the home page", "new
+landing", "redo the features section"). **Do NOT** run it for small tweaks (copy edits,
+color/size changes, moving one element) — those build immediately as always.
+
+For a qualifying request: **tell the designer up front it adds time** (e.g. *"Studying a
+few comparable sites to shape this — it'll take a little longer than usual."*), then:
+1. **Discover 3–5 comparable sites.** Any the designer named; else `WebSearch` the
+   project's own category (infer it from the existing brand/styleguide + current design —
+   e.g. a fitness-booking site, a fintech landing). Cap at 5.
+2. **Read each** — `node scripts/extract-layout.mjs <url>` for its section skeleton + nav
+   pattern. Bounded; skip any that fail.
+3. **Synthesize** the common structure (table stakes) vs. what strong ones do differently,
+   and let it inform the (re)design — **grammar only, never clone a site.**
+
+This grounds a re-imagining in real conventions instead of guesswork. It respects the
+same gate as `/design-brief` (license + the variation's on/off), so a variation with it
+**on** researches while another with it **off** designs straight away.
+
 ## 3. The authoring contract (already inlined — don't re-read the source)
 
 Every design page is a **content function wrapped in `<DesignSurface>`**.

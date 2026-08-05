@@ -45,6 +45,28 @@ Read all three JSON files. On a failed/empty extract, **fall back** (a palette f
 knowledge of the brand; sensible fonts; a conventional section order) and **proceed** —
 never hard-fail.
 
+## 2b. Research the field (licensed + gated — usually SKIP)
+**FIRST run `echo $TA_DESIGN_RESEARCH`.** If it is anything other than `on`, **skip this
+entire step** and go to step 3 (this is the default — the feature is a licensed add-on,
+off unless both licensed and toggled on). Do not mention it when off.
+
+When it prints `on`, study a few comparable sites to ground the structure. **Tell the
+designer up front it adds a little time**, e.g. *"Studying a few comparable {category}
+sites to shape the layout — this'll take a little longer than usual."* Then:
+1. **Discover 3–5 references.** Any sites the brief named first; else `WebSearch` the
+   category (`"best {category} website"`, `"{competitor} alternatives"`, landing-page
+   galleries). Cap at 5.
+2. **Read each** — `node scripts/extract-layout.mjs <url>` for its section skeleton +
+   nav pattern (and `extract-palette`/`resolve-fonts` if you need a brand cue the brief
+   didn't give). Bounded; skip any that fail — a smaller sample is fine.
+3. **Synthesize a conventions report** and write it to `/tmp/ta-research.json`:
+   the **common** section order (table stakes) vs. what the strong ones do **differently**
+   (differentiators), the prevailing nav pattern, plus an `originalityNote`. **Grammar
+   only — never reproduce any single site's layout or copy.**
+
+This is the same as the single-reference read, scaled to many + synthesized. It changes
+only step 4's *input* (a synthesized outline instead of one site's), never the rules.
+
 ## 3. Apply (deterministic — one command, creates v01)
 ```
 node scripts/apply-brand.mjs --variation v01 \
@@ -60,8 +82,9 @@ new variation on reload.
 ## 4. Design v01/Home
 Now follow the [`/design`](design.md) authoring contract and build
 `src/variations/v01/components/Home.tsx` with the **new** `--ta-*` / `--ta-font-*`
-tokens. **Drive the page's section order + block choices from `/tmp/ta-outline.json`**
-(step 2's layout extract): build each section in its `sections[]` order, matching the
+tokens. **Drive the page's section order + block choices from `/tmp/ta-research.json`
+if it exists** (step 2b ran the research layer), **otherwise from `/tmp/ta-outline.json`**
+(the single reference's skeleton): build each section in its `sections[]` order, matching the
 `type` to a block (hero / feature grid / logo cloud / pricing / testimonial / FAQ / CTA
 / footer) and honoring its `layout`/`columns`/`items` (e.g. a `grid×3` features block →
 a 3-up card row) and `nav.pattern`. This is **inspired by structure, not copied** — the
