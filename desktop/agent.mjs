@@ -5,7 +5,8 @@
 //   onEvent(evt) is called for each streamed chunk, where evt is one of:
 //     { type: "text",   text }            assistant text delta
 //     { type: "tool",   name }            a tool-use the agent invoked
-//     { type: "result", text }            end of the assistant turn
+//     { type: "result", text, usage }     end of the assistant turn (usage = the
+//                                          SDK's token usage for context sizing)
 //     { type: "error",  message }         something failed
 //
 // The SDK is imported dynamically so a missing install (or missing API key)
@@ -163,6 +164,12 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
       },
     });
 
+    // Track the usage of the LAST single model call in this turn. Its input side
+    // (fresh input + both cache tiers) ≈ the current context-window occupancy —
+    // unlike the result message's `usage`, which is CUMULATIVE across every
+    // internal call of an agentic turn and hugely overstates how full context is.
+    let lastCallUsage = null;
+
     for await (const message of iterator) {
       switch (message.type) {
         case "system":
@@ -189,6 +196,10 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
         // setup placeholder. Separate from the "tool" event above so chat and the
         // preview-timing polling are unaffected if this stream ever changes.
         case "assistant": {
+          // Each assistant message = one completed model call; its usage is that
+          // single request's real token breakdown. Keep the latest (= peak, since
+          // context grows within a turn) for the renderer's context gauge.
+          if (message.message?.usage) lastCallUsage = message.message.usage;
           const content = message.message?.content || message.content || [];
           for (const block of content) {
             if (block?.type === "tool_use") {
@@ -201,7 +212,16 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
         case "result":
           if (message.session_id) resolvedSession = message.session_id;
           if (message.subtype === "success") {
-            onEvent({ type: "result", text: message.result ?? "" });
+            // Forward token usage so the renderer can size the context gauge and
+            // nudge on long sessions. Prefer the LAST single call's usage (≈ real
+            // context occupancy) over the result message's cumulative-per-turn
+            // total. modelUsage (when present) carries the exact contextWindow.
+            onEvent({
+              type: "result",
+              text: message.result ?? "",
+              usage: lastCallUsage ?? message.usage ?? null,
+              modelUsage: message.modelUsage ?? null,
+            });
           } else {
             onEvent({ type: "error", message: `Agent turn ended: ${message.subtype}` });
           }

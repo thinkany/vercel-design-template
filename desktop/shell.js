@@ -36,6 +36,13 @@ const log = el("log");
 const input = el("input");
 const send = el("send");
 const attach = el("attach");
+const gauge = el("gauge");
+const gaugeProg = gauge.querySelector(".prog");
+const gaugePct = gauge.querySelector(".pct");
+const confirmEl = el("confirm");
+const confirmMsg = el("confirm-msg");
+const confirmCancel = el("confirm-cancel");
+const confirmOk = el("confirm-ok");
 
 // Preview / embedded browser
 const browser = el("browser");
@@ -450,7 +457,7 @@ function refreshPreview() {
   showPlaceholder({
     emoji: "👋",
     title: "Pick a starting point to your left",
-    text: "Choose Client Setup or Get Designing in the chat — your live preview opens here on its own once your design is ready.",
+    text: "Choose Client Setup or Get Designing in the chat pane. Your live preview opens here on its own once your design is ready for viewing.",
   });
 }
 
@@ -679,6 +686,7 @@ const COMMANDS = [
   ["/setup-styleguide", "Set the client's fonts, colors, and example styleguide sections."],
   ["/design", "Build or edit a page (hero, sections, landing) — the design phase."],
   ["/guide", "Show the list of commands."],
+  ["/clear", "Start a fresh session — clears the chat for faster replies (saved work is kept)."],
   ["/export-company", "Save your agency identity (name, admin fonts, logo) as a portable file."],
   ["/import-company", "Apply a saved company profile into this project."],
   ["export to Figma", "Ask in plain language to push the styleguide, blocks, or pages to Figma."],
@@ -1179,6 +1187,145 @@ function addMsg(cls, text) {
   return node;
 }
 
+// The pulsing "thinking" indicator. It's shown whenever the agent is busy but
+// nothing is actively on screen — i.e. no assistant text is currently streaming
+// (`assistantEl` is null). That covers the first beat after a prompt and the gap
+// left when a tool bubble collapses out, so the log never sits empty mid-turn.
+// updateThinking() is the single reconciler: call it at every state transition
+// (send / text / tool / result / error) and it derives visibility from state.
+let thinkingEl = null;
+function updateThinking() {
+  const shouldShow = agentBusy && !assistantEl;
+  if (shouldShow) {
+    if (!thinkingEl) {
+      thinkingEl = document.createElement("div");
+      thinkingEl.className = "msg thinking";
+      thinkingEl.innerHTML = "<i></i><i></i><i></i>";
+    }
+    log.appendChild(thinkingEl); // keep it pinned below the latest content
+    log.scrollTop = log.scrollHeight;
+  } else if (thinkingEl) {
+    thinkingEl.remove();
+    thinkingEl = null;
+  }
+}
+
+// Tool bubbles are transient — flash in for a beat of live feedback, then
+// collapse out so the chat stays conversation-only (the assistant explains what
+// it did in prose anyway). Height is locked to px first so max-height can
+// animate to 0; the node removes itself once the transition finishes.
+function autoDismissTool(node, delay = 1100) {
+  setTimeout(() => {
+    if (!node.isConnected) return;
+    node.style.maxHeight = node.scrollHeight + "px";
+    requestAnimationFrame(() => {
+      node.classList.add("fade-out");
+      node.style.maxHeight = "0px";
+    });
+    setTimeout(() => node.remove(), 320);
+  }, delay);
+}
+
+// ── Context-length gauge + long-session nudges ───────────────────────────────
+// The SDK reports token usage at the end of each turn. The last turn's input
+// (prompt + cache) ≈ how full the context window is, so we use it to fill the
+// corner ring and to nudge the designer toward /clear before things slow down.
+const DEFAULT_CONTEXT_WINDOW = 200000;
+const GAUGE_CIRCUMFERENCE = 81.68; // 2π·13, matches the SVG radius
+// Fire each nudge once per session as the context crosses these fractions.
+const SESSION_NUDGES = [
+  { at: 0.6, msg: "This conversation is getting long (~60% of the context window). If replies start to slow, type /clear to begin a fresh session — your project files and design work are saved on disk and won't be lost." },
+  { at: 0.85, msg: "Heads up — this conversation is ~85% full. /clear starts a clean, faster session (your saved work stays intact)." },
+];
+let sessionTokens = 0;
+let sessionPct = 0;
+const nudgesFired = new Set();
+
+function contextTokensFrom(usage) {
+  if (!usage) return 0;
+  const g = (a, b) => usage[a] ?? usage[b] ?? 0;
+  // Sum the whole last prompt: fresh input + both cache tiers + this turn's reply.
+  return g("input_tokens", "inputTokens")
+    + g("cache_read_input_tokens", "cacheReadInputTokens")
+    + g("cache_creation_input_tokens", "cacheCreationInputTokens")
+    + g("output_tokens", "outputTokens");
+}
+
+// Pull an exact per-model context window out of modelUsage when the SDK provides
+// it (field name varies by version); otherwise fall back to the 200k default.
+function contextWindowFrom(modelUsage) {
+  if (modelUsage && typeof modelUsage === "object") {
+    for (const m of Object.values(modelUsage)) {
+      const w = m?.contextWindow ?? m?.context_window;
+      if (typeof w === "number" && w > 0) return w;
+    }
+  }
+  return DEFAULT_CONTEXT_WINDOW;
+}
+
+function updateSessionGauge(usage, modelUsage) {
+  const tokens = contextTokensFrom(usage);
+  if (!tokens) return; // no usage on this turn → leave the gauge as-is
+  sessionTokens = tokens;
+  const windowSize = contextWindowFrom(modelUsage);
+  const frac = Math.max(0, Math.min(1, tokens / windowSize));
+  const pct = Math.round(frac * 100);
+  sessionPct = pct;
+
+  gauge.hidden = false;
+  gauge.dataset.level = frac >= 0.85 ? "high" : frac >= 0.6 ? "mid" : "low";
+  gaugeProg.style.strokeDashoffset = String(GAUGE_CIRCUMFERENCE * (1 - frac));
+  gaugePct.textContent = pct + "%";
+
+  for (const n of SESSION_NUDGES) {
+    if (frac >= n.at && !nudgesFired.has(n.at)) {
+      nudgesFired.add(n.at);
+      addMsg("system", n.msg);
+      log.scrollTop = log.scrollHeight;
+    }
+  }
+}
+
+// /clear — reset the conversation: drop the SDK session (next prompt starts
+// fresh), wipe the chat log, and zero the gauge/nudges. Files on disk untouched.
+function clearSession() {
+  sessionId = null;
+  assistantEl = null;
+  thinkingEl = null;
+  log.innerHTML = "";
+  sessionTokens = 0;
+  sessionPct = 0;
+  nudgesFired.clear();
+  gauge.hidden = true;
+  gauge.removeAttribute("data-level");
+  gaugeProg.style.strokeDashoffset = String(GAUGE_CIRCUMFERENCE);
+  gaugePct.textContent = "";
+  addMsg("system", "Started a fresh session — earlier messages are cleared. Your project and design work are saved on disk.");
+}
+
+// Clicking the gauge offers to clear the session. A centered confirm dialog
+// explains what clearing does and when to do it; confirming runs /clear the same
+// way the designer would (shows the command in chat, then executes it).
+function openClearConfirm() {
+  confirmMsg.textContent =
+    "Clearing starts a fresh session: the chat history is wiped so replies stay fast and focused. " +
+    "Your project files, design work, and styleguide are saved on disk and are NOT affected.\n\n" +
+    `You're currently at about ${sessionTokens.toLocaleString()} tokens (${sessionPct}% of the context window). ` +
+    "It's a good time to clear when this climbs high (the ring turns amber, then red) or when you're moving on to a new task.";
+  confirmEl.hidden = false;
+  confirmOk.focus();
+}
+function closeConfirm() { confirmEl.hidden = true; }
+
+gauge.addEventListener("click", openClearConfirm);
+gauge.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openClearConfirm(); }
+});
+confirmCancel.addEventListener("click", closeConfirm);
+confirmEl.addEventListener("click", (e) => { if (e.target === confirmEl) closeConfirm(); }); // backdrop
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !confirmEl.hidden) closeConfirm(); });
+confirmOk.addEventListener("click", () => { closeConfirm(); sendText("/clear"); });
+
 // Render a finished assistant message with lightweight inline markdown:
 // **bold**, `code`, and hex color chips. Built with DOM nodes (never innerHTML)
 // so message text can't inject markup. Applied on finalize — text streams in
@@ -1236,13 +1383,14 @@ function finalizeAssistant() {
 window.desktop.onAgentEvent((evt) => {
   switch (evt.type) {
     case "text":
-      if (!assistantEl) assistantEl = addMsg("assistant", "");
+      if (!assistantEl) { assistantEl = addMsg("assistant", ""); updateThinking(); }
       assistantEl.textContent += evt.text;
       log.scrollTop = log.scrollHeight;
       break;
     case "tool":
       finalizeAssistant();
-      addMsg("tool", `⚙ ${evt.name}${evt.input ? " " + JSON.stringify(evt.input) : ""}`);
+      autoDismissTool(addMsg("tool", `⚙ ${evt.name}${evt.input ? " " + JSON.stringify(evt.input) : ""}`));
+      updateThinking(); // re-pin the dots below the tool bubble while it's still working
       // A tool call may have just written the color palette — poll until the
       // styleguide is preview-ready (not merely when the variation folder
       // appears), then open the live preview mid-turn.
@@ -1267,6 +1415,8 @@ window.desktop.onAgentEvent((evt) => {
     case "result":
       finalizeAssistant();
       agentBusy = false;
+      updateThinking(); // turn done → clear the dots
+      updateSessionGauge(evt.usage, evt.modelUsage); // refresh the context gauge + maybe nudge
       // Guarding a live edit → the agent is DONE; settle Vite, then reveal.
       if (guarding) { revealPreviewAfterEdit(); break; }
       // A turn may have written the palette — re-check readiness and open the
@@ -1285,6 +1435,7 @@ window.desktop.onAgentEvent((evt) => {
     case "error":
       finalizeAssistant();
       agentBusy = false;
+      updateThinking(); // turn errored → clear the dots
       addMsg("error", "✖ " + evt.message);
       // Even on error, settle-then-reveal so the designer isn't stuck behind the
       // guard overlay (the chat carries the error detail).
@@ -1508,29 +1659,44 @@ function renderWelcomeChips() {
   title.textContent = "How would you like to start?";
   card.appendChild(title);
 
+  // Icons are static, trusted SVG (Lucide): a numbered list for step-by-step
+  // setup, a pencil-drawing-a-line for the free-form "just design it" path.
+  const ICON_LIST_ORDERED =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><line x1="10" x2="21" y1="6" y2="6"/><line x1="10" x2="21" y1="12" y2="12"/><line x1="10" x2="21" y1="18" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>';
+  const ICON_PENCIL_LINE =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+
   const opts = [
     {
       label: "Client Setup",
       desc: "Brand a new project step by step — logo, fonts, colors — then design.",
+      icon: ICON_LIST_ORDERED,
       onClick: () => sendText("/setup-project"),
     },
     {
       label: "Get Designing",
       desc: "Jump straight in — describe the site (paste style, color, or font links) and I'll design it.",
+      icon: ICON_PENCIL_LINE,
       onClick: enterDesignBriefMode,
     },
   ];
   for (const o of opts) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "qopt";
+    btn.className = "qopt welcome-opt";
+    const icon = document.createElement("span");
+    icon.className = "welcome-icon";
+    icon.innerHTML = o.icon;
+    const textWrap = document.createElement("div");
+    textWrap.className = "welcome-opt-text";
     const lbl = document.createElement("div");
     lbl.className = "lbl";
     lbl.textContent = o.label;
     const desc = document.createElement("div");
     desc.className = "desc";
     desc.textContent = o.desc;
-    btn.append(lbl, desc);
+    textWrap.append(lbl, desc);
+    btn.append(icon, textWrap);
     btn.addEventListener("click", o.onClick);
     card.appendChild(btn);
   }
@@ -1556,6 +1722,15 @@ function enterDesignBriefMode() {
 async function sendText(text) {
   text = (text || "").trim();
   if (!text) return;
+  // /clear is handled locally — it's a session reset, not a prompt for the agent.
+  if (text === "/clear") {
+    input.value = "";
+    input.placeholder = DEFAULT_PLACEHOLDER;
+    dismissWelcome();
+    clearSession();
+    input.focus();
+    return;
+  }
   dismissWelcome();
   // "Get Designing" brief → route to the /design-brief orchestrator (parse →
   // extract palette/fonts → apply into v01 → design). Show the designer's own
@@ -1570,6 +1745,7 @@ async function sendText(text) {
   assistantEl = null;
   agentBusy = true;
   conversationStarted = true;
+  updateThinking(); // dots up immediately, until the first text/tool arrives
   refreshPreview(); // show the working placeholder while the browser is closed
   send.disabled = true;
   try {
@@ -1577,6 +1753,7 @@ async function sendText(text) {
     if (res && res.sessionId) sessionId = res.sessionId;
   } catch (e) {
     agentBusy = false;
+    updateThinking();
     addMsg("error", String(e));
     refreshPreview();
   } finally {
