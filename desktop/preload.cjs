@@ -76,5 +76,6 @@ contextBridge.exposeInMainWorld("desktop", {
   saveGlobalRules: (rules) => ipcRenderer.invoke("voice:saveGlobal", { rules }),
 
   // ---- Misc ----
+  getAppVersion: () => ipcRenderer.invoke("app:version"),
   openExternal: (url) => ipcRenderer.invoke("open:external", url),
 });

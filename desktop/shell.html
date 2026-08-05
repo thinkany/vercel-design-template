@@ -8,15 +8,18 @@
       * { box-sizing: border-box; }
       html, body { margin: 0; height: 100%; font-family: -apple-system, system-ui, sans-serif; }
       #app { display: flex; height: 100vh; }
+      :root { --rail-w: 52px; }
+      body.rail-collapsed { --rail-w: 26px; }   /* collapsed rail = half width, icons hidden */
 
       /* ---- Sidebar icon rail ---- */
       #sidebar {
-        width: 52px; flex-shrink: 0; background: #17171b;
+        width: var(--rail-w); flex-shrink: 0; background: #17171b;
         display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 7.5px 0 10px;
         /* Above the drawer backdrop so the rail stays visible + clickable while a
            drawer is open (switch panels without closing) — the drawer slides out
            from behind it. */
         position: relative; z-index: 110;
+        transition: width .25s ease;
       }
       .railbtn {
         width: 36px; height: 36px; border: none; background: transparent; color: #fff;
@@ -46,6 +49,18 @@
       .railbtn:hover::after { opacity: 1; }
       /* Its drawer is already open — no need to tooltip the active icon. */
       .railbtn.active:hover::after { opacity: 0; }
+      /* Collapse pull-tab: pinned to the bottom, stays when the rail is collapsed. */
+      body.rail-collapsed .railbtn { display: none; }
+      .pulltab {
+        order: 10; margin-top: auto;   /* after all icons, pinned to the bottom */
+        width: 100%; border: none; background: transparent; color: #fff; opacity: .4;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
+        padding: 9px 0; transition: opacity .25s linear;
+      }
+      .pulltab:hover { opacity: 1; }
+      /* Gear stays full. Hover brightens it and spins a half-turn (left when open,
+         right when collapsed); the click completes the turn — both JS-driven. */
+      .pulltab svg { width: 16px; height: 16px; transform-origin: 50% 50%; transition: transform .35s ease; }
 
       /* ---- Slide-out drawer (left, beside the rail) ---- */
       #modal {
@@ -54,14 +69,14 @@
         pointer-events: none;
       }
       #modal[hidden] { display: none; }
-      #modal.open { background: rgba(0,0,0,.32); pointer-events: auto; }
+      #modal.open { background: rgba(255,255,255,.75); pointer-events: auto; }
       #modal-card {
-        position: absolute; top: 0; bottom: 0; left: 52px;    /* flush against the rail */
-        width: 360px; max-width: calc(92vw - 52px);
+        position: absolute; top: 0; bottom: 0; left: var(--rail-w);    /* flush against the rail */
+        width: 360px; max-width: calc(92vw - var(--rail-w));
         background: #fff; overflow: hidden; display: flex; flex-direction: column;
         box-shadow: 12px 0 44px rgba(0,0,0,.22);
         transform: translateX(-110%);                          /* hidden behind the rail */
-        transition: transform .24s cubic-bezier(.4, 0, .2, 1);
+        transition: transform .24s cubic-bezier(.4, 0, .2, 1), left .25s ease;
       }
       #modal.open #modal-card { transform: translateX(0); }    /* slide out */
       #modal-head {
@@ -88,6 +103,14 @@
       .cmdbtn:hover { background: #ececf1; border-color: #b9a4f0; }
       .cmdbtn:active { transform: translateY(1px); }
       .cmdbtn .run { color: #b9a4f0; font-size: 11px; }
+      /* Help drawer footer: version + credit */
+      .help-divider { height: 1px; background: #e6e6e6; margin: 22px 0 14px; }
+      .help-footer { text-align: center; }
+      .help-version { font-size: 11.5px; color: #999; margin-bottom: 6px; }
+      .help-credit { font-size: 12px; color: #666; }
+      .help-credit .heart { width: 13px; height: 13px; vertical-align: -2px; margin: 0 1px; }
+      .help-link { color: #666; text-decoration: none; cursor: pointer; transition: color .25s linear; }
+      .help-link:hover { color: #111; }
       /* Copy-voice drawer */
       .voice-h { margin: 20px 0 8px; padding-bottom: 5px; border-bottom: 1px solid #eee; }
       .voice-h-k { font-size: 13px; font-weight: 600; color: #111; }
@@ -344,22 +367,25 @@
     <div id="app">
       <div id="sidebar">
         <button class="railbtn" id="rail-help" aria-label="Help with commands" data-tip="Help with commands">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/><circle cx="12" cy="12" r="4"/></svg>
         </button>
         <button class="railbtn" id="rail-projects" aria-label="Switch Projects" data-tip="Switch Projects">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 4 20 8 16 12"/><line x1="4" y1="8" x2="20" y2="8"/><polyline points="8 12 4 16 8 20"/><line x1="4" y1="16" x2="20" y2="16"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 4 20 8 16 12"/><line x1="4" y1="8" x2="20" y2="8"/><polyline points="8 12 4 16 8 20"/><line x1="4" y1="16" x2="20" y2="16"/></svg>
         </button>
         <button class="railbtn" id="rail-company" aria-label="Company Profile" data-tip="Company Profile">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         </button>
         <button class="railbtn" id="rail-voice" aria-label="Copy Voice" data-tip="Copy Voice">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </button>
         <button class="railbtn" id="rail-figma" aria-label="Figma export" data-tip="Figma export">
           <svg viewBox="0 0 38 57" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" fill="#1abcfe"/><path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z" fill="#0acf83"/><path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z" fill="#ff7262"/><path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z" fill="#f24e1e"/><path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z" fill="#a259ff"/></svg>
         </button>
         <button class="railbtn" id="rail-claude" aria-label="Claude Settings" data-tip="Claude Settings">
           <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z" fill="#D97757" fill-rule="nonzero"></path></svg>
+        </button>
+        <button class="pulltab" id="rail-collapse" aria-label="Collapse sidebar" title="Collapse sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
         </button>
       </div>
       <div id="chat">

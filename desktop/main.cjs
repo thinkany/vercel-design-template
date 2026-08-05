@@ -499,6 +499,14 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
   return runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, model: currentModel, copyVoice: effectiveVoice(currentProject) });
 });
 
+// Read the app version from package.json directly — app.getVersion() falls back
+// to the Electron version (43.x) in the dev launch (`electron desktop/main.cjs`),
+// which doesn't resolve the root package.json.
+ipcMain.handle("app:version", () => {
+  try { return require(path.join(appRoot, "package.json")).version; }
+  catch { return app.getVersion(); }
+});
+
 // ---- Copy-voice IPC ---------------------------------------------------------
 ipcMain.handle("voice:get", () => ({ project: loadProjectVoice(currentProject), global: loadGlobalRules() }));
 ipcMain.handle("voice:saveProject", (_e, v) => { saveProjectVoice(currentProject, v); return { ok: true }; });

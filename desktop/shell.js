@@ -459,8 +459,11 @@ function showStage(stage) {
   keygate.hidden = stage !== "key";
   projectgate.hidden = stage !== "project";
   chatmain.hidden = stage !== "workspace";
+  // Workspace label left BLANK on purpose — the #status slot is reserved for a
+  // future app-level message/alert (update, license, activity). The connect /
+  // no-project states keep their labels since those screens rely on them.
   status.textContent =
-    stage === "key" ? "not connected" : stage === "project" ? "no project" : "ready";
+    stage === "key" ? "not connected" : stage === "project" ? "no project" : "";
   if (stage === "key") keyinput.focus();
   if (stage === "workspace") input.focus();
 }
@@ -631,6 +634,39 @@ railCompany.addEventListener("click", () => toggleModal("company"));
 railFigma.addEventListener("click", () => toggleModal("figma"));
 railVoice.addEventListener("click", () => toggleModal("voice"));
 railClaude.addEventListener("click", () => toggleModal("claude"));
+
+// Sidebar collapse pull-tab (the gear). Preference persists in localStorage — the
+// shell is one app-wide renderer, so it's global across projects and sessions.
+// The gear spins as it does its "job": hover = a half-turn (left when open, right
+// when collapsed), click = the remaining half-turn in the same direction (a full
+// revolution total), then the rail toggles.
+const railCollapse = el("rail-collapse");
+const railGear = railCollapse.querySelector("svg");
+const SIDEBAR_COLLAPSED_KEY = "ta-sidebar-collapsed";
+let gearBase = 0;          // committed rotation (deg)
+let gearConsumed = false;  // after a click, hold position until the pointer leaves
+// Hover direction: collapsed → clockwise (right); open → counter-clockwise (left).
+const gearDir = () => (document.body.classList.contains("rail-collapsed") ? 180 : -180);
+const setGear = (deg) => { railGear.style.transform = `rotate(${deg}deg)`; };
+
+function applySidebarCollapsed() {
+  const collapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  document.body.classList.toggle("rail-collapsed", collapsed);
+  const label = collapsed ? "Expand sidebar" : "Collapse sidebar";
+  railCollapse.title = label;
+  railCollapse.setAttribute("aria-label", label);
+}
+railCollapse.addEventListener("mouseenter", () => { if (!gearConsumed) setGear(gearBase + gearDir()); });
+railCollapse.addEventListener("mouseleave", () => { gearConsumed = false; setGear(gearBase); });
+railCollapse.addEventListener("click", () => {
+  gearBase += gearDir() * 2;   // complete a full turn in the hover direction
+  gearConsumed = true;         // don't re-apply the hover offset until the pointer leaves
+  setGear(gearBase);
+  const next = !document.body.classList.contains("rail-collapsed");
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+  applySidebarCollapsed();
+});
+applySidebarCollapsed(); // restore the remembered state on load
 modalClose.addEventListener("click", closeModal);
 modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
 document.addEventListener("keydown", (e) => {
@@ -648,7 +684,7 @@ const COMMANDS = [
   ["export to Figma", "Ask in plain language to push the styleguide, blocks, or pages to Figma."],
   ["/upgrade", "Apply the latest template version (keeps your design work)."],
 ];
-function renderHelp(body) {
+async function renderHelp(body) {
   const intro = document.createElement("p");
   intro.className = "muted";
   intro.style.margin = "0 0 12px";
@@ -675,6 +711,31 @@ function renderHelp(body) {
     row.append(btn, d);
     body.appendChild(row);
   });
+
+  // ── Footer: version + credit ──
+  const hr = document.createElement("div");
+  hr.className = "help-divider";
+  body.appendChild(hr);
+
+  const footer = document.createElement("div");
+  footer.className = "help-footer";
+  const ver = document.createElement("div");
+  ver.className = "help-version";
+  try { ver.textContent = "Version " + (await window.desktop.getAppVersion()); } catch { ver.textContent = ""; }
+  footer.appendChild(ver);
+
+  const credit = document.createElement("div");
+  credit.className = "help-credit";
+  // orange (#F98F3A) heart between "made with" and the thinkany.co link
+  credit.innerHTML = 'made with <svg class="heart" viewBox="0 0 24 24" fill="#F98F3A" aria-label="love"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg> by ';
+  const link = document.createElement("a");
+  link.className = "help-link";
+  link.href = "https://thinkany.co";
+  link.textContent = "thinkany.co";
+  link.addEventListener("click", (e) => { e.preventDefault(); window.desktop.openExternal("https://thinkany.co"); });
+  credit.appendChild(link);
+  footer.appendChild(credit);
+  body.appendChild(footer);
 }
 
 function setRow(k, valueText) {
