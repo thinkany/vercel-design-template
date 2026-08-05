@@ -13,6 +13,7 @@ const railHelp = el("rail-help");
 const railProjects = el("rail-projects");
 const railCompany = el("rail-company");
 const railFigma = el("rail-figma");
+const railVoice = el("rail-voice");
 const railClaude = el("rail-claude");
 const modal = el("modal");
 const modalTitle = el("modal-title");
@@ -64,6 +65,14 @@ let tabSeq = 0;
 let tabsOpened = false; // whether default tabs were opened for the active design
 let designJustActivated = false; // design went active this session (freshly created)
 let workingTimer = null;
+// Live-edit guard: while the agent is editing design files with the preview
+// already open, we cover it with the calm placeholder so transient Vite/HMR
+// error states never reach the designer; revealed only when the turn is done AND
+// the design compiles cleanly. guardSeq lets a stale reveal bail if a new edit
+// turn starts mid-settle.
+let guarding = false;
+let guardSeq = 0;
+const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
 // ---- Resizable chat | preview divider (min 400px, remembered) ---------------
 (function initChatResize() {
@@ -220,6 +229,7 @@ function closeAllTabs() {
   tabs = [];
   activeTab = null;
   tabsOpened = false;
+  guarding = false; guardSeq++; // drop any in-flight live-edit guard
   renderTabs();
 }
 
@@ -341,6 +351,50 @@ function showWorking() {
   phTitle.textContent = "Getting set up";
   phProgress.hidden = false;
   startWorking();
+}
+
+// ---- Live-edit guard ---------------------------------------------------------
+// Cover the OPEN live preview while the agent edits design files, so half-written
+// components / missing imports / Vite error overlays never flash at the designer.
+// No-op during setup (the browser isn't open yet — that path already shows the
+// working placeholder). Idempotent: repeated edit tools in a turn just refresh
+// the narration.
+function guardPreviewForEdit(activityText) {
+  if (!tabsOpened) return; // preview not open yet — setup already guards this
+  if (!guarding) { guarding = true; guardSeq++; }
+  browser.hidden = true;
+  previewph.hidden = false;
+  phEmoji.textContent = "✨";
+  phTitle.textContent = "Updating your design";
+  phProgress.hidden = false;
+  stopWorking();
+  phText.textContent = activityText || "We're applying your changes…";
+}
+
+// Reveal the preview once the edit turn is done AND the design compiles cleanly.
+// Polls the webview for Vite's <vite-error-overlay> (the definitive "broken right
+// now" signal). If already clean, un-hide instantly — HMR has rendered the final
+// design behind the overlay, so there's no flash. If still erroring, force one
+// reload to clear a wedged overlay, then reveal when clean or after a bound.
+async function revealPreviewAfterEdit() {
+  const myGen = guardSeq;
+  const deadline = Date.now() + 8000;
+  let reloaded = false;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 350));
+    if (guardSeq !== myGen) return; // a newer edit turn took over — abandon this reveal
+    if (!activeTab) break;
+    let broken;
+    try { broken = await activeTab.wv.executeJavaScript("!!document.querySelector('vite-error-overlay')"); }
+    catch { continue; } // mid-load / not ready — keep waiting
+    if (!broken) break; // compiled clean
+    if (!reloaded) { reloaded = true; tabs.forEach((t) => navigate(t, t.url)); } // clear a wedged overlay once
+  }
+  if (guardSeq !== myGen) return;
+  guarding = false;
+  stopWorking();
+  previewph.hidden = true;
+  browser.hidden = false;
 }
 
 async function showBrowser() {
@@ -532,12 +586,13 @@ createproject.addEventListener("click", () => chooseProject("create"));
 openproject.addEventListener("click", () => chooseProject("open"));
 
 // ---- Sidebar panels ----------------------------------------------------------
-const RAILS = { help: railHelp, projects: railProjects, company: railCompany, figma: railFigma, claude: railClaude };
+const RAILS = { help: railHelp, projects: railProjects, company: railCompany, figma: railFigma, voice: railVoice, claude: railClaude };
 const PANELS = {
   help: { title: "Commands", render: renderHelp },
   projects: { title: "Switch project", render: renderProjects },
   company: { title: "Company profile", render: renderCompany },
   figma: { title: "Figma export", render: renderFigma },
+  voice: { title: "Copy Voice", render: renderVoice },
   claude: { title: "Claude settings", render: renderClaude },
 };
 
@@ -574,6 +629,7 @@ railHelp.addEventListener("click", () => toggleModal("help"));
 railProjects.addEventListener("click", () => toggleModal("projects"));
 railCompany.addEventListener("click", () => toggleModal("company"));
 railFigma.addEventListener("click", () => toggleModal("figma"));
+railVoice.addEventListener("click", () => toggleModal("voice"));
 railClaude.addEventListener("click", () => toggleModal("claude"));
 modalClose.addEventListener("click", closeModal);
 modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
@@ -801,6 +857,135 @@ async function renderFigma(body) {
   body.appendChild(note);
 }
 
+// --- Copy voice: per-project tone + rules, plus global rules ---
+const TONE_EXAMPLES = ["Soft, professional, not pushy", "Confident and direct", "Warm and conversational", "Understated, editorial", "Playful and energetic"];
+const RULE_EXAMPLES = ["No em dashes", "Short, clear sentences", "Active voice", "No exclamation points", "Avoid jargon", "Sentence case headings"];
+
+// A row of clickable "+ example" chips; onPick(text) adds/sets it.
+function exampleChips(examples, onPick) {
+  const wrap = document.createElement("div");
+  wrap.className = "chips";
+  examples.forEach((ex) => {
+    const b = document.createElement("button");
+    b.className = "chip"; b.type = "button"; b.textContent = "+ " + ex;
+    b.addEventListener("click", () => onPick(ex));
+    wrap.appendChild(b);
+  });
+  return wrap;
+}
+
+// An editable list bound to `arr` (mutated in place). disabled → read-only + struck.
+function ruleListEl(arr, opts = {}) {
+  const box = document.createElement("div");
+  box.className = "rulelist" + (opts.disabled ? " disabled" : "");
+  const rows = document.createElement("div");
+  const rerender = () => {
+    rows.innerHTML = "";
+    if (!arr.length) {
+      const e = document.createElement("div"); e.className = "muted rule-empty";
+      e.textContent = opts.emptyText || "None yet."; rows.appendChild(e);
+    }
+    arr.forEach((r, i) => {
+      const row = document.createElement("div"); row.className = "rulerow";
+      const t = document.createElement("span"); t.className = "rule-t"; t.textContent = r; row.appendChild(t);
+      if (!opts.disabled) {
+        const x = document.createElement("button"); x.className = "rule-x"; x.type = "button"; x.textContent = "×";
+        x.addEventListener("click", () => { arr.splice(i, 1); rerender(); });
+        row.appendChild(x);
+      }
+      rows.appendChild(row);
+    });
+  };
+  box.appendChild(rows);
+  const add = (text) => {
+    const t = (text || "").trim();
+    if (t && !arr.some((r) => r.toLowerCase() === t.toLowerCase())) { arr.push(t); rerender(); }
+  };
+  if (!opts.disabled) {
+    const addRow = document.createElement("div"); addRow.className = "rule-add";
+    const inp = document.createElement("input"); inp.className = "field"; inp.placeholder = opts.placeholder || "Add a rule…";
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { add(inp.value); inp.value = ""; } });
+    const btn = document.createElement("button"); btn.className = "panelbtn"; btn.type = "button"; btn.textContent = "Add";
+    btn.addEventListener("click", () => { add(inp.value); inp.value = ""; });
+    addRow.append(inp, btn); box.appendChild(addRow);
+    box.appendChild(exampleChips(opts.examples || [], add));
+  }
+  rerender();
+  return box;
+}
+
+function voiceHeader(title, sub) {
+  const h = document.createElement("div"); h.className = "voice-h";
+  const k = document.createElement("div"); k.className = "voice-h-k"; k.textContent = title; h.appendChild(k);
+  if (sub) { const s = document.createElement("div"); s.className = "voice-h-sub"; s.textContent = sub; h.appendChild(s); }
+  return h;
+}
+
+async function renderVoice(body) {
+  const data = await window.desktop.getVoice();
+  const state = {
+    tone: (data.project && data.project.tone) || "",
+    projRules: [...((data.project && data.project.rules) || [])],
+    decline: !!(data.project && data.project.declineGlobal),
+    globalRules: [...(data.global || [])],
+  };
+
+  const intro = document.createElement("p");
+  intro.className = "muted"; intro.style.margin = "-8px 0 6px"; // tighten the space above by ~50%
+  intro.textContent = "Shape the words the AI writes into this design's copy. Nothing is set by default.";
+  body.appendChild(intro);
+
+  // ── This project ──
+  body.appendChild(voiceHeader("This project"));
+  const toneLabel = document.createElement("div"); toneLabel.className = "voice-label"; toneLabel.textContent = "Tone";
+  body.appendChild(toneLabel);
+  const toneInput = document.createElement("input");
+  toneInput.className = "field"; toneInput.placeholder = "e.g. soft, professional, not pushy"; toneInput.value = state.tone;
+  toneInput.addEventListener("input", () => { state.tone = toneInput.value; });
+  body.appendChild(toneInput);
+  body.appendChild(exampleChips(TONE_EXAMPLES, (ex) => { state.tone = ex; toneInput.value = ex; }));
+
+  const prLabel = document.createElement("div"); prLabel.className = "voice-label"; prLabel.textContent = "Rules for this project";
+  body.appendChild(prLabel);
+  body.appendChild(ruleListEl(state.projRules, { examples: RULE_EXAMPLES, placeholder: "Add a project rule…", emptyText: "No project-specific rules." }));
+
+  // ── Global rules ── (divider to set it apart from the project grouping)
+  const divider = document.createElement("div"); divider.className = "voice-divider";
+  body.appendChild(divider);
+  body.appendChild(voiceHeader("Global rules", "Apply to every project."));
+  const toggle = document.createElement("label"); toggle.className = "voice-toggle";
+  const chk = document.createElement("input"); chk.type = "checkbox"; chk.checked = state.decline;
+  const tTxt = document.createElement("span"); tTxt.textContent = "Ignore global rules for this project";
+  toggle.append(chk, tTxt); body.appendChild(toggle);
+
+  // Re-render the global list when Decline flips (read-only + struck when declined).
+  const globalWrap = document.createElement("div");
+  const renderGlobal = () => {
+    globalWrap.innerHTML = "";
+    globalWrap.appendChild(ruleListEl(state.globalRules, {
+      examples: RULE_EXAMPLES, placeholder: "Add a global rule…",
+      emptyText: "No global rules yet.", disabled: state.decline,
+    }));
+  };
+  chk.addEventListener("change", () => { state.decline = chk.checked; renderGlobal(); });
+  renderGlobal();
+  body.appendChild(globalWrap);
+
+  // ── Save (both project + global) ──
+  const save = document.createElement("button"); save.className = "panelbtn primary"; save.textContent = "Save";
+  save.style.marginTop = "16px";
+  const msg = document.createElement("div"); msg.className = "muted"; msg.style.marginTop = "8px";
+  save.addEventListener("click", async () => {
+    save.disabled = true; save.textContent = "Saving…";
+    await window.desktop.saveProjectVoice({ tone: state.tone, rules: state.projRules, declineGlobal: state.decline });
+    await window.desktop.saveGlobalRules(state.globalRules);
+    save.disabled = false; save.textContent = "Save";
+    msg.textContent = "Saved — applies to your next message.";
+  });
+  body.appendChild(save);
+  body.appendChild(msg);
+}
+
 // --- Claude settings: API key + model ---
 async function renderClaude(body) {
   const status = await window.desktop.getKeyStatus();
@@ -1007,15 +1192,22 @@ window.desktop.onAgentEvent((evt) => {
           if (flipped) { designJustActivated = true; refreshPreview(); }
         });
       }
+      // Live preview already open + a file edit is starting → guard it so the
+      // designer never sees mid-edit error states. Held until the turn completes.
+      if (tabsOpened && EDIT_TOOLS.has(evt.name)) {
+        guardPreviewForEdit(friendlyActivity(evt.name, evt.target));
+      }
       break;
     case "activity":
-      // Narrate what's happening in plain language in the preview placeholder
-      // while the preview is still closed during setup; ignore once it's open.
-      if (!tabsOpened) setWorkingMessage(friendlyActivity(evt.name, evt.target));
+      // Narrate what's happening in plain language in the preview placeholder —
+      // during setup (preview closed) OR while the live-edit guard is up.
+      if (!tabsOpened || guarding) setWorkingMessage(friendlyActivity(evt.name, evt.target));
       break;
     case "result":
       finalizeAssistant();
       agentBusy = false;
+      // Guarding a live edit → the agent is DONE; settle Vite, then reveal.
+      if (guarding) { revealPreviewAfterEdit(); break; }
       // A turn may have written the palette — re-check readiness and open the
       // live preview when it flips; otherwise revert the working placeholder.
       if (!design.previewReady) {
@@ -1033,6 +1225,9 @@ window.desktop.onAgentEvent((evt) => {
       finalizeAssistant();
       agentBusy = false;
       addMsg("error", "✖ " + evt.message);
+      // Even on error, settle-then-reveal so the designer isn't stuck behind the
+      // guard overlay (the chat carries the error detail).
+      if (guarding) { revealPreviewAfterEdit(); break; }
       refreshPreview();
       break;
   }
