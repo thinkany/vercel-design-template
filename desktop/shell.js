@@ -42,6 +42,7 @@ const gauge = el("gauge");
 const gaugeProg = gauge.querySelector(".prog");
 const gaugePct = gauge.querySelector(".pct");
 const confirmEl = el("confirm");
+const confirmTitle = el("confirm-title");
 const confirmMsg = el("confirm-msg");
 const confirmCancel = el("confirm-cancel");
 const confirmOk = el("confirm-ok");
@@ -453,7 +454,7 @@ function refreshPreview() {
     return showPlaceholder({
       emoji: "✨",
       title: "Setting up your project",
-      text: "Your live preview opens on its own once your design's ready — pick up in the chat.",
+      text: "Your live preview opens on its own once your design's ready. Pick up in the chat.",
     });
   }
   showPlaceholder({
@@ -682,13 +683,41 @@ function applySidebarCollapsed() {
 }
 railCollapse.addEventListener("mouseenter", () => { if (!gearConsumed) setGear(gearBase + gearDir()); });
 railCollapse.addEventListener("mouseleave", () => { gearConsumed = false; setGear(gearBase); });
+// Staggered icon animation on collapse/expand. Quick, not alarming (~0.5s total).
+const RAIL_ANIM_MS = 500; // last icon: 5*45ms stagger + 250ms transition
+let railAnimTimer = null;
+function railLabel() {
+  const label = document.body.classList.contains("rail-collapsed") ? "Expand sidebar" : "Collapse sidebar";
+  railCollapse.title = label;
+  railCollapse.setAttribute("aria-label", label);
+}
 railCollapse.addEventListener("click", () => {
   gearBase += gearDir() * 2;   // complete a full turn in the hover direction
   gearConsumed = true;         // don't re-apply the hover offset until the pointer leaves
   setGear(gearBase);
-  const next = !document.body.classList.contains("rail-collapsed");
-  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
-  applySidebarCollapsed();
+  const willCollapse = !document.body.classList.contains("rail-collapsed");
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, willCollapse ? "1" : "0");
+  clearTimeout(railAnimTimer);
+  document.body.classList.remove("rail-anim-in", "rail-anim-out", "rail-anim-prep");
+  if (willCollapse) {
+    // Collapse the rail (narrow + hide) AND drift the icons out to the left in
+    // PARALLEL — same timing as open. The icons stay rendered during the out
+    // transition (CSS override) even though rail-collapsed is already applied.
+    void document.body.offsetWidth; // start the transition cleanly
+    document.body.classList.add("rail-collapsed", "rail-anim-out");
+    railLabel();
+    railAnimTimer = setTimeout(() => document.body.classList.remove("rail-anim-out"), RAIL_ANIM_MS);
+  } else {
+    // Expand, park the icons off to the left + invisible instantly, then let them
+    // settle to their resting (muted) opacity, staggered — no overshoot to full.
+    document.body.classList.remove("rail-collapsed");
+    railLabel();
+    document.body.classList.add("rail-anim-prep");
+    void document.body.offsetWidth; // commit the parked state before releasing it
+    document.body.classList.remove("rail-anim-prep");
+    document.body.classList.add("rail-anim-in");
+    railAnimTimer = setTimeout(() => document.body.classList.remove("rail-anim-in"), RAIL_ANIM_MS);
+  }
 });
 applySidebarCollapsed(); // restore the remembered state on load
 modalClose.addEventListener("click", closeModal);
@@ -699,11 +728,11 @@ document.addEventListener("keydown", (e) => {
 
 // --- Help: the project's commands ---
 const COMMANDS = [
-  ["/setup-project", "Brand the template — client/company name, project type, fonts, logo, menu style."],
+  ["/setup-project", "Brand the template: client/company name, project type, fonts, logo, menu style."],
   ["/setup-styleguide", "Set the client's fonts, colors, and example styleguide sections."],
-  ["/design", "Build or edit a page (hero, sections, landing) — the design phase."],
+  ["/design", "Build or edit a page (hero, sections, landing) in the design phase."],
   ["/guide", "Show the list of commands."],
-  ["/clear", "Start a fresh session — clears the chat for faster replies (saved work is kept)."],
+  ["/clear", "Start a fresh session, clearing the chat for faster replies (saved work is kept)."],
   ["/export-company", "Save your agency identity (name, admin fonts, logo) as a portable file."],
   ["/import-company", "Apply a saved company profile into this project."],
   ["export to Figma", "Ask in plain language to push the styleguide, blocks, or pages to Figma."],
@@ -739,7 +768,7 @@ async function renderHelp(body) {
   const intro = document.createElement("p");
   intro.className = "muted";
   intro.style.margin = "0 0 12px";
-  intro.textContent = "Click a command to run it in the chat — or type it yourself. Setup runs first, then design freely.";
+  intro.textContent = "Click a command to run it in the chat, or type it yourself. Setup runs first, then design freely.";
   body.appendChild(intro);
   COMMANDS.forEach(([cmd, desc]) => {
     const row = document.createElement("div");
@@ -813,8 +842,8 @@ async function renderProjects(body) {
     body.appendChild(note);
     return;
   }
-  body.appendChild(setRow("Current project", proj.name || "—"));
-  body.appendChild(setRow("Folder", proj.path || "—"));
+  body.appendChild(setRow("Current project", proj.name || "None"));
+  body.appendChild(setRow("Folder", proj.path || "None"));
   const switchBtn = document.createElement("button");
   switchBtn.className = "panelbtn";
   switchBtn.textContent = "Switch project…";
@@ -839,7 +868,7 @@ async function renderCompany(body) {
 
   const defNote = document.createElement("div");
   defNote.className = "muted";
-  defNote.textContent = "Applied automatically to every new project — set your agency identity once and skip it on every future setup.";
+  defNote.textContent = "Applied automatically to every new project. Set your agency identity once and skip it on every future setup.";
   body.appendChild(defNote);
 
   const proj = await window.desktop.getProjectStatus();
@@ -903,7 +932,7 @@ async function renderCompany(body) {
   if (!proj.companyProfile) {
     const note = document.createElement("div");
     note.className = "muted";
-    note.textContent = "No company-profile.json yet — run /export-company in the chat to create one first.";
+    note.textContent = "No company-profile.json yet. Run /export-company in the chat to create one first.";
     body.appendChild(note);
   }
 }
@@ -1094,13 +1123,31 @@ async function renderVoice(body) {
     await window.desktop.saveProjectVoice({ tone: state.tone, rules: state.projRules, declineGlobal: state.decline });
     await window.desktop.saveGlobalRules(state.globalRules);
     save.disabled = false; save.textContent = "Save";
-    msg.textContent = "Saved — applies to your next message.";
+    msg.textContent = "Saved, applies to your next message.";
   });
   body.appendChild(save);
   body.appendChild(msg);
 }
 
 // --- Claude settings: API key + model ---
+// Thin trash icon (Lucide trash-2) for session deletes.
+const TRASH_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>';
+
+// A tri-state Inherit/On/Off <select> for a per-variation override (null|true|false).
+function triSelect(value) {
+  const sel = document.createElement("select");
+  sel.className = "field";
+  [["", "Inherit default"], ["on", "On"], ["off", "Off"]].forEach(([v, t]) => {
+    const o = document.createElement("option");
+    o.value = v;
+    o.textContent = t;
+    sel.appendChild(o);
+  });
+  sel.value = value === true ? "on" : value === false ? "off" : "";
+  return sel;
+}
+function triVal(sel) { return sel.value === "on" ? true : sel.value === "off" ? false : null; }
+
 // Friendly relative timestamp for a session's saved date.
 function relTime(iso) {
   const then = new Date(iso), now = new Date();
@@ -1205,7 +1252,7 @@ async function renderClaude(body) {
     body.appendChild(rlabel);
     const rlead = document.createElement("div");
     rlead.className = "sess-desc";
-    rlead.textContent = "Studies a few comparable sites to ground the layout, colors, and flow — so the first design and later changes take a little longer when this is on.";
+    rlead.textContent = "Studies a few comparable sites to ground the layout, colors, and flow, so the first design and later changes take a little longer when this is on.";
     body.appendChild(rlead);
 
     const gRow = document.createElement("label");
@@ -1216,32 +1263,52 @@ async function renderClaude(body) {
     const gTxt = document.createElement("span");
     gTxt.textContent = "On by default (all projects)";
     gRow.append(gCb, gTxt);
-    gCb.addEventListener("change", () => window.desktop.setResearchGlobal(gCb.checked));
     body.appendChild(gRow);
 
-    // Per-VARIATION override (the current working design). One variation can research
-    // while another designs straight away. Only shown once a working variation exists.
+    // Sub-option: "broad" — look BEYOND same-category competitors (style + regional
+    // references, cross-category). Only usable when Research itself is on.
+    const bgRow = document.createElement("label");
+    bgRow.className = "toggle-row";
+    const bgCb = document.createElement("input");
+    bgCb.type = "checkbox";
+    bgCb.checked = research.broadGlobal;
+    bgCb.disabled = !research.global;
+    const bgTxt = document.createElement("span");
+    bgTxt.textContent = "Also look beyond competitors for style & regional references";
+    bgRow.append(bgCb, bgTxt);
+    body.appendChild(bgRow);
+
+    gCb.addEventListener("change", () => { window.desktop.setResearchGlobal(gCb.checked); bgCb.disabled = !gCb.checked; });
+    bgCb.addEventListener("change", () => window.desktop.setResearchBroadGlobal(bgCb.checked));
+
+    // Per-VARIATION overrides (the current working design). One variation can research
+    // (and go broad) while another designs straight away. Only once a variation exists.
     if (research.variationId) {
       const pRow = document.createElement("div");
       pRow.className = "setrow";
       const pk = document.createElement("div");
       pk.className = "k";
-      pk.textContent = `This design (${research.variationId})`;
-      const pSel = document.createElement("select");
-      pSel.className = "field";
-      [["", "Inherit default"], ["on", "On"], ["off", "Off"]].forEach(([v, t]) => {
-        const o = document.createElement("option");
-        o.value = v;
-        o.textContent = t;
-        pSel.appendChild(o);
-      });
-      pSel.value = research.variation === true ? "on" : research.variation === false ? "off" : "";
-      pSel.addEventListener("change", () => {
-        const val = pSel.value === "on" ? true : pSel.value === "off" ? false : null;
-        window.desktop.setResearchVariation(val);
-      });
+      pk.textContent = `Research for this design (${research.variationId})`;
+      const pSel = triSelect(research.variation);
       pRow.append(pk, pSel);
       body.appendChild(pRow);
+
+      const bpRow = document.createElement("div");
+      bpRow.className = "setrow";
+      const bpk = document.createElement("div");
+      bpk.className = "k";
+      bpk.textContent = "Broad references for this design";
+      const bpSel = triSelect(research.broadVariation);
+      bpSel.disabled = !(research.variation === null ? research.global : research.variation);
+      bpRow.append(bpk, bpSel);
+      body.appendChild(bpRow);
+
+      pSel.addEventListener("change", () => {
+        const val = triVal(pSel);
+        window.desktop.setResearchVariation(val);
+        bpSel.disabled = !(val === null ? research.global : val); // broad follows research
+      });
+      bpSel.addEventListener("change", () => window.desktop.setResearchBroadVariation(triVal(bpSel)));
     }
 
   }
@@ -1258,34 +1325,67 @@ async function renderClaude(body) {
 
   const sdesc = document.createElement("div");
   sdesc.className = "sess-desc";
-  sdesc.textContent = "Saved chats for this project — they appear here when you start a new session or leave the project.";
+  sdesc.textContent = "Saved chats for this project. They appear here when you start a new session or leave the project.";
   body.appendChild(sdesc);
 
+  // Actions row: "+ New" (left) and a "delete all" trash button (right edge).
+  const sessions = await window.desktop.listSessions();
+  const actions = document.createElement("div");
+  actions.className = "sess-actions";
   const newBtn = document.createElement("button");
   newBtn.className = "sess-new";
   newBtn.textContent = "+ New";
   newBtn.title = "Start a new session (saves the current one here)";
   newBtn.addEventListener("click", async () => { closeModal(); await clearSession(); });
-  body.appendChild(newBtn);
+  const delAllBtn = document.createElement("button");
+  delAllBtn.className = "sess-delall";
+  delAllBtn.title = "Delete all saved sessions";
+  delAllBtn.innerHTML = TRASH_SVG;
+  delAllBtn.disabled = !sessions.length;
+  delAllBtn.addEventListener("click", () => showConfirm({
+    title: "Delete all saved sessions?",
+    okLabel: "Delete all",
+    danger: true,
+    message: "This permanently removes every saved session for this project from the Claude panel. Your project files and design work are not affected.",
+    onOk: async () => { await window.desktop.deleteAllSessions(); openModal("claude"); },
+  }));
+  actions.append(newBtn, delAllBtn);
+  body.appendChild(actions);
 
   const list = document.createElement("div");
   list.className = "sesslist";
   body.appendChild(list);
   // The section description above covers the empty state, so just render whatever exists.
-  const sessions = await window.desktop.listSessions();
   sessions.forEach((s) => {
-    const b = document.createElement("button");
-    b.className = "sessrow";
-    b.title = "Reopen this session";
+    const row = document.createElement("div");
+    row.className = "sessrow";
+    const open = document.createElement("button");
+    open.className = "sessrow-open";
+    open.title = "Reopen this session";
     const t = document.createElement("div");
     t.className = "sess-title";
     t.textContent = s.title || "Untitled session";
     const d = document.createElement("div");
     d.className = "sess-date";
     d.textContent = relTime(s.createdAt);
-    b.append(t, d);
-    b.addEventListener("click", async () => { closeModal(); await openSession(s.id); });
-    list.appendChild(b);
+    open.append(t, d);
+    open.addEventListener("click", async () => { closeModal(); await openSession(s.id); });
+    const del = document.createElement("button");
+    del.className = "sessrow-del";
+    del.title = "Delete this session";
+    del.innerHTML = TRASH_SVG;
+    del.addEventListener("click", (e) => {
+      e.stopPropagation();
+      showConfirm({
+        title: "Delete this session?",
+        okLabel: "Delete",
+        danger: true,
+        message: `Permanently remove "${s.title || "Untitled session"}"? Your project files and design work are not affected.`,
+        onOk: async () => { await window.desktop.deleteSession(s.id); openModal("claude"); },
+      });
+    });
+    row.append(open, del);
+    list.appendChild(row);
   });
 
   const modelNote = document.createElement("div");
@@ -1390,8 +1490,8 @@ const DEFAULT_CONTEXT_WINDOW = 200000;
 const GAUGE_CIRCUMFERENCE = 81.68; // 2π·13, matches the SVG radius
 // Fire each nudge once per session as the context crosses these fractions.
 const SESSION_NUDGES = [
-  { at: 0.6, msg: "This conversation is getting long (~60% of the context window). If replies start to slow, type /clear to begin a fresh session — your project files and design work are saved on disk and won't be lost." },
-  { at: 0.85, msg: "Heads up — this conversation is ~85% full. /clear starts a clean, faster session (your saved work stays intact)." },
+  { at: 0.6, msg: "This conversation is getting long (~60% of the context window). If replies start to slow, type /clear to begin a fresh session. Your project files and design work are saved on disk and won't be lost." },
+  { at: 0.85, msg: "Heads up: this conversation is ~85% full. /clear starts a clean, faster session (your saved work stays intact)." },
 ];
 let sessionTokens = 0;
 let sessionPct = 0;
@@ -1466,7 +1566,7 @@ async function clearSession() {
   if (old) { try { await window.desktop.archiveSession(old); } catch {} }
   sessionId = null;
   resetChatUi();
-  addMsg("system", "Started a fresh session — your previous one is saved in the Claude panel (Sessions).");
+  addMsg("system", "Started a fresh session. Your previous one is saved in the Claude panel (Sessions).");
 }
 
 // Reopen a past session: replay its chat (Part B) and resume its model context
@@ -1483,24 +1583,38 @@ async function openSession(id) {
     if (m.role === "assistant") { const elx = addMsg("assistant", ""); renderMarkdownInto(elx, m.text); }
     else addMsg("user", m.text);
   }
-  addMsg("system", "Resumed this session — pick up where you left off.");
+  addMsg("system", "Resumed this session. Pick up where you left off.");
   log.scrollTop = log.scrollHeight;
 }
 
-// Clicking the gauge offers to clear the session. A centered confirm dialog
-// explains what clearing does and when to do it; confirming runs /clear the same
-// way the designer would (shows the command in chat, then executes it).
-function openClearConfirm() {
-  confirmMsg.textContent =
-    "Starting a new session gives you a fresh, fast chat. Your current session is SAVED to the Claude " +
-    "panel's Sessions list (not lost) — reopen it anytime to pick up where you left off. Project files and " +
-    "design work are unaffected.\n\n" +
-    `You're currently at about ${sessionTokens.toLocaleString()} tokens (${sessionPct}% of the context window). ` +
-    "It's a good time to start fresh when this climbs high (the ring turns amber, then red) or you're moving to a new task.";
+// Generic centered confirm dialog. Reused for the gauge's "new session", and for
+// deleting sessions. Pass a title, message, OK label, danger flag, and an onOk.
+let confirmAction = null;
+function showConfirm({ title, message, okLabel, danger, onOk }) {
+  confirmTitle.textContent = title || "Are you sure?";
+  confirmMsg.textContent = message || "";
+  confirmOk.textContent = okLabel || "Confirm";
+  confirmOk.className = "cbtn " + (danger ? "danger" : "primary");
+  confirmAction = onOk || null;
   confirmEl.hidden = false;
   confirmOk.focus();
 }
-function closeConfirm() { confirmEl.hidden = true; }
+function closeConfirm() { confirmEl.hidden = true; confirmAction = null; }
+
+// Clicking the gauge offers to start a new session (which archives the current one).
+function openClearConfirm() {
+  showConfirm({
+    title: "Start a new session?",
+    okLabel: "New session",
+    message:
+      "Starting a new session gives you a fresh, fast chat. Your current session is SAVED to the Claude " +
+      "panel's Sessions list (not lost), reopen it anytime to pick up where you left off. Project files and " +
+      "design work are unaffected.\n\n" +
+      `You're currently at about ${sessionTokens.toLocaleString()} tokens (${sessionPct}% of the context window). ` +
+      "It's a good time to start fresh when this climbs high (the ring turns amber, then red) or you're moving to a new task.",
+    onOk: () => sendText("/clear"),
+  });
+}
 
 gauge.addEventListener("click", openClearConfirm);
 gauge.addEventListener("keydown", (e) => {
@@ -1509,7 +1623,7 @@ gauge.addEventListener("keydown", (e) => {
 confirmCancel.addEventListener("click", closeConfirm);
 confirmEl.addEventListener("click", (e) => { if (e.target === confirmEl) closeConfirm(); }); // backdrop
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !confirmEl.hidden) closeConfirm(); });
-confirmOk.addEventListener("click", () => { closeConfirm(); sendText("/clear"); });
+confirmOk.addEventListener("click", () => { const a = confirmAction; closeConfirm(); if (a) a(); });
 
 // Render a finished assistant message with lightweight inline markdown:
 // **bold**, `code`, and hex color chips. Built with DOM nodes (never innerHTML)
@@ -1823,7 +1937,7 @@ function renderQuestionCard(id, questions) {
 // Designing" (the natural-language brief entry — the front door to the
 // design-from-brief feature). Clicking a chip is that path's "hello".
 const DEFAULT_PLACEHOLDER = input.placeholder;
-const BRIEF_PLACEHOLDER = "Describe the site you want — paste links for style, colors, or fonts…";
+const BRIEF_PLACEHOLDER = "Describe the site you want, paste links for style, colors, or fonts…";
 let welcomeCard = null;
 let designBriefMode = false; // set by "Get Designing"; the next message is the brief
 
@@ -1854,13 +1968,13 @@ function renderWelcomeChips() {
   const opts = [
     {
       label: "Client Setup",
-      desc: "Brand a new project step by step — logo, fonts, colors — then design.",
+      desc: "Brand a new project step by step (logo, fonts, colors), then design.",
       icon: ICON_LIST_ORDERED,
       onClick: () => sendText("/setup-project"),
     },
     {
       label: "Get Designing",
-      desc: "Jump straight in — describe the site (paste style, color, or font links) and I'll design it.",
+      desc: "Jump straight in: describe the site (paste style, color, or font links) and I'll design it.",
       icon: ICON_PENCIL_LINE,
       onClick: enterDesignBriefMode,
     },
@@ -1897,7 +2011,7 @@ function enterDesignBriefMode() {
   designBriefMode = true;
   addMsg(
     "system",
-    "Tell me about the site you want — the vibe, plus any links for style, colors, or fonts — and I'll start designing."
+    "Tell me about the site you want (the vibe, plus any links for style, colors, or fonts) and I'll start designing."
   );
   input.placeholder = BRIEF_PLACEHOLDER;
   input.focus();

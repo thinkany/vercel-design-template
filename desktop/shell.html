@@ -25,7 +25,7 @@
         width: 36px; height: 36px; border: none; background: transparent; color: #fff;
         border-radius: 8px; cursor: pointer; line-height: 1; opacity: 0.75;
         display: flex; align-items: center; justify-content: center; position: relative;
-        transition: background .25s linear, opacity .25s linear;
+        transition: background .25s linear, opacity .25s linear, transform .25s ease;
       }
       .railbtn svg { width: 20px; height: 20px; display: block; }
       .railbtn:hover { background: #2a2a31; opacity: 1; }
@@ -37,13 +37,28 @@
       #rail-claude:not(.activated) svg path,
       #rail-figma:not(.activated) svg path { fill: #fff; }
       #rail-claude.activated, #rail-figma.activated { opacity: 1; }
-      /* Rail order (visual, top→bottom): Switch Project · Claude · Figma · Company · Voice · Help */
-      #rail-projects { order: 1; }
-      #rail-claude   { order: 2; }
-      #rail-figma    { order: 3; }
-      #rail-company  { order: 4; }
-      #rail-voice    { order: 5; }
-      #rail-help     { order: 6; }
+      /* Rail order (visual, top→bottom): Switch Project · Claude · Figma · Company · Voice · Help.
+         --i is the visual index, used to stagger the open/close animation top→bottom. */
+      #rail-projects { order: 1; --i: 0; }
+      #rail-claude   { order: 2; --i: 1; }
+      #rail-figma    { order: 3; --i: 2; }
+      #rail-company  { order: 4; --i: 3; }
+      #rail-voice    { order: 5; --i: 4; }
+      #rail-help     { order: 6; --i: 5; }
+      /* Staggered rail-icon entrance/exit — a little directional drift for "gravity".
+         Transition-based (not @keyframes) so each icon settles at its OWN resting
+         opacity (muted 0.75, or full for an activated icon) with no overshoot.
+         Prep parks them off to the left + invisible instantly; then they settle in,
+         staggered. Closing drifts back out to the left. */
+      /* opacity !important so these beat the ID-specific #rail-claude/#rail-figma
+         .activated { opacity: 1 } rules — otherwise the lit icons wouldn't fade with
+         the rest. */
+      body.rail-anim-prep .railbtn { opacity: 0 !important; transform: translateX(-7px); transition: none; }
+      body.rail-anim-in   .railbtn { transition-delay: calc(var(--i) * 45ms); }
+      body.rail-anim-out  .railbtn { opacity: 0 !important; transition-delay: 0s; }   /* close = all icons fade together while the rail collapses */
+      /* Keep icons rendered while they drift out, even though rail-collapsed (which
+         normally display:none's them) is applied in parallel. */
+      body.rail-collapsed.rail-anim-out .railbtn { display: flex; }
       .railbtn::after {
         content: attr(data-tip);
         position: absolute; left: 46px; top: 50%; transform: translateY(-50%);
@@ -120,6 +135,8 @@
       .cbtn.ghost:hover { background: #e6e6ea; }
       .cbtn.primary { background: #111; color: #fff; }             /* black on brand, not purple */
       .cbtn.primary:hover { background: #333; }                    /* soften ~20% on hover */
+      .cbtn.danger { background: #c0261e; color: #fff; }           /* destructive confirm */
+      .cbtn.danger:hover { background: #a81f18; }
 
       /* ---- Slide-out drawer (left, beside the rail) ---- */
       #modal {
@@ -195,6 +212,8 @@
       .setrow .k { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #2a2a2a; margin-bottom: 4px; }
       .setrow .v { word-break: break-all; }
       .toggle-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; cursor: pointer; }
+      /* Dim a control that's disabled because Research is off (the dependency). */
+      .toggle-row:has(input:disabled), .setrow:has(select:disabled) { opacity: .45; }
       /* Custom checkbox: white box → black when checked, with a thin 1px checkmark. */
       #modal-body input[type="checkbox"] {
         appearance: none; -webkit-appearance: none; margin: 0; box-sizing: border-box;
@@ -211,11 +230,22 @@
       .sess-sep, .drawer-sep { border-top: 1px solid #2a2a2a; margin: 20px 0 10px; }
       .sess-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #2a2a2a; }
       .sess-desc { font-size: 11.5px; color: #999; line-height: 1.45; margin: 4px 0 8px; }
-      .sess-new { display: inline-block; margin: 8px 0; border: 1px solid #d8d8de; background: #fafafb; color: #333; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: border-color .25s linear, background .25s linear; }
+      .sess-actions { display: flex; align-items: center; justify-content: space-between; margin: 8px 0; }
+      .sess-new { display: inline-block; border: 1px solid #d8d8de; background: #fafafb; color: #333; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: border-color .25s linear, background .25s linear; }
       .sess-new:hover { border-color: #111; }
+      .sess-delall { border: none; background: none; cursor: pointer; color: #999; padding: 2px; display: flex; align-items: center; transition: color .2s linear; }
+      .sess-delall:hover { color: #c0261e; }
+      .sess-delall:disabled { opacity: .35; cursor: default; }
+      .sess-delall svg { width: 16px; height: 16px; display: block; }
       .sesslist { display: flex; flex-direction: column; gap: 6px; }
-      .sessrow { display: block; width: 100%; text-align: left; border: 1px solid #e3e3e8; background: #fafafb; border-radius: 8px; padding: 8px 10px; cursor: pointer; transition: border-color .25s linear, background .25s linear; }
+      /* Session row: clickable open area + a delete button that slides in on hover. */
+      .sessrow { position: relative; display: flex; align-items: stretch; border: 1px solid #e3e3e8; background: #fafafb; border-radius: 8px; overflow: hidden; transition: border-color .25s linear; }
       .sessrow:hover { border-color: #111; }
+      .sessrow-open { flex: 1; min-width: 0; text-align: left; border: none; background: none; padding: 8px 10px; cursor: pointer; font: inherit; }
+      .sessrow-del { flex-shrink: 0; border: none; background: none; cursor: pointer; color: #999; padding: 0 9px; display: flex; align-items: center; opacity: 0; transform: translateX(8px); transition: opacity .2s ease, transform .2s ease, color .2s linear; }
+      .sessrow:hover .sessrow-del { opacity: 1; transform: translateX(0); }
+      .sessrow-del:hover { color: #c0261e; }
+      .sessrow-del svg { width: 15px; height: 15px; display: block; }
       .sess-title { font-size: 12.5px; font-weight: 600; color: #1a1a1a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .sess-date { font-size: 11px; color: #999; margin-top: 2px; }
       .panelbtn {
@@ -504,7 +534,7 @@
         <button class="railbtn" id="rail-claude" aria-label="Claude Settings" data-tip="Claude Settings">
           <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z" fill="#D97757" fill-rule="nonzero"></path></svg>
         </button>
-        <div id="gauge" hidden role="button" tabindex="0" data-tip="Claude Session Usage" aria-label="Claude Session Usage — click to clear the session">
+        <div id="gauge" hidden role="button" tabindex="0" data-tip="Claude Session Usage" aria-label="Claude Session Usage, click to clear the session">
           <svg viewBox="0 0 28 28" aria-hidden="true"><circle class="track" cx="14" cy="14" r="13"></circle><circle class="prog" cx="14" cy="14" r="13"></circle></svg>
           <span class="pct"></span>
         </div>
@@ -529,7 +559,7 @@
             <button id="keysave" class="btn-primary">Save &amp; connect</button>
             <div id="keyerror" class="gate-error"></div>
             <a class="gate-link" href="https://platform.claude.com/" data-external>Get a key at platform.claude.com →</a>
-            <p class="gate-note">Stored encrypted in your OS keychain — never written into a project.</p>
+            <p class="gate-note">Stored encrypted in your OS keychain, never written into a project.</p>
           </div>
         </div>
 
@@ -537,7 +567,7 @@
         <div id="projectgate" class="gate" hidden>
           <div class="gate-inner">
             <h2>Choose a project</h2>
-            <p>Your design work lives in a project folder, separate from the app — so the studio itself stays a pristine, unbranded template.</p>
+            <p>Your design work lives in a project folder, separate from the app, so the studio itself stays a pristine, unbranded template.</p>
             <button id="createproject" class="btn-primary">New project…</button>
             <button id="openproject" class="btn-ghost">Open existing project…</button>
             <div id="projecterror" class="gate-error"></div>

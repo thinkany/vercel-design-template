@@ -28,11 +28,15 @@ contextBridge.exposeInMainWorld("desktop", {
   getResearch: () => ipcRenderer.invoke("research:get"),
   setResearchGlobal: (enabled) => ipcRenderer.invoke("research:setGlobal", { enabled }),
   setResearchVariation: (enabled) => ipcRenderer.invoke("research:setVariation", { enabled }),
+  setResearchBroadGlobal: (enabled) => ipcRenderer.invoke("research:setBroadGlobal", { enabled }),
+  setResearchBroadVariation: (enabled) => ipcRenderer.invoke("research:setBroadVariation", { enabled }),
 
   // ---- Session history ----
   listSessions: () => ipcRenderer.invoke("session:list"),
   archiveSession: (sessionId) => ipcRenderer.invoke("session:archive", { sessionId }),
   loadSession: (id) => ipcRenderer.invoke("session:load", { id }),
+  deleteSession: (id) => ipcRenderer.invoke("session:delete", { id }),
+  deleteAllSessions: () => ipcRenderer.invoke("session:deleteAll"),
 
   // ---- Derive license (Figma export) ----
   getLicenseStatus: () => ipcRenderer.invoke("license:status"),

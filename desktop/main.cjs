@@ -318,6 +318,21 @@ function ensureSdkTranscript(project, rec) {
   fs.copyFileSync(copy, dest);
 }
 
+// Delete one archived session (its copied transcript + index entry). Leaves the
+// SDK's own ~/.claude transcript alone (that's the SDK's, not ours).
+function deleteSession(project, id) {
+  const idx = loadSessionsIndex(project);
+  const rec = idx.find((s) => s.id === id);
+  if (rec) { try { fs.unlinkSync(path.join(sessionsDir(project), rec.file)); } catch { /* gone */ } }
+  saveSessionsIndex(project, idx.filter((s) => s.id !== id));
+}
+function deleteAllSessions(project) {
+  for (const rec of loadSessionsIndex(project)) {
+    try { fs.unlinkSync(path.join(sessionsDir(project), rec.file)); } catch { /* gone */ }
+  }
+  saveSessionsIndex(project, []);
+}
+
 // ---- UI state: remember the last-used folder per dialog ----------------------
 function uiStatePath() {
   return path.join(app.getPath("userData"), "ui-state.json");
@@ -612,52 +627,60 @@ function effectiveVoice(dir) {
 function researchLicensed() {
   return !!(process.env.RESEARCH_LICENSE_KEY && process.env.RESEARCH_LICENSE_KEY.trim());
 }
+// Global settings: userData/design-research.json = { enabled, broad }.
+// `broad` = the "look beyond competitors" (multi-axis: function/aesthetic/region) mode.
 function researchGlobalFile() { return path.join(app.getPath("userData"), "design-research.json"); }
-function loadResearchGlobal() {
-  try { return !!JSON.parse(fs.readFileSync(researchGlobalFile(), "utf8")).enabled; }
-  catch { return false; } // global default OFF (dark launch)
+function loadResearchGlobalObj() {
+  try { return JSON.parse(fs.readFileSync(researchGlobalFile(), "utf8")) || {}; }
+  catch { return {}; } // global defaults OFF (dark launch)
 }
-function saveResearchGlobal(enabled) {
-  fs.writeFileSync(researchGlobalFile(), JSON.stringify({ enabled: !!enabled }, null, 2));
-}
-// The override is PER-VARIATION, not per-project: one design direction can research
-// while another designs straight away. Stored as a { <variationId>: bool } map in the
-// project's .thinkany/design-research.json; the active variation is the app's current
-// working variation (detectDesign).
+function saveResearchGlobalObj(o) { fs.writeFileSync(researchGlobalFile(), JSON.stringify(o, null, 2)); }
+function loadResearchGlobal() { return !!loadResearchGlobalObj().enabled; }
+function loadBroadGlobal() { return !!loadResearchGlobalObj().broad; }
+function saveResearchGlobal(enabled) { const o = loadResearchGlobalObj(); o.enabled = !!enabled; saveResearchGlobalObj(o); }
+function saveBroadGlobal(broad) { const o = loadResearchGlobalObj(); o.broad = !!broad; saveResearchGlobalObj(o); }
+
+// Per-VARIATION overrides: <project>/.thinkany/design-research.json =
+//   { variations: {<id>:bool}, broadVariations: {<id>:bool} }. One design direction can
+// research (and go broad) while another designs straight away. Active variation = the app's
+// working variation (detectDesign). Writes MERGE so research + broad never clobber each other.
 function researchProjectFile(dir) { return path.join(dir, ".thinkany", "design-research.json"); }
-function loadResearchMap(dir) {
-  try {
-    const j = JSON.parse(fs.readFileSync(researchProjectFile(dir), "utf8"));
-    return j && typeof j.variations === "object" && j.variations ? j.variations : {};
-  } catch { return {}; }
+function loadResearchProjectObj(dir) {
+  try { return JSON.parse(fs.readFileSync(researchProjectFile(dir), "utf8")) || {}; }
+  catch { return {}; }
 }
 function activeVariationId(dir) {
   try { return detectDesign(dir).variationId; } catch { return null; }
 }
-// The active variation's override: true|false = force; null = inherit global.
-function loadResearchVariation(dir) {
+// A variation override: true|false = force; null = inherit global.
+function loadVarOverride(dir, key) {
   const id = activeVariationId(dir);
   if (!id) return null;
-  const v = loadResearchMap(dir)[id];
+  const map = loadResearchProjectObj(dir)[key];
+  const v = map && typeof map === "object" ? map[id] : undefined;
   return v === true || v === false ? v : null;
 }
-function saveResearchVariation(dir, enabled) {
+function saveVarOverride(dir, key, enabled) {
   const id = activeVariationId(dir);
   if (!id) return;
-  const map = loadResearchMap(dir);
+  const obj = loadResearchProjectObj(dir);
+  const map = obj[key] && typeof obj[key] === "object" ? obj[key] : {};
   if (enabled === true || enabled === false) map[id] = enabled; else delete map[id];
+  obj[key] = map;
   fs.mkdirSync(path.join(dir, ".thinkany"), { recursive: true });
-  fs.writeFileSync(researchProjectFile(dir), JSON.stringify({ variations: map }, null, 2));
+  fs.writeFileSync(researchProjectFile(dir), JSON.stringify(obj, null, 2));
 }
-// The toggle value (ignores license): the active variation's override wins over global.
-function researchToggle(dir) {
-  const v = dir ? loadResearchVariation(dir) : null;
-  return v === null ? loadResearchGlobal() : v;
-}
-// Actually active = licensed AND toggled on.
-function researchActive(dir) {
-  return researchLicensed() && researchToggle(dir);
-}
+const loadResearchVariation = (dir) => loadVarOverride(dir, "variations");
+const loadBroadVariation = (dir) => loadVarOverride(dir, "broadVariations");
+const saveResearchVariation = (dir, e) => saveVarOverride(dir, "variations", e);
+const saveBroadVariation = (dir, e) => saveVarOverride(dir, "broadVariations", e);
+
+// Toggle values (ignore license): the active variation's override wins over the global default.
+function researchToggle(dir) { const v = dir ? loadResearchVariation(dir) : null; return v === null ? loadResearchGlobal() : v; }
+function broadToggle(dir) { const v = dir ? loadBroadVariation(dir) : null; return v === null ? loadBroadGlobal() : v; }
+// Active = licensed AND toggled on. Broad only matters when research itself is active.
+function researchActive(dir) { return researchLicensed() && researchToggle(dir); }
+function broadActive(dir) { return researchActive(dir) && broadToggle(dir); }
 
 // ---- Agent IPC (cwd = current project) --------------------------------------
 // Pending AskUserQuestion prompts: the agent's canUseTool awaits a renderer
@@ -685,6 +708,7 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
   // Tell the /design-brief flow whether the licensed research layer is active, via
   // an env var the agent's Bash inherits (same channel as TA_CAPTURE_* etc.).
   process.env.TA_DESIGN_RESEARCH = researchActive(currentProject) ? "on" : "off";
+  process.env.TA_DESIGN_RESEARCH_BROAD = broadActive(currentProject) ? "on" : "off";
   const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, model: currentModel, copyVoice: effectiveVoice(currentProject) });
   if (result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it
   return result;
@@ -695,12 +719,20 @@ ipcMain.handle("research:get", () => ({
   licensed: researchLicensed(),
   global: loadResearchGlobal(),
   variation: currentProject ? loadResearchVariation(currentProject) : null, // null|true|false
+  broadGlobal: loadBroadGlobal(),
+  broadVariation: currentProject ? loadBroadVariation(currentProject) : null,
   variationId: currentProject ? activeVariationId(currentProject) : null,
   effective: researchActive(currentProject),
+  broadEffective: broadActive(currentProject),
 }));
 ipcMain.handle("research:setGlobal", (_e, { enabled }) => { saveResearchGlobal(enabled); return { ok: true }; });
 ipcMain.handle("research:setVariation", (_e, { enabled }) => {
   if (currentProject) saveResearchVariation(currentProject, enabled);
+  return { ok: true };
+});
+ipcMain.handle("research:setBroadGlobal", (_e, { enabled }) => { saveBroadGlobal(enabled); return { ok: true }; });
+ipcMain.handle("research:setBroadVariation", (_e, { enabled }) => {
+  if (currentProject) saveBroadVariation(currentProject, enabled);
   return { ok: true };
 });
 
@@ -721,6 +753,8 @@ ipcMain.handle("session:load", (_e, { id }) => {
   currentSessionId = rec.sessionId; // we're now live in this session again
   return { sessionId: rec.sessionId, messages, title: rec.title, createdAt: rec.createdAt };
 });
+ipcMain.handle("session:delete", (_e, { id }) => { if (currentProject) deleteSession(currentProject, id); return { ok: true }; });
+ipcMain.handle("session:deleteAll", () => { if (currentProject) deleteAllSessions(currentProject); return { ok: true }; });
 
 // Read the app version from package.json directly — app.getVersion() falls back
 // to the Electron version (43.x) in the dev launch (`electron desktop/main.cjs`),
