@@ -90,9 +90,11 @@ enters the orchestrator's context and wall-clock stays ~one site's latency.
 1. **Discover** — reference sites named in the brief first; else `WebSearch` on the
    category + curated galleries (Land-book, Awwwards, category round-ups). Cap at
    **3–5 sites**. Nothing usable found → silently degrade to OFF-equivalent behavior.
-2. **Gather** (per site, bounded) — `WebFetch` for information architecture + copy;
-   `scripts/extract-palette.mjs` / `scripts/resolve-fonts.mjs` for visual conventions.
-   Each subagent returns a structured per-site summary (see schema), never the page.
+2. **Gather** (per site, bounded) — `scripts/extract-layout.mjs` for the section
+   skeleton (**BUILT 2026-08-05** — the per-site structural read this synthesis
+   aggregates), plus `scripts/extract-palette.mjs` / `scripts/resolve-fonts.mjs` for
+   visual conventions and `WebFetch` for copy/tone. Each subagent returns a structured
+   per-site summary (see schema), never the page.
 3. **Synthesize** — one final agent distills the per-site summaries into the single
    conventions report: *common vs. differentiating*, with an explicit
    "patterns/grammar only, never reproduce a site's layout or copy."

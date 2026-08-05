@@ -35,9 +35,15 @@ exception is in Fallbacks).
 - **Fonts:** `node scripts/resolve-fonts.mjs "Font One" "Font Two" > /tmp/ta-fonts.json`
   — or `--from <url>` to pull a site's fonts. If no fonts are named, skip this (the
   template defaults stay).
+- **Layout:** `node scripts/extract-layout.mjs <referenceURL> > /tmp/ta-outline.json`
+  — the reference being modeled. Returns the page's **section skeleton**: an ordered
+  list of sections (`hero`/`features`/`logos`/`pricing`/`testimonial`/`faq`/`cta`/`footer`)
+  with heading, layout (stack/columns/grid + counts), and the nav pattern. Skip only if
+  the brief names no reference site.
 
-Read both JSON files. On a failed/empty extract, **fall back** (a palette from your
-knowledge of the brand; sensible fonts) and **proceed** — never hard-fail.
+Read all three JSON files. On a failed/empty extract, **fall back** (a palette from your
+knowledge of the brand; sensible fonts; a conventional section order) and **proceed** —
+never hard-fail.
 
 ## 3. Apply (deterministic — one command, creates v01)
 ```
@@ -54,9 +60,15 @@ new variation on reload.
 ## 4. Design v01/Home
 Now follow the [`/design`](design.md) authoring contract and build
 `src/variations/v01/components/Home.tsx` with the **new** `--ta-*` / `--ta-font-*`
-tokens. Model the **section outline** on the reference — nav, hero (headline / sub /
-CTA), a feature row, social proof, footer — **inspired by structure, not copied**.
-Source images per `/design` §4b (one bounded `curl`, placeholder on a miss).
+tokens. **Drive the page's section order + block choices from `/tmp/ta-outline.json`**
+(step 2's layout extract): build each section in its `sections[]` order, matching the
+`type` to a block (hero / feature grid / logo cloud / pricing / testimonial / FAQ / CTA
+/ footer) and honoring its `layout`/`columns`/`items` (e.g. a `grid×3` features block →
+a 3-up card row) and `nav.pattern`. This is **inspired by structure, not copied** — the
+outline is the skeleton; the copy, imagery, and styling are the brand's own. If the
+outline is thin/missing (SPA or no reference), fall back to a conventional order
+(nav → hero → features → social proof → CTA → footer). Source images per `/design` §4b
+(one bounded `curl`, placeholder on a miss).
 
 ## 5. Surface (one line, then stop)
 Close by naming **what was pulled and from where**, and invite a correction — so the
