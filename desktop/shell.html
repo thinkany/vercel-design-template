@@ -192,11 +192,25 @@
       .rulelist.disabled .rule-t { text-decoration: line-through; }
       .voice-toggle { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin: 4px 0 10px; cursor: pointer; }
       .setrow { margin-bottom: 16px; }
-      .setrow .k { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #999; margin-bottom: 4px; }
+      .setrow .k { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #2a2a2a; margin-bottom: 4px; }
       .setrow .v { word-break: break-all; }
+      .toggle-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; cursor: pointer; }
+      /* Custom checkbox: white box → black when checked, with a thin 1px checkmark. */
+      #modal-body input[type="checkbox"] {
+        appearance: none; -webkit-appearance: none; margin: 0; box-sizing: border-box;
+        width: 15px; height: 15px; flex-shrink: 0; position: relative; cursor: pointer;
+        border: 1px solid #555; border-radius: 3px; background: #fff;
+        transition: background .15s linear, border-color .15s linear;
+      }
+      #modal-body input[type="checkbox"]:checked { background: #111; border-color: #111; }
+      #modal-body input[type="checkbox"]:checked::after {
+        content: ""; position: absolute; left: 4.5px; top: 1px; width: 3px; height: 7px;
+        border: solid #fff; border-width: 0 1px 1px 0; transform: rotate(45deg);
+      }
       /* Session history (Claude drawer) — called out at the bottom under a rule */
-      .sess-sep { border-top: 1px solid #e3e3e8; margin: 20px 0 10px; }
-      .sess-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #999; }
+      .sess-sep, .drawer-sep { border-top: 1px solid #2a2a2a; margin: 20px 0 10px; }
+      .sess-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #2a2a2a; }
+      .sess-desc { font-size: 11.5px; color: #999; line-height: 1.45; margin: 4px 0 8px; }
       .sess-new { display: inline-block; margin: 8px 0; border: 1px solid #d8d8de; background: #fafafb; color: #333; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: border-color .25s linear, background .25s linear; }
       .sess-new:hover { border-color: #111; }
       .sesslist { display: flex; flex-direction: column; gap: 6px; }
@@ -390,9 +404,28 @@
         background: #f0f0f3; padding: 1px 4px; border-radius: 4px;
       }
 
-      #composer { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #e3e3e3; }
-      #attach { border: 1px solid #ccc; background: #fff; border-radius: 8px; padding: 0 11px; cursor: pointer; font-size: 15px; }
-      #attach:hover { background: #f4f4f7; }
+      #composer { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #e3e3e3; align-items: stretch; }
+      /* Left column: Command button (top) stacked over the Attach button (bottom half) */
+      #composer-left { position: relative; display: flex; flex-direction: column; gap: 4px; }
+      #cmdbtn, #attach {
+        flex: 1; min-height: 0; display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+        border: 1px solid #d8d8de; background: #fafafb; color: #555; border-radius: 7px; cursor: pointer; padding: 0 8px;
+        transition: border-color .25s linear, background .25s linear, color .25s linear;
+      }
+      #cmdbtn:hover, #cmdbtn[aria-expanded="true"], #attach:hover { border-color: #111; color: #111; }
+      #cmdbtn .cmd-ic { width: 16px; height: 16px; }
+      #attach svg { width: 16px; height: 16px; display: block; }
+      /* "Commands" popover — opens upward from the left column */
+      #cmdmenu {
+        position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 30;
+        width: 320px; background: #fff; border: 1px solid #e0e0e6; border-radius: 10px;
+        box-shadow: 0 10px 34px rgba(0,0,0,.16); padding: 6px; max-height: 300px; overflow-y: auto;
+      }
+      #cmdmenu[hidden] { display: none; }
+      .cmdmenu-item { display: block; width: 100%; text-align: left; border: none; background: none; border-radius: 7px; padding: 7px 9px; cursor: pointer; font: inherit; transition: background .15s linear; }
+      .cmdmenu-item:hover { background: #f3f0fb; }
+      .cmdmenu-item .cmd { font-size: 12.5px; font-weight: 600; color: #1a1a1a; }
+      .cmdmenu-item .desc { font-size: 11.5px; color: #888; margin-top: 1px; line-height: 1.35; }
       #log.dragover { outline: 2px dashed #7c3aed; outline-offset: -6px; background: #faf7ff; }
       #input {
         flex: 1;
@@ -516,7 +549,15 @@
         <div id="chatmain" hidden>
           <div id="log"></div>
           <div id="composer">
-            <button id="attach" title="Attach a file (or drag one onto the chat)">📎</button>
+            <div id="composer-left">
+              <button id="cmdbtn" type="button" aria-haspopup="true" aria-expanded="false" title="Commands">
+                <svg class="cmd-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></svg>
+              </button>
+              <button id="attach" title="Attach a file (or drag one onto the chat)" aria-label="Attach a file">
+                <svg viewBox="0 -3.34 50 49.68" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path vector-effect="non-scaling-stroke" stroke-width="1" d="M36.025,19.506L20.202,35.329c-7.823,7.823-18.078-1.494-9.786-9.785c2.753-2.753,20.716-20.716,20.716-20.716c10.16-10.16,23.429,3.482,13.456,13.455c-3.363,3.364-20.716,20.715-20.716,20.715C10.519,52.351-6.795,35.974,7.025,22.154L22.849,6.331"/></svg>
+              </button>
+              <div id="cmdmenu" hidden></div>
+            </div>
             <textarea id="input" rows="2" placeholder="Message the agent…  (Enter to send · Shift+Enter for newline)"></textarea>
             <button id="send">Send</button>
           </div>

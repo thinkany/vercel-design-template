@@ -24,6 +24,11 @@ contextBridge.exposeInMainWorld("desktop", {
   saveKey: (key) => ipcRenderer.invoke("key:save", { key }),
   clearKey: () => ipcRenderer.invoke("key:clear"),
 
+  // ---- Competitor research (licensed toggle) ----
+  getResearch: () => ipcRenderer.invoke("research:get"),
+  setResearchGlobal: (enabled) => ipcRenderer.invoke("research:setGlobal", { enabled }),
+  setResearchVariation: (enabled) => ipcRenderer.invoke("research:setVariation", { enabled }),
+
   // ---- Session history ----
   listSessions: () => ipcRenderer.invoke("session:list"),
   archiveSession: (sessionId) => ipcRenderer.invoke("session:archive", { sessionId }),

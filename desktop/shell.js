@@ -36,6 +36,8 @@ const log = el("log");
 const input = el("input");
 const send = el("send");
 const attach = el("attach");
+const cmdbtn = el("cmdbtn");
+const cmdmenu = el("cmdmenu");
 const gauge = el("gauge");
 const gaugeProg = gauge.querySelector(".prog");
 const gaugePct = gauge.querySelector(".pct");
@@ -707,6 +709,32 @@ const COMMANDS = [
   ["export to Figma", "Ask in plain language to push the styleguide, blocks, or pages to Figma."],
   ["/upgrade", "Apply the latest template version (keeps your design work)."],
 ];
+
+// The composer's "Commands ▾" popover — same list as the Help drawer, one click
+// away above the input. Each item runs its command exactly like typing it.
+function buildCommandMenu() {
+  COMMANDS.forEach(([cmd, desc]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "cmdmenu-item";
+    const c = document.createElement("div");
+    c.className = "cmd";
+    c.textContent = cmd;
+    const d = document.createElement("div");
+    d.className = "desc";
+    d.textContent = desc;
+    b.append(c, d);
+    b.addEventListener("click", () => { closeCmdMenu(); sendText(cmd); });
+    cmdmenu.appendChild(b);
+  });
+}
+function openCmdMenu() { cmdmenu.hidden = false; cmdbtn.setAttribute("aria-expanded", "true"); }
+function closeCmdMenu() { cmdmenu.hidden = true; cmdbtn.setAttribute("aria-expanded", "false"); }
+cmdbtn.addEventListener("click", (e) => { e.stopPropagation(); cmdmenu.hidden ? openCmdMenu() : closeCmdMenu(); });
+document.addEventListener("click", (e) => { if (!cmdmenu.hidden && !e.target.closest("#cmdbar")) closeCmdMenu(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !cmdmenu.hidden) closeCmdMenu(); });
+buildCommandMenu();
+
 async function renderHelp(body) {
   const intro = document.createElement("p");
   intro.className = "muted";
@@ -1124,11 +1152,6 @@ async function renderClaude(body) {
   modelRow.append(mk, select);
   body.appendChild(modelRow);
 
-  const modelNote = document.createElement("div");
-  modelNote.className = "muted";
-  modelNote.textContent = "Applies to your next message; switching keeps the conversation.";
-  body.appendChild(modelNote);
-
   const [{ model: current }, res] = await Promise.all([
     window.desktop.getModel(),
     window.desktop.getModels(),
@@ -1158,19 +1181,72 @@ async function renderClaude(body) {
     addMsg("system", select.value ? `✓ Model set to ${label}` : "✓ Model set to default");
   });
 
+  // Account actions for the API key — directly beneath the model selector.
   const disc = document.createElement("button");
   disc.className = "panelbtn danger";
   disc.textContent = "Disconnect / change key";
   disc.addEventListener("click", disconnectKey);
   body.appendChild(disc);
 
-  const note = document.createElement("div");
-  note.className = "muted";
-  note.textContent = "Key stored encrypted in your OS keychain.";
-  body.appendChild(note);
+  const keyNote = document.createElement("div");
+  keyNote.className = "muted";
+  keyNote.textContent = "Key stored encrypted in your OS keychain.";
+  body.appendChild(keyNote);
 
-  // ── Sessions (project-scoped history) — called out at the bottom, under a rule,
-  // so the Key/Model/Disconnect group above stays together. ──
+  // ── Research the field (licensed enhancement — only rendered when licensed) ──
+  const research = await window.desktop.getResearch();
+  if (research.licensed) {
+    const rsep = document.createElement("div");   // divider, called out like Sessions
+    rsep.className = "drawer-sep";
+    body.appendChild(rsep);
+    const rlabel = document.createElement("div");
+    rlabel.className = "sess-label";
+    rlabel.textContent = "Research the field";
+    body.appendChild(rlabel);
+    const rlead = document.createElement("div");
+    rlead.className = "sess-desc";
+    rlead.textContent = "Studies a few comparable sites to ground the layout, colors, and flow — so the first design and later changes take a little longer when this is on.";
+    body.appendChild(rlead);
+
+    const gRow = document.createElement("label");
+    gRow.className = "toggle-row";
+    const gCb = document.createElement("input");
+    gCb.type = "checkbox";
+    gCb.checked = research.global;
+    const gTxt = document.createElement("span");
+    gTxt.textContent = "On by default (all projects)";
+    gRow.append(gCb, gTxt);
+    gCb.addEventListener("change", () => window.desktop.setResearchGlobal(gCb.checked));
+    body.appendChild(gRow);
+
+    // Per-VARIATION override (the current working design). One variation can research
+    // while another designs straight away. Only shown once a working variation exists.
+    if (research.variationId) {
+      const pRow = document.createElement("div");
+      pRow.className = "setrow";
+      const pk = document.createElement("div");
+      pk.className = "k";
+      pk.textContent = `This design (${research.variationId})`;
+      const pSel = document.createElement("select");
+      pSel.className = "field";
+      [["", "Inherit default"], ["on", "On"], ["off", "Off"]].forEach(([v, t]) => {
+        const o = document.createElement("option");
+        o.value = v;
+        o.textContent = t;
+        pSel.appendChild(o);
+      });
+      pSel.value = research.variation === true ? "on" : research.variation === false ? "off" : "";
+      pSel.addEventListener("change", () => {
+        const val = pSel.value === "on" ? true : pSel.value === "off" ? false : null;
+        window.desktop.setResearchVariation(val);
+      });
+      pRow.append(pk, pSel);
+      body.appendChild(pRow);
+    }
+
+  }
+
+  // ── Sessions (project-scoped history) — called out under a rule. ──
   const sep = document.createElement("div");
   sep.className = "sess-sep";
   body.appendChild(sep);
@@ -1179,6 +1255,11 @@ async function renderClaude(body) {
   sh.className = "sess-label";
   sh.textContent = "Sessions";
   body.appendChild(sh);
+
+  const sdesc = document.createElement("div");
+  sdesc.className = "sess-desc";
+  sdesc.textContent = "Saved chats for this project — they appear here when you start a new session or leave the project.";
+  body.appendChild(sdesc);
 
   const newBtn = document.createElement("button");
   newBtn.className = "sess-new";
@@ -1190,28 +1271,28 @@ async function renderClaude(body) {
   const list = document.createElement("div");
   list.className = "sesslist";
   body.appendChild(list);
+  // The section description above covers the empty state, so just render whatever exists.
   const sessions = await window.desktop.listSessions();
-  if (!sessions.length) {
-    const empty = document.createElement("div");
-    empty.className = "muted";
-    empty.textContent = "No saved sessions yet, they appear here when you start a new one or leave the project.";
-    list.appendChild(empty);
-  } else {
-    sessions.forEach((s) => {
-      const b = document.createElement("button");
-      b.className = "sessrow";
-      b.title = "Reopen this session";
-      const t = document.createElement("div");
-      t.className = "sess-title";
-      t.textContent = s.title || "Untitled session";
-      const d = document.createElement("div");
-      d.className = "sess-date";
-      d.textContent = relTime(s.createdAt);
-      b.append(t, d);
-      b.addEventListener("click", async () => { closeModal(); await openSession(s.id); });
-      list.appendChild(b);
-    });
-  }
+  sessions.forEach((s) => {
+    const b = document.createElement("button");
+    b.className = "sessrow";
+    b.title = "Reopen this session";
+    const t = document.createElement("div");
+    t.className = "sess-title";
+    t.textContent = s.title || "Untitled session";
+    const d = document.createElement("div");
+    d.className = "sess-date";
+    d.textContent = relTime(s.createdAt);
+    b.append(t, d);
+    b.addEventListener("click", async () => { closeModal(); await openSession(s.id); });
+    list.appendChild(b);
+  });
+
+  const modelNote = document.createElement("div");
+  modelNote.className = "muted";
+  modelNote.style.marginTop = "14px";
+  modelNote.textContent = "Applies to your next message; switching keeps the conversation.";
+  body.appendChild(modelNote);
 }
 
 // --- Moved actions ---

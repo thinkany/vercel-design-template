@@ -600,6 +600,65 @@ function effectiveVoice(dir) {
   return { tone: pv.tone.trim(), rules };
 }
 
+// ---- Competitor research (licensed + gated) ---------------------------------
+// A licensed enhancement: when active, /design-brief studies comparable sites and
+// synthesizes a conventions report to ground the layout. Gated on BOTH a license
+// AND an on/off toggle (global default + per-project override). Dark by default.
+//
+// License = STUB for now: the presence of RESEARCH_LICENSE_KEY in the env (the same
+// shape as the Figma export's DERIVE_* env). Unset today → the feature stays dark;
+// "when the time comes" the cloud server provisions the key and it activates. No
+// validation service yet (that's the later half, mirroring the derive flow).
+function researchLicensed() {
+  return !!(process.env.RESEARCH_LICENSE_KEY && process.env.RESEARCH_LICENSE_KEY.trim());
+}
+function researchGlobalFile() { return path.join(app.getPath("userData"), "design-research.json"); }
+function loadResearchGlobal() {
+  try { return !!JSON.parse(fs.readFileSync(researchGlobalFile(), "utf8")).enabled; }
+  catch { return false; } // global default OFF (dark launch)
+}
+function saveResearchGlobal(enabled) {
+  fs.writeFileSync(researchGlobalFile(), JSON.stringify({ enabled: !!enabled }, null, 2));
+}
+// The override is PER-VARIATION, not per-project: one design direction can research
+// while another designs straight away. Stored as a { <variationId>: bool } map in the
+// project's .thinkany/design-research.json; the active variation is the app's current
+// working variation (detectDesign).
+function researchProjectFile(dir) { return path.join(dir, ".thinkany", "design-research.json"); }
+function loadResearchMap(dir) {
+  try {
+    const j = JSON.parse(fs.readFileSync(researchProjectFile(dir), "utf8"));
+    return j && typeof j.variations === "object" && j.variations ? j.variations : {};
+  } catch { return {}; }
+}
+function activeVariationId(dir) {
+  try { return detectDesign(dir).variationId; } catch { return null; }
+}
+// The active variation's override: true|false = force; null = inherit global.
+function loadResearchVariation(dir) {
+  const id = activeVariationId(dir);
+  if (!id) return null;
+  const v = loadResearchMap(dir)[id];
+  return v === true || v === false ? v : null;
+}
+function saveResearchVariation(dir, enabled) {
+  const id = activeVariationId(dir);
+  if (!id) return;
+  const map = loadResearchMap(dir);
+  if (enabled === true || enabled === false) map[id] = enabled; else delete map[id];
+  fs.mkdirSync(path.join(dir, ".thinkany"), { recursive: true });
+  fs.writeFileSync(researchProjectFile(dir), JSON.stringify({ variations: map }, null, 2));
+}
+// The toggle value (ignores license): the active variation's override wins over global.
+function researchToggle(dir) {
+  const v = dir ? loadResearchVariation(dir) : null;
+  return v === null ? loadResearchGlobal() : v;
+}
+// Actually active = licensed AND toggled on.
+function researchActive(dir) {
+  return researchLicensed() && researchToggle(dir);
+}
+
 // ---- Agent IPC (cwd = current project) --------------------------------------
 // Pending AskUserQuestion prompts: the agent's canUseTool awaits a renderer
 // answer through these. Keyed by an incrementing id.
@@ -623,9 +682,26 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
       if (!event.sender.isDestroyed()) event.sender.send("agent:ask", { id, questions });
       else reject(new Error("window closed"));
     });
+  // Tell the /design-brief flow whether the licensed research layer is active, via
+  // an env var the agent's Bash inherits (same channel as TA_CAPTURE_* etc.).
+  process.env.TA_DESIGN_RESEARCH = researchActive(currentProject) ? "on" : "off";
   const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, model: currentModel, copyVoice: effectiveVoice(currentProject) });
   if (result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it
   return result;
+});
+
+// ---- Research toggle IPC ----------------------------------------------------
+ipcMain.handle("research:get", () => ({
+  licensed: researchLicensed(),
+  global: loadResearchGlobal(),
+  variation: currentProject ? loadResearchVariation(currentProject) : null, // null|true|false
+  variationId: currentProject ? activeVariationId(currentProject) : null,
+  effective: researchActive(currentProject),
+}));
+ipcMain.handle("research:setGlobal", (_e, { enabled }) => { saveResearchGlobal(enabled); return { ok: true }; });
+ipcMain.handle("research:setVariation", (_e, { enabled }) => {
+  if (currentProject) saveResearchVariation(currentProject, enabled);
+  return { ok: true };
 });
 
 // ---- Session history IPC ----------------------------------------------------
