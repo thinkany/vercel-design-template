@@ -1,5 +1,6 @@
 {
   "name": "@figma/my-make-file",
+  "productName": "thinkany design",
   "private": true,
   "version": "0.0.4",
   "type": "module",

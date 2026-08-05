@@ -12,6 +12,13 @@
 // project comes from the clean `main` branch.
 
 const { app, BrowserWindow, ipcMain, safeStorage, shell, dialog } = require("electron");
+
+// The package name is "@figma/my-make-file"; force the product name so the macOS
+// app menu (About / Hide / Quit …) and the About panel read "thinkany design".
+// Must run before app is ready / the default menu is built. Covers both the dev
+// run (app.getName() would otherwise fall back to package.json "name") and any
+// path the packaged bundle name doesn't already override.
+app.setName("thinkany design");
 const { spawn, execSync } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 const fs = require("node:fs");
