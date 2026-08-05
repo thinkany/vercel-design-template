@@ -433,6 +433,46 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, "shell.html"));
 }
 
+// ---- Copy voice (tone + rules) ----------------------------------------------
+// Per-project TONE + rules (a project file, travels with the design) plus GLOBAL
+// rules (app-level, every project). Effective rules = declineGlobal ? project
+// rules : (global ∪ project). Handed to the agent per turn (agent.mjs appends it
+// to the system prompt). Nothing set by default — empty tone + empty rules.
+function globalRulesFile() { return path.join(app.getPath("userData"), "global-copy-rules.json"); }
+function loadGlobalRules() {
+  try { const j = JSON.parse(fs.readFileSync(globalRulesFile(), "utf8")); return Array.isArray(j.rules) ? j.rules : []; }
+  catch { return []; }
+}
+function saveGlobalRules(rules) {
+  fs.writeFileSync(globalRulesFile(), JSON.stringify({ rules: (rules || []).map((r) => String(r).trim()).filter(Boolean) }, null, 2));
+}
+function projectVoiceFile(dir) { return path.join(dir, ".thinkany", "copy-voice.json"); }
+function loadProjectVoice(dir) {
+  const empty = { tone: "", rules: [], declineGlobal: false };
+  if (!dir) return empty;
+  try {
+    const v = JSON.parse(fs.readFileSync(projectVoiceFile(dir), "utf8"));
+    return { tone: String(v.tone || ""), rules: Array.isArray(v.rules) ? v.rules : [], declineGlobal: !!v.declineGlobal };
+  } catch { return empty; }
+}
+function saveProjectVoice(dir, v) {
+  if (!dir) return;
+  fs.mkdirSync(path.join(dir, ".thinkany"), { recursive: true });
+  fs.writeFileSync(projectVoiceFile(dir), JSON.stringify({
+    tone: String((v && v.tone) || "").trim(),
+    rules: ((v && v.rules) || []).map((r) => String(r).trim()).filter(Boolean),
+    declineGlobal: !!(v && v.declineGlobal),
+  }, null, 2));
+}
+// The resolved voice handed to the agent for this project (deduped, trimmed).
+function effectiveVoice(dir) {
+  const pv = loadProjectVoice(dir);
+  const merged = pv.declineGlobal ? pv.rules : [...loadGlobalRules(), ...pv.rules];
+  const seen = new Set(); const rules = [];
+  for (const r of merged) { const t = String(r).trim(); const k = t.toLowerCase(); if (t && !seen.has(k)) { seen.add(k); rules.push(t); } }
+  return { tone: pv.tone.trim(), rules };
+}
+
 // ---- Agent IPC (cwd = current project) --------------------------------------
 // Pending AskUserQuestion prompts: the agent's canUseTool awaits a renderer
 // answer through these. Keyed by an incrementing id.
@@ -456,8 +496,13 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
       if (!event.sender.isDestroyed()) event.sender.send("agent:ask", { id, questions });
       else reject(new Error("window closed"));
     });
-  return runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, model: currentModel });
+  return runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, model: currentModel, copyVoice: effectiveVoice(currentProject) });
 });
+
+// ---- Copy-voice IPC ---------------------------------------------------------
+ipcMain.handle("voice:get", () => ({ project: loadProjectVoice(currentProject), global: loadGlobalRules() }));
+ipcMain.handle("voice:saveProject", (_e, v) => { saveProjectVoice(currentProject, v); return { ok: true }; });
+ipcMain.handle("voice:saveGlobal", (_e, { rules }) => { saveGlobalRules(rules); return { ok: true }; });
 
 ipcMain.handle("agent:answer", (_event, { id, answers }) => {
   const p = pendingAsks.get(id);

@@ -70,6 +70,11 @@ contextBridge.exposeInMainWorld("desktop", {
     }
   },
 
+  // ---- Copy voice (tone + rules) ----
+  getVoice: () => ipcRenderer.invoke("voice:get"),
+  saveProjectVoice: (v) => ipcRenderer.invoke("voice:saveProject", v),
+  saveGlobalRules: (rules) => ipcRenderer.invoke("voice:saveGlobal", { rules }),
+
   // ---- Misc ----
   openExternal: (url) => ipcRenderer.invoke("open:external", url),
 });

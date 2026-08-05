@@ -68,7 +68,25 @@ function toolTarget(input) {
   );
 }
 
-export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, model }) {
+// Turn the resolved copy voice into a system-prompt addendum. Empty when nothing
+// is set — so a project with no voice keeps the exact default system prompt.
+// Scoped to user-facing DESIGN copy so it shapes what lands in pages, not code.
+function buildVoiceAppend(voice) {
+  if (!voice) return "";
+  const tone = (voice.tone || "").trim();
+  const rules = (voice.rules || []).map((r) => String(r).trim()).filter(Boolean);
+  if (!tone && !rules.length) return "";
+  let s =
+    "\n\n# Copy voice for this project\n" +
+    "When you write ANY user-facing copy in the design — headlines, body, buttons, " +
+    "labels, alt text, placeholder text — follow this voice. It governs the words " +
+    "that go INTO the design, not code or file contents.\n";
+  if (tone) s += `\nTone: ${tone}\n`;
+  if (rules.length) s += "\nRules (follow strictly):\n" + rules.map((r) => `- ${r}`).join("\n") + "\n";
+  return s;
+}
+
+export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, model, copyVoice }) {
   let resolvedSession = sessionId;
 
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -96,6 +114,7 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
 
   try {
     const claudeExe = resolveClaudeExecutable();
+    const voiceAppend = buildVoiceAppend(copyVoice);
     const iterator = query({
       prompt,
       options: {
@@ -104,6 +123,9 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
         permissionMode: "default",
         ...(claudeExe ? { pathToClaudeCodeExecutable: claudeExe } : {}),
         ...(model ? { model } : {}),
+        // Copy voice → append to Claude Code's default system prompt (only when a
+        // voice is set, so the no-voice path is byte-for-byte the current default).
+        ...(voiceAppend ? { systemPrompt: { type: "preset", preset: "claude_code", append: voiceAppend } } : {}),
         // Spike: auto-allow the core toolset so we can drive /setup-project
         // end-to-end. The canUseTool approval UI is a deliberate later step.
         allowedTools: [
