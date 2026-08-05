@@ -1,5 +1,5 @@
 ---
-description: Brand this template — set the client/project name in .env and the preview-gate fonts
+description: Brand this template, set the client/project name in .env and the preview-gate fonts
 argument-hint: "[company name] | [client name] | [project name]  (optional; you'll be prompted if omitted)"
 ---
 
@@ -9,11 +9,11 @@ live in the committed `.env` at the project root as `VITE_COMPANY_NAME`,
 consumed through `src/config/site.ts` and drive the dashboard header wordmark,
 the title lockup, the styleguide masthead, and the browser tab title.
 
-**Make this interactive — ONE question at a time.** Wherever a step says "ask" or
-"prompt," use the `AskUserQuestion` tool rather than plain conversational text — it
+**Make this interactive, ONE question at a time.** Wherever a step says "ask" or
+"prompt," use the `AskUserQuestion` tool rather than plain conversational text, it
 renders clickable options plus an "Other → type your own" field and works the same
 in the IDE and Claude Desktop. **Ask EXACTLY ONE question per `AskUserQuestion`
-call, and WAIT for the answer before asking the next — never put two or more
+call, and WAIT for the answer before asking the next, never put two or more
 questions in a single call.** The designer must only ever see a single prompt on
 screen at a time; a follow-up (like tablet preview, or menu style) is its own
 separate call after the prior answer, never bundled alongside another. Every
@@ -22,17 +22,17 @@ font-family strings) are typed there; the preset options are just fast paths and
 sensible defaults. Only fall back to a plain text prompt if a value truly has no
 reasonable presets.
 
-**Question order — gather COMPANY info together, then CLIENT/PROJECT info.** The
-company (agency) identity — logo, company name, admin/gate fonts — is set once and
+**Question order, gather COMPANY info together, then CLIENT/PROJECT info.** The
+company (agency) identity, logo, company name, admin/gate fonts, is set once and
 reused across every project, so it's collected as one block up front (steps 2a–2c),
 mirrored by the import at the very start (0.5) and the export at the very end
 (step 7). The client/project values (client name, project type, project name, menu)
-come after, in step 3. Keep that grouping — don't interleave a company question
+come after, in step 3. Keep that grouping, don't interleave a company question
 into the client block or vice-versa.
 
 Follow these steps:
 
-0. **Preflight — install dependencies.** Before any branding, make sure the
+0. **Preflight, install dependencies.** Before any branding, make sure the
    project can actually run. This is often the first time a non-technical
    designer has opened a code project, so be gentle and do the work for them.
 
@@ -49,26 +49,26 @@ Follow these steps:
       number after the `v`). This project runs on Vite 6, so it needs **Node 20.19
       or newer**; the current **LTS** (v22) is the safe default.
 
-   b. **If Node is missing** (command not found), STOP and guide them — do not
+   b. **If Node is missing** (command not found), STOP and guide them, do not
       attempt to auto-install a system runtime. Detect their OS and give a
       friendly, non-technical message, e.g.:
       > "This project needs **Node.js** to run, and it isn't installed yet.
       > It's a one-time, click-through install:
       > 1. Go to **https://nodejs.org** and download the **LTS** version
-      >    (the big green button — the installer is a `.pkg` on Mac / `.msi` on
+      >    (the big green button, the installer is a `.pkg` on Mac / `.msi` on
       >    Windows).
       > 2. Open the downloaded file and click through the installer (all
       >    defaults are fine).
       > 3. Come back here and run **`/setup-project`** again."
-      Then end the run — the rest of setup can't proceed without Node.
+      Then end the run, the rest of setup can't proceed without Node.
 
-   c. **If Node is present but older than v20.19**, STOP and ask them to update —
+   c. **If Node is present but older than v20.19**, STOP and ask them to update,
       an out-of-date Node fails later with a cryptic Vite error, so catch it now.
       Same friendly tone, and tell them their current version:
       > "Your Node.js is **v{their version}**, but this project needs **v20.19 or
       > newer**. Updating is the same quick, click-through install:
       > 1. Go to **https://nodejs.org** and download the **LTS** version (v22).
-      > 2. Open it and click through (all defaults are fine) — it replaces the
+      > 2. Open it and click through (all defaults are fine), it replaces the
       >    old version.
       > 3. Come back here and run **`/setup-project`** again."
       If they use **nvm**, the faster path is `nvm install 22 && nvm use 22` (an
@@ -78,31 +78,31 @@ Follow these steps:
       project root and report the result plainly (success, or the actual error if
       it fails). This uses npm for the local dev server; note that **Vercel builds
       with pnpm** (see `vercel.json` / `pnpm-lock.yaml`), so the `package-lock.json`
-      npm creates is git-ignored and throwaway — do not commit it.
+      npm creates is git-ignored and throwaway, do not commit it.
 
    e. Once install succeeds, continue to branding below. Hold the `npm run dev`
-      local-preview reminder for the **true end of onboarding** — after Phase II
-      (the styleguide) wraps, per step 8 — so it lands last: they can preview
+      local-preview reminder for the **true end of onboarding:** after Phase II
+      (the styleguide) wraps, per step 8, so it lands last: they can preview
       locally with **`npm run dev`** (http://localhost:5173) for instant feedback,
       separate from the Vercel preview deploy.
 
-0.5. **Company identity — is it already applied? Else, import or set fresh.**
+0.5. **Company identity, is it already applied? Else, import or set fresh.**
    **First, read `.env`.** If **`VITE_COMPANY_NAME` is set (non-empty)**, the
-   company identity is **already in place** — the desktop app auto-applied the
+   company identity is **already in place:** the desktop app auto-applied the
    designer's saved *default* company profile when it created this project. **Treat
    that as complete and skip ahead**, even if the logo and admin fonts are still
-   the template defaults — a **name-only profile is a valid, deliberate choice**,
+   the template defaults, a **name-only profile is a valid, deliberate choice**,
    NOT "incomplete." Do NOT reason yourself back into asking. Tell them in one line
-   ("Your company identity's already in place — {name}."), then **SKIP this
+   ("Your company identity's already in place, {name}."), then **SKIP this
    question AND the entire company block (2a–2c)** and go straight to the client in
    **step 3**. (If they *want* to add a logo or change admin fonts, they can anytime
-   via the app's Company Profile panel or just by asking — but don't prompt for it.)
+   via the app's Company Profile panel or just by asking, but don't prompt for it.)
 
-   **Otherwise (company not set), this is the mandatory FIRST branding question —
+   **Otherwise (company not set), this is the mandatory FIRST branding question,
    always ask it**, and don't assume a first-timer has no profile (they may have
    one saved from another project or machine). If the designer has branded a
-   previous copy of this template, they may have exported a **company profile** —
-   their agency name, admin/gate fonts, and login logo — with `/export-company`.
+   previous copy of this template, they may have exported a **company profile**,
+   their agency name, admin/gate fonts, and login logo, with `/export-company`.
    Importing it here fills all of that in one step, so ask this *before* the
    logo/name/font questions.
 
@@ -114,14 +114,14 @@ Follow these steps:
    > to re-enter them. (This is separate from the *client's* design, which you'll
    > set up next.)
 
-   Two options: **"No — set it up fresh"** (default, first) and **"Yes — import my
+   Two options: **"No, set it up fresh"** (default, first) and **"Yes, import my
    profile"**.
 
    - **On "No"** → continue to step 1 and run branding normally.
    - **On "Yes"** → run the **[`/import-company`](import-company.md)** flow (get the
      file via path or drop-it-in, then `node scripts/company-profile.mjs unpack --in
      <path>`, and finish any manual steps it reports). Once applied, the company
-     name, admin/gate fonts, and logo are set — so **SKIP the whole company block
+     name, admin/gate fonts, and logo are set, so **SKIP the whole company block
      (2a logo, 2b company name, 2c company fonts)** below, and pick up at step 3 (the
      *client* name). You can still let the designer override any imported value if
      they ask.
@@ -130,20 +130,20 @@ Follow these steps:
    `VITE_COMPANY_NAME`, `VITE_CLIENT_NAME`, and `VITE_PROJECT_NAME` (they may be
    blank on a fresh template pull).
 
-2. **The company block — logo, company name, then company fonts (2a → 2b → 2c).**
+2. **The company block, logo, company name, then company fonts (2a → 2b → 2c).**
    These are the agency's own identity and the very first things the user sees. Ask
    them in order: the logo (2a), then the company name (2b), then the company/admin
-   fonts (2c) — all together, before moving on to the client in step 3.
+   fonts (2c), all together, before moving on to the client in step 3.
 
    ### 2a. Logo on the login screen
 
-   *(Skip 2a entirely if a company profile was imported in step 0.5 — the logo is
+   *(Skip 2a entirely if a company profile was imported in step 0.5, the logo is
    already wired.)*
 
    Ask this with `AskUserQuestion`. Header (the short chip label) is **"Your
-   Logo"**. Provide exactly two options — **"Yes — add my logo"** (list it first)
-   and **"No — skip for now"**. `question` text (blank line between the two
-   sentences — a real `\n\n` in the string):
+   Logo"**. Provide exactly two options, **"Yes, add my logo"** (list it first)
+   and **"No, skip for now"**. `question` text (blank line between the two
+   sentences, a real `\n\n` in the string):
 
    > Would you like to include your logo on the login screen for the client to see?
    >
@@ -163,7 +163,7 @@ Follow these steps:
         **Ask the designer for the exact filename** they saved, and confirm the file
         is actually in place before editing anything.
 
-     2. **Wire it into the gate — edit `middleware.js`:**
+     2. **Wire it into the gate, edit `middleware.js`:**
         - Add a `.brand-logo` rule to the inline `<style>` block:
           ```css
           .brand-logo {
@@ -184,11 +184,11 @@ Follow these steps:
           authenticates (self-hosted assets need this, same as fonts): change the
           matcher on line 2 from `'/((?!_vercel).*)'` to `'/((?!_vercel|brand).*)'`.
           If other allowlist entries already exist (e.g. `fonts`), **merge** them
-          into one group rather than adding a second — e.g.
+          into one group rather than adding a second, e.g.
           `'/((?!_vercel|brand|fonts).*)'`.
 
      3. **⚠️ Flag the logo file to the designer.** This introduces a **committed
-        image asset** into a scaffold that ships unbranded — call it out and
+        image asset** into a scaffold that ships unbranded, call it out and
         confirm before proceeding: (a) the file is committed to git and **travels
         with the repo**, deploying to Vercel; (b) it currently appears **only** on
         the login gate, nowhere else in the app yet; and (c) it's forced to
@@ -197,19 +197,19 @@ Follow these steps:
 
    ### 2b. Company name
 
-   *(Skip 2b if a company profile was imported in step 0.5 — the company name is
+   *(Skip 2b if a company profile was imported in step 0.5, the company name is
    already set.)*
 
    `VITE_COMPANY_NAME` fills the dashboard header wordmark.
 
    Inline args are parsed as `company name | client name | project name` (all
-   three optional, pipe-separated, in that order — the same order as the
+   three optional, pipe-separated, in that order, the same order as the
    interactive prompts below). **If a company name was passed** as the first
    `|`-separated segment of `$ARGUMENTS`, use it (confirm it back) and skip this
    prompt.
 
    Otherwise, a company name has no reasonable presets, so **use a plain text
-   prompt** (not `AskUserQuestion`) — just ask for the value directly:
+   prompt** (not `AskUserQuestion`), just ask for the value directly:
 
    > What is your company name?
    >
@@ -221,12 +221,12 @@ Follow these steps:
 
    ### 2c. Company / admin fonts
 
-   *(Skip 2c if a company profile was imported in step 0.5 — the gate + admin
+   *(Skip 2c if a company profile was imported in step 0.5, the gate + admin
    fonts are already set.)*
 
    The gate in `middleware.js` has its own inline `<style>`, independent of the
    app's design system (it can't read the app's token layer). It uses two font
-   roles: the **wordmark** (`.brand-name`) and the **body font** — used by
+   roles: the **wordmark** (`.brand-name`) and the **body font:** used by
    everything else on the gate (subtitle, the "Preview Access" label, the password
    input, the Enter button, and the footer).
 
@@ -247,34 +247,34 @@ Follow these steps:
    > fonts for the client design a little later, and your company fonts will not
    > affect that design.
 
-   Options — exactly two:
-   - **"Use default fonts"** — keeps the template's default admin typefaces:
+   Options, exactly two:
+   - **"Use default fonts":** keeps the template's default admin typefaces:
      **DM Sans (700)** for the brand name / headings and **Inter (300)** for body
      text (these are the default admin font families). Put those names/weights on
      the option itself so the designer sees what they'd get.
-   - **"Use my company or custom fonts"** — set your own.
+   - **"Use my company or custom fonts":** set your own.
    - If **"Use default fonts"**, make **no** font changes: the template already
      ships DM Sans / Inter for both the gate and the interior admin chrome. Skip
      the rest of this step and continue to step 3.
 
    **b. Gather the values.** If **Yes**, ask these as **three SEPARATE
-   `AskUserQuestion` calls — one at a time, waiting for each answer before the
+   `AskUserQuestion` calls, one at a time, waiting for each answer before the
    next** (never combine them into one panel):
    1. Header **"Font Location"**. Question: "Where are your fonts located?"
       Three options:
-      - **Google Fonts** — paste the share / `<link>` URL.
-      - **URL** — paste any other CSS `<link>` stylesheet URL (Adobe Fonts,
+      - **Google Fonts:** paste the share / `<link>` URL.
+      - **URL:** paste any other CSS `<link>` stylesheet URL (Adobe Fonts,
         Typography.com, or any host).
-      - **Import my own fonts** — place font files in the project (exact location
+      - **Import my own fonts:** place font files in the project (exact location
         handled below).
       (`AskUserQuestion` still auto-appends an "Other → type your own" field; these
       three cover the real cases.) For a Google / URL choice, follow up for the
       exact URL if the user didn't paste one, and show the current
       `<link rel="stylesheet">` href if one is set.
-   2. Header "Primary font". `question` (blank line before the example — a real
+   2. Header "Primary font". `question` (blank line before the example, a real
       `\n\n` in the string):
 
-      > Your **primary / wordmark** font — used for the brand name and headings,
+      > Your **primary / wordmark** font, used for the brand name and headings,
       > across the login screen and the interior Styleguide + dashboard.
       >
       > Enter the family and weight, e.g. `'Vitesse A', 'Vitesse B', sans-serif` at 700.
@@ -283,7 +283,7 @@ Follow these steps:
       the free-text field.
    3. Header "Body font". `question` (blank line before the example):
 
-      > Your **secondary / body** font — used for all other admin text: on the
+      > Your **secondary / body** font, used for all other admin text: on the
       > login screen (the subtitle, the "Preview Access" label, the password field,
       > the Enter button, and the footer) and throughout the Styleguide + dashboard
       > body copy.
@@ -291,7 +291,7 @@ Follow these steps:
       > Enter the family and weight, e.g. `"Forza A", "Forza B", sans-serif` at 400.
 
    **If the designer chose "Import my own fonts":** have them place the font files
-   in **`public/fonts/`** (create the folder if missing) — e.g.
+   in **`public/fonts/`** (create the folder if missing), e.g.
    `public/fonts/Acme-Bold.woff2` and `public/fonts/Acme-Regular.woff2` (prefer
    `.woff2`). Files in `public/` are served at the site root, so reference them as
    `url('/fonts/Acme-Bold.woff2')`. Then:
@@ -301,9 +301,9 @@ Follow these steps:
      **`middleware.js`**, AND **allowlist the folder** so the login page can fetch
      the files *before* the user is authenticated: change the matcher from
      `'/((?!_vercel).*)'` to `'/((?!_vercel|fonts).*)'`. (Font files aren't
-     sensitive — this just lets `/fonts/*` pass through the gate.) If a logo
+     sensitive, this just lets `/fonts/*` pass through the gate.) If a logo
      allowlist entry already exists from step 2a (`brand`), **merge** into one
-     group rather than adding a second — e.g. `'/((?!_vercel|brand|fonts).*)'`.
+     group rather than adding a second, e.g. `'/((?!_vercel|brand|fonts).*)'`.
    - There is no external stylesheet URL in this case, so **skip the `<link>` edits
      below** and go straight to the `font-family` swaps + the admin-chrome tokens.
 
@@ -313,7 +313,7 @@ Follow these steps:
      host). If the user wants no external font, remove both `<link>` lines.
    - Replace the `font-family` on the `.brand-name` rule with the wordmark value.
    - Replace **all** occurrences of the current body `font-family` value (the one
-     on the `body` rule — the same string is repeated on `.brand-subtitle`,
+     on the `body` rule, the same string is repeated on `.brand-subtitle`,
      `.label`, `.pw-wrap input`, and `button[type="submit"]`) with the body value.
    - Warn that font services like Typography.com / Adobe Fonts are **domain-locked**:
      the fonts load only on whitelisted domains, so the user must add their Vercel
@@ -322,7 +322,7 @@ Follow these steps:
 
    Then apply the **same two fonts to the interior admin chrome** (the Styleguide
    page + dashboard), so the gate and the admin chrome share one typographic
-   identity — that chrome reads the `--admin-font-*` tokens, NOT the gate's inline
+   identity, that chrome reads the `--admin-font-*` tokens, NOT the gate's inline
    `<style>`:
    - **Load the fonts for the app too.** The gate loads its own copy via
      `middleware.js`; the React app loads fonts in `src/styles/fonts.css`. If the
@@ -335,7 +335,7 @@ Follow these steps:
      fallback in each stack, e.g. `'Wordmark', system-ui, sans-serif`). Leave
      `--admin-font-mono` and every `--admin-*` **color** token untouched.
    - These two `--admin-font-*` roles are the ONE part of `--admin-*` that project
-     branding sets — they carry the company / agency fonts (see CLAUDE.md). On
+     branding sets, they carry the company / agency fonts (see CLAUDE.md). On
      **"No"** above, leave them at their template defaults (DM Sans / Inter).
 
 3. **Determine the remaining brand values.**
@@ -343,32 +343,32 @@ Follow these steps:
      `company name | client name | project name` (the company segment was already
      consumed in step 2; client and project are the 2nd and 3rd segments, both
      optional). A leading `|` with an empty first segment means "company omitted,
-     client next" — e.g. `| ACME ltd | Case Studies` sets client + project but
+     client next", e.g. `| ACME ltd | Case Studies` sets client + project but
      leaves company to the prompt.
    - Otherwise, **prompt the user**:
      - **Client name** (required). A client name has no reasonable presets, so
-       **use a plain text prompt** (not `AskUserQuestion`) — just ask directly:
+       **use a plain text prompt** (not `AskUserQuestion`), just ask directly:
 
        > What is your client's name?
        >
        > This appears throughout the project in prominent locations.
 
        Show the current value if one is set. If the user leaves it blank, ask
-       again — the template stays unbranded without it.
-     - **Project name** (optional) is asked **after** the project-type question —
-       its options are tailored to the chosen type — so it's handled in **step 3c**
+       again, the template stays unbranded without it.
+     - **Project name** (optional) is asked **after** the project-type question,
+       its options are tailored to the chosen type, so it's handled in **step 3c**
        below, not here. (If `$ARGUMENTS` already carried a project name, use it and
        skip that prompt.)
 
-3b. **Ask the project type, THEN the tablet preview — as TWO SEPARATE
+3b. **Ask the project type, THEN the tablet preview, as TWO SEPARATE
    `AskUserQuestion` calls.** The tablet question depends on the type answer (and
-   doesn't apply at all to Brand), so **never bundle them in one call** — ask the
+   doesn't apply at all to Brand), so **never bundle them in one call:** ask the
    type, wait for the answer, then ask tablet only if it applies. Together they set
    the device-preview matrix (`VITE_PROJECT_TYPE` + `VITE_ENABLE_TABLET`, consumed
    by `previewConfig` in `src/config/site.ts`).
 
-   **Step 1 — Project Type** (its own `AskUserQuestion` call, this question only).
-   Header "Project Type". Question (blank line between the two sentences — a real
+   **Step 1, Project Type** (its own `AskUserQuestion` call, this question only).
+   Header "Project Type". Question (blank line between the two sentences, a real
    `\n\n` in the `question` string):
 
    > What type of project are you designing for?
@@ -377,30 +377,30 @@ Follow these steps:
    > are available in your workspace.
 
    Three options:
-   - **"Web Site"** — the default (list first). Desktop + mobile are the baseline.
+   - **"Web Site":** the default (list first). Desktop + mobile are the baseline.
      → writes `VITE_PROJECT_TYPE="website"`.
-   - **"App"** — mobile-first; the desktop preview is hidden (an app that needs
+   - **"App":** mobile-first; the desktop preview is hidden (an app that needs
      desktop is really a website). → `VITE_PROJECT_TYPE="app"`.
-   - **"Brand Guideline (coming soon)"** — parked; the home view shows a "coming
+   - **"Brand Guideline (coming soon)":** parked; the home view shows a "coming
      soon" Brand placeholder (`src/app/components/Brand.tsx`) instead of a device
      preview. Set it if that's the intent, but tell the user it's stubbed. →
      `VITE_PROJECT_TYPE="brand"`.
 
-   **Step 2 — Tablet preview** (a SEPARATE `AskUserQuestion` call, made only
+   **Step 2, Tablet preview** (a SEPARATE `AskUserQuestion` call, made only
    *after* Step 1 is answered, and conditional on it):
    - If they chose **Brand** → **skip this question entirely** (brand mode has no
      device preview). Leave `VITE_ENABLE_TABLET=""`.
    - If they chose **Web Site** or **App** → ask, header "Tablet view", question
      "Include a tablet preview as well?" Both default to **no** tablet unless
-     asked. Options: **"No — skip tablet"** (default, first) / **"Yes — add
+     asked. Options: **"No, skip tablet"** (default, first) / **"Yes, add
      tablet"**. "Yes" writes `VITE_ENABLE_TABLET="true"`; "No" leaves it blank.
 
    Note the effect back to the user: an **App** opens on the phone preview with no
    desktop button; a **Web Site** opens on desktop; tablet appears only if they
-   opted in. Keep the chosen type in mind — it tailors the project-name options in
+   opted in. Keep the chosen type in mind, it tailors the project-name options in
    the next step.
 
-3c. **Ask the project name — tailored to the type.** `VITE_PROJECT_NAME` fills the
+3c. **Ask the project name, tailored to the type.** `VITE_PROJECT_NAME` fills the
    secondary half of the title lockup. Use `AskUserQuestion`, header **"Project
    Name"**; the `question` text puts a **blank line between the two sentences** (a
    real `\n\n` in the string):
@@ -422,20 +422,20 @@ Follow these steps:
    if set. Blank is allowed (the title lockup simply drops the separator). If a
    project name already came via `$ARGUMENTS`, skip this and use it.
 
-3d. **Ask the desktop menu style — websites only.** SKIP for `app`/`brand`
+3d. **Ask the desktop menu style, websites only.** SKIP for `app`/`brand`
    projects (no website nav). For a **Web Site**, ask with `AskUserQuestion`.
    Header **"Menu style"**; `question`: "How should the desktop nav menus start?
    You can change or mix these per item later in `src/app/menu.ts`." Options
    (first = default):
-   - **"Traditional"** — plain links, no open menu. → leave `VITE_MENU_STYLE=""`.
-   - **"Hover dropdown"** — each item reveals a short link list on hover. →
+   - **"Traditional":** plain links, no open menu. → leave `VITE_MENU_STYLE=""`.
+   - **"Hover dropdown":** each item reveals a short link list on hover. →
      `VITE_MENU_STYLE="dropdown"`.
-   - **"Mega menu"** — each item reveals a full content-width panel of sections. →
+   - **"Mega menu":** each item reveals a full content-width panel of sections. →
      `VITE_MENU_STYLE="mega"`.
    Explain the effect: this SEEDS every nav item's menu with a populated starter of
    that style, which the designer edits or varies per item in
-   [menu.ts](src/app/menu.ts) (mix mega + dropdown + none). Each open menu — plus
-   the default mobile-menu drawer — exports to Figma as its own **"Menu — {Item}"
+   [menu.ts](src/app/menu.ts) (mix mega + dropdown + none). Each open menu, plus
+   the default mobile-menu drawer, exports to Figma as its own **"Menu, {Item}"
    Block** after the Header.
 
 4. **Write the values back** into `.env`, preserving its comments and the rest
@@ -450,64 +450,64 @@ Follow these steps:
    production build must be rebuilt/redeployed (Vercel does this on push).
 
 6. **Remind about the preview gate (Vercel only).** First confirm they have a
-   Vercel project. A [Vercel](https://vercel.com) account is **required** — it's
+   Vercel project. A [Vercel](https://vercel.com) account is **required:** it's
    what turns this project into a live, shareable website for client preview (the
    free "Hobby" tier is enough). If they haven't connected it yet, point them to
    the easiest path: create a free account at https://vercel.com (sign in with
    GitHub), push this repo to a GitHub repository, then in Vercel choose
-   **Add New → Project** and import it — every `git push` then auto-deploys. The
+   **Add New → Project** and import it, every `git push` then auto-deploys. The
    env-var steps below all live in that Vercel project, so it must exist first.
 
    The login page in
    `middleware.js` runs on Vercel's edge runtime and CANNOT read `.env` /
    `VITE_*`. To brand it, the user must add matching **`CLIENT_NAME`** and
    **`PROJECT_TITLE`** (plain names, no `VITE_` prefix) to their Vercel project's
-   Environment Variables — alongside the gate secrets `ADMIN_PASS` / `AUTH_PASS`.
+   Environment Variables, alongside the gate secrets `ADMIN_PASS` / `AUTH_PASS`.
    Give them the exact values to paste. Unset, `CLIENT_NAME` falls back to
    "Preview" and `PROJECT_TITLE` to "A Design System".
 
-   Do **not** put secrets (ADMIN_PASS / AUTH_PASS for the preview gate) in `.env`
-   — those belong in Vercel's Environment Variables or a local `.env.local`.
+   Do **not** put secrets (ADMIN_PASS / AUTH_PASS for the preview gate) in `.env`,
+  those belong in Vercel's Environment Variables or a local `.env.local`.
 
-   Note for later: the preview gate shows a text wordmark (name + subtitle) — a
+   Note for later: the preview gate shows a text wordmark (name + subtitle), a
    logo could be added via an optional `SITE_LOGO` env var in `middleware.js`. This
    is out of scope for this command; flag it if the user wants a full rebrand.
 
 7. **Offer to save these company settings for reuse.** The company name, admin
    fonts, and logo just configured (steps 2a–2c) are the **same for every project**
-   this designer will do — so offer to export them as a portable **company profile**
+   this designer will do, so offer to export them as a portable **company profile**
    they can import into the next fresh copy with `/import-company`. (Skip this offer
-   if a profile was *imported* in 0.5 and nothing was changed — there's nothing new
+   if a profile was *imported* in 0.5 and nothing was changed, there's nothing new
    to save. If they tweaked an imported value, still offer, so they can save the
    updated version.)
 
    Ask with `AskUserQuestion`, header **"Save profile"**; `question`:
 
-   > Want to save these company settings — your name, admin fonts, and logo — so you
+   > Want to save these company settings, your name, admin fonts, and logo, so you
    > can reuse them on your next project without setting them up again?
 
-   Options: **"Yes — save my company profile"** (default, first) / **"No thanks"**.
+   Options: **"Yes, save my company profile"** (default, first) / **"No thanks"**.
 
    - **On "Yes"** → run the **[`/export-company`](export-company.md)** flow
      (`node scripts/company-profile.mjs pack`) and tell them where
      `company-profile.json` landed + to keep it somewhere reusable.
    - **On "No"** → continue.
 
-## 8. Continue straight into Phase II — the styleguide
+## 8. Continue straight into Phase II, the styleguide
 
-Branding + company fonts are done, but onboarding isn't — **don't leave the
+Branding + company fonts are done, but onboarding isn't, **don't leave the
 designer at a dead end.** The company-fonts step (2c) told them they'd choose the
 client's design fonts "a little later," so flow directly into it and keep it
 feeling like one continuous setup, not a second disconnected command:
 
-- Give a **one-line bridge** — e.g. *"Your brand and company fonts are set. Now
-  let's define the client's design foundation: colors and fonts."* — then
+- Give a **one-line bridge:** e.g. *"Your brand and company fonts are set. Now
+  let's define the client's design foundation: colors and fonts."*, then
   **invoke the `/setup-styleguide` skill** to continue Phase II. That fulfils the
   "a little later" promise.
 - **Off-ramp:** if the designer would rather pause (wants to set up Vercel first,
-  or says "not now"), respect it — tell them they can run **`/setup-styleguide`**
+  or says "not now"), respect it, tell them they can run **`/setup-styleguide`**
   whenever they're ready, and give the `npm run dev` preview reminder (from step
   0d) now instead of at the end of Phase II.
 
-Do the `npm run dev` local-preview reminder at the **true end of onboarding** —
+Do the `npm run dev` local-preview reminder at the **true end of onboarding**,
 after the styleguide (Phase II) wraps, or now if they paused here.
