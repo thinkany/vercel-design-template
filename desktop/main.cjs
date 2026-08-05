@@ -17,12 +17,26 @@ const { app, BrowserWindow, ipcMain, safeStorage, shell, dialog, Menu } = requir
 // app menu (About / Hide / Quit …) and the About panel read "thinkany design".
 // Must run before app is ready / the default menu is built. Covers both the dev
 // run (app.getName() would otherwise fall back to package.json "name") and any
-// path the packaged bundle name doesn't already override.
+// path the packaged bundle name doesn't already override. Safe to rename: userData
+// is pinned below so the display name no longer dictates where state is stored.
 app.setName("thinkany design");
 const { spawn, execSync } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 const fs = require("node:fs");
 const path = require("node:path");
+
+// ⚠ Pin userData to a STABLE id — never derive it from the display name.
+// Electron defaults userData to `<appData>/<app.getName()>`, so the setName above
+// would silently relocate it to `.../thinkany design/` and strand every stored
+// secret + setting (anthropic-key.enc, derive-license.enc, company-profile-default
+// .json, global-copy-rules.json, ui-state.json, project.json). Pinning it here
+// keeps state put across renames AND upgrades (auto-update / DMG reinstall both
+// preserve userData as long as this path is stable). The safeStorage keychain
+// entry is keyed by appId (design.thinkany.app), so the .enc files stay decryptable
+// regardless of folder. This id is load-bearing — NEVER change it (same rule as appId).
+const USER_DATA_ID = "@figma/my-make-file";
+app.setPath("userData", path.join(app.getPath("appData"), USER_DATA_ID));
+
 const { TEMPLATE_EXCLUDE } = require("./template-exclude.cjs");
 const { startCaptureBridge, stopCaptureBridge } = require("./capture-bridge.cjs");
 
