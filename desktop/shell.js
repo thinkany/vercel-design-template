@@ -11,6 +11,7 @@ const projname = el("projname");
 // Sidebar + modal
 const railHelp = el("rail-help");
 const railProjects = el("rail-projects");
+const railPublish = el("rail-publish");
 const railCompany = el("rail-company");
 const railFigma = el("rail-figma");
 const railVoice = el("rail-voice");
@@ -51,6 +52,16 @@ const confirmOk = el("confirm-ok");
 const browser = el("browser");
 const tabbar = el("tabbar");
 const views = el("views");
+const feedbackBtn = el("feedback-toggle");
+const feedbackLabel = el("feedback-toggle-label");
+// Absolute file: URL of the preview inspector, attached as each preview webview's
+// preload so "point & comment" works (and survives the preview's hot-reloads).
+// Resolved in main and fetched here at boot (webviews open after boot, so it's set
+// in time); a preview that opens before it lands just skips the inspector.
+let PREVIEW_PRELOAD = "";
+if (window.desktop && window.desktop.getPreviewInspectPreload) {
+  window.desktop.getPreviewInspectPreload().then((p) => { PREVIEW_PRELOAD = p || ""; }).catch(() => {});
+}
 const urlbar = el("urlbar");
 const navback = el("navback");
 const navfwd = el("navfwd");
@@ -195,13 +206,54 @@ function setActiveTab(tab) {
   tabs.forEach((t) => { t.wv.style.display = t === tab ? "flex" : "none"; });
   renderTabs();
   syncNav();
+  setFeedbackMode(false); // don't carry feedback mode across tab switches
+  feedbackBtn.hidden = !tab; // the toggle only makes sense with a live preview
 }
+
+// ---- Point & comment: element feedback from the preview → chat ----------------
+let feedbackOn = false;
+function setFeedbackButton(on) {
+  feedbackOn = !!on;
+  feedbackBtn.classList.toggle("active", feedbackOn);
+  feedbackLabel.textContent = feedbackOn ? "Pointing… (Esc to exit)" : "Point & Comment";
+}
+function setFeedbackMode(on) {
+  if (activeTab && activeTab.wv) {
+    try { activeTab.wv.send("feedback:toggle", !!on); } catch { /* webview not ready */ }
+  }
+  setFeedbackButton(on);
+}
+function handleFeedbackSubmit(ctx) {
+  if (!ctx || !ctx.note) return;
+  const lines = ["Design feedback, pointed at an element in the live preview:", ""];
+  if (ctx.dataBlockName || ctx.dataBlock) {
+    lines.push(`- Section: ${ctx.dataBlockName || ctx.dataBlock}${ctx.dataBlock ? ` (data-block="${ctx.dataBlock}")` : ""}`);
+  }
+  lines.push(`- Element: <${ctx.tag}>${ctx.classes ? ` class="${ctx.classes}"` : ""}`);
+  if (ctx.text) lines.push(`- Text: "${ctx.text}"`);
+  if (ctx.selector) lines.push(`- Selector: ${ctx.selector}`);
+  if (ctx.variation) lines.push(`- Variation: ${ctx.variation}`);
+  lines.push("", `My note: ${ctx.note}`, "", "Make this change in the working variation's components (not the base).");
+  sendText(lines.join("\n"));
+}
+feedbackBtn.addEventListener("click", () => setFeedbackMode(!feedbackOn));
+// Escape exits pointing even when focus is in the shell (the webview's own Esc
+// handler only fires when the preview itself has keyboard focus).
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && feedbackOn) setFeedbackMode(false);
+});
 
 function openTab(url, title) {
   const wv = document.createElement("webview");
   wv.setAttribute("partition", "persist:preview");
   wv.setAttribute("allowpopups", "true"); // let target=_blank reach the window-open handler (→ new tab)
+  if (PREVIEW_PRELOAD) wv.setAttribute("preload", PREVIEW_PRELOAD); // point & comment inspector
   wv.setAttribute("src", url);
+  // Messages from the inspector (point & comment) running inside the preview.
+  wv.addEventListener("ipc-message", (e) => {
+    if (e.channel === "feedback:submit") handleFeedbackSubmit(e.args[0]);
+    else if (e.channel === "feedback:state") setFeedbackButton(!!e.args[0]);
+  });
   const tab = { id: ++tabSeq, wv, title: title || "Loading…", fixedTitle: !!title, url, retries: 0 };
   wv.addEventListener("page-title-updated", (e) => {
     if (!tab.fixedTitle) { tab.title = e.title; renderTabs(); }
@@ -209,7 +261,7 @@ function openTab(url, title) {
   const onNav = () => { if (tab === activeTab) syncNav(); };
   wv.addEventListener("did-navigate", onNav);
   wv.addEventListener("did-navigate-in-page", onNav);
-  wv.addEventListener("did-finish-load", () => { tab.retries = 0; });
+  wv.addEventListener("did-finish-load", () => { tab.retries = 0; if (tab === activeTab) setFeedbackButton(false); });
   // Vite may still be starting (ERR_CONNECTION_REFUSED) — retry so the webview
   // can't get stuck on an error page and need a manual restart.
   wv.addEventListener("did-fail-load", (e) => {
@@ -240,6 +292,7 @@ function closeAllTabs() {
   activeTab = null;
   tabsOpened = false;
   guarding = false; guardSeq++; // drop any in-flight live-edit guard
+  feedbackBtn.hidden = true; setFeedbackButton(false);
   renderTabs();
 }
 
@@ -496,12 +549,14 @@ function noProjectPlaceholder() {
 // rail. Toggled via the .activated class.
 async function refreshRailActivation() {
   try {
-    const [k, l] = await Promise.all([
+    const [k, l, vc] = await Promise.all([
       window.desktop.getKeyStatus(),
       window.desktop.getLicenseStatus(),
+      window.desktop.getVercelStatus(),
     ]);
     railClaude.classList.toggle("activated", !!(k && k.hasKey));
     railFigma.classList.toggle("activated", !!(l && l.hasLicense));
+    railPublish.classList.toggle("activated", !!(vc && vc.connected));
   } catch {}
 }
 
@@ -524,7 +579,8 @@ async function boot() {
   design = proj.design || { active: false, variationId: null, previewReady: false };
   showStage("workspace");
   refreshPreview();
-  renderWelcomeChips(); // fresh project → offer the two starting paths
+  // Optionally resume the last session; otherwise offer the two starting paths.
+  if (!(await maybeAutoRestoreSession())) renderWelcomeChips();
 }
 
 // Vite may become ready after the project is chosen — or re-ready after a
@@ -599,7 +655,8 @@ async function chooseProject(kind) {
       design = await window.desktop.getDesignState();
       showStage("workspace");
       refreshPreview();
-      renderWelcomeChips(); // fresh project → offer the two starting paths
+      // Optionally resume the last session; otherwise offer the two starting paths.
+      if (!(await maybeAutoRestoreSession())) renderWelcomeChips();
     } else {
       projecterror.textContent = res.error || "Could not open the project.";
     }
@@ -614,10 +671,11 @@ createproject.addEventListener("click", () => chooseProject("create"));
 openproject.addEventListener("click", () => chooseProject("open"));
 
 // ---- Sidebar panels ----------------------------------------------------------
-const RAILS = { help: railHelp, projects: railProjects, company: railCompany, figma: railFigma, voice: railVoice, claude: railClaude };
+const RAILS = { help: railHelp, projects: railProjects, publish: railPublish, company: railCompany, figma: railFigma, voice: railVoice, claude: railClaude };
 const PANELS = {
   help: { title: "Commands", render: renderHelp },
   projects: { title: "Switch Project", render: renderProjects },
+  publish: { title: "Publish", render: renderPublish },
   company: { title: "Company Profile", render: renderCompany },
   figma: { title: "Figma Export", render: renderFigma },
   voice: { title: "Copy Voice", render: renderVoice },
@@ -655,6 +713,7 @@ function toggleModal(kind) {
 
 railHelp.addEventListener("click", () => toggleModal("help"));
 railProjects.addEventListener("click", () => toggleModal("projects"));
+railPublish.addEventListener("click", () => toggleModal("publish"));
 railCompany.addEventListener("click", () => toggleModal("company"));
 railFigma.addEventListener("click", () => toggleModal("figma"));
 railVoice.addEventListener("click", () => toggleModal("voice"));
@@ -831,6 +890,39 @@ function setRow(k, valueText) {
   return row;
 }
 
+// The unplug mark (disconnect), shared across integration drawers.
+const UNPLUG_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 5 3-3"/><path d="m2 22 3-3"/><path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z"/><path d="M7.5 13.5 10 11"/><path d="M10.5 16.5 13 14"/><path d="m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z"/></svg>';
+
+// A drawer's connection header: an uppercase `.k` title, a status badge, and (when
+// connected) a collapse-on-hover unplug button on the right edge. Shared by the
+// Vercel / Claude / Figma drawers so they read identically.
+function connStatusRow(label, connected, badgeText, disconnectLabel, onDisconnect) {
+  const row = document.createElement("div");
+  row.className = "setrow";
+  const k = document.createElement("div");
+  k.className = "k";
+  k.textContent = label;
+  row.appendChild(k);
+  const line = document.createElement("div");
+  line.style.cssText = "display:flex;align-items:center;gap:8px;";
+  const badge = document.createElement("span");
+  badge.className = "badge " + (connected ? "ok" : "off");
+  badge.textContent = badgeText;
+  line.appendChild(badge);
+  if (connected && onDisconnect) {
+    const disc = document.createElement("button");
+    disc.className = "disc-collapse";
+    disc.style.marginLeft = "auto";
+    disc.title = disconnectLabel;
+    disc.setAttribute("aria-label", disconnectLabel);
+    disc.innerHTML = `<span class="lbl">${disconnectLabel}</span>${UNPLUG_SVG}`;
+    disc.addEventListener("click", onDisconnect);
+    line.appendChild(disc);
+  }
+  row.appendChild(line);
+  return row;
+}
+
 // --- Switch project: current project + switch ---
 async function renderProjects(body) {
   const proj = await window.desktop.getProjectStatus();
@@ -942,27 +1034,11 @@ async function renderFigma(body) {
   const lic = await window.desktop.getLicenseStatus();
   railFigma.classList.toggle("activated", !!lic.hasLicense); // color the icon on save/clear
 
-  const row = document.createElement("div");
-  row.className = "setrow";
-  const k = document.createElement("div");
-  k.className = "k";
-  k.textContent = "Figma export license";
-  const badge = document.createElement("span");
-  badge.className = "badge " + (lic.hasLicense ? "ok" : "off");
-  badge.textContent = lic.hasLicense ? "Active" : "Not set";
-  row.append(k, badge);
-  body.appendChild(row);
+  body.appendChild(connStatusRow("Figma export license", lic.hasLicense, lic.hasLicense ? "Active" : "Not set", "Remove license",
+    async () => { await window.desktop.clearLicense(); openModal("figma"); }));
 
   if (lic.hasLicense) {
     body.appendChild(setRow("Key", `…${lic.hint || "????"}`));
-    const rm = document.createElement("button");
-    rm.className = "panelbtn danger";
-    rm.textContent = "Remove license";
-    rm.addEventListener("click", async () => {
-      await window.desktop.clearLicense();
-      openModal("figma");
-    });
-    body.appendChild(rm);
   } else {
     const input = document.createElement("input");
     input.className = "field";
@@ -998,6 +1074,461 @@ async function renderFigma(body) {
   note.className = "muted";
   note.textContent = "Unlocks Figma export. Validated with the derive service; stored encrypted in your OS keychain.";
   body.appendChild(note);
+}
+
+// --- Publish: direct-to-Vercel (connect + one-click publish) ---
+// A tiny "copy to clipboard" affordance shared by the URL + password rows.
+function copyBtn(getText) {
+  const b = document.createElement("button");
+  b.className = "panelbtn";
+  b.style.cssText = "padding:2px 10px;font-size:12px;flex:0 0 auto;";
+  b.textContent = "Copy";
+  b.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(getText()); b.textContent = "Copied ✓"; setTimeout(() => (b.textContent = "Copy"), 1400); }
+    catch { b.textContent = "Copy failed"; }
+  });
+  return b;
+}
+
+// A live progress row per step, upserted as publish:progress events arrive.
+function publishProgressList(container) {
+  const rows = {};
+  const LABELS = { project: "Vercel project", env: "Preview gate", upload: "Uploading files", deploy: "Building on Vercel", domain: "Custom domain", ready: "Live", error: "Problem" };
+  return (evt) => {
+    const { step, status, detail } = evt;
+    let r = rows[step];
+    if (!r) {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;gap:8px;align-items:baseline;margin:4px 0;font-size:13px;";
+      const icon = document.createElement("span");
+      icon.style.cssText = "flex:0 0 14px;";
+      const label = document.createElement("span");
+      label.style.cssText = "flex:0 0 120px;color:var(--muted,#9a9aa2);";
+      label.textContent = LABELS[step] || step;
+      const det = document.createElement("span");
+      det.style.cssText = "flex:1;";
+      row.append(icon, label, det);
+      container.appendChild(row);
+      r = rows[step] = { icon, det };
+    }
+    r.icon.textContent = status === "done" ? "✓" : status === "error" ? "✗" : "…";
+    r.icon.style.color = status === "done" ? "#17171b" : status === "error" ? "#e5484d" : "#9a9aa2";
+    if (detail) r.det.textContent = detail;
+    if (status === "error") r.det.style.color = "#e5484d";
+  };
+}
+
+// Shared run handler for both "Publish" and "Reset password" (a republish with a
+// fresh gate password). Streams progress, then shows the live URL + any new password.
+async function runPublishFlow(btn, host, opts) {
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Publishing…";
+  host.innerHTML = "";
+  host.hidden = false;
+  const list = document.createElement("div");
+  host.appendChild(list);
+  const onEvt = publishProgressList(list);
+  const unsub = window.desktop.onPublishProgress(onEvt);
+  try {
+    const res = await window.desktop.runPublish(opts || {});
+    if (res.ok) {
+      const done = document.createElement("div");
+      done.style.cssText = "margin-top:12px;padding-top:12px;border-top:1px solid var(--border,#2a2a2a);";
+
+      // Live URL row: open + copy.
+      const urlRow = document.createElement("div");
+      urlRow.style.cssText = "display:flex;gap:8px;align-items:center;";
+      const link = document.createElement("a");
+      link.href = res.url;
+      link.textContent = res.url.replace(/^https?:\/\//, "");
+      link.style.cssText = "flex:1;color:#1a1a1a;text-decoration:underline;font-size:13px;word-break:break-all;";
+      link.addEventListener("click", (e) => { e.preventDefault(); window.desktop.openExternal(res.url); });
+      urlRow.append(link, copyBtn(() => res.url));
+      done.appendChild(urlRow);
+
+      // Freshly generated preview password (shown once — never persisted).
+      if (res.password) {
+        const pwWrap = document.createElement("div");
+        pwWrap.style.cssText = "margin-top:10px;padding:10px;border:1px solid var(--border,#2a2a2a);border-radius:8px;";
+        const pwLabel = document.createElement("div");
+        pwLabel.className = "muted";
+        pwLabel.style.cssText = "font-size:12px;margin-bottom:6px;";
+        pwLabel.textContent = "Preview password (share with your client)";
+        const pwRow = document.createElement("div");
+        pwRow.style.cssText = "display:flex;gap:8px;align-items:center;";
+        const pw = document.createElement("code");
+        pw.textContent = res.password;
+        pw.style.cssText = "flex:1;font-size:14px;letter-spacing:1px;";
+        pwRow.append(pw, copyBtn(() => res.password));
+        pwWrap.append(pwLabel, pwRow);
+        done.appendChild(pwWrap);
+      }
+      host.appendChild(done);
+      // Only the primary publish button becomes "Publish changes" after the first
+      // publish; the reset button keeps its own label (don't create a duplicate).
+      btn.textContent = label === "Publish this design" ? "Publish changes" : label;
+    } else {
+      const err = document.createElement("div");
+      err.className = "muted";
+      err.style.cssText = "margin-top:10px;color:#e5484d;";
+      err.textContent = res.error || "Publish failed.";
+      host.appendChild(err);
+      btn.textContent = label;
+    }
+  } catch (e) {
+    const err = document.createElement("div");
+    err.className = "muted";
+    err.style.cssText = "margin-top:10px;color:#e5484d;";
+    err.textContent = String(e);
+    host.appendChild(err);
+    btn.textContent = label;
+  } finally {
+    unsub();
+    btn.disabled = false;
+    refreshRailActivation();
+  }
+}
+
+// --- Publish help: a tabbed, step-by-step walkthrough (assumes no Vercel account) ---
+const PUBHELP = {
+  start: {
+    intro: "Publishing puts your design online behind a password so you can share it with a client. It uses Vercel, a free hosting service. Here is the one-time setup.",
+    steps: [
+      { h: "Create a free Vercel account", d: "Sign up with GitHub, GitLab, or an email address. It is free for design previews, no credit card needed.", link: { label: "Open vercel.com/signup", url: "https://vercel.com/signup" } },
+      { h: "Create an access token", d: "In Vercel, open Account Settings, then Tokens. Create one, name it something like \"thinkany design\", and copy it.", note: "A token is safe to store: it only lets an app deploy on your behalf, and you can delete it from that same Vercel page at any time.", link: { label: "Open the token page", url: "https://vercel.com/account/tokens" } },
+      { h: "Connect it here", d: "Close this window, paste the token into the Publish panel, and click Connect Vercel. It is stored encrypted on your computer, so you only do this once." },
+      { h: "You are ready to publish", d: "Switch to the How to publish tab for the rest." },
+    ],
+  },
+  how: {
+    intro: "Once Vercel is connected, publishing a design is a few clicks.",
+    steps: [
+      { h: "Open a finished design", d: "Open the project you want to share. The Publish button stays greyed out until a design is ready to show." },
+      { h: "Click Publish this design", d: "The app creates the site, uploads your design, and Vercel builds it. This usually takes a minute or two, and you will see the progress." },
+      { h: "Copy your link and password", d: "You get a live link (like yourproject.vercel.app) and a one-time preview password. Copy both.", note: "Save the password when it is shown, it is not displayed again. If you lose it, Reset preview password generates a new one." },
+      { h: "Share with your client", d: "Send them the link and the password. The site stays locked until they enter it, so the link is safe to share." },
+      { h: "Update anytime", d: "Made changes? Click Publish changes to refresh the same link. Use Reset preview password to set a new password." },
+    ],
+  },
+};
+const pubhelp = el("pubhelp");
+const pubhelpBody = el("pubhelp-body");
+const pubhelpTabs = Array.from(document.querySelectorAll(".pubhelp-tab"));
+function renderPubHelp(tab) {
+  const data = PUBHELP[tab] || PUBHELP.start;
+  pubhelpTabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
+  pubhelpBody.innerHTML = "";
+  const intro = document.createElement("p");
+  intro.className = "ph-intro";
+  intro.textContent = data.intro;
+  pubhelpBody.appendChild(intro);
+  data.steps.forEach((s, i) => {
+    const row = document.createElement("div");
+    row.className = "ph-step";
+    const num = document.createElement("div");
+    num.className = "ph-num";
+    num.textContent = String(i + 1);
+    const b = document.createElement("div");
+    b.style.flex = "1";
+    const h = document.createElement("div"); h.className = "ph-step-h"; h.textContent = s.h;
+    const d = document.createElement("div"); d.className = "ph-step-d"; d.textContent = s.d;
+    b.append(h, d);
+    // A helper note reads as part of the step, tucked right under its copy.
+    if (s.note) {
+      const note = document.createElement("div");
+      note.className = "ph-step-note";
+      note.textContent = s.note;
+      b.appendChild(note);
+    }
+    if (s.link) {
+      const a = document.createElement("button");
+      a.className = "ph-link";
+      const label = document.createElement("span");
+      label.textContent = s.link.label;
+      // Short-stemmed up-right arrow (external link) — neat, not the long ↗ glyph.
+      const arrow = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      arrow.setAttribute("viewBox", "0 0 10 10");
+      arrow.setAttribute("fill", "none");
+      arrow.setAttribute("stroke", "currentColor");
+      arrow.setAttribute("stroke-width", "1.3");
+      arrow.setAttribute("stroke-linecap", "round");
+      arrow.setAttribute("stroke-linejoin", "round");
+      arrow.innerHTML = '<path d="M3.2 6.8 6.8 3.2"/><path d="M4.4 3.2H6.8V5.6"/>';
+      a.append(label, arrow);
+      a.addEventListener("click", () => window.desktop.openExternal(s.link.url));
+      b.appendChild(a);
+    }
+    row.append(num, b);
+    pubhelpBody.appendChild(row);
+  });
+}
+function openPubHelp(tab) { renderPubHelp(tab || "start"); pubhelp.hidden = false; }
+function closePubHelp() { pubhelp.hidden = true; }
+pubhelpTabs.forEach((t) => t.addEventListener("click", () => renderPubHelp(t.dataset.tab)));
+el("pubhelp-close").addEventListener("click", closePubHelp);
+pubhelp.addEventListener("click", (e) => { if (e.target === pubhelp) closePubHelp(); });
+// Esc closes the help first (capture phase, so the drawer's Esc handler doesn't also fire).
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !pubhelp.hidden) { closePubHelp(); e.stopPropagation(); }
+}, true);
+
+async function renderPublish(body) {
+  const st = await window.desktop.getVercelStatus();
+  railPublish.classList.toggle("activated", !!st.connected);
+
+  // Fill the drawer height so the help button can pin to the bottom, with the gap
+  // beneath it matching the drawer's top padding.
+  const col = document.createElement("div");
+  col.style.cssText = "min-height:100%;display:flex;flex-direction:column;";
+  body.appendChild(col);
+  body = col;
+
+  // Appended last (before any early return) so it sits at the very bottom, as a
+  // footer separated from the content above (e.g. the Disconnect button) by a rule.
+  const addHelp = () => {
+    const foot = document.createElement("div");
+    foot.style.cssText = "margin-top:auto;"; // pin the footer to the bottom of the drawer
+    const sep = document.createElement("div");
+    sep.style.cssText = "height:1px;background:#ececf1;margin:18px 0 14px;";
+    const helpBtn = document.createElement("button");
+    helpBtn.className = "pubhelp-open";
+    helpBtn.style.margin = "0"; // spacing comes from the separator above
+    // Life-buoy icon — the same "help" mark used in the rail.
+    helpBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/><circle cx="12" cy="12" r="4"/></svg><span>Help with publishing</span>';
+    helpBtn.addEventListener("click", () => openPubHelp(st.connected ? "how" : "start"));
+    foot.append(sep, helpBtn);
+    col.appendChild(foot);
+  };
+
+  // ── Connection ──
+  const badgeText = st.connected ? (st.user ? `Connected · ${st.user}` : "Connected") : "Not connected";
+  body.appendChild(connStatusRow("Vercel", st.connected, badgeText, "Disconnect Vercel",
+    async () => { await window.desktop.clearVercel(); refreshRailActivation(); openModal("publish"); }));
+
+  if (!st.connected) {
+    const intro = document.createElement("p");
+    intro.className = "muted";
+    intro.style.margin = "0 0 12px";
+    intro.textContent = "Publish your design straight to a private, password-gated URL you can send a client. Paste a Vercel access token to connect.";
+    body.appendChild(intro);
+
+    const input = document.createElement("input");
+    input.className = "field";
+    input.type = "password";
+    input.placeholder = "Paste your Vercel token";
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "panelbtn primary";
+    saveBtn.textContent = "Connect Vercel";
+    const msg = document.createElement("div");
+    msg.className = "muted";
+    const doSave = async () => {
+      const token = input.value.trim();
+      if (!token) return;
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Connecting…";
+      msg.textContent = "";
+      const res = await window.desktop.saveVercelToken(token);
+      if (res.ok) { refreshRailActivation(); openModal("publish"); }
+      else {
+        msg.textContent = res.error || "Could not connect.";
+        msg.style.color = "#e5484d";
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Connect Vercel";
+      }
+    };
+    saveBtn.addEventListener("click", doSave);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") doSave(); });
+    body.append(input, saveBtn, msg);
+
+    const tokenLink = document.createElement("button");
+    tokenLink.className = "panelbtn";
+    tokenLink.textContent = "Create a token on Vercel ↗";
+    tokenLink.addEventListener("click", () => window.desktop.openExternal("https://vercel.com/account/tokens"));
+    body.appendChild(tokenLink);
+
+    const note = document.createElement("div");
+    note.className = "muted";
+    note.textContent = "Stored encrypted in your OS keychain. Only used to deploy your design.";
+    body.appendChild(note);
+    addHelp();
+    return;
+  }
+
+  // Divider: connection status sits above; the deploy controls (scope + this
+  // project) are grouped together below it.
+  const sep = document.createElement("div");
+  sep.style.cssText = "height:1px;background:#ececf1;margin:14px 0;";
+  body.appendChild(sep);
+
+  // Deploy-to scope (grouped with This project, below the divider).
+  const { teams } = await window.desktop.getVercelTeams();
+  if (teams && teams.length) {
+    const scopeRow = document.createElement("div");
+    scopeRow.className = "setrow";
+    const sk = document.createElement("div");
+    sk.className = "k";
+    sk.textContent = "Deploy to";
+    const sel = document.createElement("select");
+    sel.className = "field";
+    const personal = document.createElement("option");
+    personal.value = "";
+    personal.textContent = "Personal account";
+    sel.appendChild(personal);
+    teams.forEach((t) => {
+      const o = document.createElement("option");
+      o.value = t.id;
+      o.textContent = t.name;
+      sel.appendChild(o);
+    });
+    sel.value = st.teamId || "";
+    sel.addEventListener("change", () => {
+      const name = sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : null;
+      window.desktop.selectVercelScope(sel.value || null, sel.value ? name : null);
+    });
+    scopeRow.append(sk, sel);
+    body.appendChild(scopeRow);
+  }
+
+  // ── This project ──
+  const pub = await window.desktop.getPublishStatus();
+  if (!pub.hasProject) {
+    const note = document.createElement("div");
+    note.className = "muted";
+    note.textContent = "Open a project to publish it.";
+    body.appendChild(note);
+  } else {
+    // Existing live URL (if already published).
+    if (pub.url) {
+      const liveRow = document.createElement("div");
+      liveRow.style.cssText = "display:flex;gap:8px;align-items:center;min-height:38px;margin-bottom:4px;";
+      const live = document.createElement("a");
+      live.href = pub.url;
+      live.textContent = pub.url.replace(/^https?:\/\//, "");
+      live.style.cssText = "flex:1;color:#1a1a1a;text-decoration:underline;font-size:13px;word-break:break-all;";
+      live.addEventListener("click", (e) => { e.preventDefault(); window.desktop.openExternal(pub.url); });
+      liveRow.append(live, copyBtn(() => pub.url));
+      body.appendChild(liveRow);
+
+      if (pub.gatePassword) {
+        const pwRow = document.createElement("div");
+        pwRow.style.cssText = "display:flex;gap:8px;align-items:center;min-height:38px;margin-bottom:4px;";
+        const lab = document.createElement("span");
+        lab.className = "muted"; lab.style.cssText = "font-size:12px;flex:0 0 auto;";
+        lab.textContent = "Password:";
+        const pw = document.createElement("code");
+        pw.textContent = pub.gatePassword;
+        pw.style.cssText = "flex:1;font-size:13px;letter-spacing:.5px;word-break:break-all;";
+        pwRow.append(lab, pw, copyBtn(() => pub.gatePassword));
+        body.appendChild(pwRow);
+      }
+    } else {
+      const lead = document.createElement("p");
+      lead.className = "muted";
+      lead.style.margin = "0 0 12px";
+      lead.textContent = pub.canPublish
+        ? "Publish this design to a private URL. The first publish sets a preview password you share with your client."
+        : "Finish a design first — then you can publish it here.";
+      body.appendChild(lead);
+    }
+
+    // ── Preview domain: default *.vercel.app, or a subdomain of a domain you own ──
+    const domSec = document.createElement("div");
+    domSec.style.cssText = "margin: 2px 0 4px;";
+    const domLabel = document.createElement("div");
+    domLabel.className = "k";
+    domLabel.textContent = "Preview domain";
+    domSec.appendChild(domLabel);
+
+    const { domains } = await window.desktop.getVercelDomains();
+    const baseSlug = pub.projectName || "preview";
+    let curBase = "", curLabel = "";
+    if (pub.customDomain && domains && domains.length) {
+      const match = domains.find((d) => pub.customDomain === d.name || pub.customDomain.endsWith("." + d.name));
+      if (match) { curBase = match.name; curLabel = pub.customDomain === match.name ? "" : pub.customDomain.slice(0, -(match.name.length + 1)); }
+    }
+
+    const domSel = document.createElement("select");
+    domSel.className = "field";
+    const optDefault = document.createElement("option");
+    optDefault.value = ""; optDefault.textContent = "Vercel subdomain (default)";
+    domSel.appendChild(optDefault);
+    (domains || []).forEach((d) => {
+      const o = document.createElement("option"); o.value = d.name; o.textContent = d.name; domSel.appendChild(o);
+    });
+    domSel.value = curBase;
+
+    const subWrap = document.createElement("div");
+    subWrap.style.cssText = "display:flex;align-items:center;gap:6px;margin-top:6px;";
+    const subInput = document.createElement("input");
+    subInput.className = "field"; subInput.placeholder = "subdomain"; subInput.style.cssText = "flex:0 1 140px;";
+    subInput.value = curLabel || (curBase ? baseSlug : "");
+    const domPreview = document.createElement("span");
+    domPreview.className = "muted"; domPreview.style.cssText = "font-size:12px;word-break:break-all;";
+    subWrap.append(subInput, domPreview);
+
+    const slugifyLabel = (s) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+    const updateDomPreview = () => {
+      const base = domSel.value;
+      subWrap.style.display = base ? "flex" : "none";
+      if (!base) return;
+      const label = slugifyLabel(subInput.value.trim());
+      domPreview.textContent = label ? `→ ${label}.${base}` : `→ name.${base}`;
+    };
+    const saveDom = () => {
+      const base = domSel.value;
+      if (!base) { window.desktop.setPublishDomain(null); return; }
+      const label = slugifyLabel(subInput.value.trim());
+      if (label) window.desktop.setPublishDomain(`${label}.${base}`);
+    };
+    domSel.addEventListener("change", () => { if (domSel.value && !subInput.value.trim()) subInput.value = baseSlug; updateDomPreview(); saveDom(); });
+    subInput.addEventListener("input", updateDomPreview);
+    subInput.addEventListener("change", saveDom);
+    subInput.addEventListener("blur", saveDom);
+
+    domSec.append(domSel, subWrap);
+    body.appendChild(domSec);
+    updateDomPreview();
+
+    const domNote = document.createElement("div");
+    domNote.className = "muted";
+    domNote.style.cssText = "font-size:11.5px;margin:2px 0 12px;";
+    domNote.textContent = (domains && domains.length)
+      ? "A subdomain of a domain you own on Vercel. Applied on the next publish."
+      : "No domains on your Vercel account yet. Add one in Vercel and it'll appear here.";
+    body.appendChild(domNote);
+
+    const host = document.createElement("div"); // progress + result target
+    host.hidden = true;
+
+    const publishBtn = document.createElement("button");
+    publishBtn.className = "panelbtn primary";
+    publishBtn.textContent = pub.url ? "Publish changes" : "Publish this design";
+    publishBtn.disabled = !pub.canPublish;
+    publishBtn.addEventListener("click", () => runPublishFlow(publishBtn, host, { resetPassword: false }));
+    body.appendChild(publishBtn);
+
+    if (pub.url) {
+      const resetBtn = document.createElement("button");
+      resetBtn.className = "panelbtn";
+      resetBtn.textContent = "Reset preview password";
+      resetBtn.title = "Generate a new client password and republish";
+      resetBtn.addEventListener("click", () => runPublishFlow(resetBtn, host, { resetPassword: true }));
+      body.appendChild(resetBtn);
+    }
+
+    body.appendChild(host);
+
+    if (pub.lastDeployAt) {
+      const last = document.createElement("div");
+      last.className = "muted";
+      last.style.marginTop = "8px";
+      try { last.textContent = "Last published " + new Date(pub.lastDeployAt).toLocaleString(); } catch { last.textContent = ""; }
+      body.appendChild(last);
+    }
+  }
+
+  addHelp();
 }
 
 // --- Copy voice: per-project tone + rules, plus global rules ---
@@ -1164,16 +1695,7 @@ function relTime(iso) {
 
 async function renderClaude(body) {
   const status = await window.desktop.getKeyStatus();
-  const row = document.createElement("div");
-  row.className = "setrow";
-  const k = document.createElement("div");
-  k.className = "k";
-  k.textContent = "Claude API key";
-  const badge = document.createElement("span");
-  badge.className = "badge " + (status.hasKey ? "ok" : "off");
-  badge.textContent = status.hasKey ? "Connected" : "Not connected";
-  row.append(k, badge);
-  body.appendChild(row);
+  body.appendChild(connStatusRow("Claude API key", status.hasKey, status.hasKey ? "Connected" : "Not connected", "Disconnect", disconnectKey));
 
   if (!status.hasKey) {
     const note = document.createElement("div");
@@ -1228,13 +1750,7 @@ async function renderClaude(body) {
     addMsg("system", select.value ? `✓ Model set to ${label}` : "✓ Model set to default");
   });
 
-  // Account actions for the API key — directly beneath the model selector.
-  const disc = document.createElement("button");
-  disc.className = "panelbtn danger";
-  disc.textContent = "Disconnect / change key";
-  disc.addEventListener("click", disconnectKey);
-  body.appendChild(disc);
-
+  // Disconnect lives in the status header (top-right unplug), matching Vercel/Figma.
   const keyNote = document.createElement("div");
   keyNote.className = "muted";
   keyNote.textContent = "Key stored encrypted in your OS keychain.";
@@ -1327,6 +1843,18 @@ async function renderClaude(body) {
   sdesc.className = "sess-desc";
   sdesc.textContent = "Saved chats for this project. They appear here when you start a new session or leave the project.";
   body.appendChild(sdesc);
+
+  // Auto-restore the most recent session when a project opens (global preference).
+  const autoRow = document.createElement("label");
+  autoRow.className = "toggle-row";
+  const autoCb = document.createElement("input");
+  autoCb.type = "checkbox";
+  autoCb.checked = localStorage.getItem(AUTO_RESTORE_KEY) === "1";
+  const autoTxt = document.createElement("span");
+  autoTxt.textContent = "Auto-restore last session when a project opens";
+  autoRow.append(autoCb, autoTxt);
+  autoCb.addEventListener("change", () => localStorage.setItem(AUTO_RESTORE_KEY, autoCb.checked ? "1" : "0"));
+  body.appendChild(autoRow);
 
   // Actions row: "+ New" (left) and a "delete all" trash button (right edge).
   const sessions = await window.desktop.listSessions();
@@ -1585,6 +2113,19 @@ async function openSession(id) {
   }
   addMsg("system", "Resumed this session. Pick up where you left off.");
   log.scrollTop = log.scrollHeight;
+}
+
+// "Auto-restore last session on project start" — a global preference (localStorage,
+// like the sidebar-collapsed pref). When on, opening a project reopens its most
+// recent saved session instead of starting empty. Returns true if it restored one.
+const AUTO_RESTORE_KEY = "ta-auto-restore-session";
+async function maybeAutoRestoreSession() {
+  if (localStorage.getItem(AUTO_RESTORE_KEY) !== "1") return false;
+  try {
+    const sessions = await window.desktop.listSessions(); // newest first
+    if (sessions && sessions.length) { await openSession(sessions[0].id); return true; }
+  } catch { /* fall through to a fresh start */ }
+  return false;
 }
 
 // Generic centered confirm dialog. Reused for the gauge's "new session", and for

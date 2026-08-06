@@ -39,6 +39,7 @@ app.setPath("userData", path.join(app.getPath("appData"), USER_DATA_ID));
 
 const { TEMPLATE_EXCLUDE } = require("./template-exclude.cjs");
 const { startCaptureBridge, stopCaptureBridge } = require("./capture-bridge.cjs");
+const vercel = require("./publish.cjs");
 
 const appRoot = path.resolve(__dirname, ".."); // the Electron app / template source (git worktree in dev; Resources/app when packaged)
 
@@ -186,6 +187,106 @@ async function validateLicense(key) {
   } catch (e) {
     return { ok: false, error: `Couldn't reach the license service: ${e.message}` };
   }
+}
+
+// ---- Vercel token + scope (in-app Publish) ----------------------------------
+// Same encrypted-secret shape as the API key / license: entered in-app, persisted
+// via the OS keychain under userData. Unlike those, it's used ONLY by the main
+// process's publish handlers (never a subprocess), so it stays in a module var and
+// out of process.env. The chosen team scope is public identity, not a secret →
+// plain JSON alongside it.
+let vercelToken = null;
+function vercelTokenFilePath() {
+  return path.join(app.getPath("userData"), "vercel-token.enc");
+}
+function loadStoredVercelToken() {
+  try {
+    const p = vercelTokenFilePath();
+    if (!fs.existsSync(p)) return null;
+    const buf = fs.readFileSync(p);
+    if (safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(buf);
+    return buf.toString("utf8");
+  } catch {
+    return null;
+  }
+}
+function storeVercelToken(token) {
+  const data = safeStorage.isEncryptionAvailable()
+    ? safeStorage.encryptString(token)
+    : Buffer.from(token, "utf8");
+  fs.writeFileSync(vercelTokenFilePath(), data);
+}
+function removeStoredVercelToken() {
+  try { fs.unlinkSync(vercelTokenFilePath()); } catch { /* already gone */ }
+}
+function vercelScopeFile() {
+  return path.join(app.getPath("userData"), "vercel-scope.json");
+}
+function loadVercelScope() {
+  try { return JSON.parse(fs.readFileSync(vercelScopeFile(), "utf8")) || {}; }
+  catch { return {}; }
+}
+function saveVercelScope(scope) {
+  fs.writeFileSync(vercelScopeFile(), JSON.stringify(scope || {}, null, 2));
+}
+function clearVercelScope() {
+  try { fs.unlinkSync(vercelScopeFile()); } catch { /* already gone */ }
+}
+
+// ---- Per-project publish record ---------------------------------------------
+// Non-secret linkage (project name, live URL, last deploy), stored in the project
+// alongside sessions/voice/research. Per the spec: the gate password is NOT kept
+// here — only a set/not-set flag — so publish.json never carries a credential.
+function publishFile(dir) { return path.join(dir, ".thinkany", "publish.json"); }
+function loadPublish(dir) {
+  if (!dir) return {};
+  try { return JSON.parse(fs.readFileSync(publishFile(dir), "utf8")) || {}; }
+  catch { return {}; }
+}
+function savePublish(dir, obj) {
+  if (!dir) return;
+  fs.mkdirSync(path.join(dir, ".thinkany"), { recursive: true });
+  fs.writeFileSync(publishFile(dir), JSON.stringify(obj || {}, null, 2));
+}
+
+// Read the project's committed .env (public VITE_* brand config) into a map, so we
+// can map VITE_CLIENT_NAME/VITE_PROJECT_NAME → the gate's CLIENT_NAME/PROJECT_TITLE.
+function readProjectEnv(dir) {
+  const out = {};
+  try {
+    for (const line of fs.readFileSync(path.join(dir, ".env"), "utf8").split("\n")) {
+      const t = line.trim();
+      if (!t || t.startsWith("#")) continue;
+      const eq = t.indexOf("=");
+      if (eq === -1) continue;
+      const k = t.slice(0, eq).trim();
+      let v = t.slice(eq + 1).trim();
+      if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+      out[k] = v;
+    }
+  } catch { /* no .env */ }
+  return out;
+}
+// A DNS-safe Vercel project name from the client/project/folder name.
+// Accents are FOLDED to their plain letters first (ō→o, é→e, ñ→n) via NFKD +
+// stripping combining marks, so "mōr" becomes "mor" and not "m-r".
+function deriveProjectName(dir) {
+  const env = readProjectEnv(dir);
+  const raw = env.VITE_CLIENT_NAME || env.VITE_PROJECT_NAME || path.basename(dir) || "preview";
+  const slug = String(raw)
+    .normalize("NFKD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 52);
+  return slug || "preview";
+}
+function gateEnvFor(dir) {
+  const env = readProjectEnv(dir);
+  return {
+    CLIENT_NAME: env.VITE_CLIENT_NAME || path.basename(dir) || "Preview",
+    PROJECT_TITLE: env.VITE_PROJECT_NAME || "",
+  };
 }
 
 // ---- Project (workspace) storage --------------------------------------------
@@ -842,6 +943,132 @@ ipcMain.handle("license:clear", () => {
   return { ok: true };
 });
 
+// ---- Publish IPC (direct-to-Vercel) -----------------------------------------
+ipcMain.handle("vercel:status", () => {
+  const scope = loadVercelScope();
+  return { connected: !!vercelToken, user: scope.user || null, teamId: scope.teamId || null, teamName: scope.teamName || null };
+});
+ipcMain.handle("vercel:save", async (_event, { token }) => {
+  const t = (token || "").trim();
+  if (!t) return { ok: false, error: "Paste your Vercel token first." };
+  const v = await vercel.validateToken(t);
+  if (!v.ok) return v;
+  try {
+    storeVercelToken(t);
+  } catch (e) {
+    return { ok: false, error: `Could not save the token: ${e.message}` };
+  }
+  vercelToken = t;
+  const scope = loadVercelScope();
+  scope.user = v.user;
+  saveVercelScope(scope);
+  const teams = await vercel.listTeams(t);
+  return { ok: true, user: v.user, teams };
+});
+ipcMain.handle("vercel:teams", async () => {
+  if (!vercelToken) return { teams: [] };
+  return { teams: await vercel.listTeams(vercelToken) };
+});
+// Domains already on the user's Vercel account/team (to host previews on a subdomain).
+ipcMain.handle("vercel:domains", async () => {
+  if (!vercelToken) return { domains: [] };
+  const scope = loadVercelScope();
+  return { domains: await vercel.listDomains(vercelToken, scope.teamId || null) };
+});
+// Save (or clear) the custom preview domain for the current project.
+ipcMain.handle("publish:setDomain", (_event, { domain }) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const rec = loadPublish(currentProject);
+  const d = (domain || "").trim().toLowerCase();
+  if (d) rec.customDomain = d; else delete rec.customDomain;
+  savePublish(currentProject, rec);
+  return { ok: true, customDomain: rec.customDomain || null };
+});
+ipcMain.handle("vercel:selectScope", (_event, { teamId, teamName }) => {
+  const scope = loadVercelScope();
+  if (teamId) { scope.teamId = teamId; scope.teamName = teamName || null; }
+  else { delete scope.teamId; delete scope.teamName; }
+  saveVercelScope(scope);
+  return { ok: true };
+});
+ipcMain.handle("vercel:clear", () => {
+  removeStoredVercelToken();
+  clearVercelScope();
+  vercelToken = null;
+  return { ok: true };
+});
+
+// Per-project publish state the panel reads to decide what to show.
+ipcMain.handle("publish:status", () => {
+  const connected = !!vercelToken;
+  const scope = loadVercelScope();
+  if (!currentProject) return { connected, scope, hasProject: false };
+  const design = detectDesign(currentProject);
+  const rec = loadPublish(currentProject);
+  return {
+    connected,
+    scope,
+    hasProject: true,
+    canPublish: !!(design.active && design.previewReady),
+    url: rec.url || null,
+    projectName: rec.projectName || deriveProjectName(currentProject),
+    lastDeployAt: rec.lastDeployAt || null,
+    gatePasswordSet: !!rec.gatePasswordSet,
+    gatePassword: rec.gatePassword || null,
+    customDomain: rec.customDomain || null,
+  };
+});
+
+// The one-time chain (and every republish). Streams publish:progress. A fresh
+// preview password is generated on the FIRST publish or when resetPassword is
+// asked for, and returned once so the panel can show it; only a set/not-set flag
+// is persisted (never the password itself).
+ipcMain.handle("publish:run", async (event, args) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!vercelToken) return { ok: false, error: "Connect Vercel first." };
+  const design = detectDesign(currentProject);
+  if (!design.active || !design.previewReady) {
+    return { ok: false, error: "There's nothing to publish yet — finish a design first." };
+  }
+  const resetPassword = !!(args && args.resetPassword);
+  const scope = loadVercelScope();
+  const rec = loadPublish(currentProject);
+  const projectName = rec.projectName || deriveProjectName(currentProject);
+  // Re-assert the gate password on EVERY publish so the live deployment always
+  // matches what we display. (Edge Middleware bakes env values in at build time, so
+  // a stale ADMIN_PASS otherwise drifts from the shown one.) Reuse the stored
+  // password; generate a fresh one on first publish, on reset, or for legacy
+  // records that predate storing it.
+  let password = rec.gatePassword || null;
+  if (resetPassword || !password) password = vercel.generatePassword();
+  const onProgress = (evt) => { if (!event.sender.isDestroyed()) event.sender.send("publish:progress", evt); };
+  try {
+    const res = await vercel.publishProject({
+      token: vercelToken,
+      teamId: scope.teamId || null,
+      projectDir: currentProject,
+      projectName,
+      env: gateEnvFor(currentProject),
+      password,
+      customDomain: rec.customDomain || null,
+      onProgress,
+    });
+    savePublish(currentProject, {
+      ...rec,
+      projectName: res.projectName,
+      projectId: res.projectId,
+      url: res.url,
+      lastDeployAt: new Date().toISOString(),
+      gatePasswordSet: true,
+      gatePassword: password,
+    });
+    return { ok: true, url: res.url, projectName: res.projectName, password, domainPending: res.domainPending, domainError: res.domainError };
+  } catch (e) {
+    onProgress({ step: "error", status: "error", detail: e.message });
+    return { ok: false, error: e.message };
+  }
+});
+
 // ---- Project IPC ------------------------------------------------------------
 function companyProfilePath(projectDir) {
   return path.join(projectDir, "company-profile.json");
@@ -1055,6 +1282,11 @@ ipcMain.handle("open:external", (_event, url) => {
   if (typeof url === "string" && /^https?:\/\//.test(url)) shell.openExternal(url);
 });
 
+// The preview inspector (point & comment) file URL, resolved here where __dirname
+// exists (the sandboxed renderer preload can't compute it). The shell fetches this
+// once and attaches it as each preview webview's preload.
+ipcMain.handle("preview:preloadPath", () => pathToFileURL(path.join(__dirname, "preview-inspect.cjs")).href);
+
 // Attach a file via the native picker (📎 button).
 ipcMain.handle("file:attach", async () => {
   if (!currentProject) return { ok: false, error: "No project is open." };
@@ -1126,6 +1358,7 @@ app.whenReady().then(async () => {
   if (stored) process.env.ANTHROPIC_API_KEY = stored;
   const storedLicense = loadStoredLicense(); // in-app license wins over .env.local
   if (storedLicense) process.env.DERIVE_LICENSE_KEY = storedLicense;
+  vercelToken = loadStoredVercelToken(); // in-app Publish (Vercel) token
   // Native capture bridge: a hidden BrowserWindow the app-owned export scripts
   // drive over loopback (see capture-bridge.cjs). Injecting these into the env
   // makes `ta-export reconstruct` capture with the app's own Chromium instead of

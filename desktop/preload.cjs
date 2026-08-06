@@ -43,6 +43,22 @@ contextBridge.exposeInMainWorld("desktop", {
   saveLicense: (key) => ipcRenderer.invoke("license:save", { key }),
   clearLicense: () => ipcRenderer.invoke("license:clear"),
 
+  // ---- Publish (direct-to-Vercel) ----
+  getVercelStatus: () => ipcRenderer.invoke("vercel:status"),
+  saveVercelToken: (token) => ipcRenderer.invoke("vercel:save", { token }),
+  getVercelTeams: () => ipcRenderer.invoke("vercel:teams"),
+  getVercelDomains: () => ipcRenderer.invoke("vercel:domains"),
+  setPublishDomain: (domain) => ipcRenderer.invoke("publish:setDomain", { domain }),
+  selectVercelScope: (teamId, teamName) => ipcRenderer.invoke("vercel:selectScope", { teamId, teamName }),
+  clearVercel: () => ipcRenderer.invoke("vercel:clear"),
+  getPublishStatus: () => ipcRenderer.invoke("publish:status"),
+  runPublish: (opts) => ipcRenderer.invoke("publish:run", opts || {}),
+  onPublishProgress: (cb) => {
+    const listener = (_e, evt) => cb(evt);
+    ipcRenderer.on("publish:progress", listener);
+    return () => ipcRenderer.removeListener("publish:progress", listener);
+  },
+
   // ---- Model ----
   getModels: () => ipcRenderer.invoke("models:list"),
   getModel: () => ipcRenderer.invoke("model:get"),
@@ -92,4 +108,9 @@ contextBridge.exposeInMainWorld("desktop", {
   // ---- Misc ----
   getAppVersion: () => ipcRenderer.invoke("app:version"),
   openExternal: (url) => ipcRenderer.invoke("open:external", url),
+
+  // Absolute file: URL of the preview inspector (point & comment), attached as the
+  // preview <webview>'s preload. Resolved in MAIN (a sandboxed preload has no
+  // __dirname), fetched once at boot by the shell.
+  getPreviewInspectPreload: () => ipcRenderer.invoke("preview:preloadPath"),
 });
