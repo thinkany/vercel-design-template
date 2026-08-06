@@ -1,4 +1,5 @@
 // ©2026 thinkany llc. All rights reserved.
+import { useLayoutEffect, useRef, useState } from "react";
 import { Menu, X, ChevronDown } from "lucide-react";
 import { designPages } from "@/app/pages";
 import { siteConfig } from "@/config/site";
@@ -27,10 +28,28 @@ function DropdownPanel({
 }: { id: string; name: string; menu: DropdownMenu; open: boolean; onNavigate: (p: string) => void }) {
   // Anchored under its nav item (parent is `relative`); flush to the header so the
   // hover doesn't break crossing a gap. Marked as a block only when open.
+  //
+  // Keep it inside the frame: a left-aligned panel on a right-side nav item would
+  // spill past the right edge, so when it would overflow we flip to right-alignment.
+  // Measured against the HEADER (which spans the frame), not `window`, so it's
+  // correct inside the device-frame preview and the Figma export alike.
+  const ref = useRef<HTMLDivElement>(null);
+  const [alignRight, setAlignRight] = useState(false);
+  useLayoutEffect(() => {
+    if (!open) return;
+    const panel = ref.current;
+    const item = panel?.offsetParent as HTMLElement | null; // the `relative` nav item
+    const header = panel?.closest("header");
+    if (!panel || !item || !header) return;
+    const itemLeft = item.getBoundingClientRect().left;
+    const headerRight = header.getBoundingClientRect().right;
+    setAlignRight(itemLeft + panel.offsetWidth > headerRight - 16);
+  }, [open]);
   return (
     <div
+      ref={ref}
       {...(open ? { "data-block": `menu-${id}`, "data-block-name": `Menu — ${name}` } : {})}
-      className={`absolute left-0 top-full z-40 min-w-[220px] flex-col border border-black/10 bg-ta-surface p-2 shadow-xl ${open ? "flex" : "hidden"}`}
+      className={`absolute ${alignRight ? "right-0" : "left-0"} top-full z-40 min-w-[220px] flex-col border border-black/10 bg-ta-surface p-2 shadow-xl ${open ? "flex" : "hidden"}`}
     >
       {menu.links.map((l) => (
         <button
