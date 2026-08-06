@@ -2,7 +2,7 @@
   "name": "@figma/my-make-file",
   "productName": "thinkany design",
   "private": true,
-  "version": "0.0.9",
+  "version": "0.0.10",
   "type": "module",
   "main": "desktop/main.cjs",
   "description": "a thinkany AI based design studio",
@@ -13,7 +13,7 @@
     "build": "vite build",
     "dev": "vite",
     "desktop": "electron desktop/main.cjs",
-    "predist": "npm version patch --no-git-tag-version && node desktop/build/make-template.cjs",
+    "predist": "node desktop/build/ensure-arch-deps.cjs && npm version patch --no-git-tag-version && node desktop/build/make-template.cjs",
     "dist": "electron-builder --mac"
   },
   "engines": {
@@ -114,16 +114,22 @@
       "package.json",
       "!desktop/.env.local",
       "!desktop/**/*.map",
-      "!**/@anthropic-ai/claude-agent-sdk-darwin-arm64/**"
+      "!**/@anthropic-ai/claude-agent-sdk-darwin-arm64/**",
+      "!**/@anthropic-ai/claude-agent-sdk-darwin-x64/**"
     ],
-    "extraResources": [
-      {
-        "from": "node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude",
-        "to": "claude-bin/claude"
-      }
-    ],
+    "npmRebuild": false,
+    "afterPack": "desktop/build/after-pack.cjs",
     "mac": {
-      "target": "dmg",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
       "category": "public.app-category.developer-tools",
       "icon": "desktop/build/icon.png",
       "identity": null
