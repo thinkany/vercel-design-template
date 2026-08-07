@@ -635,6 +635,93 @@
       /* Gentle back-and-forth (alternate + ease-in-out eases at each edge) — a
          calm, unhurried feel instead of a fast one-way sweep. */
       @keyframes ph-bounce { from { transform: translateX(0%); } to { transform: translateX(150%); } }
+
+      /* ---- Intake host (in-pane onboarding — T3/T4) ------------------------- */
+      #intakeph {
+        position: absolute; inset: 0; overflow-y: auto;
+        background: linear-gradient(180deg, #fbfbfd, #f4f4f7);
+      }
+      #intakeph[hidden] { display: none; }
+      .intake-inner { max-width: 560px; margin: 0 auto; padding: 48px 32px 64px; }
+      .intake-head { margin-bottom: 22px; }
+      #intake-title { font-size: 22px; margin: 0 0 8px; color: #1a1a1a; letter-spacing: -0.01em; }
+      #intake-lead { font-size: 14px; line-height: 1.6; color: #666; margin: 0; text-wrap: balance; }
+      #intake-stack { display: flex; flex-direction: column; gap: 14px; }
+
+      /* A card group = one intake() call's cards + its Continue button. */
+      .intake-group { display: flex; flex-direction: column; gap: 14px; }
+      .intake-group.answered { opacity: 0.6; }
+      .intake-group.answered .icard, .intake-group.answered .intake-continue { pointer-events: none; }
+
+      .icard {
+        border: 1px solid #e3e3e9; border-radius: 12px; padding: 16px 16px 15px;
+        background: #fff; box-shadow: 0 1px 2px rgba(20,20,30,.03);
+      }
+      .icard-label { font-size: 14px; font-weight: 600; color: #1a1a1a; margin-bottom: 2px; }
+      .icard-help { font-size: 12.5px; color: #888; margin-bottom: 11px; line-height: 1.5; }
+      .icard-label + .icard-body { margin-top: 11px; }
+      .icard.skipped { opacity: 0.55; }
+
+      /* open-text */
+      .icard-input, .icard-textarea {
+        width: 100%; border: 1px solid #d8d8de; border-radius: 8px;
+        padding: 9px 11px; font: inherit; font-size: 13.5px; color: #1a1a1a;
+        background: #fff; box-sizing: border-box; resize: none; line-height: 1.5;
+      }
+      .icard-input:focus, .icard-textarea:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 3px #f0e9ff; }
+      .icard-textarea { min-height: 96px; }
+      .icard-counter { font-size: 11.5px; color: #aaa; text-align: right; margin-top: 5px; }
+      .icard-counter.over { color: #d33; }
+
+      /* single / multi choice — bordered rows */
+      .iopt {
+        display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left;
+        border: 1px solid #e0e0e6; border-radius: 9px; padding: 10px 12px; margin-bottom: 8px;
+        background: #fff; cursor: pointer; transition: border-color .12s, background .12s;
+      }
+      .iopt:last-child { margin-bottom: 0; }
+      .iopt:hover { border-color: #111; }
+      .iopt.selected { border-color: #7c3aed; background: #f6f1ff; }
+      .iopt-check {
+        flex: 0 0 auto; width: 16px; height: 16px; margin-top: 1px; border-radius: 5px;
+        border: 1.5px solid #c8c8d0; display: flex; align-items: center; justify-content: center;
+        color: #fff; font-size: 11px; line-height: 1;
+      }
+      .iopt.radio .iopt-check { border-radius: 50%; }
+      .iopt.selected .iopt-check { background: #7c3aed; border-color: #7c3aed; }
+      .iopt-label { font-size: 13.5px; color: #1a1a1a; }
+
+      /* chips — compact multi-select */
+      .ichips { display: flex; flex-wrap: wrap; gap: 8px; }
+      .ichip {
+        border: 1px solid #d8d8de; border-radius: 999px; padding: 6px 13px;
+        font-size: 13px; color: #333; background: #fff; cursor: pointer;
+        transition: border-color .12s, background .12s, color .12s;
+      }
+      .ichip:hover { border-color: #111; color: #111; }
+      .ichip.selected { border-color: #7c3aed; background: #7c3aed; color: #fff; }
+
+      /* reference — url + why */
+      .iref-field { margin-bottom: 9px; }
+      .iref-field:last-child { margin-bottom: 0; }
+      .iref-cap { font-size: 12px; color: #888; margin-bottom: 5px; }
+
+      /* per-card skip + per-group continue */
+      .icard-skip {
+        margin-top: 10px; background: none; border: none; padding: 0; cursor: pointer;
+        font: inherit; font-size: 12px; color: #9a7fe0; text-decoration: none;
+      }
+      .icard-skip:hover { color: #7c3aed; text-decoration: underline; }
+      .icard-skip.undo { color: #999; }
+      .intake-continue {
+        align-self: flex-start; border: none; border-radius: 8px; padding: 9px 20px;
+        background: #7c3aed; color: #fff; font: inherit; font-size: 13.5px; font-weight: 600;
+        cursor: pointer; transition: opacity .12s;
+      }
+      .intake-continue:disabled { opacity: 0.4; cursor: default; }
+      .intake-done {
+        font-size: 12.5px; color: #16a34a; font-weight: 600; padding: 2px 0;
+      }
     </style>
   </head>
   <body>
@@ -750,6 +837,18 @@
             <h2 id="ph-title">The live preview appears here</h2>
             <p id="ph-text">Open or create a project to begin.</p>
             <div class="ph-progress" id="ph-progress" hidden><div class="ph-progress-bar"></div></div>
+          </div>
+        </div>
+        <!-- Intake host — the in-pane onboarding conversation (T3). The agent's
+             intake() cards render here as a centered card column; the chat rail
+             stays docked. Hidden until an intake begins. -->
+        <div id="intakeph" hidden>
+          <div class="intake-inner">
+            <div class="intake-head">
+              <h2 id="intake-title">Let's design something</h2>
+              <p id="intake-lead">Tell me a little about what you're making. The more you share, the closer the first draft lands.</p>
+            </div>
+            <div id="intake-stack"></div>
           </div>
         </div>
       </div>

@@ -20,6 +20,8 @@
 //   help              — optional sub-label / hint under the label.
 //   placeholder       — optional input placeholder (open-text / reference).
 //   options           — REQUIRED for single-choice / multi-choice / chips; the choice pool.
+//   long              — OPTIONAL (open-text): render a multi-line textarea instead of one line.
+//   maxLength         — OPTIONAL (open-text / reference): cap + show a "N / max" counter.
 //   skippable         — if true, the designer may skip; a skip records `null` (= agent decides).
 //   agentDecidesLabel — optional label for the skip affordance (e.g. "Let you pick").
 //
@@ -61,6 +63,8 @@ function isValidCardSpec(card) {
   if (card.field != null && typeof card.field !== "string") errors.push("`field` must be a string");
   if (card.help != null && typeof card.help !== "string") errors.push("`help` must be a string");
   if (card.placeholder != null && typeof card.placeholder !== "string") errors.push("`placeholder` must be a string");
+  if (card.long != null && typeof card.long !== "boolean") errors.push("`long` must be a boolean");
+  if (card.maxLength != null && (typeof card.maxLength !== "number" || card.maxLength <= 0)) errors.push("`maxLength` must be a positive number");
   if (card.skippable != null && typeof card.skippable !== "boolean") errors.push("`skippable` must be a boolean");
   if (card.agentDecidesLabel != null && typeof card.agentDecidesLabel !== "string") errors.push("`agentDecidesLabel` must be a string");
 

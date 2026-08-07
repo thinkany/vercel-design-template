@@ -103,6 +103,8 @@ const CARD_SHAPE = z.object({
   help: z.string().optional().describe("an optional hint shown under the label"),
   placeholder: z.string().optional().describe("input placeholder (open-text / reference)"),
   options: z.array(z.string()).optional().describe("the choice pool — REQUIRED for single-choice, multi-choice, and chips"),
+  long: z.boolean().optional().describe("open-text only: render a multi-line textarea (use for the 'what are we making' lead card)"),
+  maxLength: z.number().optional().describe("open-text / reference: cap length and show a live 'N / max' counter"),
   skippable: z.boolean().optional().describe("if true the designer can skip; a skip records null (= you decide)"),
   agentDecidesLabel: z.string().optional().describe("label for the skip affordance, e.g. 'Let you pick'"),
 });

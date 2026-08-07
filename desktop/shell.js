@@ -71,6 +71,10 @@ const phEmoji = previewph.querySelector(".ph-emoji");
 const phTitle = el("ph-title");
 const phText = el("ph-text");
 const phProgress = el("ph-progress");
+// Intake host (in-pane onboarding — T3/T4)
+const intakeph = el("intakeph");
+const intakeStack = el("intake-stack");
+let intakeActive = false; // while true, refreshPreview() leaves the pane to the intake host
 
 let sessionId = null;
 let assistantEl = null;
@@ -488,6 +492,9 @@ async function showBrowser() {
 }
 
 function refreshPreview() {
+  // The intake host owns the pane while an onboarding conversation is live — don't
+  // let a working/placeholder refresh stomp it.
+  if (intakeActive) return;
   // Open the live browser only when the design's styleguide is READY (palette
   // written — not just the variation folder created) AND the server is up.
   if (design.previewReady && viteUrl) return showBrowser();
@@ -536,6 +543,7 @@ function noProjectPlaceholder() {
   design = { active: false, variationId: null, previewReady: false };
   agentBusy = false;
   conversationStarted = false; // a new/blank project greets fresh again
+  resetIntake();
   closeAllTabs();
   showPlaceholder({
     emoji: "👋",
@@ -2134,6 +2142,7 @@ function resetChatUi() {
   assistantEl = null;
   thinkingEl = null;
   log.innerHTML = "";
+  resetIntake(); // never carry a live intake into a fresh/reopened session
   sessionTokens = 0;
   sessionPct = 0;
   nudgesFired.clear();
@@ -2526,6 +2535,263 @@ function renderQuestionCard(id, questions) {
   card.appendChild(submitBtn);
   log.appendChild(card);
   log.scrollTop = log.scrollHeight;
+}
+
+// ---- Intake host (in-pane onboarding — T3/T4) -------------------------------
+// The agent drives the onboarding conversation by calling the `intake` tool
+// (agent.mjs) with a batch of cards; main.cjs routes each batch here as an
+// `agent:intake` event. This host renders each batch as a card GROUP in the pane
+// (not the chat), collects the answers, and posts them back with `answerIntake`
+// so the agent's tool call resolves and it can send the next batch. Prior groups
+// stay in the stack as answered history. See tickets T3 (host) + T4 (renderers).
+
+// Show/clear the intake pane. Entering hides the browser + placeholder; the guard
+// in refreshPreview() keeps them from stomping the host while a flow is live.
+function enterIntakeMode() {
+  intakeActive = true;
+  browser.hidden = true;
+  previewph.hidden = true;
+  intakeph.hidden = false;
+}
+function resetIntake() {
+  intakeActive = false;
+  intakeph.hidden = true;
+  intakeStack.innerHTML = "";
+}
+
+window.desktop.onAgentIntake(({ id, cards }) => renderIntakeGroup(id, cards));
+
+// Render ONE intake() batch as a group: its cards + a single Continue button.
+function renderIntakeGroup(id, cards) {
+  enterIntakeMode();
+
+  const group = document.createElement("div");
+  group.className = "intake-group";
+
+  // Each renderer reports { getValue(), isReady() } up to the group so Continue
+  // can enable itself. getValue() → the answer (null = skipped/empty); isReady()
+  // → whether this card is complete enough to submit (skippable is always ready).
+  const controls = (cards || []).map((card) => {
+    const r = renderIntakeCard(card, refreshReady);
+    group.appendChild(r.el);
+    return { card, ...r };
+  });
+
+  const continueBtn = document.createElement("button");
+  continueBtn.className = "intake-continue";
+  continueBtn.textContent = "Continue";
+  function refreshReady() { continueBtn.disabled = !controls.every((c) => c.isReady()); }
+  refreshReady();
+
+  async function submit() {
+    if (group.classList.contains("answered")) return;
+    group.classList.add("answered");
+    const answers = {};
+    for (const c of controls) answers[c.card.id] = c.getValue();
+    continueBtn.replaceWith(doneNote());
+    await window.desktop.answerIntake(id, answers);
+  }
+  continueBtn.addEventListener("click", submit);
+  group.appendChild(continueBtn);
+
+  intakeStack.appendChild(group);
+  intakeph.scrollTop = intakeph.scrollHeight;
+}
+
+function doneNote() {
+  const d = document.createElement("div");
+  d.className = "intake-done";
+  d.textContent = "✓ Got it";
+  return d;
+}
+
+// Dispatch to the per-type renderer. Every renderer returns { el, getValue, isReady }
+// and calls onChange() whenever its value changes so the group can re-check Continue.
+function renderIntakeCard(card, onChange) {
+  const el = document.createElement("div");
+  el.className = "icard";
+
+  const label = document.createElement("div");
+  label.className = "icard-label";
+  label.textContent = card.label || "";
+  el.appendChild(label);
+  if (card.help) {
+    const help = document.createElement("div");
+    help.className = "icard-help";
+    help.textContent = card.help;
+    el.appendChild(help);
+  }
+  const body = document.createElement("div");
+  body.className = "icard-body";
+  el.appendChild(body);
+
+  let skipped = false;
+  const skippable = card.skippable === true;
+  const built =
+    card.type === "open-text" ? buildOpenText(card, body, onChange)
+    : card.type === "single-choice" ? buildChoice(card, body, false, onChange)
+    : card.type === "multi-choice" ? buildChoice(card, body, true, onChange)
+    : card.type === "chips" ? buildChips(card, body, onChange)
+    : card.type === "reference" ? buildReference(card, body, onChange)
+    : buildOpenText(card, body, onChange); // defensive fallback
+
+  // Skippable cards get a "let you decide" affordance that records null.
+  if (skippable) {
+    const skip = document.createElement("button");
+    skip.type = "button";
+    skip.className = "icard-skip";
+    const skipLabel = card.agentDecidesLabel || "Skip — you decide";
+    skip.textContent = skipLabel;
+    skip.addEventListener("click", () => {
+      skipped = !skipped;
+      el.classList.toggle("skipped", skipped);
+      built.setDisabled(skipped);
+      skip.textContent = skipped ? "Undo skip" : skipLabel;
+      skip.classList.toggle("undo", skipped);
+      onChange();
+    });
+    el.appendChild(skip);
+  }
+
+  return {
+    el,
+    getValue: () => (skipped ? null : built.getValue()),
+    // Skippable → always ready. Otherwise needs a non-empty value.
+    isReady: () => skipped || skippable || built.hasValue(),
+  };
+}
+
+// open-text → single line, or a textarea when `long`. Optional maxLength counter.
+function buildOpenText(card, body, onChange) {
+  const long = card.long === true;
+  const field = document.createElement(long ? "textarea" : "input");
+  field.className = long ? "icard-textarea" : "icard-input";
+  if (card.placeholder) field.placeholder = card.placeholder;
+  if (card.maxLength) field.maxLength = card.maxLength;
+  body.appendChild(field);
+
+  let counter = null;
+  if (card.maxLength) {
+    counter = document.createElement("div");
+    counter.className = "icard-counter";
+    body.appendChild(counter);
+    const paint = () => {
+      counter.textContent = `${field.value.length} / ${card.maxLength}`;
+      counter.classList.toggle("over", field.value.length >= card.maxLength);
+    };
+    paint();
+    field.addEventListener("input", paint);
+  }
+  field.addEventListener("input", onChange);
+
+  return {
+    getValue: () => field.value.trim() || null,
+    hasValue: () => field.value.trim().length > 0,
+    setDisabled: (d) => { field.disabled = d; },
+  };
+}
+
+// single-choice / multi-choice → bordered rows with a check/radio.
+function buildChoice(card, body, multi, onChange) {
+  const selected = new Set();
+  const rows = [];
+  (card.options || []).forEach((opt) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "iopt" + (multi ? "" : " radio");
+    const check = document.createElement("span");
+    check.className = "iopt-check";
+    const lbl = document.createElement("span");
+    lbl.className = "iopt-label";
+    lbl.textContent = opt;
+    row.append(check, lbl);
+    row.addEventListener("click", () => {
+      if (row.disabled) return;
+      if (multi) {
+        if (selected.has(opt)) selected.delete(opt);
+        else selected.add(opt);
+      } else {
+        selected.clear();
+        selected.add(opt);
+        rows.forEach((r) => r.classList.remove("selected"));
+      }
+      row.classList.toggle("selected", selected.has(opt));
+      if (multi) check.textContent = selected.has(opt) ? "✓" : "";
+      else rows.forEach((r, i) => { r.querySelector(".iopt-check").textContent = r.classList.contains("selected") ? "✓" : ""; });
+      onChange();
+    });
+    rows.push(row);
+    body.appendChild(row);
+  });
+  return {
+    getValue: () => {
+      if (!selected.size) return null;
+      return multi ? [...selected] : [...selected][0];
+    },
+    hasValue: () => selected.size > 0,
+    setDisabled: (d) => rows.forEach((r) => { r.disabled = d; }),
+  };
+}
+
+// chips → compact pill multi-select (returns string[]).
+function buildChips(card, body, onChange) {
+  const selected = new Set();
+  const chips = [];
+  const wrap = document.createElement("div");
+  wrap.className = "ichips";
+  (card.options || []).forEach((opt) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "ichip";
+    chip.textContent = opt;
+    chip.addEventListener("click", () => {
+      if (chip.disabled) return;
+      if (selected.has(opt)) selected.delete(opt);
+      else selected.add(opt);
+      chip.classList.toggle("selected", selected.has(opt));
+      onChange();
+    });
+    chips.push(chip);
+    wrap.appendChild(chip);
+  });
+  body.appendChild(wrap);
+  return {
+    getValue: () => (selected.size ? [...selected] : null),
+    hasValue: () => selected.size > 0,
+    setDisabled: (d) => chips.forEach((c) => { c.disabled = d; }),
+  };
+}
+
+// reference → a URL field + a "what do you like about it?" why field. Value is
+// { url, reason }; the WHY is the taste we capture (not a clone of the source).
+function buildReference(card, body, onChange) {
+  const mk = (cap, placeholder, isWhy) => {
+    const f = document.createElement("div");
+    f.className = "iref-field";
+    const c = document.createElement("div");
+    c.className = "iref-cap";
+    c.textContent = cap;
+    const input = document.createElement(isWhy ? "textarea" : "input");
+    input.className = isWhy ? "icard-textarea" : "icard-input";
+    if (isWhy) input.style.minHeight = "64px";
+    if (placeholder) input.placeholder = placeholder;
+    if (card.maxLength && isWhy) input.maxLength = card.maxLength;
+    input.addEventListener("input", onChange);
+    f.append(c, input);
+    body.appendChild(f);
+    return input;
+  };
+  const url = mk("Link", card.placeholder || "https://…", false);
+  const why = mk("What do you like about it?", "The feel, the layout, a detail…", true);
+  return {
+    getValue: () => {
+      const u = url.value.trim();
+      if (!u) return null;
+      return { url: u, reason: why.value.trim() || null };
+    },
+    hasValue: () => url.value.trim().length > 0,
+    setDisabled: (d) => { url.disabled = d; why.disabled = d; },
+  };
 }
 
 // ---- Welcome path picker (fresh-start chips) --------------------------------
