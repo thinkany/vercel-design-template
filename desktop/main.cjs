@@ -1032,8 +1032,9 @@ ipcMain.handle("agent:intakeAnswer", (event, { id, answers }) => {
       for (const c of p.cards) {
         if (!c.field || !answers || !(c.id in answers)) continue;
         let v = answers[c.id];
-        // Brief.references is a SourceRef[]; a reference card yields one {url,reason}.
-        if (c.type === "reference" && v) v = [v];
+        // Brief.references is a SourceRef[]. A reference card yields an array of
+        // {url,reason} (up to 3); tolerate a lone object from older callers.
+        if (c.type === "reference" && v && !Array.isArray(v)) v = [v];
         byField[c.field] = v;
       }
       intakeBrief = applyAnswers(intakeBrief, byField);

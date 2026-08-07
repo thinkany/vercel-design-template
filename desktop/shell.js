@@ -75,6 +75,14 @@ const phProgress = el("ph-progress");
 const intakeph = el("intakeph");
 const intakeStack = el("intake-stack");
 let intakeActive = false; // while true, refreshPreview() leaves the pane to the intake host
+let intakePhase = "idle"; // idle | gathering | review | designing
+// Post-answer "taking it in" lines, cycled so consecutive waits read differently.
+const TAKING_IN_MESSAGES = [
+  "Got it, give me a moment while I take that in…",
+  "Perfect, let me sit with that a second…",
+  "Great, thinking that through now…",
+];
+let takingInIdx = 0;
 
 let sessionId = null;
 let assistantEl = null;
@@ -351,13 +359,13 @@ const WORKING_MESSAGES = [
   "Your live preview will open on its own once it's ready…",
   "Thanks for hanging in there with us…",
 ];
-function startWorking() {
+function startWorking(messages = WORKING_MESSAGES) {
   if (workingTimer) return;
   let i = 0;
-  phText.textContent = WORKING_MESSAGES[0];
+  phText.textContent = messages[0];
   workingTimer = setInterval(() => {
-    i = (i + 1) % WORKING_MESSAGES.length;
-    phText.textContent = WORKING_MESSAGES[i];
+    i = (i + 1) % messages.length;
+    phText.textContent = messages[i];
   }, 4200);
 }
 function stopWorking() {
@@ -588,7 +596,7 @@ async function boot() {
   showStage("workspace");
   refreshPreview();
   // Optionally resume the last session; otherwise offer the two starting paths.
-  if (!(await maybeAutoRestoreSession())) renderWelcomeChips();
+  if (!(await maybeAutoRestoreSession())) renderStartChoices();
 }
 
 // Vite may become ready after the project is chosen — or re-ready after a
@@ -664,7 +672,7 @@ async function chooseProject(kind) {
       showStage("workspace");
       refreshPreview();
       // Optionally resume the last session; otherwise offer the two starting paths.
-      if (!(await maybeAutoRestoreSession())) renderWelcomeChips();
+      if (!(await maybeAutoRestoreSession())) renderStartChoices();
     } else {
       projecterror.textContent = res.error || "Could not open the project.";
     }
@@ -2321,6 +2329,9 @@ window.desktop.onAgentEvent((evt) => {
       finalizeAssistant();
       agentBusy = false;
       updateThinking(); // turn done → clear the dots
+      clearIntakePending();
+      // Turn ended mid-intake → the brief is complete: show the review actions.
+      if (intakeActive && intakeph.classList.contains("flow")) showBriefComplete();
       updateSessionGauge(evt.usage, evt.modelUsage); // refresh the context gauge + maybe nudge
       // Guarding a live edit → the agent is DONE; settle Vite, then reveal.
       if (guarding) { revealPreviewAfterEdit(); break; }
@@ -2341,6 +2352,7 @@ window.desktop.onAgentEvent((evt) => {
       finalizeAssistant();
       agentBusy = false;
       updateThinking(); // turn errored → clear the dots
+      clearIntakePending();
       addMsg("error", "✖ " + evt.message);
       // Even on error, settle-then-reveal so the designer isn't stuck behind the
       // guard overlay (the chat carries the error detail).
@@ -2545,6 +2557,24 @@ function renderQuestionCard(id, questions) {
 // so the agent's tool call resolves and it can send the next batch. Prior groups
 // stay in the stack as answered history. See tickets T3 (host) + T4 (renderers).
 
+// ---- Intake motion (soft, GSAP-like, via the Web Animations API) ------------
+// A single ease-out curve (≈ GSAP power3.out) + generous durations give the
+// "intentional and soft" feel. anim() cancels any prior animations on the element
+// first so re-entrances (start → design) don't composite oddly.
+const INTAKE_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
+function anim(elem, keyframes, opts = {}) {
+  if (!elem || typeof elem.animate !== "function") return null;
+  try { elem.getAnimations().forEach((a) => a.cancel()); } catch {}
+  return elem.animate(keyframes, { easing: INTAKE_EASE, fill: "both", ...opts });
+}
+// Fade + slide into place from an (dx,dy) offset.
+function fadeSlideIn(elem, { dx = 0, dy = 0, duration = 640, delay = 0 } = {}) {
+  return anim(elem, [
+    { opacity: 0, transform: `translate(${dx}px, ${dy}px)` },
+    { opacity: 1, transform: "translate(0px, 0px)" },
+  ], { duration, delay });
+}
+
 // Show/clear the intake pane. Entering hides the browser + placeholder; the guard
 // in refreshPreview() keeps them from stomping the host while a flow is live.
 function enterIntakeMode() {
@@ -2553,13 +2583,19 @@ function enterIntakeMode() {
   previewph.hidden = true;
   intakeph.hidden = false;
 }
+function setIntakeHead(title, lead) {
+  el("intake-title").textContent = title;
+  el("intake-lead").textContent = lead;
+}
 function resetIntake() {
   intakeActive = false;
+  startChoicesShown = false;
+  intakePhase = "idle";
+  exitReview(); // clear the review's head-hidden state
+  intakeph.classList.remove("start", "flow", "hasbrief");
   intakeph.hidden = true;
   intakeStack.innerHTML = "";
-  const brief = el("intake-brief");
-  brief.hidden = true;
-  brief.innerHTML = "";
+  el("intake-brief").innerHTML = "";
 }
 
 window.desktop.onAgentIntake(({ id, cards }) => renderIntakeGroup(id, cards));
@@ -2570,7 +2606,10 @@ window.desktop.onAgentBrief((brief) => renderBriefSummary(brief));
 
 function renderBriefSummary(brief) {
   const box = el("intake-brief");
-  if (!brief) { box.hidden = true; box.innerHTML = ""; return; }
+  // Toggling `hasbrief` on the host is what animates the rail open (left 40%) and
+  // makes room for the questions column; the CSS handles the transition.
+  const showRail = (has) => intakeph.classList.toggle("hasbrief", has);
+  if (!brief) { showRail(false); box.innerHTML = ""; return; }
   const rows = [];
   const add = (key, val) => { if (val) rows.push([key, val]); };
   add("Making", brief.what);
@@ -2580,7 +2619,7 @@ function renderBriefSummary(brief) {
   }
   if (Array.isArray(brief.audience) && brief.audience.length) add("For", brief.audience.join(", "));
   add("Tone", brief.tone);
-  if (!rows.length) { box.hidden = true; box.innerHTML = ""; return; }
+  if (!rows.length) { showRail(false); box.innerHTML = ""; return; }
 
   box.innerHTML = "";
   const title = document.createElement("div");
@@ -2599,12 +2638,15 @@ function renderBriefSummary(brief) {
     row.append(k, v);
     box.appendChild(row);
   }
-  box.hidden = false;
+  showRail(true);
 }
 
 // Render ONE intake() batch as a group: its cards + a single Continue button.
 function renderIntakeGroup(id, cards) {
   enterIntakeMode();
+  clearIntakePending(); // the next questions are here → fade the "hang tight" line
+  exitReview(); // a new question means we're back to gathering, not reviewing
+  intakePhase = "gathering";
 
   const group = document.createElement("div");
   group.className = "intake-group";
@@ -2628,15 +2670,25 @@ function renderIntakeGroup(id, cards) {
     if (group.classList.contains("answered")) return;
     group.classList.add("answered");
     const answers = {};
-    for (const c of controls) answers[c.card.id] = c.getValue();
+    for (const c of controls) { answers[c.card.id] = c.getValue(); c.collapse(); }
     continueBtn.replaceWith(doneNote());
+    // Conversational feedback while the agent takes it in — cycled so the line after
+    // the second answer differs from the first (works whether or not more follow).
+    showIntakePending(TAKING_IN_MESSAGES[takingInIdx % TAKING_IN_MESSAGES.length]);
+    takingInIdx++;
     await window.desktop.answerIntake(id, answers);
   }
   continueBtn.addEventListener("click", submit);
   group.appendChild(continueBtn);
 
   intakeStack.appendChild(group);
-  intakeph.scrollTop = intakeph.scrollHeight;
+  // Entrance: the question group rises in from underneath.
+  fadeSlideIn(group, { dy: 44, duration: 720, delay: 60 });
+  // In flow mode the scroll lives on the questions column, not the pane.
+  const scroller = intakeph.classList.contains("flow")
+    ? intakeph.querySelector(".intake-inner")
+    : intakeph;
+  if (scroller) scroller.scrollTop = scroller.scrollHeight;
 }
 
 function doneNote() {
@@ -2646,25 +2698,182 @@ function doneNote() {
   return d;
 }
 
-// Dispatch to the per-type renderer. Every renderer returns { el, getValue, isReady }
-// and calls onChange() whenever its value changes so the group can re-check Continue.
+// A soft, conversational "thinking" line under the answered card, shown while the
+// agent lines up the next batch (the designer is watching the pane, not the chat).
+// It fades away when the next questions arrive (renderIntakeGroup) or the turn ends.
+function showIntakePending(text) {
+  clearIntakePending();
+  const p = document.createElement("div");
+  p.className = "intake-pending";
+  p.id = "intake-pending";
+  const t = document.createElement("span");
+  t.className = "intake-pending-text";
+  t.textContent = text;
+  const dots = document.createElement("span");
+  dots.className = "intake-pending-dots";
+  dots.innerHTML = "<i></i><i></i><i></i>";
+  p.append(t, dots);
+  intakeStack.appendChild(p);
+  fadeSlideIn(p, { dy: 10, duration: 520 });
+  const scroller = intakeph.classList.contains("flow") ? intakeph.querySelector(".intake-inner") : intakeph;
+  if (scroller) scroller.scrollTop = scroller.scrollHeight;
+}
+function clearIntakePending() {
+  const p = document.getElementById("intake-pending");
+  if (!p) return;
+  p.id = ""; // release the id so a fresh pending can appear during this fade-out
+  const a = anim(p, [{ opacity: 1 }, { opacity: 0, transform: "translateY(-6px)" }], { duration: 360 });
+  if (a && a.finished) a.finished.then(() => p.remove(), () => p.remove());
+  else p.remove();
+}
+
+// ---- Brief-complete review state (#2) ---------------------------------------
+// When the agent finishes gathering (its turn ends mid-intake), the pane animates
+// the head + question groups OFF (keeping the brief rail) and offers two choices:
+// start designing, or add more context first.
+function showBriefComplete() {
+  if (intakePhase !== "gathering") return; // only from the gathering state
+  intakePhase = "review";
+  clearIntakePending();
+  const head = intakeph.querySelector(".intake-head");
+  const leaving = [head, ...Array.from(intakeStack.children)].filter(Boolean);
+  const anims = leaving
+    .map((elm) => anim(elm, [
+      { opacity: 1, transform: "translateY(0px)" },
+      { opacity: 0, transform: "translateY(-22px)" },
+    ], { duration: 460 }))
+    .filter(Boolean);
+  const after = () => {
+    if (intakePhase !== "review") return; // a new question arrived mid-animation
+    intakeStack.innerHTML = "";
+    if (head) head.classList.add("intake-hidden");
+    intakeph.classList.add("reviewing"); // center the actions level with the brief rail
+    renderReviewActions();
+  };
+  if (anims.length) Promise.allSettled(anims.map((a) => a.finished)).then(after);
+  else after();
+}
+
+// Restore the head (a new question arrived after review sent us back to gathering).
+function exitReview() {
+  intakeph.classList.remove("reviewing");
+  const head = intakeph.querySelector(".intake-head");
+  if (head) head.classList.remove("intake-hidden");
+}
+
+function renderReviewActions() {
+  const wrap = document.createElement("div");
+  wrap.className = "intake-review";
+
+  const q = document.createElement("div");
+  q.className = "intake-review-q";
+  q.textContent = "That's a solid start. Ready to design, or want to add more context first?";
+
+  const primary = document.createElement("button");
+  primary.className = "intake-continue";
+  primary.textContent = "Looks good, start designing";
+  primary.addEventListener("click", startDesigning);
+
+  const secondary = document.createElement("button");
+  secondary.className = "ireview-secondary";
+  secondary.textContent = "Wait, let me add more context";
+
+  // Hidden "more context" input, revealed by the secondary button.
+  const more = document.createElement("div");
+  more.className = "ireview-more";
+  more.hidden = true;
+  const ta = document.createElement("textarea");
+  ta.className = "icard-textarea";
+  ta.placeholder = "Anything else that matters: company or site name, the client, the audience, must-haves…";
+  const send = document.createElement("button");
+  send.className = "intake-continue";
+  send.textContent = "Add this and continue";
+  send.addEventListener("click", () => {
+    const text = ta.value.trim();
+    if (!text) { ta.focus(); return; }
+    intakePhase = "gathering"; // the turn's result brings us back to review
+    anim(wrap, [{ opacity: 1 }, { opacity: 0, transform: "translateY(-12px)" }], { duration: 320 });
+    if (wrap.remove) setTimeout(() => wrap.remove(), 320);
+    showIntakePending("Thanks, folding that into your brief…");
+    runAgent("A bit more context for the brief before we design: " + text);
+  });
+  more.append(ta, send);
+
+  secondary.addEventListener("click", () => {
+    secondary.hidden = true;
+    more.hidden = false;
+    fadeSlideIn(more, { dy: 10, duration: 420 });
+    ta.focus();
+  });
+
+  wrap.append(q, primary, secondary, more);
+  intakeStack.appendChild(wrap);
+  fadeSlideIn(wrap, { dy: 20, duration: 620, delay: 80 });
+}
+
+// ---- Start designing (#3) ---------------------------------------------------
+// Animate the whole pane clean (brief rail included), then hand off to the build
+// with a persistent "preparing" status + rotating messages until the design shows.
+function startDesigning() {
+  intakePhase = "designing";
+  clearIntakePending();
+  const leaving = [intakeph.querySelector(".intake-head"), el("intake-brief"), ...Array.from(intakeStack.children)].filter(Boolean);
+  const anims = leaving
+    .map((elm) => anim(elm, [
+      { opacity: 1, transform: "translateY(0px)" },
+      { opacity: 0, transform: "translateY(-18px)" },
+    ], { duration: 440 }))
+    .filter(Boolean);
+  const go = () => {
+    // Kick the agent FIRST (while intakeActive still guards refreshPreview from
+    // showing its own "working" placeholder), THEN swap the pane to preparing.
+    runAgent("The brief looks good. Please start designing the site now, applying the brief we gathered.");
+    showPreparing();
+  };
+  if (anims.length) Promise.allSettled(anims.map((a) => a.finished)).then(go);
+  else go();
+}
+
+const PREPARING_MESSAGES = [
+  "Please use the chat pane to make changes once your design is revealed.",
+  "Laying out your sections…",
+  "Bringing your colors and type together…",
+  "Assembling your first draft…",
+  "Your live preview opens here on its own once it's ready…",
+];
+function showPreparing() {
+  resetIntake(); // leave the intake host; the preview placeholder takes the pane
+  browser.hidden = true;
+  previewph.hidden = false;
+  phEmoji.textContent = "✨";
+  phTitle.textContent = "Getting your site design elements prepared";
+  phProgress.hidden = false;
+  stopWorking(); // clear any stale rotation so ours (build-flavored) takes over
+  startWorking(PREPARING_MESSAGES);
+}
+
+// Dispatch to the per-type renderer. Every builder returns
+// { getValue, hasValue, setDisabled, display }; renderIntakeCard wraps it in the
+// card shell, adds the optional skip affordance, and exposes collapse() — which,
+// on submit, swaps the live inputs for a clean read-only value so no disabled
+// field lingers (feedback #2).
 function renderIntakeCard(card, onChange) {
-  const el = document.createElement("div");
-  el.className = "icard";
+  const elc = document.createElement("div");
+  elc.className = "icard";
 
   const label = document.createElement("div");
   label.className = "icard-label";
   label.textContent = card.label || "";
-  el.appendChild(label);
+  elc.appendChild(label);
   if (card.help) {
     const help = document.createElement("div");
     help.className = "icard-help";
     help.textContent = card.help;
-    el.appendChild(help);
+    elc.appendChild(help);
   }
   const body = document.createElement("div");
   body.className = "icard-body";
-  el.appendChild(body);
+  elc.appendChild(body);
 
   let skipped = false;
   const skippable = card.skippable === true;
@@ -2677,28 +2886,39 @@ function renderIntakeCard(card, onChange) {
     : buildOpenText(card, body, onChange); // defensive fallback
 
   // Skippable cards get a "let you decide" affordance that records null.
+  let skipBtn = null;
   if (skippable) {
-    const skip = document.createElement("button");
-    skip.type = "button";
-    skip.className = "icard-skip";
-    const skipLabel = card.agentDecidesLabel || "Skip — you decide";
-    skip.textContent = skipLabel;
-    skip.addEventListener("click", () => {
+    skipBtn = document.createElement("button");
+    skipBtn.type = "button";
+    skipBtn.className = "icard-skip";
+    const skipLabel = card.agentDecidesLabel || "Skip, you decide";
+    skipBtn.textContent = skipLabel;
+    skipBtn.addEventListener("click", () => {
       skipped = !skipped;
-      el.classList.toggle("skipped", skipped);
+      elc.classList.toggle("skipped", skipped);
       built.setDisabled(skipped);
-      skip.textContent = skipped ? "Undo skip" : skipLabel;
-      skip.classList.toggle("undo", skipped);
+      skipBtn.textContent = skipped ? "Undo skip" : skipLabel;
+      skipBtn.classList.toggle("undo", skipped);
       onChange();
     });
-    el.appendChild(skip);
+    elc.appendChild(skipBtn);
   }
 
   return {
-    el,
+    el: elc,
     getValue: () => (skipped ? null : built.getValue()),
     // Skippable → always ready. Otherwise needs a non-empty value.
     isReady: () => skipped || skippable || built.hasValue(),
+    // Post-submit: replace the inputs with a plain read-only value + drop the skip.
+    collapse: () => {
+      const text = skipped ? "" : built.display();
+      body.innerHTML = "";
+      const ans = document.createElement("div");
+      ans.className = "icard-answer" + (text ? "" : " empty");
+      ans.textContent = text || "Skipped";
+      body.appendChild(ans);
+      if (skipBtn) skipBtn.remove();
+    },
   };
 }
 
@@ -2711,9 +2931,8 @@ function buildOpenText(card, body, onChange) {
   if (card.maxLength) field.maxLength = card.maxLength;
   body.appendChild(field);
 
-  let counter = null;
   if (card.maxLength) {
-    counter = document.createElement("div");
+    const counter = document.createElement("div");
     counter.className = "icard-counter";
     body.appendChild(counter);
     const paint = () => {
@@ -2729,6 +2948,7 @@ function buildOpenText(card, body, onChange) {
     getValue: () => field.value.trim() || null,
     hasValue: () => field.value.trim().length > 0,
     setDisabled: (d) => { field.disabled = d; },
+    display: () => field.value.trim(),
   };
 }
 
@@ -2758,7 +2978,7 @@ function buildChoice(card, body, multi, onChange) {
       }
       row.classList.toggle("selected", selected.has(opt));
       if (multi) check.textContent = selected.has(opt) ? "✓" : "";
-      else rows.forEach((r, i) => { r.querySelector(".iopt-check").textContent = r.classList.contains("selected") ? "✓" : ""; });
+      else rows.forEach((r) => { r.querySelector(".iopt-check").textContent = r.classList.contains("selected") ? "✓" : ""; });
       onChange();
     });
     rows.push(row);
@@ -2771,6 +2991,7 @@ function buildChoice(card, body, multi, onChange) {
     },
     hasValue: () => selected.size > 0,
     setDisabled: (d) => rows.forEach((r) => { r.disabled = d; }),
+    display: () => [...selected].join(", "),
   };
 }
 
@@ -2800,65 +3021,117 @@ function buildChips(card, body, onChange) {
     getValue: () => (selected.size ? [...selected] : null),
     hasValue: () => selected.size > 0,
     setDisabled: (d) => chips.forEach((c) => { c.disabled = d; }),
+    display: () => [...selected].join(", "),
   };
 }
 
-// reference → a URL field + a "what do you like about it?" why field. Value is
-// { url, reason }; the WHY is the taste we capture (not a clone of the source).
+// reference → up to 3 { url, why } pairs (feedback #4). The WHY is the taste we
+// capture (not a clone of the source). getValue() → a SourceRef[] { url, reason }.
 function buildReference(card, body, onChange) {
-  const mk = (cap, placeholder, isWhy) => {
-    const f = document.createElement("div");
-    f.className = "iref-field";
-    const c = document.createElement("div");
-    c.className = "iref-cap";
-    c.textContent = cap;
-    const input = document.createElement(isWhy ? "textarea" : "input");
-    input.className = isWhy ? "icard-textarea" : "icard-input";
-    if (isWhy) input.style.minHeight = "64px";
-    if (placeholder) input.placeholder = placeholder;
-    if (card.maxLength && isWhy) input.maxLength = card.maxLength;
-    input.addEventListener("input", onChange);
-    f.append(c, input);
-    body.appendChild(f);
-    return input;
-  };
-  const url = mk("Link", card.placeholder || "https://…", false);
-  const why = mk("What do you like about it?", "The feel, the layout, a detail…", true);
+  const MAX = 3;
+  const entries = []; // { row, url, why }
+
+  const list = document.createElement("div");
+  list.className = "iref-list";
+  body.appendChild(list);
+
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "iref-add";
+  addBtn.textContent = "+ Add another site";
+
+  function updateAddBtn() { addBtn.hidden = entries.length >= MAX; }
+
+  function addEntry() {
+    if (entries.length >= MAX) return;
+    const row = document.createElement("div");
+    row.className = "iref-entry";
+    const mk = (cap, placeholder, isWhy) => {
+      const f = document.createElement("div");
+      f.className = "iref-field";
+      const c = document.createElement("div");
+      c.className = "iref-cap";
+      c.textContent = cap;
+      const inp = document.createElement(isWhy ? "textarea" : "input");
+      inp.className = isWhy ? "icard-textarea" : "icard-input";
+      if (isWhy) inp.style.minHeight = "58px";
+      if (placeholder) inp.placeholder = placeholder;
+      if (card.maxLength && isWhy) inp.maxLength = card.maxLength;
+      inp.addEventListener("input", onChange);
+      f.append(c, inp);
+      row.appendChild(f);
+      return inp;
+    };
+    const url = mk("Link", card.placeholder || "https://…", false);
+    const why = mk("What do you like about it?", "The feel, the layout, a detail…", true);
+    // Entries past the first get a Remove control.
+    if (entries.length >= 1) {
+      const rm = document.createElement("button");
+      rm.type = "button";
+      rm.className = "iref-remove";
+      rm.textContent = "Remove";
+      rm.addEventListener("click", () => {
+        const i = entries.findIndex((e) => e.row === row);
+        if (i >= 0) entries.splice(i, 1);
+        row.remove();
+        updateAddBtn();
+        onChange();
+      });
+      row.appendChild(rm);
+    }
+    entries.push({ row, url, why });
+    list.appendChild(row);
+    updateAddBtn();
+  }
+
+  const collect = () =>
+    entries
+      .map((e) => ({ url: e.url.value.trim(), reason: e.why.value.trim() || null }))
+      .filter((e) => e.url);
+
+  addEntry(); // one to start
+  addBtn.addEventListener("click", () => { addEntry(); onChange(); });
+  body.appendChild(addBtn);
+
   return {
-    getValue: () => {
-      const u = url.value.trim();
-      if (!u) return null;
-      return { url: u, reason: why.value.trim() || null };
+    getValue: () => { const v = collect(); return v.length ? v : null; },
+    hasValue: () => collect().length > 0,
+    setDisabled: (d) => {
+      entries.forEach((e) => { e.url.disabled = d; e.why.disabled = d; });
+      addBtn.disabled = d;
+      list.querySelectorAll(".iref-remove").forEach((b) => { b.disabled = d; });
     },
-    hasValue: () => url.value.trim().length > 0,
-    setDisabled: (d) => { url.disabled = d; why.disabled = d; },
+    display: () => collect().map((e) => e.url + (e.reason ? ` (${e.reason})` : "")).join("; "),
   };
 }
 
-// ---- Welcome path picker (fresh-start chips) --------------------------------
-// On a truly fresh project the chat opens with two choices instead of guessing
-// from a typed "hello": "Client Setup" (deterministic /setup-project) and "Get
-// Designing" (the natural-language brief entry — the front door to the
-// design-from-brief feature). Clicking a chip is that path's "hello".
+// ---- Start path picker (fresh-start choices in the pane) --------------------
+// On a truly fresh project the BIG PANE shows two choices instead of guessing from
+// a typed "hello": "Client Setup" (deterministic /setup-project) and "Get Designing"
+// (the pane intake). Clicking a card is that path's "hello".
 const DEFAULT_PLACEHOLDER = input.placeholder;
-let welcomeCard = null;
+let startChoicesShown = false; // the pane is showing the start fork right now
 
+// If the start fork is up and the user does something else (types a message,
+// reopens a session), leave that screen so the normal view takes over.
 function dismissWelcome() {
-  if (welcomeCard) { welcomeCard.remove(); welcomeCard = null; }
+  if (startChoicesShown) { startChoicesShown = false; resetIntake(); }
 }
 
-function renderWelcomeChips() {
+function renderStartChoices() {
   // Only greet on a truly fresh start: a project is open, no design yet, and
   // nothing has been said. Self-guards so callers can fire it freely.
   if (conversationStarted || (design && design.active)) return;
-  if (welcomeCard || log.children.length) return;
 
-  const card = document.createElement("div");
-  card.className = "qcard welcome-card";
-  const title = document.createElement("div");
-  title.className = "welcome-title";
-  title.textContent = "How would you like to start?";
-  card.appendChild(title);
+  // The start fork lives in the BIG PANE now (feedback #1), as two side-by-side
+  // choice cards — not a chat card. The chat rail stays for the conversation.
+  enterIntakeMode();
+  intakePhase = "idle";
+  intakeph.classList.add("start"); // center the fork vertically + center the head text
+  intakeph.classList.remove("flow", "hasbrief");
+  setIntakeHead("Let's make something", "Pick how you'd like to begin.");
+  el("intake-brief").innerHTML = "";
+  intakeStack.innerHTML = "";
 
   // Icons are static, trusted SVG (Lucide): a numbered list for step-by-step
   // setup, a pencil-drawing-a-line for the free-form "just design it" path.
@@ -2872,37 +3145,43 @@ function renderWelcomeChips() {
       label: "Client Setup",
       desc: "Brand a new project step by step (logo, fonts, colors), then design.",
       icon: ICON_LIST_ORDERED,
-      onClick: () => sendText("/setup-project"),
+      // A chat-driven flow → leave the pane so the working/preview view takes over.
+      onClick: () => { resetIntake(); sendText("/setup-project"); },
     },
     {
       label: "Get Designing",
-      desc: "Jump straight in: describe the site (paste style, color, or font links) and I'll design it.",
+      desc: "Jump straight in: tell me about the site and I'll gather the brief.",
       icon: ICON_PENCIL_LINE,
       onClick: enterDesignBriefMode,
     },
   ];
+  const row = document.createElement("div");
+  row.className = "istart-row";
   for (const o of opts) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "qopt welcome-opt";
+    btn.className = "istart-card";
     const icon = document.createElement("span");
-    icon.className = "welcome-icon";
+    icon.className = "istart-icon";
     icon.innerHTML = o.icon;
-    const textWrap = document.createElement("div");
-    textWrap.className = "welcome-opt-text";
     const lbl = document.createElement("div");
-    lbl.className = "lbl";
+    lbl.className = "istart-label";
     lbl.textContent = o.label;
     const desc = document.createElement("div");
-    desc.className = "desc";
+    desc.className = "istart-desc";
     desc.textContent = o.desc;
-    textWrap.append(lbl, desc);
-    btn.append(icon, textWrap);
+    btn.append(icon, lbl, desc);
     btn.addEventListener("click", o.onClick);
-    card.appendChild(btn);
+    row.appendChild(btn);
   }
-  log.appendChild(card);
-  welcomeCard = card;
+  intakeStack.appendChild(row);
+  startChoicesShown = true;
+
+  // Entrance: the copy rises + fades, then the two cards slide in from the sides,
+  // staggered (left first, right just after).
+  fadeSlideIn(intakeph.querySelector(".intake-head"), { dy: 50, duration: 780, delay: 60 });
+  fadeSlideIn(row.children[0], { dx: -64, duration: 720, delay: 340 });
+  fadeSlideIn(row.children[1], { dx: 64, duration: 720, delay: 470 });
 }
 
 // "Get Designing" — drive the intake in the PANE (T5), not a chat brief. Clicking
@@ -2910,12 +3189,46 @@ function renderWelcomeChips() {
 // conversation through the `intake` tool. beginIntake() starts a fresh Brief on the
 // main side so each answered batch folds in and pushes back an updated summary.
 async function enterDesignBriefMode() {
-  dismissWelcome();
   addMsg(
     "system",
-    "Let's design something. I'll ask you a few quick things in the panel on the right, then put your brief together."
+    "Let's design something. I'll ask you a few quick things here in the panel, then put your brief together."
   );
+  // FLIP: glide the head UP from its centered start position to the flow position,
+  // keeping its width. Measure FIRST (start layout), switch layout, measure LAST,
+  // then animate the delta away.
+  const head = intakeph.querySelector(".intake-head");
+  const first = head.getBoundingClientRect();
+
+  // Swap the start-choice cards for the design intake head + a fresh stack.
+  startChoicesShown = false; // we're moving into the design intake, not leaving it
+  intakeph.classList.add("flow"); // two-column mode: questions right, brief rail left
+  intakeph.classList.remove("start", "hasbrief");
   enterIntakeMode();
+  setIntakeHead(
+    "Let's design something",
+    "Tell me a little about what you're making. The more you share, the closer the first draft lands."
+  );
+  el("intake-brief").innerHTML = "";
+  intakeStack.innerHTML = "";
+
+  const last = head.getBoundingClientRect();
+  const flip = anim(head, [
+    { transform: `translate(${first.left - last.left}px, ${first.top - last.top}px)` },
+    { transform: "translate(0px, 0px)" },
+  ], { duration: 780 });
+
+  intakePhase = "gathering";
+  takingInIdx = 0; // reset the "taking it in" wording rotation for this intake
+  // Reveal the kickoff line only AFTER the title + description have settled at the
+  // top (and only if the first question hasn't already arrived), so it animates in
+  // beneath them rather than popping in ahead of the move.
+  const showKickoff = () => {
+    if (intakePhase === "gathering" && !intakeStack.querySelector(".intake-group")) {
+      showIntakePending("Hold tight while we get things started. I'll ask you a few quick things right here.");
+    }
+  };
+  if (flip && flip.finished) flip.finished.then(showKickoff, showKickoff);
+  else showKickoff();
   try { await window.desktop.beginIntake("web-pages"); } catch {}
   runAgent(GET_DESIGNING_PROMPT); // silent kickoff — no user bubble for the instruction
 }
