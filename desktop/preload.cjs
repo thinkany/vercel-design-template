@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld("desktop", {
   cancelIntake: (id) => ipcRenderer.invoke("agent:cancelIntake", { id }),
   beginIntake: (deliverableType) => ipcRenderer.invoke("intake:begin", { deliverableType }),
   addBriefNote: (text) => ipcRenderer.invoke("intake:addNote", { text }),
+  getDesignPrompt: () => ipcRenderer.invoke("intake:designPrompt"),
   onAgentBrief: (cb) => {
     const listener = (_e, brief) => cb(brief);
     ipcRenderer.on("agent:brief", listener);

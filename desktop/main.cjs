@@ -1031,6 +1031,34 @@ ipcMain.handle("intake:addNote", (event, { text } = {}) => {
   return { ok: true };
 });
 
+// Phase 2: turn the accumulated Brief into a natural-language `/design-brief`
+// invocation. That command's orchestrator parses references/colors/fonts, runs the
+// extractors, applies the brand into v01 (which flips previewReady → the pane
+// reveals the live preview), then designs the page. Kept as an assembled NL string
+// because /design-brief is authored around $ARGUMENTS, not a structured object.
+function buildDesignPrompt(brief) {
+  const b = brief || {};
+  const parts = [];
+  const list = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
+  if (b.what) parts.push(String(b.what).trim());
+  const refs = list(b.references)
+    .map((r) => (r && r.url ? (r.reason ? `${r.url} (drawn to: ${r.reason})` : r.url) : ""))
+    .filter(Boolean);
+  if (refs.length) parts.push(`Model the structure and feel on ${refs.join("; ")}`);
+  const colors = list(b.colorSources).map((c) => c && c.value).filter(Boolean);
+  if (colors.length) parts.push(`Colors from ${colors.join(", ")}`);
+  const fonts = list(b.fontSources).map((f) => f && f.value).filter(Boolean);
+  if (fonts.length) parts.push(`Fonts ${fonts.join(", ")}`);
+  if (list(b.sections).length) parts.push(`Include these sections: ${b.sections.join(", ")}`);
+  if (list(b.audience).length) parts.push(`Audience: ${b.audience.join(", ")}`);
+  if (b.tone) parts.push(`Tone: ${b.tone}`);
+  if (list(b.deviceTargets).length) parts.push(`Devices: ${b.deviceTargets.join(", ")}`);
+  if (list(b.notes).length) parts.push(`Also: ${b.notes.join("; ")}`);
+  const body = parts.join(". ");
+  return "/design-brief " + (body || "a clean, modern marketing website");
+}
+ipcMain.handle("intake:designPrompt", () => ({ prompt: buildDesignPrompt(intakeBrief) }));
+
 // The pane submitted the designer's intake answers → fold them into the running
 // Brief (mapping each card's `field`), push the updated Brief to the pane, and
 // resolve the waiting tool call so the agent continues.

@@ -2827,10 +2827,13 @@ function startDesigning() {
       { opacity: 0, transform: "translateY(-18px)" },
     ], { duration: 440 }))
     .filter(Boolean);
-  const go = () => {
+  const go = async () => {
+    // Assemble the Brief into a /design-brief invocation (Phase 2) and hand off.
+    let prompt = "/design-brief a clean, modern marketing website";
+    try { const r = await window.desktop.getDesignPrompt(); if (r && r.prompt) prompt = r.prompt; } catch {}
     // Kick the agent FIRST (while intakeActive still guards refreshPreview from
     // showing its own "working" placeholder), THEN swap the pane to preparing.
-    runAgent("The brief looks good. Please start designing the site now, applying the brief we gathered.");
+    runAgent(prompt);
     showPreparing();
   };
   if (anims.length) Promise.allSettled(anims.map((a) => a.finished)).then(go);
