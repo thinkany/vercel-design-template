@@ -1020,6 +1020,17 @@ ipcMain.handle("intake:begin", (_event, { deliverableType } = {}) => {
   return { ok: true };
 });
 
+// Free-form "add more context" from the review step → append to the Brief's notes
+// and push the updated Brief so the pane's brief rail refreshes (not just the chat).
+ipcMain.handle("intake:addNote", (event, { text } = {}) => {
+  const t = (text || "").trim();
+  if (!t) return { ok: true };
+  if (!intakeBrief) intakeBrief = createEmptyBrief("web-pages");
+  intakeBrief.notes = Array.isArray(intakeBrief.notes) ? [...intakeBrief.notes, t] : [t];
+  if (!event.sender.isDestroyed()) event.sender.send("agent:brief", intakeBrief);
+  return { ok: true };
+});
+
 // The pane submitted the designer's intake answers → fold them into the running
 // Brief (mapping each card's `field`), push the updated Brief to the pane, and
 // resolve the waiting tool call so the agent continues.

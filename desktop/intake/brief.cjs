@@ -24,11 +24,12 @@
  * @property {string|null} existingCode      Pointer/description of code to build on.
  * @property {string|null} tone              Voice/feel in a phrase.
  * @property {string[]|null} deviceTargets   e.g. ["desktop","mobile"].
+ * @property {string[]|null} notes           Free-form extra context the designer added.
  */
 
 const BRIEF_FIELDS = [
   "deliverableType", "what", "audience", "references", "colorSources", "fontSources",
-  "sections", "variationAxes", "existingCode", "tone", "deviceTargets",
+  "sections", "variationAxes", "existingCode", "tone", "deviceTargets", "notes",
 ];
 
 /** A fresh Brief with everything unanswered (null = agent decides). */

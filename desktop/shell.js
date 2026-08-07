@@ -2619,6 +2619,7 @@ function renderBriefSummary(brief) {
   }
   if (Array.isArray(brief.audience) && brief.audience.length) add("For", brief.audience.join(", "));
   add("Tone", brief.tone);
+  if (Array.isArray(brief.notes) && brief.notes.length) add("Notes", brief.notes.join("; "));
   if (!rows.length) { showRail(false); box.innerHTML = ""; return; }
 
   box.innerHTML = "";
@@ -2788,13 +2789,15 @@ function renderReviewActions() {
   const send = document.createElement("button");
   send.className = "intake-continue";
   send.textContent = "Add this and continue";
-  send.addEventListener("click", () => {
+  send.addEventListener("click", async () => {
     const text = ta.value.trim();
     if (!text) { ta.focus(); return; }
     intakePhase = "gathering"; // the turn's result brings us back to review
     anim(wrap, [{ opacity: 1 }, { opacity: 0, transform: "translateY(-12px)" }], { duration: 320 });
     if (wrap.remove) setTimeout(() => wrap.remove(), 320);
     showIntakePending("Thanks, folding that into your brief…");
+    // Update the brief rail in the pane (not just the chat), then let the agent see it too.
+    try { await window.desktop.addBriefNote(text); } catch {}
     runAgent("A bit more context for the brief before we design: " + text);
   });
   more.append(ta, send);
