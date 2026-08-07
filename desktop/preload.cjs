@@ -27,6 +27,12 @@ contextBridge.exposeInMainWorld("desktop", {
   },
   answerIntake: (id, answers) => ipcRenderer.invoke("agent:intakeAnswer", { id, answers }),
   cancelIntake: (id) => ipcRenderer.invoke("agent:cancelIntake", { id }),
+  beginIntake: (deliverableType) => ipcRenderer.invoke("intake:begin", { deliverableType }),
+  onAgentBrief: (cb) => {
+    const listener = (_e, brief) => cb(brief);
+    ipcRenderer.on("agent:brief", listener);
+    return () => ipcRenderer.removeListener("agent:brief", listener);
+  },
 
   // ---- API key ----
   getKeyStatus: () => ipcRenderer.invoke("key:status"),

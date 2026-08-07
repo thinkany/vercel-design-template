@@ -2557,9 +2557,50 @@ function resetIntake() {
   intakeActive = false;
   intakeph.hidden = true;
   intakeStack.innerHTML = "";
+  const brief = el("intake-brief");
+  brief.hidden = true;
+  brief.innerHTML = "";
 }
 
 window.desktop.onAgentIntake(({ id, cards }) => renderIntakeGroup(id, cards));
+
+// The Brief accumulated so far (T5) — main folds each answered batch in and pushes
+// it here. Render it as a compact "Your brief so far" recap pinned above the cards.
+window.desktop.onAgentBrief((brief) => renderBriefSummary(brief));
+
+function renderBriefSummary(brief) {
+  const box = el("intake-brief");
+  if (!brief) { box.hidden = true; box.innerHTML = ""; return; }
+  const rows = [];
+  const add = (key, val) => { if (val) rows.push([key, val]); };
+  add("Making", brief.what);
+  if (Array.isArray(brief.sections) && brief.sections.length) add("Sections", brief.sections.join(", "));
+  if (Array.isArray(brief.references) && brief.references.length) {
+    add("Likes", brief.references.map((r) => r.url + (r.reason ? ` (${r.reason})` : "")).join("; "));
+  }
+  if (Array.isArray(brief.audience) && brief.audience.length) add("For", brief.audience.join(", "));
+  add("Tone", brief.tone);
+  if (!rows.length) { box.hidden = true; box.innerHTML = ""; return; }
+
+  box.innerHTML = "";
+  const title = document.createElement("div");
+  title.className = "ibrief-title";
+  title.textContent = "Your brief so far";
+  box.appendChild(title);
+  for (const [key, val] of rows) {
+    const row = document.createElement("div");
+    row.className = "ibrief-row";
+    const k = document.createElement("span");
+    k.className = "ibrief-key";
+    k.textContent = key;
+    const v = document.createElement("span");
+    v.className = "ibrief-val";
+    v.textContent = val;
+    row.append(k, v);
+    box.appendChild(row);
+  }
+  box.hidden = false;
+}
 
 // Render ONE intake() batch as a group: its cards + a single Continue button.
 function renderIntakeGroup(id, cards) {
@@ -2800,9 +2841,7 @@ function buildReference(card, body, onChange) {
 // Designing" (the natural-language brief entry — the front door to the
 // design-from-brief feature). Clicking a chip is that path's "hello".
 const DEFAULT_PLACEHOLDER = input.placeholder;
-const BRIEF_PLACEHOLDER = "Describe the site you want, paste links for style, colors, or fonts…";
 let welcomeCard = null;
-let designBriefMode = false; // set by "Get Designing"; the next message is the brief
 
 function dismissWelcome() {
   if (welcomeCard) { welcomeCard.remove(); welcomeCard = null; }
@@ -2866,49 +2905,49 @@ function renderWelcomeChips() {
   welcomeCard = card;
 }
 
-// "Get Designing" — collect the brief rather than firing a generic message.
-// Focus the composer with a brief-oriented placeholder and invite the details;
-// the next message the designer sends is their brief.
-function enterDesignBriefMode() {
+// "Get Designing" — drive the intake in the PANE (T5), not a chat brief. Clicking
+// enters intake mode immediately and silently kicks off the agent, which runs the
+// conversation through the `intake` tool. beginIntake() starts a fresh Brief on the
+// main side so each answered batch folds in and pushes back an updated summary.
+async function enterDesignBriefMode() {
   dismissWelcome();
-  designBriefMode = true;
   addMsg(
     "system",
-    "Tell me about the site you want (the vibe, plus any links for style, colors, or fonts) and I'll start designing."
+    "Let's design something. I'll ask you a few quick things in the panel on the right, then put your brief together."
   );
-  input.placeholder = BRIEF_PLACEHOLDER;
-  input.focus();
+  enterIntakeMode();
+  try { await window.desktop.beginIntake("web-pages"); } catch {}
+  runAgent(GET_DESIGNING_PROMPT); // silent kickoff — no user bubble for the instruction
 }
 
-// One send path for both typed messages and chip-fired prompts.
-async function sendText(text) {
-  text = (text || "").trim();
-  if (!text) return;
-  // /clear is handled locally — it's a session reset, not a prompt for the agent.
-  if (text === "/clear") {
-    input.value = "";
-    input.placeholder = DEFAULT_PLACEHOLDER;
-    dismissWelcome();
-    await clearSession();
-    input.focus();
-    return;
-  }
+// The instruction that turns "Get Designing" into an agent-driven, in-pane intake.
+// The build itself is STUBBED in Phase 1 (the agent recaps the brief instead of
+// designing); Phase 2 swaps step 3 for the real /design-brief build.
+const GET_DESIGNING_PROMPT = [
+  'The designer chose "Get Designing." Gather a short design brief by calling the `intake` tool',
+  "(mcp__intake__intake) — do NOT ask questions in chat; every question must go through `intake` so it",
+  "renders in the pane. Keep it to TWO intake calls total:",
+  '1. First call: ONE open-text card, long:true, maxLength ~400 — { id:"what", field:"what" } — asking,',
+  "   in a warm line, what they're making and the feeling they want.",
+  "2. Read their answer, then a second call with one or two ADAPTIVE, skippable follow-ups that fit what",
+  '   they said: a chips card of likely sections { id:"sections", field:"sections", options:[…] } and/or a',
+  '   reference card { id:"reference", field:"references" } for a site they like and why.',
+  "3. Do NOT build or edit anything yet. Reply in chat with a short, friendly recap of the brief you",
+  "   gathered (what, sections, any reference). Phase 2 will design from it.",
+].join("\n");
+
+// Core send: fire a prompt at the agent. `echoText`, when given, is shown as the
+// user's chat bubble; omit it to run a prompt silently (Get Designing's kickoff).
+async function runAgent(toSend, echoText) {
   dismissWelcome();
-  // "Get Designing" brief → route to the /design-brief orchestrator (parse →
-  // extract palette/fonts → apply into v01 → design). Show the designer's own
-  // words in chat, but send the command. A slash-command the user typed
-  // themselves (or the Client Setup chip) passes through untouched.
-  const asBrief = designBriefMode && !text.startsWith("/");
-  designBriefMode = false;
-  const toSend = asBrief ? `/design-brief ${text}` : text;
-  addMsg("user", text);
+  if (echoText) addMsg("user", echoText);
   input.value = "";
   input.placeholder = DEFAULT_PLACEHOLDER;
   assistantEl = null;
   agentBusy = true;
   conversationStarted = true;
   updateThinking(); // dots up immediately, until the first text/tool arrives
-  refreshPreview(); // show the working placeholder while the browser is closed
+  refreshPreview(); // show the working placeholder while the browser is closed (no-op during intake)
   send.disabled = true;
   try {
     const res = await window.desktop.sendPrompt(toSend, sessionId);
@@ -2922,6 +2961,21 @@ async function sendText(text) {
     send.disabled = false;
     input.focus();
   }
+}
+
+// Typed messages + the Client Setup chip. /clear is a local session reset.
+async function sendText(text) {
+  text = (text || "").trim();
+  if (!text) return;
+  if (text === "/clear") {
+    input.value = "";
+    input.placeholder = DEFAULT_PLACEHOLDER;
+    dismissWelcome();
+    await clearSession();
+    input.focus();
+    return;
+  }
+  await runAgent(text, text);
 }
 
 function submit() {

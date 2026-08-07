@@ -49,6 +49,7 @@ const { TEMPLATE_EXCLUDE } = require("./template-exclude.cjs");
 const { startCaptureBridge, stopCaptureBridge } = require("./capture-bridge.cjs");
 const vercel = require("./publish.cjs");
 const { validateCards } = require("./intake/cards.cjs");
+const { createEmptyBrief, applyAnswers } = require("./intake/brief.cjs");
 
 const appRoot = path.resolve(__dirname, ".."); // the Electron app / template source (git worktree in dev; Resources/app when packaged)
 
@@ -897,6 +898,9 @@ let askSeq = 0;
 // these, keyed by an incrementing id.
 const pendingIntakes = new Map();
 let intakeSeq = 0;
+// The Brief accumulated across a Get-Designing intake (T5). Reset when a flow
+// begins (intake:begin); each answered batch folds in via its cards' `field`s.
+let intakeBrief = null;
 
 ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
   if (!currentProject) {
@@ -925,7 +929,7 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
       if (!v.ok) { reject(new Error("invalid intake cards: " + v.errors.join(" | "))); return; }
       if (event.sender.isDestroyed()) { reject(new Error("window closed")); return; }
       const id = ++intakeSeq;
-      pendingIntakes.set(id, { resolve, reject });
+      pendingIntakes.set(id, { resolve, reject, cards });
       event.sender.send("agent:intake", { id, cards });
     });
   // Tell the /design-brief flow whether the licensed research layer is active, via
@@ -1010,11 +1014,31 @@ ipcMain.handle("agent:cancelAsk", (_event, { id }) => {
   return { ok: true };
 });
 
-// The pane submitted the designer's intake answers → resolve the waiting tool call.
-ipcMain.handle("agent:intakeAnswer", (_event, { id, answers }) => {
+// Begin a Get-Designing intake → start a fresh Brief for this flow (T5).
+ipcMain.handle("intake:begin", (_event, { deliverableType } = {}) => {
+  intakeBrief = createEmptyBrief(deliverableType || "web-pages");
+  return { ok: true };
+});
+
+// The pane submitted the designer's intake answers → fold them into the running
+// Brief (mapping each card's `field`), push the updated Brief to the pane, and
+// resolve the waiting tool call so the agent continues.
+ipcMain.handle("agent:intakeAnswer", (event, { id, answers }) => {
   const p = pendingIntakes.get(id);
   if (p) {
     pendingIntakes.delete(id);
+    if (intakeBrief && Array.isArray(p.cards)) {
+      const byField = {};
+      for (const c of p.cards) {
+        if (!c.field || !answers || !(c.id in answers)) continue;
+        let v = answers[c.id];
+        // Brief.references is a SourceRef[]; a reference card yields one {url,reason}.
+        if (c.type === "reference" && v) v = [v];
+        byField[c.field] = v;
+      }
+      intakeBrief = applyAnswers(intakeBrief, byField);
+      if (!event.sender.isDestroyed()) event.sender.send("agent:brief", intakeBrief);
+    }
     p.resolve(answers || {});
   }
   return { ok: true };
