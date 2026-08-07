@@ -890,6 +890,15 @@ function setRow(k, valueText) {
   return row;
 }
 
+// Inline pulsing loading dots (same animation as the chat "thinking" indicator),
+// shown while a panel waits on a network call so it doesn't read as frozen.
+function loadingDots() {
+  const d = document.createElement("span");
+  d.className = "ta-dots";
+  d.innerHTML = "<i></i><i></i><i></i>";
+  return d;
+}
+
 // The unplug mark (disconnect), shared across integration drawers.
 const UNPLUG_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 5 3-3"/><path d="m2 22 3-3"/><path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z"/><path d="M7.5 13.5 10 11"/><path d="M10.5 16.5 13 14"/><path d="m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z"/></svg>';
 
@@ -1193,11 +1202,11 @@ async function runPublishFlow(btn, host, opts) {
 // --- Publish help: a tabbed, step-by-step walkthrough (assumes no Vercel account) ---
 const PUBHELP = {
   start: {
-    intro: "Publishing puts your design online behind a password so you can share it with a client. It uses Vercel, a free hosting service. Here is the one-time setup.",
+    intro: "Publishing puts your design online behind a password so you can share it with a client. It uses Vercel, a free hosting service. Connecting takes about a minute, once.",
     steps: [
-      { h: "Create a free Vercel account", d: "Sign up with GitHub, GitLab, or an email address. It is free for design previews, no credit card needed.", link: { label: "Open vercel.com/signup", url: "https://vercel.com/signup" } },
-      { h: "Create an access token", d: "In Vercel, open Account Settings, then Tokens. Create one, name it something like \"thinkany design\", and copy it.", note: "A token is safe to store: it only lets an app deploy on your behalf, and you can delete it from that same Vercel page at any time.", link: { label: "Open the token page", url: "https://vercel.com/account/tokens" } },
-      { h: "Connect it here", d: "Close this window, paste the token into the Publish panel, and click Connect Vercel. It is stored encrypted on your computer, so you only do this once." },
+      { h: "Have a free Vercel account", d: "If you do not have one yet, sign up at vercel.com. It is free for design previews, no credit card needed.", link: { label: "Open vercel.com/signup", url: "https://vercel.com/signup" } },
+      { h: "Click Connect with Vercel", d: "In the Publish panel, click Connect with Vercel. Your browser opens a Vercel page, there is no token to create, copy, or paste." },
+      { h: "Approve, and you are in", d: "Sign into your Vercel account if asked, approve the request, then return to the app. The panel shows you are connected.", note: "Nothing to configure. If you would rather use a token instead, there is an \"or paste an access token\" option under the button." },
       { h: "You are ready to publish", d: "Switch to the How to publish tab for the rest." },
     ],
   },
@@ -1205,10 +1214,11 @@ const PUBHELP = {
     intro: "Once Vercel is connected, publishing a design is a few clicks.",
     steps: [
       { h: "Open a finished design", d: "Open the project you want to share. The Publish button stays greyed out until a design is ready to show." },
+      { h: "Choose where it goes (optional)", d: "Under Deploy to, pick your personal account or a team. Under Preview domain, keep the default vercel.app address or put it on a subdomain of a domain you own.", note: "The domain choice is remembered per project; Deploy to is shared across projects." },
       { h: "Click Publish this design", d: "The app creates the site, uploads your design, and Vercel builds it. This usually takes a minute or two, and you will see the progress." },
-      { h: "Copy your link and password", d: "You get a live link (like yourproject.vercel.app) and a one-time preview password. Copy both.", note: "Save the password when it is shown, it is not displayed again. If you lose it, Reset preview password generates a new one." },
+      { h: "Copy your link and password", d: "You get a live link and a preview password, both shown in the panel with copy buttons.", note: "The password stays visible in the panel. Use Reset preview password to rotate it." },
       { h: "Share with your client", d: "Send them the link and the password. The site stays locked until they enter it, so the link is safe to share." },
-      { h: "Update anytime", d: "Made changes? Click Publish changes to refresh the same link. Use Reset preview password to set a new password." },
+      { h: "Update anytime", d: "Made changes? Click Publish changes to refresh the same link." },
     ],
   },
 };
@@ -1310,16 +1320,46 @@ async function renderPublish(body) {
     const intro = document.createElement("p");
     intro.className = "muted";
     intro.style.margin = "0 0 12px";
-    intro.textContent = "Publish your design straight to a private, password-gated URL you can send a client. Paste a Vercel access token to connect.";
+    intro.textContent = "Publish your design straight to a private, password-gated URL you can send a client. Connect your Vercel account to start.";
     body.appendChild(intro);
+
+    // Primary: Sign in with Vercel (OAuth) — opens the browser, no token to copy.
+    const connectBtn = document.createElement("button");
+    connectBtn.className = "panelbtn primary";
+    connectBtn.textContent = "Connect with Vercel";
+    const connMsg = document.createElement("div");
+    connMsg.className = "muted";
+    connMsg.style.marginTop = "6px";
+    connectBtn.addEventListener("click", async () => {
+      connectBtn.disabled = true;
+      connectBtn.textContent = "Waiting for authorization…";
+      connMsg.style.color = "";
+      connMsg.textContent = "A Vercel page opened in your browser. Approve it there, then come back.";
+      const res = await window.desktop.connectVercel();
+      if (res.ok) { refreshRailActivation(); openModal("publish"); }
+      else {
+        connMsg.textContent = res.error || "Could not connect.";
+        connMsg.style.color = "#e5484d";
+        connectBtn.disabled = false;
+        connectBtn.textContent = "Connect with Vercel";
+      }
+    });
+    body.append(connectBtn, connMsg);
+
+    // Fallback: paste an access token.
+    const orSep = document.createElement("div");
+    orSep.className = "muted";
+    orSep.style.cssText = "text-align:center;font-size:11.5px;margin:16px 0 8px;";
+    orSep.textContent = "or paste an access token";
+    body.appendChild(orSep);
 
     const input = document.createElement("input");
     input.className = "field";
     input.type = "password";
     input.placeholder = "Paste your Vercel token";
     const saveBtn = document.createElement("button");
-    saveBtn.className = "panelbtn primary";
-    saveBtn.textContent = "Connect Vercel";
+    saveBtn.className = "panelbtn";
+    saveBtn.textContent = "Save token";
     const msg = document.createElement("div");
     msg.className = "muted";
     const doSave = async () => {
@@ -1334,7 +1374,7 @@ async function renderPublish(body) {
         msg.textContent = res.error || "Could not connect.";
         msg.style.color = "#e5484d";
         saveBtn.disabled = false;
-        saveBtn.textContent = "Connect Vercel";
+        saveBtn.textContent = "Save token";
       }
     };
     saveBtn.addEventListener("click", doSave);
@@ -1361,6 +1401,10 @@ async function renderPublish(body) {
   sep.style.cssText = "height:1px;background:#ececf1;margin:14px 0;";
   body.appendChild(sep);
 
+  // Reloads the Preview domain list for the current scope (set once the domain
+  // control exists); called on a scope change so we don't re-render the whole panel.
+  let refreshDomains = null;
+
   // Deploy-to scope (grouped with This project, below the divider).
   const { teams } = await window.desktop.getVercelTeams();
   if (teams && teams.length) {
@@ -1382,9 +1426,10 @@ async function renderPublish(body) {
       sel.appendChild(o);
     });
     sel.value = st.teamId || "";
-    sel.addEventListener("change", () => {
+    sel.addEventListener("change", async () => {
       const name = sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : null;
-      window.desktop.selectVercelScope(sel.value || null, sel.value ? name : null);
+      await window.desktop.selectVercelScope(sel.value || null, sel.value ? name : null);
+      if (refreshDomains) refreshDomains(); // reload the Preview domain list for the new scope
     });
     scopeRow.append(sk, sel);
     body.appendChild(scopeRow);
@@ -1438,65 +1483,76 @@ async function renderPublish(body) {
     const domLabel = document.createElement("div");
     domLabel.className = "k";
     domLabel.textContent = "Preview domain";
-    domSec.appendChild(domLabel);
-
-    const { domains } = await window.desktop.getVercelDomains();
-    const baseSlug = pub.projectName || "preview";
-    let curBase = "", curLabel = "";
-    if (pub.customDomain && domains && domains.length) {
-      const match = domains.find((d) => pub.customDomain === d.name || pub.customDomain.endsWith("." + d.name));
-      if (match) { curBase = match.name; curLabel = pub.customDomain === match.name ? "" : pub.customDomain.slice(0, -(match.name.length + 1)); }
-    }
-
-    const domSel = document.createElement("select");
-    domSel.className = "field";
-    const optDefault = document.createElement("option");
-    optDefault.value = ""; optDefault.textContent = "Vercel subdomain (default)";
-    domSel.appendChild(optDefault);
-    (domains || []).forEach((d) => {
-      const o = document.createElement("option"); o.value = d.name; o.textContent = d.name; domSel.appendChild(o);
-    });
-    domSel.value = curBase;
-
-    const subWrap = document.createElement("div");
-    subWrap.style.cssText = "display:flex;align-items:center;gap:6px;margin-top:6px;";
-    const subInput = document.createElement("input");
-    subInput.className = "field"; subInput.placeholder = "subdomain"; subInput.style.cssText = "flex:0 1 140px;";
-    subInput.value = curLabel || (curBase ? baseSlug : "");
-    const domPreview = document.createElement("span");
-    domPreview.className = "muted"; domPreview.style.cssText = "font-size:12px;word-break:break-all;";
-    subWrap.append(subInput, domPreview);
-
-    const slugifyLabel = (s) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
-    const updateDomPreview = () => {
-      const base = domSel.value;
-      subWrap.style.display = base ? "flex" : "none";
-      if (!base) return;
-      const label = slugifyLabel(subInput.value.trim());
-      domPreview.textContent = label ? `→ ${label}.${base}` : `→ name.${base}`;
-    };
-    const saveDom = () => {
-      const base = domSel.value;
-      if (!base) { window.desktop.setPublishDomain(null); return; }
-      const label = slugifyLabel(subInput.value.trim());
-      if (label) window.desktop.setPublishDomain(`${label}.${base}`);
-    };
-    domSel.addEventListener("change", () => { if (domSel.value && !subInput.value.trim()) subInput.value = baseSlug; updateDomPreview(); saveDom(); });
-    subInput.addEventListener("input", updateDomPreview);
-    subInput.addEventListener("change", saveDom);
-    subInput.addEventListener("blur", saveDom);
-
-    domSec.append(domSel, subWrap);
+    const domBody = document.createElement("div"); // filled once Vercel responds
+    domSec.append(domLabel, domBody);
     body.appendChild(domSec);
-    updateDomPreview();
 
     const domNote = document.createElement("div");
     domNote.className = "muted";
     domNote.style.cssText = "font-size:11.5px;margin:2px 0 12px;";
-    domNote.textContent = (domains && domains.length)
-      ? "A subdomain of a domain you own on Vercel. Applied on the next publish."
-      : "No domains on your Vercel account yet. Add one in Vercel and it'll appear here.";
     body.appendChild(domNote);
+
+    const baseSlug = pub.projectName || "preview";
+    const slugifyLabel = (s) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+    // Load (and reload, on a scope change) the owned domains WITHOUT blocking the
+    // rest of the panel — show the pulsing dots so the wait never reads as a glitch.
+    refreshDomains = () => {
+      domBody.innerHTML = "";
+      domBody.appendChild(loadingDots());
+      domNote.textContent = "";
+      window.desktop.getVercelDomains().then(({ domains }) => {
+        domBody.innerHTML = "";
+        let curBase = "", curLabel = "";
+        if (pub.customDomain && domains && domains.length) {
+          const match = domains.find((d) => pub.customDomain === d.name || pub.customDomain.endsWith("." + d.name));
+          if (match) { curBase = match.name; curLabel = pub.customDomain === match.name ? "" : pub.customDomain.slice(0, -(match.name.length + 1)); }
+        }
+        const domSel = document.createElement("select");
+        domSel.className = "field";
+        const optDefault = document.createElement("option");
+        optDefault.value = ""; optDefault.textContent = "Vercel subdomain (default)";
+        domSel.appendChild(optDefault);
+        (domains || []).forEach((d) => { const o = document.createElement("option"); o.value = d.name; o.textContent = d.name; domSel.appendChild(o); });
+        domSel.value = curBase;
+
+        const subWrap = document.createElement("div");
+        subWrap.style.cssText = "display:flex;align-items:center;gap:6px;margin-top:6px;";
+        const subInput = document.createElement("input");
+        subInput.className = "field"; subInput.placeholder = "subdomain"; subInput.style.cssText = "flex:0 1 140px;";
+        subInput.value = curLabel || (curBase ? baseSlug : "");
+        const domPreview = document.createElement("span");
+        domPreview.className = "muted"; domPreview.style.cssText = "font-size:12px;word-break:break-all;";
+        subWrap.append(subInput, domPreview);
+
+        const updateDomPreview = () => {
+          const base = domSel.value;
+          subWrap.style.display = base ? "flex" : "none";
+          if (!base) return;
+          const label = slugifyLabel(subInput.value.trim());
+          domPreview.textContent = label ? `→ ${label}.${base}` : `→ name.${base}`;
+        };
+        const saveDom = () => {
+          const base = domSel.value;
+          if (!base) { window.desktop.setPublishDomain(null); return; }
+          const label = slugifyLabel(subInput.value.trim());
+          if (label) window.desktop.setPublishDomain(`${label}.${base}`);
+        };
+        domSel.addEventListener("change", () => { if (domSel.value && !subInput.value.trim()) subInput.value = baseSlug; updateDomPreview(); saveDom(); });
+        subInput.addEventListener("input", updateDomPreview);
+        subInput.addEventListener("change", saveDom);
+        subInput.addEventListener("blur", saveDom);
+
+        domBody.append(domSel, subWrap);
+        updateDomPreview();
+        domNote.textContent = (domains && domains.length)
+          ? "A subdomain of a domain you own on Vercel. Applied on the next publish."
+          : "No domains on your Vercel account yet. Add one in Vercel and it'll appear here.";
+      }).catch(() => {
+        domBody.innerHTML = "";
+        domNote.textContent = "Couldn't load your Vercel domains — check your connection.";
+      });
+    };
+    refreshDomains();
 
     const host = document.createElement("div"); // progress + result target
     host.hidden = true;

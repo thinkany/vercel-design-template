@@ -24,6 +24,14 @@ const { spawn, execSync } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
+const http = require("node:http");
+
+// Sign in with Vercel (OAuth public client + PKCE). The client_id is public; the
+// loopback redirect + fixed port are registered on the Vercel app.
+const VERCEL_CLIENT_ID = "cl_cREhcnsVM9e9YNFHHBAlZ0u9IoDIcjRP";
+const VERCEL_OAUTH_PORT = 9789;
+const VERCEL_REDIRECT_URI = `http://127.0.0.1:${VERCEL_OAUTH_PORT}/callback`;
 
 // ⚠ Pin userData to a STABLE id — never derive it from the display name.
 // Electron defaults userData to `<appData>/<app.getName()>`, so the setName above
@@ -195,11 +203,15 @@ async function validateLicense(key) {
 // process's publish handlers (never a subprocess), so it stays in a module var and
 // out of process.env. The chosen team scope is public identity, not a secret →
 // plain JSON alongside it.
-let vercelToken = null;
+// `vercelAuth` holds one of:
+//   { kind: "token", token }                              — a pasted access token
+//   { kind: "oauth", accessToken, refreshToken, expiresAt } — Sign in with Vercel
+// Persisted (encrypted) as JSON. A legacy plain-string file is read as a pasted token.
+let vercelAuth = null;
 function vercelTokenFilePath() {
   return path.join(app.getPath("userData"), "vercel-token.enc");
 }
-function loadStoredVercelToken() {
+function readVercelAuthRaw() {
   try {
     const p = vercelTokenFilePath();
     if (!fs.existsSync(p)) return null;
@@ -210,15 +222,105 @@ function loadStoredVercelToken() {
     return null;
   }
 }
-function storeVercelToken(token) {
-  const data = safeStorage.isEncryptionAvailable()
-    ? safeStorage.encryptString(token)
-    : Buffer.from(token, "utf8");
-  fs.writeFileSync(vercelTokenFilePath(), data);
+function parseVercelAuth(raw) {
+  if (!raw) return null;
+  try { const o = JSON.parse(raw); if (o && o.kind) return o; } catch { /* not JSON */ }
+  return { kind: "token", token: raw }; // legacy: a bare pasted token string
+}
+function loadVercelAuth() { return parseVercelAuth(readVercelAuthRaw()); }
+function storeVercelAuth(obj) {
+  const data = JSON.stringify(obj);
+  const enc = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(data) : Buffer.from(data, "utf8");
+  fs.writeFileSync(vercelTokenFilePath(), enc);
+  vercelAuth = obj;
 }
 function removeStoredVercelToken() {
   try { fs.unlinkSync(vercelTokenFilePath()); } catch { /* already gone */ }
 }
+// A valid access token for API calls: refreshes an expired OAuth token lazily.
+// Returns null if not connected or a refresh fails (caller reports "connect first").
+async function vercelAccessToken() {
+  if (!vercelAuth) return null;
+  if (vercelAuth.kind === "token") return vercelAuth.token;
+  if (vercelAuth.kind === "oauth") {
+    if (Date.now() < (vercelAuth.expiresAt || 0) - 60000) return vercelAuth.accessToken; // 1-min skew
+    if (!vercelAuth.refreshToken) return null;
+    const r = await vercel.refreshOAuthToken({ clientId: VERCEL_CLIENT_ID, refreshToken: vercelAuth.refreshToken });
+    if (!r.ok) return null;
+    storeVercelAuth({ ...vercelAuth, accessToken: r.accessToken, refreshToken: r.refreshToken, expiresAt: Date.now() + r.expiresIn * 1000 });
+    return vercelAuth.accessToken;
+  }
+  return null;
+}
+function b64url(buf) {
+  return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+// The little page shown in the browser after the redirect, so the user knows to
+// return to the app.
+function oauthResultPage(ok, message) {
+  const title = ok ? "Connected to Vercel" : "Couldn't connect";
+  const body = ok ? "You can close this tab and return to thinkany design." : (message || "Something went wrong. Return to thinkany design and try again.");
+  return `<!doctype html><meta charset="utf-8"><title>${title}</title><style>body{font:15px -apple-system,system-ui,sans-serif;color:#1a1a1a;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;background:#fafafa}.c{max-width:340px;text-align:center;padding:28px}h1{font-size:17px;margin:0 0 8px}p{color:#555;margin:0}</style><div class="c"><h1>${title}</h1><p>${body}</p></div>`;
+}
+// Run the full Sign in with Vercel flow: PKCE, a one-shot loopback listener on the
+// registered port, open the authorize URL, catch the code, exchange it (no secret).
+// Resolves { ok, accessToken, refreshToken, expiresIn } or { ok:false, error }.
+function runVercelOAuth() {
+  const codeVerifier = crypto.randomBytes(43).toString("hex");
+  const codeChallenge = b64url(crypto.createHash("sha256").update(codeVerifier).digest());
+  const state = crypto.randomBytes(24).toString("hex");
+  const authUrl = "https://vercel.com/oauth/authorize?" + new URLSearchParams({
+    client_id: VERCEL_CLIENT_ID,
+    redirect_uri: VERCEL_REDIRECT_URI,
+    response_type: "code",
+    scope: "openid offline_access",
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: "S256",
+  }).toString();
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer = null;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { server.close(); } catch { /* already closing */ }
+      resolve(result);
+    };
+    const server = http.createServer(async (req, res) => {
+      let parsed;
+      try { parsed = new URL(req.url, VERCEL_REDIRECT_URI); } catch { res.writeHead(400); res.end(); return; }
+      if (parsed.pathname !== "/callback") { res.writeHead(404); res.end(); return; }
+      console.log("[vercel-oauth] callback:", parsed.search); // surface Vercel's real response
+      const code = parsed.searchParams.get("code");
+      const retState = parsed.searchParams.get("state");
+      const err = parsed.searchParams.get("error");
+      const errDesc = parsed.searchParams.get("error_description");
+      const reply = (ok, msg) => { res.writeHead(200, { "content-type": "text/html" }); res.end(oauthResultPage(ok, msg)); };
+      if (err) {
+        const detail = errDesc ? `${err}: ${errDesc}` : err;
+        reply(false, detail);
+        return finish({ ok: false, error: `Vercel returned "${detail}".` });
+      }
+      if (retState !== state) { reply(false, "State mismatch."); return finish({ ok: false, error: "Authorization response didn't match (state mismatch)." }); }
+      if (!code) { reply(false, "No authorization code was returned."); return finish({ ok: false, error: "No authorization code was returned." }); }
+      try {
+        const ex = await vercel.exchangeOAuthCode({ clientId: VERCEL_CLIENT_ID, code, codeVerifier, redirectUri: VERCEL_REDIRECT_URI });
+        reply(ex.ok, ex.ok ? null : ex.error);
+        finish(ex);
+      } catch (e) {
+        reply(false, e.message);
+        finish({ ok: false, error: e.message });
+      }
+    });
+    server.on("error", (e) => finish({ ok: false, error: e.code === "EADDRINUSE" ? `Port ${VERCEL_OAUTH_PORT} is in use — close whatever is using it and try again.` : e.message }));
+    server.listen(VERCEL_OAUTH_PORT, "127.0.0.1", () => { shell.openExternal(authUrl); });
+    timer = setTimeout(() => finish({ ok: false, error: "Timed out waiting for authorization (5 min)." }), 5 * 60 * 1000);
+  });
+}
+
 function vercelScopeFile() {
   return path.join(app.getPath("userData"), "vercel-scope.json");
 }
@@ -946,7 +1048,23 @@ ipcMain.handle("license:clear", () => {
 // ---- Publish IPC (direct-to-Vercel) -----------------------------------------
 ipcMain.handle("vercel:status", () => {
   const scope = loadVercelScope();
-  return { connected: !!vercelToken, user: scope.user || null, teamId: scope.teamId || null, teamName: scope.teamName || null };
+  return { connected: !!vercelAuth, user: scope.user || null, teamId: scope.teamId || null, teamName: scope.teamName || null };
+});
+// Sign in with Vercel (OAuth). Opens the browser, catches the callback, exchanges
+// the code, validates the token can reach the API, and stores it (with its refresh
+// token). Validation catches the case where the app's API permissions aren't active.
+ipcMain.handle("vercel:oauthStart", async () => {
+  const res = await runVercelOAuth();
+  if (!res.ok) return res;
+  const v = await vercel.validateToken(res.accessToken);
+  if (!v.ok) {
+    return { ok: false, error: "Connected, but this account can't reach the Vercel API yet (its API permissions may not be enabled). You can paste an access token instead." };
+  }
+  storeVercelAuth({ kind: "oauth", accessToken: res.accessToken, refreshToken: res.refreshToken, expiresAt: Date.now() + res.expiresIn * 1000 });
+  const scope = loadVercelScope();
+  scope.user = v.user;
+  saveVercelScope(scope);
+  return { ok: true, user: v.user };
 });
 ipcMain.handle("vercel:save", async (_event, { token }) => {
   const t = (token || "").trim();
@@ -954,11 +1072,10 @@ ipcMain.handle("vercel:save", async (_event, { token }) => {
   const v = await vercel.validateToken(t);
   if (!v.ok) return v;
   try {
-    storeVercelToken(t);
+    storeVercelAuth({ kind: "token", token: t });
   } catch (e) {
     return { ok: false, error: `Could not save the token: ${e.message}` };
   }
-  vercelToken = t;
   const scope = loadVercelScope();
   scope.user = v.user;
   saveVercelScope(scope);
@@ -966,14 +1083,16 @@ ipcMain.handle("vercel:save", async (_event, { token }) => {
   return { ok: true, user: v.user, teams };
 });
 ipcMain.handle("vercel:teams", async () => {
-  if (!vercelToken) return { teams: [] };
-  return { teams: await vercel.listTeams(vercelToken) };
+  const t = await vercelAccessToken();
+  if (!t) return { teams: [] };
+  return { teams: await vercel.listTeams(t) };
 });
 // Domains already on the user's Vercel account/team (to host previews on a subdomain).
 ipcMain.handle("vercel:domains", async () => {
-  if (!vercelToken) return { domains: [] };
+  const t = await vercelAccessToken();
+  if (!t) return { domains: [] };
   const scope = loadVercelScope();
-  return { domains: await vercel.listDomains(vercelToken, scope.teamId || null) };
+  return { domains: await vercel.listDomains(t, scope.teamId || null) };
 });
 // Save (or clear) the custom preview domain for the current project.
 ipcMain.handle("publish:setDomain", (_event, { domain }) => {
@@ -994,13 +1113,13 @@ ipcMain.handle("vercel:selectScope", (_event, { teamId, teamName }) => {
 ipcMain.handle("vercel:clear", () => {
   removeStoredVercelToken();
   clearVercelScope();
-  vercelToken = null;
+  vercelAuth = null;
   return { ok: true };
 });
 
 // Per-project publish state the panel reads to decide what to show.
 ipcMain.handle("publish:status", () => {
-  const connected = !!vercelToken;
+  const connected = !!vercelAuth;
   const scope = loadVercelScope();
   if (!currentProject) return { connected, scope, hasProject: false };
   const design = detectDesign(currentProject);
@@ -1025,7 +1144,8 @@ ipcMain.handle("publish:status", () => {
 // is persisted (never the password itself).
 ipcMain.handle("publish:run", async (event, args) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
-  if (!vercelToken) return { ok: false, error: "Connect Vercel first." };
+  const token = await vercelAccessToken();
+  if (!token) return { ok: false, error: "Connect Vercel first." };
   const design = detectDesign(currentProject);
   if (!design.active || !design.previewReady) {
     return { ok: false, error: "There's nothing to publish yet — finish a design first." };
@@ -1044,7 +1164,7 @@ ipcMain.handle("publish:run", async (event, args) => {
   const onProgress = (evt) => { if (!event.sender.isDestroyed()) event.sender.send("publish:progress", evt); };
   try {
     const res = await vercel.publishProject({
-      token: vercelToken,
+      token,
       teamId: scope.teamId || null,
       projectDir: currentProject,
       projectName,
@@ -1358,7 +1478,7 @@ app.whenReady().then(async () => {
   if (stored) process.env.ANTHROPIC_API_KEY = stored;
   const storedLicense = loadStoredLicense(); // in-app license wins over .env.local
   if (storedLicense) process.env.DERIVE_LICENSE_KEY = storedLicense;
-  vercelToken = loadStoredVercelToken(); // in-app Publish (Vercel) token
+  vercelAuth = loadVercelAuth(); // in-app Publish: pasted token or Sign in with Vercel
   // Native capture bridge: a hidden BrowserWindow the app-owned export scripts
   // drive over loopback (see capture-bridge.cjs). Injecting these into the env
   // makes `ta-export reconstruct` capture with the app's own Chromium instead of

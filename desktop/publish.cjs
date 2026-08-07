@@ -59,6 +59,52 @@ async function validateToken(token) {
   }
 }
 
+// ---- Sign in with Vercel (OAuth, public client + PKCE) ----------------------
+const OAUTH_TOKEN_URL = "https://api.vercel.com/login/oauth/token";
+
+// Exchange the authorization code for tokens. Public client (auth method `none`),
+// so no client_secret — PKCE's code_verifier is the proof instead.
+async function exchangeOAuthCode({ clientId, code, codeVerifier, redirectUri }) {
+  try {
+    const res = await fetch(OAUTH_TOKEN_URL, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        client_id: clientId,
+        code,
+        code_verifier: codeVerifier,
+        redirect_uri: redirectUri,
+      }).toString(),
+    });
+    const j = await readJson(res);
+    if (!res.ok) return { ok: false, error: (j && (j.error_description || j.error)) || `Token exchange failed (${res.status}).` };
+    return { ok: true, accessToken: j.access_token, refreshToken: j.refresh_token || null, expiresIn: j.expires_in || 3600 };
+  } catch (e) {
+    return { ok: false, error: `Couldn't reach Vercel: ${e.message}` };
+  }
+}
+
+// Trade a refresh token for a fresh access token (the access token lasts ~1h).
+async function refreshOAuthToken({ clientId, refreshToken }) {
+  try {
+    const res = await fetch(OAUTH_TOKEN_URL, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: clientId,
+        refresh_token: refreshToken,
+      }).toString(),
+    });
+    const j = await readJson(res);
+    if (!res.ok) return { ok: false, error: (j && (j.error_description || j.error)) || `Token refresh failed (${res.status}).` };
+    return { ok: true, accessToken: j.access_token, refreshToken: j.refresh_token || refreshToken, expiresIn: j.expires_in || 3600 };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
 // Teams the token can deploy into (for scope selection). Personal scope is implicit.
 async function listTeams(token) {
   try {
@@ -347,4 +393,4 @@ async function publishProject({ token, teamId, projectDir, projectName, env, pas
   return { url, projectName: project.name, projectId: project.id, password: password || null, domainPending, domainError };
 }
 
-module.exports = { validateToken, listTeams, listDomains, publishProject, generatePassword, collectFiles };
+module.exports = { validateToken, listTeams, listDomains, publishProject, generatePassword, collectFiles, exchangeOAuthCode, refreshOAuthToken };

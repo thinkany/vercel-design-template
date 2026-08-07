@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld("desktop", {
 
   // ---- Publish (direct-to-Vercel) ----
   getVercelStatus: () => ipcRenderer.invoke("vercel:status"),
+  connectVercel: () => ipcRenderer.invoke("vercel:oauthStart"),
   saveVercelToken: (token) => ipcRenderer.invoke("vercel:save", { token }),
   getVercelTeams: () => ipcRenderer.invoke("vercel:teams"),
   getVercelDomains: () => ipcRenderer.invoke("vercel:domains"),

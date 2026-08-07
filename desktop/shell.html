@@ -255,16 +255,16 @@
       .voice-divider { height: 1px; background: #e3e3e8; margin: 24px 0 0; }
       .rulelist.disabled { opacity: .5; }
       .rulelist.disabled .rule-t { text-decoration: line-through; }
-      .voice-toggle { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin: 4px 0 10px; cursor: pointer; }
+      .voice-toggle { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; margin: 4px 0 10px; cursor: pointer; }
       .setrow { margin-bottom: 16px; }
       .setrow .k { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #2a2a2a; margin-bottom: 4px; }
       .setrow .v { word-break: break-all; }
-      .toggle-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; cursor: pointer; }
+      .toggle-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; font-size: 13px; cursor: pointer; }
       /* Dim a control that's disabled because Research is off (the dependency). */
       .toggle-row:has(input:disabled), .setrow:has(select:disabled) { opacity: .45; }
       /* Custom checkbox: white box → black when checked, with a thin 1px checkmark. */
       #modal-body input[type="checkbox"] {
-        appearance: none; -webkit-appearance: none; margin: 0; box-sizing: border-box;
+        appearance: none; -webkit-appearance: none; margin: 2px 0 0; box-sizing: border-box;
         width: 15px; height: 15px; flex-shrink: 0; position: relative; cursor: pointer;
         border: 1px solid #555; border-radius: 3px; background: #fff;
         transition: background .15s linear, border-color .15s linear;
@@ -313,9 +313,11 @@
         display: inline-flex; align-items: center; gap: 0; flex: 0 0 auto; box-sizing: border-box;
         padding: 1px 4px; border-radius: 999px; border: 1px solid #e7b7b3; background: #fff;
         color: #c0261e; cursor: pointer; font-size: 12px; font-weight: 600; line-height: 1.55;
-        transition: background .18s linear;
+        transition: background .18s linear, padding-left .22s ease;
       }
-      .disc-collapse:hover { background: #fbf3f2; }
+      /* Expanded (hover): give the label breathing room from the left edge; collapsed
+         stays a symmetric circle (padding-left returns to 4px). */
+      .disc-collapse:hover { background: #fbf3f2; padding-left: 12px; }
       .disc-collapse svg { width: 13px; height: 13px; flex: 0 0 auto; }
       .disc-collapse .lbl {
         max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap; margin-right: 0; line-height: 1.55;
@@ -397,6 +399,16 @@
         border-radius: 8px;
         margin-bottom: 10px;
       }
+      /* Custom caret so it sits 5px from the right edge (half the 10px left inset),
+         instead of the browser default that hugs the border. */
+      select.field {
+        appearance: none; -webkit-appearance: none;
+        padding-right: 28px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 5px center;
+        background-size: 12px 12px;
+      }
       .btn-primary {
         width: 100%;
         padding: 10px;
@@ -465,6 +477,11 @@
       .msg.thinking i:nth-child(2) { animation-delay: .18s; }
       .msg.thinking i:nth-child(3) { animation-delay: .36s; }
       @keyframes ta-think { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
+      /* Reusable inline loading dots (same animation as the chat's thinking dots). */
+      .ta-dots { display: inline-flex; align-items: center; gap: 4px; height: 34px; }
+      .ta-dots i { width: 5px; height: 5px; border-radius: 50%; background: #9a9aa2; opacity: .25; animation: ta-think 1.1s infinite ease-in-out both; }
+      .ta-dots i:nth-child(2) { animation-delay: .18s; }
+      .ta-dots i:nth-child(3) { animation-delay: .36s; }
 
       /* ---- AskUserQuestion card ---- */
       .qcard { border: 1px solid #e0e0e6; border-radius: 10px; padding: 12px; margin-bottom: 12px; background: #fff; }
