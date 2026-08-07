@@ -48,6 +48,7 @@ app.setPath("userData", path.join(app.getPath("appData"), USER_DATA_ID));
 const { TEMPLATE_EXCLUDE } = require("./template-exclude.cjs");
 const { startCaptureBridge, stopCaptureBridge } = require("./capture-bridge.cjs");
 const vercel = require("./publish.cjs");
+const { validateCards } = require("./intake/cards.cjs");
 
 const appRoot = path.resolve(__dirname, ".."); // the Electron app / template source (git worktree in dev; Resources/app when packaged)
 
@@ -891,6 +892,12 @@ function broadActive(dir) { return researchActive(dir) && broadToggle(dir); }
 const pendingAsks = new Map();
 let askSeq = 0;
 
+// Pending `intake` tool calls (the rich, in-pane onboarding channel — ticket T2).
+// Mirrors pendingAsks: the agent's intake MCP tool awaits a renderer answer through
+// these, keyed by an incrementing id.
+const pendingIntakes = new Map();
+let intakeSeq = 0;
+
 ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
   if (!currentProject) {
     event.sender.send("agent:event", { type: "error", message: "No project is open." });
@@ -908,11 +915,24 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
       if (!event.sender.isDestroyed()) event.sender.send("agent:ask", { id, questions });
       else reject(new Error("window closed"));
     });
+  // Bridge: validate the intake cards, send them to the pane, resolve when the
+  // designer submits (agent:intakeAnswer). Validating here — BEFORE the round-trip —
+  // is what makes a bad card spec fail loud (rejects the tool call) instead of
+  // hanging the turn with a broken pane.
+  const askIntake = (cards) =>
+    new Promise((resolve, reject) => {
+      const v = validateCards(cards);
+      if (!v.ok) { reject(new Error("invalid intake cards: " + v.errors.join(" | "))); return; }
+      if (event.sender.isDestroyed()) { reject(new Error("window closed")); return; }
+      const id = ++intakeSeq;
+      pendingIntakes.set(id, { resolve, reject });
+      event.sender.send("agent:intake", { id, cards });
+    });
   // Tell the /design-brief flow whether the licensed research layer is active, via
   // an env var the agent's Bash inherits (same channel as TA_CAPTURE_* etc.).
   process.env.TA_DESIGN_RESEARCH = researchActive(currentProject) ? "on" : "off";
   process.env.TA_DESIGN_RESEARCH_BROAD = broadActive(currentProject) ? "on" : "off";
-  const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, model: currentModel, copyVoice: effectiveVoice(currentProject) });
+  const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, askIntake, model: currentModel, copyVoice: effectiveVoice(currentProject) });
   if (result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it
   return result;
 });
@@ -986,6 +1006,27 @@ ipcMain.handle("agent:cancelAsk", (_event, { id }) => {
   if (p) {
     pendingAsks.delete(id);
     p.reject(new Error("cancelled"));
+  }
+  return { ok: true };
+});
+
+// The pane submitted the designer's intake answers → resolve the waiting tool call.
+ipcMain.handle("agent:intakeAnswer", (_event, { id, answers }) => {
+  const p = pendingIntakes.get(id);
+  if (p) {
+    pendingIntakes.delete(id);
+    p.resolve(answers || {});
+  }
+  return { ok: true };
+});
+
+// The designer dismissed the intake → reject so the tool returns an error (not a hang)
+// and the agent can decide the remaining fields itself.
+ipcMain.handle("agent:cancelIntake", (_event, { id }) => {
+  const p = pendingIntakes.get(id);
+  if (p) {
+    pendingIntakes.delete(id);
+    p.reject(new Error("the designer dismissed the intake"));
   }
   return { ok: true };
 });

@@ -19,6 +19,15 @@ contextBridge.exposeInMainWorld("desktop", {
   answerAgent: (id, answers) => ipcRenderer.invoke("agent:answer", { id, answers }),
   cancelAsk: (id) => ipcRenderer.invoke("agent:cancelAsk", { id }),
 
+  // ---- Intake (rich in-pane onboarding cards — ticket T2) ----
+  onAgentIntake: (cb) => {
+    const listener = (_e, data) => cb(data);
+    ipcRenderer.on("agent:intake", listener);
+    return () => ipcRenderer.removeListener("agent:intake", listener);
+  },
+  answerIntake: (id, answers) => ipcRenderer.invoke("agent:intakeAnswer", { id, answers }),
+  cancelIntake: (id) => ipcRenderer.invoke("agent:cancelIntake", { id }),
+
   // ---- API key ----
   getKeyStatus: () => ipcRenderer.invoke("key:status"),
   saveKey: (key) => ipcRenderer.invoke("key:save", { key }),

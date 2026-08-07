@@ -16,13 +16,16 @@ import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 
-let _query = null;
+let _sdk = null;
+async function getSdk() {
+  if (_sdk) return _sdk;
+  _sdk = await import("@anthropic-ai/claude-agent-sdk");
+  return _sdk;
+}
 async function getQuery() {
-  if (_query) return _query;
-  const mod = await import("@anthropic-ai/claude-agent-sdk");
-  _query = mod.query;
-  return _query;
+  return (await getSdk()).query;
 }
 
 // The SDK spawns a SELF-CONTAINED native `claude` binary (bundled per-platform
@@ -87,7 +90,54 @@ function buildVoiceAppend(voice) {
   return s;
 }
 
-export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, model, copyVoice }) {
+// The zod shape for one intake card (mirrors desktop/intake/cards.cjs — kept in sync
+// there). Describing it richly here is what teaches the model to emit good cards; the
+// authoritative semantic check (unique ids, options required for choice types) runs in
+// main.cjs's askIntake via cards.cjs and surfaces bad output as a clear tool error.
+const CARD_SHAPE = z.object({
+  id: z.string().describe("stable, unique id for this card — the answer comes back keyed by it"),
+  type: z.enum(["open-text", "single-choice", "multi-choice", "chips", "reference"])
+    .describe("open-text = free text; single/multi-choice = pick from options; chips = compact multi-select; reference = a URL + why they like it"),
+  label: z.string().describe("the question or prompt shown on the card"),
+  field: z.string().optional().describe("the Brief field this answer maps to (e.g. 'what', 'sections', 'references'); omit if it doesn't map 1:1"),
+  help: z.string().optional().describe("an optional hint shown under the label"),
+  placeholder: z.string().optional().describe("input placeholder (open-text / reference)"),
+  options: z.array(z.string()).optional().describe("the choice pool — REQUIRED for single-choice, multi-choice, and chips"),
+  skippable: z.boolean().optional().describe("if true the designer can skip; a skip records null (= you decide)"),
+  agentDecidesLabel: z.string().optional().describe("label for the skip affordance, e.g. 'Let you pick'"),
+});
+
+// Build the in-process `intake` MCP server for ONE runPrompt call. The tool handler
+// runs in this (main) process and awaits `askIntake(cards)`, which routes the cards to
+// the renderer's pane and resolves when the designer submits — the whole round-trip is
+// synchronous to the agent's turn (the MCP tool-call timeout is effectively unbounded,
+// so the designer can take their time). A fresh server per call binds this call's
+// askIntake bridge. See ticket T2.
+function buildIntakeServer(sdk, askIntake) {
+  const intakeTool = sdk.tool(
+    "intake",
+    "Ask the designer one or more rich intake cards IN THE PANE (not the chat) and wait for their answers. " +
+      "Use this to drive the onboarding conversation: lead with an open-text 'what are we making', then " +
+      "sprinkle adaptive follow-ups (chips for sections, a reference card for sites they like + why, choices " +
+      "for tone/devices). Prefer this over AskUserQuestion for anything that isn't a plain multiple-choice. " +
+      "Returns { answers: { [cardId]: value } }; a skipped card's value is null (you decide that field).",
+    { cards: z.array(CARD_SHAPE).min(1).describe("one or more cards to show the designer, in order") },
+    async (args) => {
+      try {
+        const answers = await askIntake(args.cards);
+        return { content: [{ type: "text", text: JSON.stringify({ answers }) }] };
+      } catch (err) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `intake rejected: ${err?.message ?? String(err)}` }],
+        };
+      }
+    },
+  );
+  return sdk.createSdkMcpServer({ name: "intake", version: "1.0.0", tools: [intakeTool] });
+}
+
+export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, askIntake, model, copyVoice }) {
   let resolvedSession = sessionId;
 
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -116,6 +166,8 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
   try {
     const claudeExe = resolveClaudeExecutable();
     const voiceAppend = buildVoiceAppend(copyVoice);
+    // The in-process intake tool, only when a bridge is provided (agent:prompt path).
+    const intakeServer = askIntake ? buildIntakeServer(await getSdk(), askIntake) : null;
     const iterator = query({
       prompt,
       options: {
@@ -124,6 +176,7 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
         permissionMode: "default",
         ...(claudeExe ? { pathToClaudeCodeExecutable: claudeExe } : {}),
         ...(model ? { model } : {}),
+        ...(intakeServer ? { mcpServers: { intake: intakeServer } } : {}),
         // Copy voice → append to Claude Code's default system prompt (only when a
         // voice is set, so the no-voice path is byte-for-byte the current default).
         ...(voiceAppend ? { systemPrompt: { type: "preset", preset: "claude_code", append: voiceAppend } } : {}),
@@ -143,6 +196,11 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
           // needs-auth and its tools are simply skipped — a clean degrade, not an
           // abort — which also tells us OAuth is the remaining piece.
           "mcp__figma__*",
+          // The in-process intake tool (registered as the "intake" SDK MCP server
+          // when an askIntake bridge is present). Pre-approved so it clears the
+          // allow-rules stage and never hits an interactive permission handshake
+          // this non-interactive session can't answer.
+          "mcp__intake__*",
         ],
         ...(sessionId ? { resume: sessionId } : {}),
 
