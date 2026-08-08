@@ -225,6 +225,23 @@ permission-gated and is inconsistent). Source them over plain HTTP instead:
    placeholders.
 4. **Single-source still applies** (rule 4): author the image once; `DesignSurface`
    renders it across every device frame.
+5. **Record each image's licence → `public/images/credits.json`.** A gathered photo is
+   often **copyrighted**, the designer must know which ones aren't free before they
+   ship. As you fetch images, maintain a manifest so the preview can flag them:
+   ```json
+   { "images": [
+     { "file": "hero.jpg",  "source": "unsplash.com", "url": "<url>", "free": true },
+     { "file": "team1.jpg", "source": "acme.com",     "url": "<url>", "free": false }
+   ] }
+   ```
+   Set **`free: true` ONLY** for images from a known free-to-use source (Unsplash,
+   Pexels, Pixabay, Wikimedia Commons, or an explicitly public-domain/CC0 source).
+   **Everything else, a brand site, a generic CDN, a search result, is `free: false`**
+   (when unsure, `false`, that's the safe default). `source` = the origin domain.
+   Placeholders (network-free token blocks) get **no** entry. Write the manifest fresh
+   for this design (list the images you actually used). `DesignSurface` reads it and
+   shows one small "not free to reuse" badge (lower-left, local-dev only) listing the
+   flagged images, it's excluded from the Figma export and the shared Vercel preview.
 
 Why local over hotlinking: the Figma export fetches each image URL with a bounded
 timeout and **skips a slow/blocked/CORS'd CDN image** (empty box in Figma), so a

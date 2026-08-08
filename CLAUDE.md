@@ -431,7 +431,13 @@ Before hand-rolling UI, use the resources already installed:
   slow/failed fetch, don't retry, prompt, or escalate, drop a network-free
   placeholder (`aspect-video bg-ta-border`), keep building, and **list the
   placeholders in the closing summary** so the designer can supply the real assets.
-  See [`/design`](.claude/commands/design.md) §4b.
+  Also **record each gathered image's licence in `public/images/credits.json`**
+  (`{file, source, url, free}`; `free:true` only for known free sources like
+  Unsplash/Pexels/Pixabay, else `false`), so
+  [ImageCredits](src/app/components/ImageCredits.tsx) can show one small "not free to
+  reuse" badge (lower-left, **local-dev only**, excluded from the Figma export + the
+  shared Vercel preview) alerting the designer to license or replace them. See
+  [`/design`](.claude/commands/design.md) §4b.
 - **Tailwind-first.** Build components and elements with Tailwind utility
   classes. Apply the active variation's design values, the fonts, colors, and
   structures defined in its styleguide (`--ta-*` / `--ta-font-*` tokens, exposed

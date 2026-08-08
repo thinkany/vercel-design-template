@@ -5,6 +5,7 @@ import { TabletFrame } from "./components/TabletFrame";
 import { ViewToggle } from "./components/ViewToggle";
 import { resolveComponent } from "./variationRegistry";
 import { MenuStateContext } from "./menuState";
+import { ImageCredits } from "./components/ImageCredits";
 import { previewConfig, projectType } from "@/config/site";
 
 type View = "desktop" | "tablet" | "mobile";
@@ -139,6 +140,8 @@ export function DesignSurface({
       ) : (
         surface
       )}
+      {/* Non-free-image alert (local-dev working aid; never in capture/export). */}
+      <ImageCredits />
     </div>
   );
 }
