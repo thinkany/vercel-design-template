@@ -1901,6 +1901,34 @@ async function renderClaude(body) {
   keyNote.textContent = "Key stored encrypted in your OS keychain.";
   body.appendChild(keyNote);
 
+  // ── Images ──────────────────────────────────────────────────────────────────
+  const imgSep = document.createElement("div");
+  imgSep.className = "drawer-sep";
+  body.appendChild(imgSep);
+  const imgLabel = document.createElement("div");
+  imgLabel.className = "sess-label";
+  imgLabel.textContent = "Images";
+  body.appendChild(imgLabel);
+  const imgDesc = document.createElement("div");
+  imgDesc.className = "sess-desc";
+  imgDesc.textContent = "By default the design sources real images. Turn this on to skip that and hold every image spot with a marked placeholder instead, so you can drop in your own.";
+  body.appendChild(imgDesc);
+
+  const imgMode = await window.desktop.getImagesMode();
+  const imgRow = document.createElement("label");
+  imgRow.className = "toggle-row";
+  const imgCb = document.createElement("input");
+  imgCb.type = "checkbox";
+  imgCb.checked = !!imgMode.placeholder;
+  const imgTxt = document.createElement("span");
+  imgTxt.textContent = "No images, placeholders only";
+  imgRow.append(imgCb, imgTxt);
+  imgCb.addEventListener("change", () => {
+    window.desktop.setImagesMode(imgCb.checked);
+    addMsg("system", imgCb.checked ? "✓ Placeholders only, I won't source images." : "✓ Image sourcing back on.");
+  });
+  body.appendChild(imgRow);
+
   // ── Research the field (licensed enhancement — only rendered when licensed) ──
   const research = await window.desktop.getResearch();
   if (research.licensed) {

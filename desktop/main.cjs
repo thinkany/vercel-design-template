@@ -936,6 +936,9 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
   // an env var the agent's Bash inherits (same channel as TA_CAPTURE_* etc.).
   process.env.TA_DESIGN_RESEARCH = researchActive(currentProject) ? "on" : "off";
   process.env.TA_DESIGN_RESEARCH_BROAD = broadActive(currentProject) ? "on" : "off";
+  // Image mode: "placeholder" = don't source images, hold each spot with an FPO
+  // block; else "on" (the normal gather-into-public/ flow). Same env channel.
+  process.env.TA_DESIGN_IMAGES = loadImagesPlaceholder() ? "placeholder" : "on";
   const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, askIntake, model: currentModel, copyVoice: effectiveVoice(currentProject) });
   if (result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it
   return result;
@@ -952,6 +955,11 @@ ipcMain.handle("research:get", () => ({
   effective: researchActive(currentProject),
   broadEffective: broadActive(currentProject),
 }));
+// ---- Images mode IPC (placeholder-only vs source) — a global preference --------
+function loadImagesPlaceholder() { return !!loadUiState().imagesPlaceholder; }
+ipcMain.handle("images:get", () => ({ placeholder: loadImagesPlaceholder() }));
+ipcMain.handle("images:set", (_e, { placeholder }) => { setUiState({ imagesPlaceholder: !!placeholder }); return { ok: true }; });
+
 ipcMain.handle("research:setGlobal", (_e, { enabled }) => { saveResearchGlobal(enabled); return { ok: true }; });
 ipcMain.handle("research:setVariation", (_e, { enabled }) => {
   if (currentProject) saveResearchVariation(currentProject, enabled);

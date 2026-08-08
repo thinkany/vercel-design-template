@@ -42,6 +42,8 @@ contextBridge.exposeInMainWorld("desktop", {
   clearKey: () => ipcRenderer.invoke("key:clear"),
 
   // ---- Competitor research (licensed toggle) ----
+  getImagesMode: () => ipcRenderer.invoke("images:get"),
+  setImagesMode: (placeholder) => ipcRenderer.invoke("images:set", { placeholder }),
   getResearch: () => ipcRenderer.invoke("research:get"),
   setResearchGlobal: (enabled) => ipcRenderer.invoke("research:setGlobal", { enabled }),
   setResearchVariation: (enabled) => ipcRenderer.invoke("research:setVariation", { enabled }),
