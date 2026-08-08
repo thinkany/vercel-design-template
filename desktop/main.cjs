@@ -1378,6 +1378,7 @@ ipcMain.handle("project:status", () => ({
   hasProject: !!currentProject,
   path: currentProject,
   name: currentProject ? path.basename(currentProject) : null,
+  ...(currentProject ? readProjectMeta(currentProject) : { client: "", project: "" }),
   viteUrl,
   design: currentProject ? detectDesign(currentProject) : { active: false, variationId: null },
   companyProfile: hasCompanyProfile(currentProject),
@@ -1495,7 +1496,7 @@ ipcMain.handle("project:create", async () => {
   } catch (e) {
     return { ok: false, error: `Project created, but Vite failed to start: ${e.message}` };
   }
-  return { ok: true, path: dir, name: path.basename(dir), viteUrl };
+  return { ok: true, path: dir, name: path.basename(dir), ...readProjectMeta(dir), viteUrl };
 });
 
 ipcMain.handle("project:open", async () => {
@@ -1525,7 +1526,7 @@ ipcMain.handle("project:open", async () => {
   } catch (e) {
     return { ok: false, error: `Vite failed to start: ${e.message}` };
   }
-  return { ok: true, path: dir, name: path.basename(dir), viteUrl };
+  return { ok: true, path: dir, name: path.basename(dir), ...readProjectMeta(dir), viteUrl };
 });
 
 // The last few opened projects, excluding the current one, pruned to those that
@@ -1555,7 +1556,7 @@ ipcMain.handle("project:openPath", async (_e, { path: dir } = {}) => {
   } catch (e) {
     return { ok: false, error: `Vite failed to start: ${e.message}` };
   }
-  return { ok: true, path: dir, name: path.basename(dir), viteUrl };
+  return { ok: true, path: dir, name: path.basename(dir), ...readProjectMeta(dir), viteUrl };
 });
 
 ipcMain.handle("project:reset", () => {

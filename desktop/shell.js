@@ -7,6 +7,19 @@ const el = (id) => document.getElementById(id);
 // Bar
 const status = el("status");
 const projname = el("projname");
+// Title for the chat bar: "Client - Project" when both exist, else whichever is set,
+// else the folder name. Sets a tooltip too so the full name shows when truncated.
+function projectTitle(m) {
+  const client = ((m && m.client) || "").trim();
+  const project = ((m && m.project) || "").trim();
+  if (client && project) return `${client} - ${project}`;
+  return client || project || (m && m.name) || "";
+}
+function setProjTitle(m) {
+  const t = projectTitle(m);
+  projname.textContent = t;
+  projname.title = t;
+}
 
 // Sidebar + modal
 const railHelp = el("rail-help");
@@ -663,7 +676,7 @@ async function boot() {
     showStage("project");
     return;
   }
-  projname.textContent = proj.name || "";
+  setProjTitle(proj);
   viteUrl = proj.viteUrl || null;
   design = proj.design || { active: false, variationId: null, previewReady: false };
   showStage("workspace");
@@ -739,7 +752,7 @@ async function chooseProject(kind) {
     if (res.canceled) return;
     if (res.ok) {
       closeAllTabs(); // fresh browser tabs for the new project
-      projname.textContent = res.name || "";
+      setProjTitle(res);
       viteUrl = res.viteUrl || null;
       design = await window.desktop.getDesignState();
       showStage("workspace");
@@ -1115,7 +1128,7 @@ async function enterProjectFromResult(res) {
   conversationStarted = false;
   resetChatUi();   // clears chat log + gauge + any live intake
   closeAllTabs();  // fresh preview tabs + reset build reveal
-  projname.textContent = res.name || "";
+  setProjTitle(res);
   viteUrl = res.viteUrl || null;
   design = await window.desktop.getDesignState();
   showStage("workspace");

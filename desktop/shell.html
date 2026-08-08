@@ -374,8 +374,10 @@
         position: relative; z-index: 2;   /* sit above the chat so the shadow shows */
         box-shadow: 0 3px 8px rgba(0, 0, 0, .18);
       }
-      #barright { display: flex; gap: 10px; align-items: center; }
-      #projname { opacity: 0.85; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #barright { display: flex; gap: 10px; align-items: center; flex: 0 0 auto; }
+      /* Flexes with the chat column: shows more of the client/project as it's dragged
+         wider, ellipsizes when narrow (full name in the title tooltip). */
+      #projname { opacity: 0.85; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #status { opacity: 0.55; }
       .barbtn {
         background: none;
