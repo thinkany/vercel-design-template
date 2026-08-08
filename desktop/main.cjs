@@ -416,6 +416,23 @@ function addRecentProject(dir) {
   const prev = (loadUiState().recentProjects || []).filter((x) => x && x !== dir);
   setUiState({ recentProjects: [dir, ...prev].slice(0, 8) });
 }
+// Read a project's identity from its committed .env (folder names aren't reliable
+// identifiers). Returns { client, project } (either may be empty).
+function readProjectMeta(dir) {
+  let client = "", project = "";
+  try {
+    const env = fs.readFileSync(path.join(dir, ".env"), "utf8");
+    const get = (k) => {
+      const m = env.match(new RegExp("^\\s*" + k + "\\s*=\\s*(.*)$", "m"));
+      return m ? m[1].trim().replace(/^["']|["']$/g, "").trim() : "";
+    };
+    client = get("VITE_CLIENT_NAME");
+    project = get("VITE_PROJECT_NAME");
+  } catch {
+    /* no .env yet */
+  }
+  return { client, project };
+}
 function clearProjectPath() {
   try {
     fs.unlinkSync(projectConfigPath());
@@ -1469,6 +1486,8 @@ ipcMain.handle("project:create", async () => {
       console.error("[main] company-profile auto-apply failed:", e.message);
     }
   }
+  if (currentProject && currentSessionId) { try { archiveSession(currentProject, currentSessionId); } catch {} }
+  currentSessionId = null;
   currentProject = dir;
   saveProjectPath(dir);
   try {
@@ -1497,6 +1516,8 @@ ipcMain.handle("project:open", async () => {
   } catch {
     /* has its own node_modules or symlink failed; Vite will report if unusable */
   }
+  if (currentProject && currentSessionId) { try { archiveSession(currentProject, currentSessionId); } catch {} }
+  currentSessionId = null;
   currentProject = dir;
   saveProjectPath(dir);
   try {
@@ -1513,7 +1534,7 @@ ipcMain.handle("projects:recent", () => {
   return (loadUiState().recentProjects || [])
     .filter((p) => p && p !== currentProject && fs.existsSync(p) && fs.existsSync(path.join(p, "package.json")))
     .slice(0, 5)
-    .map((p) => ({ path: p, name: path.basename(p) }));
+    .map((p) => ({ path: p, name: path.basename(p), ...readProjectMeta(p) }));
 });
 
 // Open a specific project by path (a Recent-Projects click) — like project:open

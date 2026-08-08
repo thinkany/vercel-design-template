@@ -1058,13 +1058,24 @@ async function renderProjects(body) {
       const open = document.createElement("button");
       open.className = "sessrow-open";
       open.title = r.path;
+
+      // Client name → project name → path (folder names aren't reliable IDs).
+      const primary = r.client || r.project || r.name;
       const nm = document.createElement("div");
       nm.className = "sess-title";
-      nm.textContent = r.name;
+      nm.textContent = primary;
+      open.appendChild(nm);
+      if (r.client && r.project && r.project !== r.client) {
+        const sub = document.createElement("div");
+        sub.className = "recent-sub";
+        sub.textContent = r.project;
+        open.appendChild(sub);
+      }
       const pth = document.createElement("div");
       pth.className = "recent-path";
       pth.textContent = r.path;
-      open.append(nm, pth);
+      open.appendChild(pth);
+
       open.addEventListener("click", () => openRecentProject(r.path));
       row.appendChild(open);
       list.appendChild(row);
@@ -1072,23 +1083,34 @@ async function renderProjects(body) {
     body.appendChild(list);
   }
 
+  // ── Create or switch project ──
+  const csep = document.createElement("div");
+  csep.className = "drawer-sep";
+  body.appendChild(csep);
+  const clabel = document.createElement("div");
+  clabel.className = "sess-label";
+  clabel.textContent = "Create or switch project";
+  body.appendChild(clabel);
+
+  const btnRow = document.createElement("div");
+  btnRow.className = "projbtns";
+  const createBtn = document.createElement("button");
+  createBtn.className = "panelbtn primary";
+  createBtn.textContent = "Create new";
+  createBtn.addEventListener("click", createNewProject);
   const switchBtn = document.createElement("button");
   switchBtn.className = "panelbtn";
-  switchBtn.style.marginTop = "12px";
   switchBtn.textContent = "Switch project…";
-  switchBtn.addEventListener("click", switchProject);
-  body.appendChild(switchBtn);
+  switchBtn.addEventListener("click", switchToExisting);
+  btnRow.append(createBtn, switchBtn);
+  body.appendChild(btnRow);
 }
 
-// Open a project straight from the Recent list (no chooser). Mirrors chooseProject's
-// success path, with a clean slate for the incoming project.
-async function openRecentProject(dir) {
-  closeModal();
-  const res = await window.desktop.openProjectPath(dir);
-  if (!res || !res.ok) {
-    addMsg("error", (res && res.error) || "Could not open that project.");
-    return;
-  }
+// Boot the workspace from a create/open/openPath result, with a clean slate for the
+// incoming project. Returns true on success. Shared by all three entry points.
+async function enterProjectFromResult(res) {
+  if (!res || res.canceled) return false;
+  if (!res.ok) { addMsg("error", res.error || "Could not open the project."); return false; }
   sessionId = null;
   conversationStarted = false;
   resetChatUi();   // clears chat log + gauge + any live intake
@@ -1099,6 +1121,19 @@ async function openRecentProject(dir) {
   showStage("workspace");
   refreshPreview();
   if (!(await maybeAutoRestoreSession())) renderStartChoices();
+  return true;
+}
+async function openRecentProject(dir) {
+  closeModal();
+  await enterProjectFromResult(await window.desktop.openProjectPath(dir));
+}
+async function createNewProject() {
+  closeModal();
+  await enterProjectFromResult(await window.desktop.createProject());
+}
+async function switchToExisting() {
+  closeModal();
+  await enterProjectFromResult(await window.desktop.openProject());
 }
 
 // --- Company profile: export the agency identity ---
@@ -2156,15 +2191,6 @@ async function renderClaude(body) {
   body.appendChild(modelNote);
 }
 
-// --- Moved actions ---
-async function switchProject() {
-  closeModal();
-  await window.desktop.resetProject();
-  sessionId = null;
-  log.innerHTML = "";
-  noProjectPlaceholder();
-  showStage("project");
-}
 async function disconnectKey() {
   closeModal();
   await window.desktop.clearKey();
