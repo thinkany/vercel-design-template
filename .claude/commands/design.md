@@ -200,6 +200,17 @@ routing (`?v={id}&about`), rendering, the nav link, and Figma export. No
 
 ## 4b. Images, non-browser, download to `public/`, else placeholder
 
+**FIRST run `echo $TA_DESIGN_IMAGES`.** If it prints **`placeholder`**, the designer
+chose *No images, placeholders only* (Claude Settings), **do NOT source any images**,
+skip the whole gather flow below (no `curl`, no `credits.json`). For **every** image
+spot, hold it with the FPO component instead:
+`<ImagePlaceholder className="aspect-video w-full rounded-xl" label="Hero image" />`
+(import from `@/app/components/ImagePlaceholder`; give the real aspect/rounding for
+that spot and a short `label` of what it'll be). In the closing summary, say the
+image spots are held with placeholders **by preference** (not failures), ready for
+the designer's own art. Anything other than `placeholder` (or unset) = the normal
+sourcing flow below.
+
 Design generation is code, no browser. Gathering images is the same:
 **never open a headless/automation browser or screenshot to find images** (it gets
 permission-gated and is inconsistent). Source them over plain HTTP instead:
@@ -214,9 +225,10 @@ permission-gated and is inconsistent). Source them over plain HTTP instead:
    **non-interactive** (the scaffold allowlists `curl`, so it never prompts) and
    **bounded** (it can't hang). If it isn't a fast success (timeout, non-200,
    error), **do not retry, do not escalate to a browser, do not stop to ask**,
-   drop in a **network-free placeholder** (a token-colored block at the right aspect
-   ratio, e.g. `<div className="aspect-video bg-ta-border rounded" />`) and keep
-   building. **Don't interrupt the design over a missing image.**
+   drop in the **network-free FPO placeholder** at the right aspect ratio,
+   `<ImagePlaceholder className="aspect-video w-full rounded" label="Hero image" />`
+   (from `@/app/components/ImagePlaceholder`), and keep building. **Don't interrupt
+   the design over a missing image.**
 3. **Track placeholders → report them in the closing summary.** Keep a running list
    of every image that fell back to a placeholder (which section, what it should
    be). When the design is ready to view, tell the designer plainly in the wrap-up,

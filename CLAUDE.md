@@ -422,7 +422,11 @@ Before hand-rolling UI, use the resources already installed:
   `view === "mobile" ? <copyA/> : <copyB/>`) or duplicating text/images per
   device. The same applies to shared globals (Header/Footer): they live in one
   component consumed by every page, edit that component, not each page.
-- **Images are gathered non-browser, into `public/`.** Never open a headless
+- **Images are gathered non-browser, into `public/`** (unless the designer chose
+  *No images, placeholders only* in Claude Settings, which sets `TA_DESIGN_IMAGES=
+  placeholder`, then skip sourcing and hold every spot with
+  [ImagePlaceholder](src/app/components/ImagePlaceholder.tsx), the FPO block. See
+  [`/design`](.claude/commands/design.md) §4b). Never open a headless
   browser or screenshot to source images (gated + inconsistent). Fetch over plain
   HTTP with one **bounded, non-interactive** attempt (`curl -fsS --max-time 8 -o
   public/images/…`, the scaffold allowlists `curl` so it never prompts) into
