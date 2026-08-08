@@ -598,6 +598,20 @@
       .qlink:hover { border-color: #111; color: #111; }
       #views { flex: 1; position: relative; min-height: 0; }
       #views webview { width: 100%; height: 100%; }
+      /* Home-tab progress cover (Style guide is live alongside it). */
+      #buildoverlay {
+        position: absolute; inset: 0; z-index: 5;
+        display: flex; align-items: center; justify-content: center;
+        text-align: center; padding: 32px;
+        background: linear-gradient(180deg, #fbfbfd, #f4f4f7);
+      }
+      #buildoverlay[hidden] { display: none; }
+      .bo-inner { max-width: 460px; }
+      .bo-emoji { font-size: 40px; line-height: 1; margin-bottom: 16px; }
+      #bo-title { font-size: 19px; color: #1a1a1a; margin: 0 0 10px; }
+      #bo-text { font-size: 14px; color: #666; margin: 0; line-height: 1.6; text-wrap: balance; }
+      #buildoverlay .ph-progress { margin: 18px auto 0; }
+      .bo-hint { font-size: 12.5px; color: #999; margin-top: 16px; }
       /* "Point & comment" toggle — floats over the live preview. */
       #feedback-toggle {
         position: absolute; right: 16px; bottom: 16px; z-index: 10;
@@ -935,6 +949,18 @@
             </span>
           </div>
           <div id="views">
+            <!-- Progress cover for the Home tab while it's still being designed
+                 (the Style guide tab is live). Scoped INSIDE #views so the tab bar
+                 stays usable; the home webview is display:none behind it. -->
+            <div id="buildoverlay" hidden>
+              <div class="bo-inner">
+                <div class="bo-emoji">✨</div>
+                <div id="bo-title">Designing your home page…</div>
+                <div id="bo-text">Laying out your sections…</div>
+                <div class="ph-progress"><div class="ph-progress-bar"></div></div>
+                <div class="bo-hint">Your Style guide is ready, have a look while this finishes.</div>
+              </div>
+            </div>
             <button id="feedback-toggle" hidden title="Point at an element in the preview and leave a note for Claude" aria-label="Point and Comment">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
               <span id="feedback-toggle-label">Point &amp; Comment</span>

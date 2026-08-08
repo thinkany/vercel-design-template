@@ -71,6 +71,8 @@ const phEmoji = previewph.querySelector(".ph-emoji");
 const phTitle = el("ph-title");
 const phText = el("ph-text");
 const phProgress = el("ph-progress");
+const buildoverlay = el("buildoverlay");
+const boText = el("bo-text");
 // Intake host (in-pane onboarding — T3/T4)
 const intakeph = el("intakeph");
 const intakeStack = el("intake-stack");
@@ -106,6 +108,11 @@ let workingTimer = null;
 let guarding = false;
 let guardSeq = 0;
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
+// Progressive build reveal: once previewReady flips mid-build, we open the Style
+// guide tab LIVE and keep the Home tab under a progress cover until the turn ends.
+let homeTab = null;         // the Home tab opened during the early reveal
+let homeBuilding = false;   // true while the Home tab is still being designed
+let buildMsgTimer = null;   // rotates the build-overlay subline
 
 // ---- Resizable chat | preview divider (min 400px, remembered) ---------------
 (function initChatResize() {
@@ -216,10 +223,19 @@ function renderTabs() {
 function setActiveTab(tab) {
   activeTab = tab;
   tabs.forEach((t) => { t.wv.style.display = t === tab ? "flex" : "none"; });
+  applyBuildOverlay(); // cover the Home tab if it's still designing
   renderTabs();
   syncNav();
   setFeedbackMode(false); // don't carry feedback mode across tab switches
   feedbackBtn.hidden = !tab; // the toggle only makes sense with a live preview
+}
+
+// Show the progress cover only when the Home tab is active AND still designing;
+// the half-written home webview stays display:none behind it.
+function applyBuildOverlay() {
+  const cover = !!(homeBuilding && homeTab && activeTab === homeTab);
+  buildoverlay.hidden = !cover;
+  if (cover) homeTab.wv.style.display = "none";
 }
 
 // ---- Point & comment: element feedback from the preview → chat ----------------
@@ -304,6 +320,7 @@ function closeAllTabs() {
   activeTab = null;
   tabsOpened = false;
   guarding = false; guardSeq++; // drop any in-flight live-edit guard
+  resetBuildReveal(); // drop any home-tab cover / dangling homeTab ref
   feedbackBtn.hidden = true; setFeedbackButton(false);
   renderTabs();
 }
@@ -470,6 +487,62 @@ async function revealPreviewAfterEdit() {
   stopWorking();
   previewph.hidden = true;
   browser.hidden = false;
+}
+
+// ---- Progressive build reveal (styleguide live, home still designing) --------
+// While the design is being built, poll for the previewReady flip (which
+// apply-brand writes as soon as the styleguide tokens land). On the flip, reveal
+// the Style guide tab LIVE and open the Home tab under a progress cover; the turn
+// end (finishBuildReveal) uncovers the finished home.
+const BUILD_MESSAGES = [
+  "Laying out your sections…",
+  "Placing your hero and headline…",
+  "Building out the page…",
+  "Adding your content and imagery…",
+  "Bringing it all together…",
+];
+function startBuildRotation() {
+  stopBuildRotation();
+  let i = 0;
+  boText.textContent = BUILD_MESSAGES[0];
+  buildMsgTimer = setInterval(() => { i = (i + 1) % BUILD_MESSAGES.length; boText.textContent = BUILD_MESSAGES[i]; }, 4200);
+}
+function stopBuildRotation() { if (buildMsgTimer) { clearInterval(buildMsgTimer); buildMsgTimer = null; } }
+function setBuildMessage(text) { if (text) { stopBuildRotation(); boText.textContent = text; } }
+
+function resetBuildReveal() {
+  stopBuildRotation();
+  homeBuilding = false;
+  homeTab = null;
+  buildoverlay.hidden = true;
+}
+
+// The previewReady flip landed mid-build: reveal the Style guide live, park the
+// Home tab under the progress cover. Driven by the existing mid-turn readiness
+// poll in the "tool" event handler (no separate timer).
+function revealDuringBuild() {
+  if (tabsOpened || !viteUrl) return;
+  tabsOpened = true;
+  homeBuilding = true;
+  stopWorking();
+  previewph.hidden = true;
+  browser.hidden = false;
+  const style = openTab(quickUrl("styleguide"), "Style guide");
+  homeTab = openTab(quickUrl("home"), "Home");
+  setActiveTab(style); // land on the ready brand guidelines
+  startBuildRotation();
+}
+
+// Turn ended: the home design is complete — drop the cover and load the result.
+function finishBuildReveal() {
+  homeBuilding = false;
+  stopBuildRotation();
+  buildoverlay.hidden = true;
+  if (homeTab) {
+    navigate(homeTab, quickUrl("home")); // reload to the finished design
+    homeTab.wv.style.display = activeTab === homeTab ? "flex" : "none";
+  }
+  applyBuildOverlay();
 }
 
 async function showBrowser() {
@@ -2311,19 +2384,27 @@ window.desktop.onAgentEvent((evt) => {
         window.desktop.getDesignState().then((d) => {
           const flipped = d.previewReady && !design.previewReady;
           design = d;
-          if (flipped) { designJustActivated = true; refreshPreview(); }
+          if (!flipped) return;
+          designJustActivated = true;
+          // In the Get-Designing build: reveal the Style guide LIVE now and keep
+          // the Home tab covered (it's still being written). Otherwise (setup),
+          // the normal reveal opens both tabs.
+          if (intakePhase === "designing" && !tabsOpened) revealDuringBuild();
+          else refreshPreview();
         });
       }
       // Live preview already open + a file edit is starting → guard it so the
-      // designer never sees mid-edit error states. Held until the turn completes.
-      if (tabsOpened && EDIT_TOOLS.has(evt.name)) {
+      // designer never sees mid-edit error states. Skip while the Home cover is up
+      // (that cover already hides the in-progress home; the Style guide stays live).
+      if (tabsOpened && EDIT_TOOLS.has(evt.name) && !homeBuilding) {
         guardPreviewForEdit(friendlyActivity(evt.name, evt.target));
       }
       break;
     case "activity":
-      // Narrate what's happening in plain language in the preview placeholder —
-      // during setup (preview closed) OR while the live-edit guard is up.
+      // Narrate what's happening in plain language: in the preview placeholder
+      // (setup / guarded edit) or on the Home-tab cover during the build.
       if (!tabsOpened || guarding) setWorkingMessage(friendlyActivity(evt.name, evt.target));
+      else if (homeBuilding) setBuildMessage(friendlyActivity(evt.name, evt.target));
       break;
     case "result":
       finalizeAssistant();
@@ -2333,6 +2414,8 @@ window.desktop.onAgentEvent((evt) => {
       // Turn ended mid-intake → the brief is complete: show the review actions.
       if (intakeActive && intakeph.classList.contains("flow")) showBriefComplete();
       updateSessionGauge(evt.usage, evt.modelUsage); // refresh the context gauge + maybe nudge
+      // Home was revealed mid-build under a cover → the design is done: uncover it.
+      if (homeBuilding) { finishBuildReveal(); break; }
       // Guarding a live edit → the agent is DONE; settle Vite, then reveal.
       if (guarding) { revealPreviewAfterEdit(); break; }
       // A turn may have written the palette — re-check readiness and open the
@@ -2354,8 +2437,9 @@ window.desktop.onAgentEvent((evt) => {
       updateThinking(); // turn errored → clear the dots
       clearIntakePending();
       addMsg("error", "✖ " + evt.message);
-      // Even on error, settle-then-reveal so the designer isn't stuck behind the
-      // guard overlay (the chat carries the error detail).
+      // Even on error, settle-then-reveal so the designer isn't stuck behind a
+      // cover (the chat carries the error detail).
+      if (homeBuilding) { finishBuildReveal(); break; }
       if (guarding) { revealPreviewAfterEdit(); break; }
       refreshPreview();
       break;
@@ -2856,6 +2940,9 @@ function showPreparing() {
   phProgress.hidden = false;
   stopWorking(); // clear any stale rotation so ours (build-flavored) takes over
   startWorking(PREPARING_MESSAGES);
+  // The mid-turn readiness poll (in the "tool" handler) reveals the Style guide the
+  // moment previewReady flips, keeping the Home tab covered until the build ends.
+  resetBuildReveal();
 }
 
 // Dispatch to the per-type renderer. Every builder returns
