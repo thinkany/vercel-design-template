@@ -237,8 +237,10 @@ permission-gated and is inconsistent). Source them over plain HTTP instead:
    Set **`free: true` ONLY** for images from a known free-to-use source (Unsplash,
    Pexels, Pixabay, Wikimedia Commons, or an explicitly public-domain/CC0 source).
    **Everything else, a brand site, a generic CDN, a search result, is `free: false`**
-   (when unsure, `false`, that's the safe default). `source` = the origin domain.
-   Placeholders (network-free token blocks) get **no** entry. Write the manifest fresh
+   (when unsure, `false`, that's the safe default). `source` = the origin domain and
+   `url` = the exact URL you fetched it from, the badge turns them into a "visit
+   source ↗" link so the designer can go see where the image came from, so record
+   both accurately. Placeholders (network-free token blocks) get **no** entry. Write the manifest fresh
    for this design (list the images you actually used). `DesignSurface` reads it and
    shows one small "not free to reuse" badge (lower-left, local-dev only) listing the
    flagged images, it's excluded from the Figma export and the shared Vercel preview.

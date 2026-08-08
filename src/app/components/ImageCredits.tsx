@@ -94,13 +94,28 @@ export function ImageCredits() {
             {n} image{n > 1 ? "s" : ""} not free to reuse
           </div>
           <ul style={{ margin: "0 0 8px", padding: 0, listStyle: "none", maxHeight: 168, overflowY: "auto" }}>
-            {flagged.map((c) => (
-              <li key={c.file} style={{ padding: "2px 0", color: "#d7d7dd" }}>
-                <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#e5484d", marginRight: 7, verticalAlign: "middle" }} />
-                {c.file}
-                {c.source ? ` · ${c.source}` : ""}
-              </li>
-            ))}
+            {flagged.map((c) => {
+              const href = sourceLink(c);
+              return (
+                <li key={c.file} style={{ padding: "3px 0", color: "#d7d7dd" }}>
+                  <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#e5484d", marginRight: 7, verticalAlign: "middle" }} />
+                  <span style={{ verticalAlign: "middle" }}>{c.file}</span>
+                  {href ? (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#aab6ff", textDecoration: "none", verticalAlign: "middle" }}
+                    >
+                      {" · "}
+                      {c.source || "source"} ↗
+                    </a>
+                  ) : c.source ? (
+                    <span style={{ color: "#9a9aa2", verticalAlign: "middle" }}>{" · "}{c.source}</span>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
           <div style={{ color: "#9a9aa2" }}>Outlined in the design. License or replace them, then click the badge to turn this off.</div>
         </div>
@@ -108,7 +123,8 @@ export function ImageCredits() {
       <button
         type="button"
         aria-pressed={active}
-        aria-label={`${n} image${n > 1 ? "s" : ""} not free to reuse${active ? " (highlighting on)" : ""}`}
+        title="Unlicensed Images"
+        aria-label={`Unlicensed images: ${n} not free to reuse${active ? " (highlighting on)" : ""}`}
         onClick={() => setActive((a) => !a)}
         style={{
           display: "flex",
@@ -134,6 +150,15 @@ export function ImageCredits() {
       </button>
     </div>
   );
+}
+
+// Where "visit the source" points: the exact origin URL if recorded, else the
+// source domain. A non-domain label (e.g. a bare note) gets no link.
+function sourceLink(c: Credit): string | null {
+  if (c.url && /^https?:\/\//i.test(c.url)) return c.url;
+  const dom = (c.source || "").replace(/^https?:\/\//i, "").trim();
+  if (dom && /^[^\s/]+\.[^\s/]+/.test(dom)) return "https://" + dom;
+  return null;
 }
 
 // Find every element in the design that renders one of the flagged files, whether
