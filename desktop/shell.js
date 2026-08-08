@@ -2824,6 +2824,12 @@ function renderBriefSummary(brief) {
   const rows = [];
   const add = (key, val) => { if (val) rows.push([key, val]); };
   add("Making", brief.what);
+  if (Array.isArray(brief.colorSources) && brief.colorSources.length) {
+    add("Colors", brief.colorSources.map((c) => c && c.value).filter(Boolean).join(", "));
+  }
+  if (Array.isArray(brief.fontSources) && brief.fontSources.length) {
+    add("Fonts", brief.fontSources.map((f) => f && f.value).filter(Boolean).join(", "));
+  }
   if (Array.isArray(brief.sections) && brief.sections.length) add("Sections", brief.sections.join(", "));
   if (Array.isArray(brief.references) && brief.references.length) {
     add("Likes", brief.references.map((r) => r.url + (r.reason ? ` (${r.reason})` : "")).join("; "));
@@ -3103,6 +3109,8 @@ function renderIntakeCard(card, onChange) {
     : card.type === "multi-choice" ? buildChoice(card, body, true, onChange)
     : card.type === "chips" ? buildChips(card, body, onChange)
     : card.type === "reference" ? buildReference(card, body, onChange)
+    : card.type === "color-swatch" ? buildColorSwatch(card, body, onChange)
+    : card.type === "font-pick" ? buildFontPick(card, body, onChange)
     : buildOpenText(card, body, onChange); // defensive fallback
 
   // Skippable cards get a "let you decide" affordance that records null.
@@ -3325,6 +3333,90 @@ function buildReference(card, body, onChange) {
   };
 }
 
+// color-swatch → pick one primary color from a few swatches (options = hex values).
+function buildColorSwatch(card, body, onChange) {
+  let selected = null;
+  const swatches = [];
+  const wrap = document.createElement("div");
+  wrap.className = "iswatches";
+  (card.options || []).forEach((hex) => {
+    const sw = document.createElement("button");
+    sw.type = "button";
+    sw.className = "iswatch";
+    sw.style.background = hex;
+    sw.title = hex;
+    sw.setAttribute("aria-label", hex);
+    sw.addEventListener("click", () => {
+      if (sw.disabled) return;
+      selected = selected === hex ? null : hex;
+      swatches.forEach((s) => s.classList.toggle("selected", s === sw && selected === hex));
+      onChange();
+    });
+    swatches.push(sw);
+    wrap.appendChild(sw);
+  });
+  body.appendChild(wrap);
+  return {
+    getValue: () => selected,
+    hasValue: () => !!selected,
+    setDisabled: (d) => swatches.forEach((s) => { s.disabled = d; }),
+    display: () => selected || "",
+  };
+}
+
+// font-pick → pick one font, shown in its actual typeface (options = Google Font
+// family names). Loads the fonts for preview; falls back to the name if a load fails.
+function buildFontPick(card, body, onChange) {
+  const fonts = (card.options || []).filter(Boolean);
+  loadGoogleFonts(fonts);
+  let selected = null;
+  const opts = [];
+  const wrap = document.createElement("div");
+  wrap.className = "ifonts";
+  fonts.forEach((name) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ifont";
+    btn.style.fontFamily = `'${name}', system-ui, sans-serif`;
+    const big = document.createElement("span");
+    big.className = "ifont-preview";
+    big.textContent = "Ag";
+    const lbl = document.createElement("span");
+    lbl.className = "ifont-name";
+    lbl.textContent = name;
+    btn.append(big, lbl);
+    btn.addEventListener("click", () => {
+      if (btn.disabled) return;
+      selected = selected === name ? null : name;
+      opts.forEach((b, i) => b.classList.toggle("selected", fonts[i] === name && selected === name));
+      onChange();
+    });
+    opts.push(btn);
+    wrap.appendChild(btn);
+  });
+  body.appendChild(wrap);
+  return {
+    getValue: () => selected,
+    hasValue: () => !!selected,
+    setDisabled: (d) => opts.forEach((b) => { b.disabled = d; }),
+    display: () => selected || "",
+  };
+}
+
+// Inject a Google Fonts stylesheet for the given families (deduped). Best-effort —
+// no CSP blocks it in the chrome; a failed load just leaves the name in a fallback.
+const _loadedFonts = new Set();
+function loadGoogleFonts(families) {
+  const fresh = (families || []).filter((f) => f && !_loadedFonts.has(f));
+  if (!fresh.length) return;
+  fresh.forEach((f) => _loadedFonts.add(f));
+  const q = fresh.map((f) => "family=" + encodeURIComponent(f).replace(/%20/g, "+")).join("&");
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = `https://fonts.googleapis.com/css2?${q}&display=swap`;
+  document.head.appendChild(link);
+}
+
 // ---- Start path picker (fresh-start choices in the pane) --------------------
 // On a truly fresh project the BIG PANE shows two choices instead of guessing from
 // a typed "hello": "Client Setup" (deterministic /setup-project) and "Get Designing"
@@ -3458,15 +3550,22 @@ async function enterDesignBriefMode() {
 // designing); Phase 2 swaps step 3 for the real /design-brief build.
 const GET_DESIGNING_PROMPT = [
   'The designer chose "Get Designing." Gather a short design brief by calling the `intake` tool',
-  "(mcp__intake__intake) — do NOT ask questions in chat; every question must go through `intake` so it",
-  "renders in the pane. Keep it to TWO intake calls total:",
+  "(mcp__intake__intake) — do NOT ask questions in chat; every question goes through `intake` so it",
+  "renders in the pane. Aim for TWO intake calls:",
   '1. First call: ONE open-text card, long:true, maxLength ~400 — { id:"what", field:"what" } — asking,',
   "   in a warm line, what they're making and the feeling they want.",
-  "2. Read their answer, then a second call with one or two ADAPTIVE, skippable follow-ups that fit what",
-  '   they said: a chips card of likely sections { id:"sections", field:"sections", options:[…] } and/or a',
-  '   reference card { id:"reference", field:"references" } for a site they like and why.',
+  "2. Read their answer, then a second call with a few ADAPTIVE, skippable follow-ups that fit what they",
+  "   said. Include:",
+  '   - a chips card of likely sections { id:"sections", field:"sections", options:[…] };',
+  '   - a reference card { id:"reference", field:"references" } for a site they like and why;',
+  '   - IF they did NOT mention colors, a color-swatch card { id:"primaryColor", field:"colorSources",',
+  "     options:[~5 tasteful hex values fitting the vibe] } to pick a primary color;",
+  '   - IF they did NOT mention fonts, a font-pick card { id:"font", field:"fontSources",',
+  "     options:[~4 Google-Font family names fitting the vibe] } to pick a font.",
+  '   Mark every follow-up skippable:true (agentDecidesLabel like "You choose"). Omit the color or font',
+  "   card entirely if they already named one, or gave a reference to pull it from.",
   "3. Do NOT build or edit anything yet. Reply in chat with a short, friendly recap of the brief you",
-  "   gathered (what, sections, any reference). Phase 2 will design from it.",
+  "   gathered. Phase 2 will design from it.",
 ].join("\n");
 
 // Core send: fire a prompt at the agent. `echoText`, when given, is shown as the

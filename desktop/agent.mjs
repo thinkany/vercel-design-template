@@ -96,8 +96,8 @@ function buildVoiceAppend(voice) {
 // main.cjs's askIntake via cards.cjs and surfaces bad output as a clear tool error.
 const CARD_SHAPE = z.object({
   id: z.string().describe("stable, unique id for this card — the answer comes back keyed by it"),
-  type: z.enum(["open-text", "single-choice", "multi-choice", "chips", "reference"])
-    .describe("open-text = free text; single/multi-choice = pick from options; chips = compact multi-select; reference = a URL + why they like it"),
+  type: z.enum(["open-text", "single-choice", "multi-choice", "chips", "reference", "color-swatch", "font-pick"])
+    .describe("open-text = free text; single/multi-choice = pick from options; chips = compact multi-select; reference = a URL + why they like it; color-swatch = pick one color (options = hex values like '#2b3a67'); font-pick = pick one font (options = Google Font family names, shown in the actual typeface)"),
   label: z.string().describe("the question or prompt shown on the card"),
   field: z.string().optional().describe("the Brief field this answer maps to (e.g. 'what', 'sections', 'references'); omit if it doesn't map 1:1"),
   help: z.string().optional().describe("an optional hint shown under the label"),

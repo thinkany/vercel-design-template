@@ -33,10 +33,12 @@
 //   chips         → string[] | null
 //   reference     → { url: string, reason: string|null } | null
 
-const CARD_TYPES = ["open-text", "single-choice", "multi-choice", "chips", "reference"];
+const CARD_TYPES = ["open-text", "single-choice", "multi-choice", "chips", "reference", "color-swatch", "font-pick"];
 
 // Card types that must carry a non-empty `options` pool.
-const OPTION_TYPES = ["single-choice", "multi-choice", "chips"];
+//   color-swatch options = hex colors (e.g. "#2b3a67"); the answer is the picked hex.
+//   font-pick    options = font family names (Google Fonts); the answer is the picked name.
+const OPTION_TYPES = ["single-choice", "multi-choice", "chips", "color-swatch", "font-pick"];
 
 /**
  * Validate ONE card. Returns `{ ok, errors }` (errors = human-readable strings).

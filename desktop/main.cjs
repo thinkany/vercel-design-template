@@ -1106,6 +1106,11 @@ ipcMain.handle("agent:intakeAnswer", (event, { id, answers }) => {
         // Brief.references is a SourceRef[]. A reference card yields an array of
         // {url,reason} (up to 3); tolerate a lone object from older callers.
         if (c.type === "reference" && v && !Array.isArray(v)) v = [v];
+        // color-swatch / font-pick yield a scalar (hex / font name); the Brief's
+        // colorSources & fontSources are SourceRef[] — wrap into { value }.
+        if ((c.field === "colorSources" || c.field === "fontSources") && v && !Array.isArray(v)) {
+          v = [{ value: v, reason: null }];
+        }
         byField[c.field] = v;
       }
       intakeBrief = applyAnswers(intakeBrief, byField);
