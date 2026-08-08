@@ -408,6 +408,13 @@ function loadProjectPath() {
 }
 function saveProjectPath(p) {
   fs.writeFileSync(projectConfigPath(), JSON.stringify({ path: p }, null, 2));
+  addRecentProject(p);
+}
+// Most-recently-opened list (for the Switch Projects drawer). Newest first, deduped.
+function addRecentProject(dir) {
+  if (!dir) return;
+  const prev = (loadUiState().recentProjects || []).filter((x) => x && x !== dir);
+  setUiState({ recentProjects: [dir, ...prev].slice(0, 8) });
 }
 function clearProjectPath() {
   try {
@@ -1490,6 +1497,36 @@ ipcMain.handle("project:open", async () => {
   } catch {
     /* has its own node_modules or symlink failed; Vite will report if unusable */
   }
+  currentProject = dir;
+  saveProjectPath(dir);
+  try {
+    await startViteFor(dir);
+  } catch (e) {
+    return { ok: false, error: `Vite failed to start: ${e.message}` };
+  }
+  return { ok: true, path: dir, name: path.basename(dir), viteUrl };
+});
+
+// The last few opened projects, excluding the current one, pruned to those that
+// still exist and look like projects. Cap at 5 for the drawer.
+ipcMain.handle("projects:recent", () => {
+  return (loadUiState().recentProjects || [])
+    .filter((p) => p && p !== currentProject && fs.existsSync(p) && fs.existsSync(path.join(p, "package.json")))
+    .slice(0, 5)
+    .map((p) => ({ path: p, name: path.basename(p) }));
+});
+
+// Open a specific project by path (a Recent-Projects click) — like project:open
+// but with no dialog. Archives the current session first, then switches + starts Vite.
+ipcMain.handle("project:openPath", async (_e, { path: dir } = {}) => {
+  if (!dir || !fs.existsSync(dir)) return { ok: false, error: "That project folder no longer exists." };
+  if (!fs.existsSync(path.join(dir, "package.json"))) {
+    return { ok: false, error: "That folder has no package.json — it doesn't look like a project." };
+  }
+  if (dir === currentProject) return { ok: true, path: dir, name: path.basename(dir), viteUrl };
+  if (currentProject && currentSessionId) { try { archiveSession(currentProject, currentSessionId); } catch {} }
+  currentSessionId = null;
+  try { linkNodeModules(dir); } catch { /* has its own deps or symlink failed */ }
   currentProject = dir;
   saveProjectPath(dir);
   try {

@@ -95,6 +95,8 @@ contextBridge.exposeInMainWorld("desktop", {
   clearDefaultCompany: () => ipcRenderer.invoke("company:clearDefault"),
   createProject: () => ipcRenderer.invoke("project:create"),
   openProject: () => ipcRenderer.invoke("project:open"),
+  getRecentProjects: () => ipcRenderer.invoke("projects:recent"),
+  openProjectPath: (path) => ipcRenderer.invoke("project:openPath", { path }),
   resetProject: () => ipcRenderer.invoke("project:reset"),
   onViteReady: (cb) => {
     const listener = (_e, url) => cb(url);

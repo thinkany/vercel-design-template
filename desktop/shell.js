@@ -1034,11 +1034,71 @@ async function renderProjects(body) {
   }
   body.appendChild(setRow("Current project", proj.name || "None"));
   body.appendChild(setRow("Folder", proj.path || "None"));
+
+  // ── Recent projects — one click back into a project you had open. ──
+  const recents = await window.desktop.getRecentProjects();
+  if (recents && recents.length) {
+    const sep = document.createElement("div");
+    sep.className = "drawer-sep";
+    body.appendChild(sep);
+    const rl = document.createElement("div");
+    rl.className = "sess-label";
+    rl.textContent = "Recent projects";
+    body.appendChild(rl);
+    const rd = document.createElement("div");
+    rd.className = "sess-desc";
+    rd.textContent = "Jump straight back into a project you had open.";
+    body.appendChild(rd);
+
+    const list = document.createElement("div");
+    list.className = "sesslist";
+    recents.forEach((r) => {
+      const row = document.createElement("div");
+      row.className = "sessrow";
+      const open = document.createElement("button");
+      open.className = "sessrow-open";
+      open.title = r.path;
+      const nm = document.createElement("div");
+      nm.className = "sess-title";
+      nm.textContent = r.name;
+      const pth = document.createElement("div");
+      pth.className = "recent-path";
+      pth.textContent = r.path;
+      open.append(nm, pth);
+      open.addEventListener("click", () => openRecentProject(r.path));
+      row.appendChild(open);
+      list.appendChild(row);
+    });
+    body.appendChild(list);
+  }
+
   const switchBtn = document.createElement("button");
   switchBtn.className = "panelbtn";
+  switchBtn.style.marginTop = "12px";
   switchBtn.textContent = "Switch project…";
   switchBtn.addEventListener("click", switchProject);
   body.appendChild(switchBtn);
+}
+
+// Open a project straight from the Recent list (no chooser). Mirrors chooseProject's
+// success path, with a clean slate for the incoming project.
+async function openRecentProject(dir) {
+  closeModal();
+  const res = await window.desktop.openProjectPath(dir);
+  if (!res || !res.ok) {
+    addMsg("error", (res && res.error) || "Could not open that project.");
+    return;
+  }
+  sessionId = null;
+  conversationStarted = false;
+  resetChatUi();   // clears chat log + gauge + any live intake
+  closeAllTabs();  // fresh preview tabs + reset build reveal
+  projname.textContent = res.name || "";
+  viteUrl = res.viteUrl || null;
+  design = await window.desktop.getDesignState();
+  showStage("workspace");
+  refreshPreview();
+  if (!(await maybeAutoRestoreSession())) renderStartChoices();
 }
 
 // --- Company profile: export the agency identity ---
