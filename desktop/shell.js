@@ -1045,7 +1045,7 @@ async function renderProjects(body) {
     body.appendChild(note);
     return;
   }
-  body.appendChild(setRow("Current project", proj.name || "None"));
+  body.appendChild(setRow("Current project", projectTitle(proj) || "None"));
   body.appendChild(setRow("Folder", proj.path || "None"));
 
   // ── Recent projects — one click back into a project you had open. ──
