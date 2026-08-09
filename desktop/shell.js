@@ -1327,74 +1327,114 @@ function publishProgressList(container) {
   };
 }
 
-// Shared run handler for both "Publish" and "Reset password" (a republish with a
-// fresh gate password). Streams progress, then shows the live URL + any new password.
-async function runPublishFlow(btn, host, opts) {
-  const label = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = "Publishing…";
-  host.innerHTML = "";
-  host.hidden = false;
-  const list = document.createElement("div");
-  host.appendChild(list);
-  const onEvt = publishProgressList(list);
-  const unsub = window.desktop.onPublishProgress(onEvt);
-  try {
-    const res = await window.desktop.runPublish(opts || {});
-    if (res.ok) {
-      const done = document.createElement("div");
-      done.style.cssText = "margin-top:12px;padding-top:12px;border-top:1px solid var(--border,#2a2a2a);";
+// --- Publish run state (survives an accidental drawer close) -----------------
+// The publish itself runs in the MAIN process, so closing the drawer never aborts
+// it. But the progress + result render into drawer DOM; if the drawer is closed
+// mid-run and reopened, that output would be orphaned. So we hold the run at module
+// scope and repaint it into whatever host the (re)rendered Publish drawer provides.
+// (The finished URL + password are also recoverable from the persisted publish
+// status at the top of the drawer, so only the IN-FLIGHT view needs re-attaching.)
+let activePublish = null; // { opts, label, events:[], result:null, running:bool, host, btn }
 
-      // Live URL row: open + copy.
-      const urlRow = document.createElement("div");
-      urlRow.style.cssText = "display:flex;gap:8px;align-items:center;";
-      const link = document.createElement("a");
-      link.href = res.url;
-      link.textContent = res.url.replace(/^https?:\/\//, "");
-      link.style.cssText = "flex:1;color:#1a1a1a;text-decoration:underline;font-size:13px;word-break:break-all;";
-      link.addEventListener("click", (e) => { e.preventDefault(); window.desktop.openExternal(res.url); });
-      urlRow.append(link, copyBtn(() => res.url));
-      done.appendChild(urlRow);
-
-      // Freshly generated preview password (shown once — never persisted).
-      if (res.password) {
-        const pwWrap = document.createElement("div");
-        pwWrap.style.cssText = "margin-top:10px;padding:10px;border:1px solid var(--border,#2a2a2a);border-radius:8px;";
-        const pwLabel = document.createElement("div");
-        pwLabel.className = "muted";
-        pwLabel.style.cssText = "font-size:12px;margin-bottom:6px;";
-        pwLabel.textContent = "Preview password (share with your client)";
-        const pwRow = document.createElement("div");
-        pwRow.style.cssText = "display:flex;gap:8px;align-items:center;";
-        const pw = document.createElement("code");
-        pw.textContent = res.password;
-        pw.style.cssText = "flex:1;font-size:14px;letter-spacing:1px;";
-        pwRow.append(pw, copyBtn(() => res.password));
-        pwWrap.append(pwLabel, pwRow);
-        done.appendChild(pwWrap);
-      }
-      host.appendChild(done);
-      // Only the primary publish button becomes "Publish changes" after the first
-      // publish; the reset button keeps its own label (don't create a duplicate).
-      btn.textContent = label === "Publish this design" ? "Publish changes" : label;
-    } else {
-      const err = document.createElement("div");
-      err.className = "muted";
-      err.style.cssText = "margin-top:10px;color:#e5484d;";
-      err.textContent = res.error || "Publish failed.";
-      host.appendChild(err);
-      btn.textContent = label;
+// Render the freshly-published URL + password (or an error) below the progress list.
+function paintPublishResult(host, res) {
+  if (res.ok) {
+    const done = document.createElement("div");
+    done.style.cssText = "margin-top:12px;padding-top:12px;border-top:1px solid var(--border,#2a2a2a);";
+    // Live URL row: open + copy.
+    const urlRow = document.createElement("div");
+    urlRow.style.cssText = "display:flex;gap:8px;align-items:center;";
+    const link = document.createElement("a");
+    link.href = res.url;
+    link.textContent = (res.url || "").replace(/^https?:\/\//, "");
+    link.style.cssText = "flex:1;color:#1a1a1a;text-decoration:underline;font-size:13px;word-break:break-all;";
+    link.addEventListener("click", (e) => { e.preventDefault(); window.desktop.openExternal(res.url); });
+    urlRow.append(link, copyBtn(() => res.url));
+    done.appendChild(urlRow);
+    if (res.password) {
+      const pwWrap = document.createElement("div");
+      pwWrap.style.cssText = "margin-top:10px;padding:10px;border:1px solid var(--border,#2a2a2a);border-radius:8px;";
+      const pwLabel = document.createElement("div");
+      pwLabel.className = "muted";
+      pwLabel.style.cssText = "font-size:12px;margin-bottom:6px;";
+      pwLabel.textContent = "Preview password (share with your client)";
+      const pwRow = document.createElement("div");
+      pwRow.style.cssText = "display:flex;gap:8px;align-items:center;";
+      const pw = document.createElement("code");
+      pw.textContent = res.password;
+      pw.style.cssText = "flex:1;font-size:14px;letter-spacing:1px;";
+      pwRow.append(pw, copyBtn(() => res.password));
+      pwWrap.append(pwLabel, pwRow);
+      done.appendChild(pwWrap);
     }
-  } catch (e) {
+    host.appendChild(done);
+  } else {
     const err = document.createElement("div");
     err.className = "muted";
     err.style.cssText = "margin-top:10px;color:#e5484d;";
-    err.textContent = String(e);
+    err.textContent = res.error || "Publish failed.";
     host.appendChild(err);
-    btn.textContent = label;
+  }
+}
+
+// Repaint the active run into its current host from scratch (idempotent — the
+// progress list upserts by step, so replaying all events rebuilds the rows).
+function repaintPublish() {
+  const ap = activePublish;
+  if (!ap || !ap.host) return;
+  ap.host.hidden = false;
+  ap.host.innerHTML = "";
+  const list = document.createElement("div");
+  ap.host.appendChild(list);
+  const paint = publishProgressList(list);
+  ap.events.forEach(paint);
+  if (ap.result) paintPublishResult(ap.host, ap.result);
+}
+
+// Point an in-flight run at a freshly-rendered drawer (host + button) and repaint,
+// so a reopened Publish drawer reflects the ongoing publish instead of a stale idle
+// state. Called by renderPublish. Returns true when a running publish was re-attached.
+function reattachPublish(host, btn) {
+  const ap = activePublish;
+  if (!ap || !ap.running) return false;
+  ap.host = host; ap.btn = btn;
+  btn.disabled = true;
+  btn.textContent = "Publishing…";
+  repaintPublish();
+  return true;
+}
+
+// Shared run handler for both "Publish" and "Reset password" (a republish with a
+// fresh gate password). Streams progress, then shows the live URL + any new password.
+async function runPublishFlow(btn, host, opts) {
+  if (activePublish && activePublish.running) return; // one publish at a time
+  const label = btn.textContent;
+  const ap = activePublish = { opts: opts || {}, label, events: [], result: null, running: true, host, btn };
+  btn.disabled = true;
+  btn.textContent = "Publishing…";
+  const unsub = window.desktop.onPublishProgress((evt) => { ap.events.push(evt); repaintPublish(); });
+  repaintPublish();
+  try {
+    const res = await window.desktop.runPublish(ap.opts);
+    ap.result = res;
+    ap.running = false;
+    repaintPublish();
+    if (ap.btn) {
+      ap.btn.disabled = false;
+      // Only the primary publish button becomes "Publish changes"; the reset button
+      // keeps its own label (don't create a duplicate).
+      ap.btn.textContent = res.ok ? (label === "Publish this design" ? "Publish changes" : label) : label;
+    }
+  } catch (e) {
+    ap.result = { ok: false, error: String(e) };
+    ap.running = false;
+    repaintPublish();
+    if (ap.btn) { ap.btn.disabled = false; ap.btn.textContent = label; }
   } finally {
     unsub();
-    btn.disabled = false;
+    // Run's done. The persisted status (URL + password) now covers reopens, so drop
+    // the run so a future drawer open starts clean.
+    if (activePublish === ap) activePublish = null;
     refreshRailActivation();
   }
 }
@@ -1795,8 +1835,9 @@ async function renderPublish(body) {
     publishBtn.addEventListener("click", () => runPublishFlow(publishBtn, host, { resetPassword: false }));
     body.appendChild(publishBtn);
 
+    let resetBtn = null;
     if (pub.url) {
-      const resetBtn = document.createElement("button");
+      resetBtn = document.createElement("button");
       resetBtn.className = "panelbtn";
       resetBtn.textContent = "Reset preview password";
       resetBtn.title = "Generate a new client password and republish";
@@ -1805,6 +1846,11 @@ async function renderPublish(body) {
     }
 
     body.appendChild(host);
+
+    // A publish is already running (drawer was closed mid-run and reopened) → show
+    // its live progress here and keep the buttons disabled until it finishes, rather
+    // than a stale idle state that could trigger a second, conflicting publish.
+    if (reattachPublish(host, publishBtn) && resetBtn) resetBtn.disabled = true;
 
     if (pub.lastDeployAt) {
       const last = document.createElement("div");
@@ -2274,7 +2320,65 @@ function addMsg(cls, text) {
   node.textContent = text;
   log.appendChild(node);
   log.scrollTop = log.scrollHeight;
+  updateScrollDownBtn();
   return node;
+}
+
+// Auto-scroll for the streaming assistant reply. Instead of always chasing the
+// bottom (which pushes the start of a long reply off the top before you can read
+// it), keep the latest line visible only while the reply fits; once it grows
+// taller than the pane, PIN its top at the top of the pane. So you never lose the
+// spot where the reply began — read from the top, then scroll to the end yourself.
+// Respects a manual scroll: if you move the pane away from where we last put it,
+// we stop auto-scrolling until the next reply.
+let lastAutoScrollTop = 0;
+function offsetTopWithin(child, parent) {
+  let y = 0, n = child;
+  while (n && n !== parent && n.offsetParent) { y += n.offsetTop; n = n.offsetParent; }
+  return y;
+}
+// The tool bubble's label. Most tools show their name (+ input), but a raw "Bash"
+// (and its shell command) is technical noise the designer shouldn't see, so we swap
+// it for a rotating action verb, a small "something's happening" cue that fades out
+// with the bubble. Any other tool keeps its normal name + input.
+const BASH_VERBS = [
+  "Working", "Cooking", "Crunching", "Tinkering", "Wrangling", "Assembling",
+  "Piecing things together", "Rustling something up", "Noodling on it", "Conjuring",
+  "Fiddling with the bits", "Making it happen",
+];
+function toolBubbleLabel(evt) {
+  if (evt.name === "Bash") {
+    return `⚙ ${BASH_VERBS[Math.floor(Math.random() * BASH_VERBS.length)]}…`;
+  }
+  return `⚙ ${evt.name}${evt.input ? " " + JSON.stringify(evt.input) : ""}`;
+}
+
+function stickStreamScroll() {
+  if (!assistantEl) { log.scrollTop = log.scrollHeight; updateScrollDownBtn(); return; }
+  // The user scrolled away from our last auto position → don't fight them.
+  if (Math.abs(log.scrollTop - lastAutoScrollTop) > 4) { updateScrollDownBtn(); return; }
+  const top = offsetTopWithin(assistantEl, log);
+  const target = Math.max(0, Math.min(top, log.scrollHeight - log.clientHeight));
+  log.scrollTop = target;
+  lastAutoScrollTop = target;
+  updateScrollDownBtn();
+}
+
+// Jump-to-latest button: visible only when the log is scrolled up from the newest
+// message (including while a long reply is pinned to its top mid-stream, where the
+// end sits below the fold). Click smooth-scrolls to the bottom.
+const scrolldown = el("scrolldown");
+function updateScrollDownBtn() {
+  if (!scrolldown) return;
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 24;
+  scrolldown.classList.toggle("show", !atBottom);
+}
+if (scrolldown) {
+  scrolldown.addEventListener("click", () => {
+    log.scrollTo({ top: log.scrollHeight, behavior: "smooth" });
+  });
+  log.addEventListener("scroll", updateScrollDownBtn, { passive: true });
+  window.addEventListener("resize", updateScrollDownBtn);
 }
 
 // The pulsing "thinking" indicator. It's shown whenever the agent is busy but
@@ -2530,13 +2634,13 @@ function finalizeAssistant() {
 window.desktop.onAgentEvent((evt) => {
   switch (evt.type) {
     case "text":
-      if (!assistantEl) { assistantEl = addMsg("assistant", ""); updateThinking(); }
+      if (!assistantEl) { assistantEl = addMsg("assistant", ""); updateThinking(); lastAutoScrollTop = log.scrollTop; }
       assistantEl.textContent += evt.text;
-      log.scrollTop = log.scrollHeight;
+      stickStreamScroll();
       break;
     case "tool":
       finalizeAssistant();
-      autoDismissTool(addMsg("tool", `⚙ ${evt.name}${evt.input ? " " + JSON.stringify(evt.input) : ""}`));
+      autoDismissTool(addMsg("tool", toolBubbleLabel(evt)));
       updateThinking(); // re-pin the dots below the tool bubble while it's still working
       // A tool call may have just written the color palette — poll until the
       // styleguide is preview-ready (not merely when the variation folder
@@ -2623,6 +2727,23 @@ function isFileQuestion(q) {
   return (q.options || []).some((o) => /upload|attach|choose a file/i.test(o.label || ""));
 }
 
+// A font/typeface question → render each option in its ACTUAL typefaces so the
+// designer can see a pairing, not just read font names. Heuristic on the header/
+// question wording (the model composes these at the styleguide's Fonts step).
+function isFontQuestion(q) {
+  const h = (q.header || "").toLowerCase();
+  const t = (q.question || "").toLowerCase();
+  return /font|typeface|pairing/.test(h) || /typeface|font pairing|display face|body copy/.test(t);
+}
+// Split a pairing label ("Playfair Display + Inter", "Fraunces / Inter") into the
+// family names, first = display/heading face, second (if any) = body face.
+function parsePairingFonts(label) {
+  return String(label || "")
+    .split(/\s*(?:\+|\/|·|—|&|,|\band\b|\bwith\b|\bover\b)\s*/i)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 function renderQuestionCard(id, questions) {
   pendingFileFulfill = null;
   const card = document.createElement("div");
@@ -2679,6 +2800,12 @@ function renderQuestionCard(id, questions) {
     if (card.classList.contains("answered")) return;
     pendingFileFulfill = null;
     card.classList.add("answered");
+    // Drop focus so a pasted "Other" value doesn't leave a blinking caret in the
+    // now-answered field (paste auto-submits a single single-select question).
+    otherInputs.forEach((i) => i && i.blur());
+    if (document.activeElement && typeof document.activeElement.blur === "function") {
+      document.activeElement.blur();
+    }
     submitBtn.remove();
     const answers = {};
     questions.forEach((q, qi) => (answers[q.question] = valueFor(qi)));
@@ -2733,13 +2860,34 @@ function renderQuestionCard(id, questions) {
       block.append(uploadBtn, uploadNote);
     }
 
+    const fontQuestion = isFontQuestion(q);
+    if (fontQuestion) loadGoogleFonts((q.options || []).flatMap((o) => parsePairingFonts(o.label)));
+
     q.options.forEach((opt) => {
       const btn = document.createElement("button");
-      btn.className = "qopt";
-      const lbl = document.createElement("div");
-      lbl.className = "lbl";
-      lbl.textContent = opt.label;
-      btn.appendChild(lbl);
+      btn.className = "qopt" + (fontQuestion ? " qfont" : "");
+      if (fontQuestion) {
+        // Show the pairing in its ACTUAL faces: the display family rendered large in
+        // itself, then a sentence in the companion body face, so the choice is
+        // something you can see rather than a name to go research.
+        const fams = parsePairingFonts(opt.label);
+        const display = fams[0] || opt.label;
+        const bodyFam = fams[1] || fams[0] || display;
+        const head = document.createElement("div");
+        head.className = "qfont-head";
+        head.style.fontFamily = `'${display}', Georgia, serif`;
+        head.textContent = display;
+        const sample = document.createElement("div");
+        sample.className = "qfont-body";
+        sample.style.fontFamily = `'${bodyFam}', system-ui, -apple-system, sans-serif`;
+        sample.textContent = (fams[1] ? bodyFam + " · " : "") + "The quick brown fox jumps over the lazy dog";
+        btn.append(head, sample);
+      } else {
+        const lbl = document.createElement("div");
+        lbl.className = "lbl";
+        lbl.textContent = opt.label;
+        btn.appendChild(lbl);
+      }
       if (opt.description) {
         const desc = document.createElement("div");
         desc.className = "desc";

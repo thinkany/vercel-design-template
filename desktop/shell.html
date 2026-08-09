@@ -509,6 +509,11 @@
       .qopt .lbl { font-size: 13px; font-weight: 600; color: #1a1a1a; }
       .qopt .desc { font-size: 12px; color: #777; margin-top: 2px; }
       .qopt.selected .lbl, .qopt.selected .desc { color: #fff; }
+      /* Font-pairing options: display face shown large in itself, body face below. */
+      .qopt.qfont { padding: 11px 12px; }
+      .qfont-head { font-size: 23px; line-height: 1.1; color: #1a1a1a; }
+      .qfont-body { font-size: 13px; line-height: 1.45; color: #555; margin-top: 5px; }
+      .qopt.qfont.selected .qfont-head, .qopt.qfont.selected .qfont-body { color: #fff; }
       .qother-input {
         width: 100%; padding: 7px 9px; font: inherit; font-size: 13px;
         border: 1px solid #d8d8de; border-radius: 8px; margin: 0 0 6px;
@@ -519,6 +524,10 @@
       }
       .qsubmit:disabled { opacity: 0.4; cursor: default; }
       .qopt.qupload { border-color: #111; background: #f4f4f7; }
+      /* Once a file is attached, match every other chosen option: black fill, white
+         text (the .qupload base background would otherwise keep it light and hide
+         the now-white label). */
+      .qopt.qupload.selected { border-color: #111; background: #111; }
       .qupload-note { font-size: 12px; color: #0a7; margin: -2px 0 8px; min-height: 14px; }
 
       /* ---- Welcome path picker (fresh-start chips) ---- */
@@ -544,7 +553,22 @@
         background: #f0f0f3; padding: 1px 4px; border-radius: 4px;
       }
 
-      #composer { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #e3e3e3; align-items: stretch; }
+      #composer { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #e3e3e3; align-items: stretch; position: relative; }
+      /* Jump-to-latest affordance: a 1px-stroke circle with a down caret, floating in
+         the chat pane's lower-right just above the composer. Anchored to the composer's
+         top edge so it stays put as the textarea grows. Fades in only when the log is
+         scrolled up from the newest message. */
+      #scrolldown {
+        position: absolute; top: -46px; right: 14px; width: 30px; height: 30px;
+        border-radius: 50%; border: 1px solid #c8c8cf; background: #fff; color: #555;
+        display: flex; align-items: center; justify-content: center; padding: 0;
+        cursor: pointer; opacity: 0; pointer-events: none;
+        transition: opacity .25s ease, border-color .18s ease, color .18s ease;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      }
+      #scrolldown.show { opacity: 1; pointer-events: auto; }
+      #scrolldown:hover { border-color: #111; color: #111; }
+      #scrolldown svg { width: 16px; height: 16px; }
       /* Left column: Command button (top) stacked over the Attach button (bottom half) */
       #composer-left { position: relative; display: flex; flex-direction: column; gap: 4px; }
       #cmdbtn, #attach {
@@ -961,6 +985,9 @@
         <div id="chatmain" hidden>
           <div id="log"></div>
           <div id="composer">
+            <button id="scrolldown" type="button" title="Jump to the latest message" aria-label="Jump to the latest message">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
             <div id="composer-left">
               <button id="cmdbtn" type="button" aria-haspopup="true" aria-expanded="false" title="Commands">
                 <svg class="cmd-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></svg>
