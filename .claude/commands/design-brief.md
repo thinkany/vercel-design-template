@@ -25,9 +25,9 @@ JSON, or token mechanics.
 ## 1. Parse the brief
 From the brief pull: **reference site(s)** to model (layout), **color source** (a URL
 or a named brand), **fonts** (names, or a site to pull from), **project type**
-(`website`/`app`/`brand`, default `website`), **client name** (if named), **copy
-hints**. A missing value → infer it or leave the default. **Do NOT ask** (the one
-exception is in Fallbacks).
+(`website`/`app`/`brand`, default `website`), **client name** (the company/brand, if
+named), **project name** (if named), **copy hints**. A missing value → infer it or
+leave the default. **Do NOT ask** (the one exception is in Fallbacks).
 
 ## 2. Extract (run the tools, ~10s each, don't narrate them)
 - **Colors:** `node scripts/extract-palette.mjs <colorURL> > /tmp/ta-palette.json`,
@@ -87,7 +87,8 @@ only step 4's *input* (a synthesized outline + feel notes instead of one site's)
 ```
 node scripts/apply-brand.mjs --variation v01 \
   --palette /tmp/ta-palette.json --fonts /tmp/ta-fonts.json \
-  --client "<name or a sensible placeholder>" --project-type <type> [--menu <dropdown|mega>]
+  --client "<name or a sensible placeholder>" [--project "<project name if given>"] \
+  --project-type <type> [--menu <dropdown|mega>]
 ```
 This creates `v01` from base, writes its `tokens.css` (the seven `--ta-*` colors,
 the `--ta-font-*` stacks, the shadcn bridge) + `brand.ts` + `fonts.css` `@import`,
