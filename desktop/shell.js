@@ -2618,6 +2618,8 @@ function isFileQuestion(q) {
   const h = (q.header || "").toLowerCase();
   const t = (q.question || "").toLowerCase();
   if (h.includes("company profile") || t.includes("company profile")) return true;
+  // Logos (the designer's company logo AND a client's) → offer the same upload.
+  if (h.includes("logo") || t.includes("logo")) return true;
   return (q.options || []).some((o) => /upload|attach|choose a file/i.test(o.label || ""));
 }
 
