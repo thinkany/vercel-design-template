@@ -84,7 +84,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
                 objectFit: "cover",
                 objectPosition: "top center",
                 display: "block",
-                opacity: hoveringThumb ? 0.54 : 0.24,
+                opacity: hoveringThumb ? 0.7 : 0.42,
                 transition: "opacity 0.18s ease",
               }}
             />
@@ -102,7 +102,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
                 transformOrigin: "top left",
                 border: "none",
                 pointerEvents: "none",
-                opacity: hoveringThumb ? 0.54 : 0.24,
+                opacity: hoveringThumb ? 0.7 : 0.42,
                 transition: "opacity 0.18s ease",
               }}
             />
