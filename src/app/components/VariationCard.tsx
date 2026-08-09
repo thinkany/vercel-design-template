@@ -54,24 +54,27 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
         background: "#fff",
         borderRight: "1px solid rgba(0,0,0,0.06)",
       }}>
-        {/* Thumbnail */}
-        {variation.screenshot && (
-          <a
-            href={siteUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onMouseEnter={() => setHoveringThumb(true)}
-            onMouseLeave={() => setHoveringThumb(false)}
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "block",
-              overflow: "hidden",
-              textDecoration: "none",
-              cursor: "pointer",
-              zIndex: 1,
-            }}
-          >
+        {/* Thumbnail — the live design behind the version badge. A static
+            `screenshot` wins if one was ever set; otherwise a scaled, live capture
+            of the design itself (same approach as the Make-Variation modal, using
+            the bare `&capture` route so there's no ViewToggle chrome). */}
+        <a
+          href={siteUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onMouseEnter={() => setHoveringThumb(true)}
+          onMouseLeave={() => setHoveringThumb(false)}
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "block",
+            overflow: "hidden",
+            textDecoration: "none",
+            cursor: "pointer",
+            zIndex: 1,
+          }}
+        >
+          {variation.screenshot ? (
             <img
               src={variation.screenshot}
               alt={`Preview: ${variation.title}`}
@@ -85,8 +88,26 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
                 transition: "opacity 0.18s ease",
               }}
             />
-          </a>
-        )}
+          ) : (
+            <iframe
+              src={`/?v=${variation.id}&capture=desktop`}
+              loading="lazy"
+              tabIndex={-1}
+              aria-hidden="true"
+              title=""
+              style={{
+                width: 1280,
+                height: 900,
+                transform: `scale(${260 / 1280})`,
+                transformOrigin: "top left",
+                border: "none",
+                pointerEvents: "none",
+                opacity: hoveringThumb ? 0.54 : 0.24,
+                transition: "opacity 0.18s ease",
+              }}
+            />
+          )}
+        </a>
 
         {/* Gradient scrim — full zone */}
         <div style={{
