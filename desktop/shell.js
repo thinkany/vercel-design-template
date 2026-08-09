@@ -89,8 +89,11 @@ const boText = el("bo-text");
 // Intake host (in-pane onboarding — T3/T4)
 const intakeph = el("intakeph");
 const intakeStack = el("intake-stack");
+const intakeBack = el("intake-back");
 let intakeActive = false; // while true, refreshPreview() leaves the pane to the intake host
-let intakePhase = "idle"; // idle | gathering | review | designing
+let intakePhase = "idle"; // idle | deliverable | gathering | review | designing
+let currentIntakeId = null; // the pending intake batch's id (for Back → cancel)
+let deliverableType = "website"; // "website" | "app" — the first fork
 // Post-answer "taking it in" lines, cycled so consecutive waits read differently.
 const TAKING_IN_MESSAGES = [
   "Got it, give me a moment while I take that in…",
@@ -2833,11 +2836,13 @@ function resetIntake() {
   intakeActive = false;
   startChoicesShown = false;
   intakePhase = "idle";
+  currentIntakeId = null;
   exitReview(); // clear the review's head-hidden state
   intakeph.classList.remove("start", "flow", "hasbrief");
   intakeph.hidden = true;
   intakeStack.innerHTML = "";
   el("intake-brief").innerHTML = "";
+  updateBackButton();
 }
 
 window.desktop.onAgentIntake(({ id, cards }) => renderIntakeGroup(id, cards));
@@ -2854,6 +2859,7 @@ function renderBriefSummary(brief) {
   if (!brief) { showRail(false); box.innerHTML = ""; return; }
   const rows = [];
   const add = (key, val) => { if (val) rows.push([key, val]); };
+  if (brief.projectType) add("Type", brief.projectType === "app" ? "App" : "Web site");
   add("Making", brief.what);
   add("Company", brief.clientName);
   add("Project", brief.projectName);
@@ -2898,6 +2904,8 @@ function renderIntakeGroup(id, cards) {
   clearIntakePending(); // the next questions are here → fade the "hang tight" line
   exitReview(); // a new question means we're back to gathering, not reviewing
   intakePhase = "gathering";
+  currentIntakeId = id; // Back can cancel this pending batch
+  updateBackButton();
 
   const group = document.createElement("div");
   group.className = "intake-group";
@@ -2923,6 +2931,7 @@ function renderIntakeGroup(id, cards) {
     const answers = {};
     for (const c of controls) { answers[c.card.id] = c.getValue(); c.collapse(); }
     continueBtn.replaceWith(doneNote());
+    if (currentIntakeId === id) currentIntakeId = null; // answered, not cancellable now
     // Conversational feedback while the agent takes it in — cycled so the line after
     // the second answer differs from the first (works whether or not more follow).
     showIntakePending(TAKING_IN_MESSAGES[takingInIdx % TAKING_IN_MESSAGES.length]);
@@ -2985,6 +2994,8 @@ function clearIntakePending() {
 function showBriefComplete() {
   if (intakePhase !== "gathering") return; // only from the gathering state
   intakePhase = "review";
+  currentIntakeId = null;
+  updateBackButton();
   clearIntakePending();
   const head = intakeph.querySelector(".intake-head");
   const leaving = [head, ...Array.from(intakeStack.children)].filter(Boolean);
@@ -3069,6 +3080,7 @@ function renderReviewActions() {
 // with a persistent "preparing" status + rotating messages until the design shows.
 function startDesigning() {
   intakePhase = "designing";
+  updateBackButton();
   clearIntakePending();
   const leaving = [intakeph.querySelector(".intake-head"), el("intake-brief"), ...Array.from(intakeStack.children)].filter(Boolean);
   const anims = leaving
@@ -3500,6 +3512,7 @@ function renderStartChoices() {
   // choice cards — not a chat card. The chat rail stays for the conversation.
   enterIntakeMode();
   intakePhase = "idle";
+  updateBackButton();
   intakeph.classList.add("start"); // center the fork vertically + center the head text
   intakeph.classList.remove("flow", "hasbrief");
   setIntakeHead("Let's make something", "Pick how you'd like to begin.");
@@ -3561,19 +3574,70 @@ function renderStartChoices() {
 // enters intake mode immediately and silently kicks off the agent, which runs the
 // conversation through the `intake` tool. beginIntake() starts a fresh Brief on the
 // main side so each answered batch folds in and pushes back an updated summary.
-async function enterDesignBriefMode() {
-  addMsg(
-    "system",
-    "Let's design something. I'll ask you a few quick things here in the panel, then put your brief together."
-  );
-  // FLIP: glide the head UP from its centered start position to the flow position,
-  // keeping its width. Measure FIRST (start layout), switch layout, measure LAST,
-  // then animate the delta away.
+// "Get Designing" step 1: pick what we're making (Web Site or App), THEN the
+// agent-driven questions. Renderer-driven (before the agent), centered like the
+// start fork.
+function enterDesignBriefMode() {
+  renderDeliverableChoice();
+}
+
+// 1px-stroke type icons: a browser window (Web Site) and a phone (App).
+const ICON_WEBSITE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="M2.5 8.5h19"/><circle cx="5.4" cy="6.5" r=".55"/><circle cx="7.5" cy="6.5" r=".55"/></svg>';
+const ICON_APP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>';
+
+function renderDeliverableChoice() {
+  dismissWelcome();
+  intakePhase = "deliverable";
+  currentIntakeId = null;
+  enterIntakeMode();
+  intakeph.classList.add("start");        // centered, like the start fork
+  intakeph.classList.remove("flow", "hasbrief");
+  setIntakeHead("What are you designing?", "Pick one to get started.");
+  el("intake-brief").innerHTML = "";
+  intakeStack.innerHTML = "";
+  renderBriefSummary(null); // clear the rail
+
+  const opts = [
+    { type: "website", label: "Web Site", desc: "A marketing site or landing pages.", icon: ICON_WEBSITE },
+    { type: "app", label: "App", desc: "Product UI, dashboards, in-app screens.", icon: ICON_APP },
+  ];
+  const row = document.createElement("div");
+  row.className = "istart-row";
+  for (const o of opts) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "istart-card istart-center";
+    const icon = document.createElement("span");
+    icon.className = "istart-icon";
+    icon.innerHTML = o.icon;
+    const lbl = document.createElement("div");
+    lbl.className = "istart-label";
+    lbl.textContent = o.label;
+    const desc = document.createElement("div");
+    desc.className = "istart-desc";
+    desc.textContent = o.desc;
+    btn.append(icon, lbl, desc);
+    btn.addEventListener("click", () => pickDeliverable(o.type));
+    row.appendChild(btn);
+  }
+  intakeStack.appendChild(row);
+  updateBackButton();
+
+  // Entrance: head rises, cards stagger in from the sides.
+  fadeSlideIn(intakeph.querySelector(".intake-head"), { dy: 40, duration: 700, delay: 40 });
+  fadeSlideIn(row.children[0], { dx: -52, duration: 640, delay: 260 });
+  fadeSlideIn(row.children[1], { dx: 52, duration: 640, delay: 360 });
+}
+
+// Deliverable picked → FLIP the head up into the flow and kick off the questions.
+async function pickDeliverable(type) {
+  deliverableType = type;
+  addMsg("system", `Designing a ${type === "app" ? "app" : "web site"}. I'll ask you a few quick things here in the panel, then put your brief together.`);
+
   const head = intakeph.querySelector(".intake-head");
   const first = head.getBoundingClientRect();
 
-  // Swap the start-choice cards for the design intake head + a fresh stack.
-  startChoicesShown = false; // we're moving into the design intake, not leaving it
+  startChoicesShown = false;
   intakeph.classList.add("flow"); // two-column mode: questions right, brief rail left
   intakeph.classList.remove("start", "hasbrief");
   enterIntakeMode();
@@ -3591,10 +3655,8 @@ async function enterDesignBriefMode() {
   ], { duration: 780 });
 
   intakePhase = "gathering";
-  takingInIdx = 0; // reset the "taking it in" wording rotation for this intake
-  // Reveal the kickoff line only AFTER the title + description have settled at the
-  // top (and only if the first question hasn't already arrived), so it animates in
-  // beneath them rather than popping in ahead of the move.
+  takingInIdx = 0;
+  updateBackButton();
   const showKickoff = () => {
     if (intakePhase === "gathering" && !intakeStack.querySelector(".intake-group")) {
       showIntakePending("Hold tight while we get things started. I'll ask you a few quick things right here.");
@@ -3602,36 +3664,59 @@ async function enterDesignBriefMode() {
   };
   if (flip && flip.finished) flip.finished.then(showKickoff, showKickoff);
   else showKickoff();
-  try { await window.desktop.beginIntake("web-pages"); } catch {}
-  runAgent(GET_DESIGNING_PROMPT); // silent kickoff — no user bubble for the instruction
+  try { await window.desktop.beginIntake("web-pages", type); } catch {}
+  runAgent(getDesigningPrompt(type)); // silent kickoff — no user bubble for the instruction
 }
 
-// The instruction that turns "Get Designing" into an agent-driven, in-pane intake.
-// The build itself is STUBBED in Phase 1 (the agent recaps the brief instead of
-// designing); Phase 2 swaps step 3 for the real /design-brief build.
-const GET_DESIGNING_PROMPT = [
-  'The designer chose "Get Designing." Gather a short design brief by calling the `intake` tool',
-  "(mcp__intake__intake) — do NOT ask questions in chat; every question goes through `intake` so it",
-  "renders in the pane. Aim for TWO intake calls:",
-  '1. First call: ONE open-text card, long:true, maxLength ~400 — { id:"what", field:"what" } — asking,',
-  "   in a warm line, what they're making and the feeling they want.",
-  "2. Read their answer, then a second call with a few ADAPTIVE, skippable follow-ups that fit what they",
-  "   said. Include:",
-  '   - IF they did NOT give a company/brand name, an open-text card { id:"clientName", field:"clientName",',
-  '     label:"Company or brand name" };',
-  '   - IF they did NOT give a project name, an open-text card { id:"projectName", field:"projectName",',
-  '     label:"A name for this project" };',
-  '   - a chips card of likely sections { id:"sections", field:"sections", options:[…] };',
-  '   - a reference card { id:"reference", field:"references" } for a site they like and why;',
-  '   - IF they did NOT mention colors, a color-swatch card { id:"primaryColor", field:"colorSources",',
-  "     options:[~5 tasteful hex values fitting the vibe] } to pick a primary color;",
-  '   - IF they did NOT mention fonts, a font-pick card { id:"font", field:"fontSources",',
-  "     options:[~4 Google-Font family names fitting the vibe] } to pick a font.",
-  '   Mark every follow-up skippable:true (agentDecidesLabel like "You choose", or "Skip" for the names).',
-  "   Omit any card whose value they already gave (a named color/font, a reference to pull from, a name).",
-  "3. Do NOT build or edit anything yet. Reply in chat with a short, friendly recap of the brief you",
-  "   gathered. Phase 2 will design from it.",
-].join("\n");
+// Step back through the flow. During questioning → back to the Web Site / App fork
+// (cancels the pending question so the agent turn ends cleanly, and starts fresh on
+// the next pick). At the fork → back to the Client Setup / Get Designing start.
+function goBack() {
+  conversationStarted = false;
+  if (intakePhase === "gathering") {
+    if (currentIntakeId != null) { try { window.desktop.cancelIntake(currentIntakeId); } catch {} currentIntakeId = null; }
+    clearIntakePending();
+    renderDeliverableChoice();
+  } else if (intakePhase === "deliverable") {
+    resetIntake();
+    renderStartChoices();
+  }
+}
+function updateBackButton() {
+  intakeBack.hidden = !(intakePhase === "deliverable" || intakePhase === "gathering");
+}
+intakeBack.addEventListener("click", goBack);
+
+// The instruction that turns "Get Designing" into an agent-driven, in-pane intake,
+// tailored to the picked type (web site vs app).
+function getDesigningPrompt(type) {
+  const kind = type === "app" ? "app" : "web site";
+  const sectionsWord = type === "app" ? "screens/views (e.g. dashboard, settings, profile)" : "sections (e.g. hero, features, pricing)";
+  return [
+    `The designer chose "Get Designing" and is designing a ${kind}. Gather a short design brief by calling`,
+    "the `intake` tool (mcp__intake__intake) — do NOT ask questions in chat; every question goes through",
+    "`intake` so it renders in the pane. Tailor the wording to a " + kind + ". Aim for TWO intake calls:",
+    '1. First call: ONE open-text card, long:true, maxLength ~400 — { id:"what", field:"what" } — asking,',
+    "   in a warm line, what they're making and the feeling they want.",
+    "2. Read their answer, then a second call with a few ADAPTIVE, skippable follow-ups that fit what they",
+    "   said. Include:",
+    '   - IF they did NOT give a company/brand name, an open-text card { id:"clientName", field:"clientName",',
+    '     label:"Company or brand name" };',
+    '   - IF they did NOT give a project name, an open-text card { id:"projectName", field:"projectName",',
+    '     label:"A name for this project" };',
+    `   - a chips card of likely ${sectionsWord} { id:"sections", field:"sections", options:[…] };`,
+    '   - a reference card { id:"reference", field:"references" } for a ' + kind + ' they like and why;',
+    '   - IF they did NOT mention colors, a color-swatch card { id:"primaryColor", field:"colorSources",',
+    "     options:[~5 tasteful hex values fitting the vibe] } to pick a primary color;",
+    '   - IF they did NOT mention fonts, a font-pick card { id:"font", field:"fontSources",',
+    "     options:[~4 Google-Font family names fitting the vibe] } to pick a font.",
+    '   Mark every follow-up skippable:true (agentDecidesLabel like "You choose", or "Skip" for the names).',
+    "   Omit any card whose value they already gave (a named color/font, a reference to pull from, a name).",
+    "   If the designer DISMISSES a question (the intake tool returns an error), stop and wait — do not retry.",
+    "3. Do NOT build or edit anything yet. Reply in chat with a short, friendly recap of the brief you",
+    "   gathered. Phase 2 will design from it.",
+  ].join("\n");
+}
 
 // Core send: fire a prompt at the agent. `echoText`, when given, is shown as the
 // user's chat bubble; omit it to run a prompt silently (Get Designing's kickoff).

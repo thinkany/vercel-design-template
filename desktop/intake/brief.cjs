@@ -14,6 +14,7 @@
  *
  * @typedef {Object} Brief
  * @property {string|null} deliverableType   A deliverables.cjs id (e.g. "web-pages").
+ * @property {string|null} projectType        "website" | "app" (the first fork).
  * @property {string|null} what              Free-text: what we're making, in their words.
  * @property {string[]|null} audience        Who it's for.
  * @property {SourceRef[]|null} references    Sites they like + why.
@@ -30,7 +31,7 @@
  */
 
 const BRIEF_FIELDS = [
-  "deliverableType", "what", "audience", "references", "colorSources", "fontSources",
+  "deliverableType", "projectType", "what", "audience", "references", "colorSources", "fontSources",
   "sections", "variationAxes", "existingCode", "tone", "deviceTargets",
   "clientName", "projectName", "notes",
 ];

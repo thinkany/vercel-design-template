@@ -1048,8 +1048,9 @@ ipcMain.handle("agent:cancelAsk", (_event, { id }) => {
 });
 
 // Begin a Get-Designing intake → start a fresh Brief for this flow (T5).
-ipcMain.handle("intake:begin", (_event, { deliverableType } = {}) => {
+ipcMain.handle("intake:begin", (_event, { deliverableType, projectType } = {}) => {
   intakeBrief = createEmptyBrief(deliverableType || "web-pages");
+  if (projectType) intakeBrief.projectType = projectType; // website | app (first fork)
   return { ok: true };
 });
 
@@ -1074,6 +1075,7 @@ function buildDesignPrompt(brief) {
   const parts = [];
   const list = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
   if (b.what) parts.push(String(b.what).trim());
+  if (b.projectType) parts.push(`Project type: ${b.projectType}`);
   if (b.clientName) parts.push(`Client / company: ${b.clientName}`);
   if (b.projectName) parts.push(`Project name: ${b.projectName}`);
   const refs = list(b.references)

@@ -720,6 +720,17 @@
          intro text centered above them (only in the start state, not the flow). */
       #intakeph.start { display: flex; flex-direction: column; justify-content: center; }
       #intakeph.start .intake-head { text-align: center; margin-bottom: 26px; }
+      /* Back — steps through the flow (top-left of the pane). */
+      #intake-back {
+        position: absolute; top: 16px; left: 16px; z-index: 6;
+        display: inline-flex; align-items: center; gap: 5px;
+        background: #fff; border: 1px solid #e0e0e6; border-radius: 999px;
+        padding: 6px 13px 6px 10px; cursor: pointer; font: inherit; font-size: 12.5px;
+        color: #444; transition: border-color .12s, color .12s;
+      }
+      #intake-back:hover { border-color: #111; color: #111; }
+      #intake-back[hidden] { display: none; }
+      #intake-back svg { width: 15px; height: 15px; }
       .istart-row { display: flex; gap: 14px; }
       .istart-card {
         flex: 1 1 0; text-align: left; cursor: pointer;
@@ -733,6 +744,9 @@
       .istart-icon svg { width: 26px; height: 26px; display: block; stroke-width: 1; }
       .istart-label { font-size: 15px; font-weight: 600; color: #1a1a1a; margin-bottom: 5px; }
       .istart-desc { font-size: 12.5px; line-height: 1.5; color: #777; }
+      /* Centered variant — used for the Web Site / App type fork (icon over label). */
+      .istart-card.istart-center { text-align: center; }
+      .istart-center .istart-icon { margin-left: auto; margin-right: auto; }
 
       /* Read-only answer, shown once a card is submitted (feedback #2). */
       .icard-answer { font-size: 13.5px; line-height: 1.55; color: #1a1a1a; white-space: pre-wrap; }
@@ -1003,6 +1017,11 @@
              intake() cards render here as a centered card column; the chat rail
              stays docked. Hidden until an intake begins. -->
         <div id="intakeph" hidden>
+          <!-- Step back through the flow (questioning → what-are-we-making fork). -->
+          <button id="intake-back" hidden type="button" aria-label="Back">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            <span>Back</span>
+          </button>
           <!-- Left rail (appears once the brief has content): a persistent
                reference while the questions on the right keep scrolling. -->
           <div id="intake-brief"></div>

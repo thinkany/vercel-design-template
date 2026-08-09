@@ -27,7 +27,7 @@ contextBridge.exposeInMainWorld("desktop", {
   },
   answerIntake: (id, answers) => ipcRenderer.invoke("agent:intakeAnswer", { id, answers }),
   cancelIntake: (id) => ipcRenderer.invoke("agent:cancelIntake", { id }),
-  beginIntake: (deliverableType) => ipcRenderer.invoke("intake:begin", { deliverableType }),
+  beginIntake: (deliverableType, projectType) => ipcRenderer.invoke("intake:begin", { deliverableType, projectType }),
   addBriefNote: (text) => ipcRenderer.invoke("intake:addNote", { text }),
   getDesignPrompt: () => ipcRenderer.invoke("intake:designPrompt"),
   onAgentBrief: (cb) => {
