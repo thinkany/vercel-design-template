@@ -3581,9 +3581,11 @@ function enterDesignBriefMode() {
   renderDeliverableChoice();
 }
 
-// 1px-stroke type icons: a browser window (Web Site) and a phone (App).
-const ICON_WEBSITE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="M2.5 8.5h19"/><circle cx="5.4" cy="6.5" r=".55"/><circle cx="7.5" cy="6.5" r=".55"/></svg>';
-const ICON_APP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>';
+// 1px-stroke type icons. Website = a monitor + tablet + phone (responsive), baselines
+// aligned; App = a single phone. Both drawn to the same 26px height so the two card
+// labels line up (see .istart-center .istart-icon CSS).
+const ICON_WEBSITE = '<svg viewBox="0 0 46 26" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="20" height="13" rx="1.5"/><path d="M11 16v4M6.5 20h9"/><rect x="26" y="6.5" width="9" height="13.5" rx="1.5"/><path d="M29.5 18h2"/><rect x="39" y="9.5" width="6" height="10.5" rx="1.5"/><path d="M41.2 18h1.6"/></svg>';
+const ICON_APP = '<svg viewBox="0 0 14 26" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2" width="11" height="22" rx="2.5"/><path d="M5.5 20.5h3"/></svg>';
 
 function renderDeliverableChoice() {
   dismissWelcome();
@@ -3592,13 +3594,13 @@ function renderDeliverableChoice() {
   enterIntakeMode();
   intakeph.classList.add("start");        // centered, like the start fork
   intakeph.classList.remove("flow", "hasbrief");
-  setIntakeHead("What are you designing?", "Pick one to get started.");
+  setIntakeHead("What are you designing?", "Choose one to get started.");
   el("intake-brief").innerHTML = "";
   intakeStack.innerHTML = "";
   renderBriefSummary(null); // clear the rail
 
   const opts = [
-    { type: "website", label: "Web Site", desc: "A marketing site or landing pages.", icon: ICON_WEBSITE },
+    { type: "website", label: "Website", desc: "A marketing site or landing pages.", icon: ICON_WEBSITE },
     { type: "app", label: "App", desc: "Product UI, dashboards, in-app screens.", icon: ICON_APP },
   ];
   const row = document.createElement("div");
@@ -3632,7 +3634,7 @@ function renderDeliverableChoice() {
 // Deliverable picked → FLIP the head up into the flow and kick off the questions.
 async function pickDeliverable(type) {
   deliverableType = type;
-  addMsg("system", `Designing a ${type === "app" ? "app" : "web site"}. I'll ask you a few quick things here in the panel, then put your brief together.`);
+  addMsg("system", `Designing ${type === "app" ? "an app" : "a website"}. I'll ask you a few quick things here in the panel, then put your brief together.`);
 
   const head = intakeph.querySelector(".intake-head");
   const first = head.getBoundingClientRect();

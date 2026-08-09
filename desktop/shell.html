@@ -744,9 +744,11 @@
       .istart-icon svg { width: 26px; height: 26px; display: block; stroke-width: 1; }
       .istart-label { font-size: 15px; font-weight: 600; color: #1a1a1a; margin-bottom: 5px; }
       .istart-desc { font-size: 12.5px; line-height: 1.5; color: #777; }
-      /* Centered variant — used for the Web Site / App type fork (icon over label). */
+      /* Centered variant — the Website / App type fork (icon over label). Both icons
+         render at the same fixed height so the two labels sit on the same line. */
       .istart-card.istart-center { text-align: center; }
-      .istart-center .istart-icon { margin-left: auto; margin-right: auto; }
+      .istart-center .istart-icon { display: flex; align-items: flex-end; justify-content: center; width: auto; height: 26px; margin: 0 0 12px; }
+      .istart-center .istart-icon svg { width: auto; height: 26px; }
 
       /* Read-only answer, shown once a card is submitted (feedback #2). */
       .icard-answer { font-size: 13.5px; line-height: 1.55; color: #1a1a1a; white-space: pre-wrap; }
