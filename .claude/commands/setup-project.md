@@ -449,29 +449,24 @@ Follow these steps:
    vars: the dev server reloads automatically on `.env` change, but a running
    production build must be rebuilt/redeployed (Vercel does this on push).
 
-6. **Remind about the preview gate (Vercel only).** First confirm they have a
-   Vercel project. A [Vercel](https://vercel.com) account is **required:** it's
-   what turns this project into a live, shareable website for client preview (the
-   free "Hobby" tier is enough). If they haven't connected it yet, point them to
-   the easiest path: create a free account at https://vercel.com (sign in with
-   GitHub), push this repo to a GitHub repository, then in Vercel choose
-   **Add New → Project** and import it, every `git push` then auto-deploys. The
-   env-var steps below all live in that Vercel project, so it must exist first.
+6. **Point them to Publish, it's built into the app now.** Sharing a live, client-
+   ready preview is one button, the **Publish** icon in the left rail. The app does
+   the whole job: there is **no GitHub push, no manual Vercel import, and no
+   environment variables to paste** (that older flow is gone). What to tell them:
+   - **Connect once.** In the Publish drawer, **Connect with Vercel** (a free account
+     is enough; sign-in opens in your browser) or paste a Vercel access token.
+   - **Publish.** One click uploads the design, lets Vercel build it, and returns a
+     private, **password-gated URL** to send the client. The app **generates the
+     preview password** for you and shows it right after publishing (you can reset it
+     any time). Re-publishing later keeps the same URL and just ships the latest.
+   - **The sign-in screen brands itself** from this project's company/client info,
+     the very values set here, so finishing the branding above is what makes the
+     shared link look like theirs.
 
-   The login page in
-   `middleware.js` runs on Vercel's edge runtime and CANNOT read `.env` /
-   `VITE_*`. To brand it, the user must add matching **`CLIENT_NAME`** and
-   **`PROJECT_TITLE`** (plain names, no `VITE_` prefix) to their Vercel project's
-   Environment Variables, alongside the gate secrets `ADMIN_PASS` / `AUTH_PASS`.
-   Give them the exact values to paste. Unset, `CLIENT_NAME` falls back to
-   "Preview" and `PROJECT_TITLE` to "A Design System".
-
-   Do **not** put secrets (ADMIN_PASS / AUTH_PASS for the preview gate) in `.env`,
-  those belong in Vercel's Environment Variables or a local `.env.local`.
-
-   Note for later: the preview gate shows a text wordmark (name + subtitle), a
-   logo could be added via an optional `SITE_LOGO` env var in `middleware.js`. This
-   is out of scope for this command; flag it if the user wants a full rebrand.
+   Under the hood the gate still runs on Vercel's edge (`middleware.js`, which can't
+   read `.env`/`VITE_*`), but the app sets its config and secrets in the Vercel
+   project for you, `CLIENT_NAME` / `PROJECT_TITLE` / `ADMIN_PASS`, so the designer
+   never touches environment variables, and secrets never go in `.env`.
 
 7. **Offer to save these company settings for reuse.** The company name, admin
    fonts, and logo just configured (steps 2a–2c) are the **same for every project**
