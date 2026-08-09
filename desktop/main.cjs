@@ -1073,6 +1073,8 @@ function buildDesignPrompt(brief) {
   const parts = [];
   const list = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
   if (b.what) parts.push(String(b.what).trim());
+  if (b.clientName) parts.push(`Client / company: ${b.clientName}`);
+  if (b.projectName) parts.push(`Project name: ${b.projectName}`);
   const refs = list(b.references)
     .map((r) => (r && r.url ? (r.reason ? `${r.url} (drawn to: ${r.reason})` : r.url) : ""))
     .filter(Boolean);

@@ -2824,6 +2824,8 @@ function renderBriefSummary(brief) {
   const rows = [];
   const add = (key, val) => { if (val) rows.push([key, val]); };
   add("Making", brief.what);
+  add("Company", brief.clientName);
+  add("Project", brief.projectName);
   if (Array.isArray(brief.colorSources) && brief.colorSources.length) {
     add("Colors", brief.colorSources.map((c) => c && c.value).filter(Boolean).join(", "));
   }
@@ -3333,12 +3335,19 @@ function buildReference(card, body, onChange) {
   };
 }
 
-// color-swatch → pick one primary color from a few swatches (options = hex values).
+// color-swatch → pick one primary color: a few on-brief swatches (options = hex)
+// PLUS a true color picker for any color the designer wants.
 function buildColorSwatch(card, body, onChange) {
   let selected = null;
   const swatches = [];
   const wrap = document.createElement("div");
   wrap.className = "iswatches";
+
+  const clearSelected = () => {
+    swatches.forEach((s) => s.classList.remove("selected"));
+    customEl.classList.remove("selected");
+  };
+
   (card.options || []).forEach((hex) => {
     const sw = document.createElement("button");
     sw.type = "button";
@@ -3348,18 +3357,39 @@ function buildColorSwatch(card, body, onChange) {
     sw.setAttribute("aria-label", hex);
     sw.addEventListener("click", () => {
       if (sw.disabled) return;
-      selected = selected === hex ? null : hex;
-      swatches.forEach((s) => s.classList.toggle("selected", s === sw && selected === hex));
+      const off = selected === hex;
+      selected = off ? null : hex;
+      clearSelected();
+      if (!off) sw.classList.add("selected");
       onChange();
     });
     swatches.push(sw);
     wrap.appendChild(sw);
   });
+
+  // True color picker (native): a rainbow "custom" swatch wrapping <input type=color>.
+  const customEl = document.createElement("label");
+  customEl.className = "iswatch iswatch-custom";
+  customEl.title = "Custom color";
+  const picker = document.createElement("input");
+  picker.type = "color";
+  picker.className = "iswatch-input";
+  picker.value = (card.options && card.options[0]) || "#888888";
+  picker.addEventListener("input", () => {
+    selected = picker.value;
+    clearSelected();
+    customEl.classList.add("selected", "has-color");
+    customEl.style.background = selected;
+    onChange();
+  });
+  customEl.appendChild(picker);
+  wrap.appendChild(customEl);
+
   body.appendChild(wrap);
   return {
     getValue: () => selected,
     hasValue: () => !!selected,
-    setDisabled: (d) => swatches.forEach((s) => { s.disabled = d; }),
+    setDisabled: (d) => { swatches.forEach((s) => { s.disabled = d; }); picker.disabled = d; },
     display: () => selected || "",
   };
 }
@@ -3556,14 +3586,18 @@ const GET_DESIGNING_PROMPT = [
   "   in a warm line, what they're making and the feeling they want.",
   "2. Read their answer, then a second call with a few ADAPTIVE, skippable follow-ups that fit what they",
   "   said. Include:",
+  '   - IF they did NOT give a company/brand name, an open-text card { id:"clientName", field:"clientName",',
+  '     label:"Company or brand name" };',
+  '   - IF they did NOT give a project name, an open-text card { id:"projectName", field:"projectName",',
+  '     label:"A name for this project" };',
   '   - a chips card of likely sections { id:"sections", field:"sections", options:[…] };',
   '   - a reference card { id:"reference", field:"references" } for a site they like and why;',
   '   - IF they did NOT mention colors, a color-swatch card { id:"primaryColor", field:"colorSources",',
   "     options:[~5 tasteful hex values fitting the vibe] } to pick a primary color;",
   '   - IF they did NOT mention fonts, a font-pick card { id:"font", field:"fontSources",',
   "     options:[~4 Google-Font family names fitting the vibe] } to pick a font.",
-  '   Mark every follow-up skippable:true (agentDecidesLabel like "You choose"). Omit the color or font',
-  "   card entirely if they already named one, or gave a reference to pull it from.",
+  '   Mark every follow-up skippable:true (agentDecidesLabel like "You choose", or "Skip" for the names).',
+  "   Omit any card whose value they already gave (a named color/font, a reference to pull from, a name).",
   "3. Do NOT build or edit anything yet. Reply in chat with a short, friendly recap of the brief you",
   "   gathered. Phase 2 will design from it.",
 ].join("\n");
