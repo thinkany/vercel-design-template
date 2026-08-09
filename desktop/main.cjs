@@ -419,7 +419,7 @@ function addRecentProject(dir) {
 // Read a project's identity from its committed .env (folder names aren't reliable
 // identifiers). Returns { client, project } (either may be empty).
 function readProjectMeta(dir) {
-  let client = "", project = "";
+  let client = "", project = "", company = "";
   try {
     const env = fs.readFileSync(path.join(dir, ".env"), "utf8");
     const get = (k) => {
@@ -428,10 +428,11 @@ function readProjectMeta(dir) {
     };
     client = get("VITE_CLIENT_NAME");
     project = get("VITE_PROJECT_NAME");
+    company = get("VITE_COMPANY_NAME");
   } catch {
     /* no .env yet */
   }
-  return { client, project };
+  return { client, project, company };
 }
 function clearProjectPath() {
   try {

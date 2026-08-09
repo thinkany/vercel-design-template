@@ -1513,6 +1513,37 @@ async function renderPublish(body) {
   body.appendChild(connStatusRow("Vercel", st.connected, badgeText, "Disconnect Vercel",
     async () => { await window.desktop.clearVercel(); refreshRailActivation(); openModal("publish"); }));
 
+  // ── Company info nudge — the shared preview's sign-in screen shows the agency's
+  // name + logo to the client; if it isn't set, offer to add it before publishing
+  // (still optional). Shown whether or not Vercel is connected.
+  const proj = await window.desktop.getProjectStatus();
+  if (proj.hasProject && !((proj.company || "").trim())) {
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "margin: 6px 0 18px;";
+    const rule = document.createElement("div");
+    rule.style.cssText = "height: 2px; background: #c0261e; border-radius: 2px; margin-bottom: 12px;";
+    const title = document.createElement("div");
+    title.style.cssText = "font-size: 13px; font-weight: 600; color: #c0261e; margin-bottom: 5px;";
+    title.textContent = "Your Company Information";
+    const desc = document.createElement("div");
+    desc.className = "sess-desc";
+    desc.style.marginTop = "0";
+    desc.textContent = "The private link you share opens on a sign-in screen branded with YOUR company name and logo, that's what your client sees first. It isn't set for this project yet. Add it so the preview looks like yours (you can still publish without it).";
+    const btns = document.createElement("div");
+    btns.className = "projbtns";
+    const upload = document.createElement("button");
+    upload.className = "panelbtn primary";
+    upload.textContent = "Upload a profile";
+    upload.addEventListener("click", () => { closeModal(); sendText("/import-company"); });
+    const setup = document.createElement("button");
+    setup.className = "panelbtn";
+    setup.textContent = "Set up project";
+    setup.addEventListener("click", () => { closeModal(); sendText("/setup-project"); });
+    btns.append(upload, setup);
+    wrap.append(rule, title, desc, btns);
+    body.appendChild(wrap);
+  }
+
   if (!st.connected) {
     const intro = document.createElement("p");
     intro.className = "muted";
