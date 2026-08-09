@@ -40,9 +40,8 @@ Follow these steps:
    the checks below:
 
    > Let's get started. First, a quick preflight to make sure the project can run.
-   > These are system checks and are required in order to run this project! When
-   > prompted, you'll want to say yes to continue, and remember, we respect your
-   > choices, so no definitely means no with us!
+   > These are system checks and are required in order to run this project! If
+   > anything isn't quite right, we'll walk you through how to get things going.
 
    a. Check whether Node.js is installed **and current enough** by running
       `node -v` and `npm -v` from the project root. Note the Node version (the
@@ -80,11 +79,9 @@ Follow these steps:
       with pnpm** (see `vercel.json` / `pnpm-lock.yaml`), so the `package-lock.json`
       npm creates is git-ignored and throwaway, do not commit it.
 
-   e. Once install succeeds, continue to branding below. Hold the `npm run dev`
-      local-preview reminder for the **true end of onboarding:** after Phase II
-      (the styleguide) wraps, per step 8, so it lands last: they can preview
-      locally with **`npm run dev`** (http://localhost:5173) for instant feedback,
-      separate from the Vercel preview deploy.
+   e. Once install succeeds, continue to branding below. The preview runs itself in
+      the app, so **don't** tell the designer to run `npm run dev` or point them at a
+      localhost URL, that's internal plumbing, not a step they take.
 
 0.5. **Company identity, is it already applied? Else, import or set fresh.**
    **First, read `.env`.** If **`VITE_COMPANY_NAME` is set (non-empty)**, the
@@ -177,7 +174,6 @@ Follow these steps:
             max-width: 360px;   /* keeps the logo from dominating */
             height: auto;
             margin: 0 auto 24px; /* centered, matching the centered text */
-            filter: grayscale(100%); /* enforce black & white regardless of source */
           }
           ```
         - Insert the image as the **first child of the `.brand` div**, directly
@@ -450,48 +446,21 @@ Follow these steps:
    declined). For websites, also write `VITE_MENU_STYLE` from 3d (leave `""` for
    traditional).
 
-5. **Confirm** what you set, and remind the user that these are Vite build-time
-   vars: the dev server reloads automatically on `.env` change, but a running
-   production build must be rebuilt/redeployed (Vercel does this on push).
+5. **Write the values, then move straight on, no recap, no publishing talk here.**
+   The values are in `.env`, that's enough. Do **NOT**, at this point:
+   - give the designer a "here's what we set" branding recap,
+   - introduce or walk through Publishing / Vercel, or
+   - offer to save a company profile.
 
-6. **Point them to Publish, it's built into the app now.** Sharing a live, client-
-   ready preview is one button, the **Publish** icon in the left rail. The app does
-   the whole job: there is **no GitHub push, no manual Vercel import, and no
-   environment variables to paste** (that older flow is gone). What to tell them:
-   - **Connect once.** In the Publish drawer, **Connect with Vercel** (a free account
-     is enough; sign-in opens in your browser) or paste a Vercel access token.
-   - **Publish.** One click uploads the design, lets Vercel build it, and returns a
-     private, **password-gated URL** to send the client. The app **generates the
-     preview password** for you and shows it right after publishing (you can reset it
-     any time). Re-publishing later keeps the same URL and just ships the latest.
-   - **The sign-in screen brands itself** from this project's company/client info,
-     the very values set here, so finishing the branding above is what makes the
-     shared link look like theirs.
+   None of that belongs before the client has a design, showing it here is exactly
+   the "too soon" problem. **All three are deferred to the true end of onboarding**
+   (the styleguide's sign-off, `/setup-styleguide` **step 5**): the branding recap +
+   build-time note, the full Publish/Vercel how-to, and the save-company-profile
+   offer. Keep Phase I flowing straight into Phase II.
 
-   Under the hood the gate still runs on Vercel's edge (`middleware.js`, which can't
-   read `.env`/`VITE_*`), but the app sets its config and secrets in the Vercel
-   project for you, `CLIENT_NAME` / `PROJECT_TITLE` / `ADMIN_PASS`, so the designer
-   never touches environment variables, and secrets never go in `.env`.
-
-7. **Offer to save these company settings for reuse.** The company name, admin
-   fonts, and logo just configured (steps 2a–2c) are the **same for every project**
-   this designer will do, so offer to export them as a portable **company profile**
-   they can import into the next fresh copy with `/import-company`. (Skip this offer
-   if a profile was *imported* in 0.5 and nothing was changed, there's nothing new
-   to save. If they tweaked an imported value, still offer, so they can save the
-   updated version.)
-
-   Ask with `AskUserQuestion`, header **"Save profile"**; `question`:
-
-   > Want to save these company settings, your name, admin fonts, and logo, so you
-   > can reuse them on your next project without setting them up again?
-
-   Options: **"Yes, save my company profile"** (default, first) / **"No thanks"**.
-
-   - **On "Yes"** → run the **[`/export-company`](export-company.md)** flow
-     (`node scripts/company-profile.mjs pack`) and tell them where
-     `company-profile.json` landed + to keep it somewhere reusable.
-   - **On "No"** → continue.
+   (Carry forward the one fact step 5's deferred content needs: whether a company
+   profile was *imported unchanged* in 0.5, if so, the end-of-onboarding save offer
+   is skipped, there's nothing new to save.)
 
 ## 8. Continue straight into Phase II, the styleguide
 
@@ -503,11 +472,15 @@ feeling like one continuous setup, not a second disconnected command:
 - Give a **one-line bridge:** e.g. *"Your brand and company fonts are set. Now
   let's define the client's design foundation: colors and fonts."*, then
   **invoke the `/setup-styleguide` skill** to continue Phase II. That fulfils the
-  "a little later" promise.
-- **Off-ramp:** if the designer would rather pause (wants to set up Vercel first,
-  or says "not now"), respect it, tell them they can run **`/setup-styleguide`**
-  whenever they're ready, and give the `npm run dev` preview reminder (from step
-  0d) now instead of at the end of Phase II.
+  "a little later" promise. **No branding recap, publish talk, or profile-save here**
+  (per step 5), those all land at the styleguide's sign-off.
+- **Off-ramp:** if the designer would rather pause ("not now"), respect it and tell
+  them they can run **`/setup-styleguide`** whenever they're ready. Because the
+  end-of-onboarding content lives in Phase II's sign-off, a pause means they simply
+  get it when they resume. If they clearly want to publish before designing, you may
+  give the Publish/Vercel how-to (from `/setup-styleguide` step 5) now, but keep the
+  branding recap and profile-save for the true end.
 
-Do the `npm run dev` local-preview reminder at the **true end of onboarding**,
-after the styleguide (Phase II) wraps, or now if they paused here.
+The **end of onboarding is the styleguide's sign-off** (`/setup-styleguide` step 5):
+that is where the branding recap, the Publish/Vercel how-to, and the save-company-
+profile offer are delivered, once there's a design worth sharing.

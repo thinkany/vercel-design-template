@@ -97,6 +97,11 @@ step 2's font resolve. If the preview doesn't refresh, the dev server picks up t
 new variation on reload.
 
 ## 4. Design v01/Home
+**First, save the brief for reference.** Write the designer's original brief
+(`$ARGUMENTS`, verbatim, unedited) into `"brief"` in
+`src/variations/v01/variation.json`, the dashboard card shows it under "Original
+brief." Silent bookkeeping, don't narrate it.
+
 Now follow the [`/design`](design.md) authoring contract and build
 `src/variations/v01/components/Home.tsx` with the **new** `--ta-*` / `--ta-font-*`
 tokens. **Drive the page's section order + block choices from `/tmp/ta-research.json`

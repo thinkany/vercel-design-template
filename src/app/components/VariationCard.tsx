@@ -133,8 +133,10 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
           alignItems: "center",
           justifyContent: "center",
           pointerEvents: "none",
-          opacity: hoveringThumb ? 1 : 0.76,
-          transition: "opacity 0.18s ease",
+          // Softly clear the number circle on hover so the live screenshot behind it
+          // reads unobstructed; it eases back in when the pointer leaves.
+          opacity: hoveringThumb ? 0 : 0.76,
+          transition: "opacity 0.4s ease",
         }}>
           <span style={{
             fontFamily: "var(--admin-font-heading)",
@@ -219,6 +221,38 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
         }}>
           {variation.description}
         </p>
+
+        {/* Original brief — the designer's verbatim request that started this design,
+            saved for reference. Only shown when one was captured. */}
+        {variation.brief && (
+          <div style={{
+            borderLeft: "2px solid rgba(0,0,0,0.14)",
+            paddingLeft: 12,
+            margin: "2px 0",
+          }}>
+            <div style={{
+              fontSize: 10,
+              fontWeight: 500,
+              letterSpacing: "0.1em",
+              color: "var(--admin-gray-mid)",
+              textTransform: "uppercase",
+              marginBottom: 4,
+              fontFamily: "var(--admin-font-body)",
+            }}>
+              Original brief
+            </div>
+            <p style={{
+              fontSize: 13.5,
+              fontStyle: "italic",
+              color: "var(--admin-gray-dark)",
+              lineHeight: 1.6,
+              margin: 0,
+              fontFamily: "var(--admin-font-body)",
+            }}>
+              “{variation.brief}”
+            </p>
+          </div>
+        )}
 
         {/* Styleguide setup nudge — same amber language as the styleguide's own
             banner, so the two surfaces read as one state. Persists until this
@@ -374,8 +408,10 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
           Styleguide ↗
         </a>
 
-        {/* Remove — admin only, not on base */}
-        {isAdmin && !variation.isBase && (
+        {/* Remove — admin only, not on base, and only during local design (dev).
+            Removal is a dev-server capability; the hosted/published preview is
+            read-only, so the control is hidden there. */}
+        {isAdmin && !variation.isBase && import.meta.env.DEV && (
           <button
             onClick={onRemove}
             style={{

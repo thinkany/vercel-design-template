@@ -161,7 +161,7 @@ export function Dashboard() {
           >
             Sign Out
           </button>
-        {isAdmin && (
+        {isAdmin && import.meta.env.DEV && (
           <button
             onClick={() => setShowMakeModal(true)}
             style={{

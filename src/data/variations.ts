@@ -17,6 +17,9 @@ export interface Variation {
   modifiedAt: string; // "MM/DD/YYYY HH:MM"
   isBase: boolean;
   label?: string;     // override for the filled blue tag; falls back to "Original" / "Client Edits"
+  brief?: string;     // the designer's original, verbatim design request that kicked this design
+                      // off (written by /design or /design-brief on the first build); shown on the
+                      // dashboard card for reference. Kept as-is, never paraphrased.
   screenshot?: string; // static thumbnail image URL
   removed?: boolean;   // hidden from the gallery (files kept); set by the remove action
   // Per-variation styleguide state. "needs-review" shows the setup banner on this

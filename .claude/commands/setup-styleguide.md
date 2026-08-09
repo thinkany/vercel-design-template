@@ -69,9 +69,10 @@ configures THAT variation, never the base.**
   **`previewReady: false` keeps the app's live preview CLOSED for now.** The variation
   folder exists the instant you copy the base, but its styleguide has no client colors
   yet, so opening the preview here would pop a blank/base page mid-setup. The app waits
-  for `previewReady: true`, which you flip **once the color palette is written** (Step
-  1a), that's when there's real content to show. (Only the desktop app reads this
-  field; it's a harmless no-op elsewhere.)
+  for `previewReady: true`, which you flip **at the end of the Fonts step** (Step 1b),
+  once colors AND fonts are both in, that's when there's real content to show and the
+  right moment for the browser to open. (Only the desktop app reads this field; it's a
+  harmless no-op elsewhere.)
 
   The dashboard reads this file directly, no localStorage, so it shows the right
   title/status in every browser. Tell the designer in one plain line that you've set
@@ -257,15 +258,28 @@ new group and leaves existing ones intact.
 nothing to click. (If you ever need to re-flag/clear it by hand, edit that field in
 `src/variations/{id}/variation.json`.)
 
-**Now open the live preview, set `"previewReady": true`.** The palette is written, so
-this is the point where the styleguide has real swatches to show. Edit the
-`previewReady` field in `src/variations/{id}/variation.json` (Step 0 wrote it as
-`false`) to `true`. That flip is the signal the desktop app waits on: it holds the
-preview closed while the variation is created and the palette is being set, then opens
-the styleguide + home tabs on the real palette. Flip it **once, here:** not earlier,
-not per-color.
+**Leave the preview closed for now, fonts come next.** Keep `previewReady: false`
+(Step 0's value), do **not** flip it here. The palette is written, but the app must
+not pop the styleguide browser open mid-setup, before the client's fonts are chosen.
+You flip `previewReady` to `true` at the **end of the Fonts step (1b)**, so the
+preview opens **once**, on the real colors AND fonts together. Not earlier, not
+per-color.
 
 ### 1b. Fonts
+
+**When you offer font pairings with `AskUserQuestion`, make the options renderable in
+their real typefaces.** The app shows each font option **in its actual faces** (the
+display family drawn large in itself, a body sample in its companion) so the designer
+can *see* a pairing instead of researching names. For that to work:
+- Use **real [Google Fonts](https://fonts.google.com) family names**, spelled exactly
+  (e.g. `Playfair Display`, `Source Sans 3`, `Fraunces`), not descriptive nicknames.
+- Format each option's **`label`** as **`{Display Family} + {Body Family}`**, the app
+  splits on the `+` (also `/`, `·`, `&`, "and", "with") to know which face is heading
+  vs body. One family alone (no separator) is fine for a single-font option.
+- Put the pairing's *character* ("elegant editorial", "clean and modern") in the
+  **`description`**, not the label, the label is the faces themselves.
+- Keep families to ones actually on Google Fonts so they load; an unknown name simply
+  falls back to a system face (still selectable, just not previewed).
 
 In the scope's `styles/` folder: declare/import the families in `fonts.css`, then
 point the `--ta-font-*` tokens in `tokens.css` at them. The type specimens render
@@ -276,6 +290,15 @@ lives only in `tokens.css` (the manifest references it via `var(--ta-font-*)`).
 Confirm the changes show up in the styleguide's **Primitives → Colors / Type
 Scale** sections, those swatches read the live token values, so they should
 reflect your edits immediately.
+
+**Now open the live preview, set `"previewReady": true`.** Colors AND fonts are both
+written, so this is the point where the styleguide has the real palette and type to
+show, and the right moment for the browser to open. Edit the `previewReady` field in
+`src/variations/{id}/variation.json` (Step 0 wrote it as `false`) to `true`. That flip
+is the signal the desktop app waits on: it holds the preview closed while the variation
+is created and the palette + fonts are set, then opens the styleguide + home tabs on the
+real design. Flip it **once, here at the end of fonts:** not earlier, not per-color, and
+never before the fonts are in.
 
 ### 1c. Bridge the shadcn primitives to the brand
 
@@ -401,10 +424,15 @@ preview's header (and in the phone frame, where it should scale down cleanly).
 ## 2. The working variation's name (just inform)
 
 The dashboard lists each design as a **variation**. Step 0 already titled the working
-variation **"Initial Design"** (in its `variation.json`); the base keeps its **"Base"**
-blueprint label (in code). To rename it, edit `title`/`description` in
-`src/variations/{id}/variation.json`, no need to during setup. The base seed lives in
-code (`BASE` in `src/data/variations.ts`) and stays "Base".
+variation **"Initial Design"**. If you mention it, keep it plain: the working design is
+titled "Initial Design" in the dashboard, and they can rename it any time by just saying
+so. No action is needed during setup.
+
+**Never expose implementation detail in designer-facing copy.** Do not mention file
+paths, `variation.json`, `src/…`, or the internal **"Base"** blueprint in anything the
+designer reads (chat replies, summaries, sign-offs). Those are internal, they read as
+noise to a designer. Say "the working design in the dashboard," not where it lives on
+disk.
 
 ## 3. The example sections are flexible, just inform (no question)
 
@@ -435,17 +463,73 @@ they clear it. It never applies to the variation this setup just configured.
 
 ## 5. Sign off, onboarding complete
 
-Both phases are now done (brand + company fonts in Phase I, client colors + fonts
-and the styleguide here in Phase II). Give the warm wrap and the local-preview
-reminder that `/setup-project` deferred to this point (its step 0d): they can
-preview anytime with **`npm run dev`** (http://localhost:5173) for instant,
-hot-reloading feedback, separate from the Vercel preview deploy, and they're now
-ready to start designing pages.
+This is the **true end of onboarding** and the one place the Phase I deferrals land.
+Deliver them here, **in this order**, and only now (there's finally a design worth
+sharing). **If `/setup-styleguide` was run standalone** (not reached via the
+`/setup-project` handoff), skip 5a–5c, those are Phase I's, and go straight to the
+wrap (5d).
 
-Point them to **`/guide`** as well: they can type it at any time to see every
-command this project offers (setup, design, Figma export, preview controls). The quickest next
-step is simply to describe the page they want, that kicks off `/design`, which
-will also offer to start the preview server if it isn't already running.
+### 5a. Branding recap + build-time note
+
+Give the concise recap of what Phase I set (this is the recap deliberately held back
+from setup-project step 5): **Company**, **Client**, **Project**, **Type** (with the
+active previews), and **Menus**. Then the build-time note: these are Vite build-time
+values, so the local preview picks them up on reload, but a published build only
+reflects changes on a fresh publish.
+
+### 5b. Publish, it's built into the app
+
+Now introduce sharing (held back from setup-project step 6). Sharing a live, client-
+ready preview is one button, the **Publish** icon in the left rail. The app does the
+whole job: **no GitHub push, no manual Vercel import, no environment variables to
+paste**. What to tell them:
+- **Connect once.** In the Publish drawer, **Connect with Vercel** (a free account is
+  enough; sign-in opens in your browser) or paste a Vercel access token.
+- **Publish.** One click uploads the design, lets Vercel build it, and returns a
+  private, **password-gated URL** to send the client. The app **generates the preview
+  password** and shows it right after publishing (you can reset it any time).
+  Re-publishing later keeps the same URL and just ships the latest.
+- **The sign-in screen brands itself** from this project's company/client info, so the
+  branding above is what makes the shared link look like theirs.
+
+Under the hood the gate runs on Vercel's edge (`middleware.js`, which can't read
+`.env`/`VITE_*`), but the app sets its config + secrets (`CLIENT_NAME` /
+`PROJECT_TITLE` / `ADMIN_PASS`) in the Vercel project, so the designer never touches
+environment variables and secrets never go in `.env`.
+
+### 5c. Offer to save the company profile
+
+Finally, offer to save the company layer for reuse (held back from setup-project step
+7). The company name, admin fonts, and logo are the **same for every project** this
+designer does, so offer to export them as a portable **company profile** for the next
+fresh copy (`/import-company`). **Skip this offer** if a profile was *imported
+unchanged* in setup-project 0.5 (nothing new to save); if they tweaked an imported
+value, still offer so they can re-save.
+
+Ask with `AskUserQuestion`, header **"Save profile"**; `question`:
+
+> Want to save these company settings, your name, admin fonts, and logo, so you
+> can reuse them on your next project without setting them up again?
+
+Options: **"Yes, save my company profile"** (default, first) / **"No thanks"**.
+
+- **On "Yes"** → run the **[`/export-company`](export-company.md)** flow
+  (`node scripts/company-profile.mjs pack`) and tell them where `company-profile.json`
+  landed + to keep it somewhere reusable.
+- **On "No"** → continue.
+
+### 5d. Warm wrap
+
+Give a short, warm wrap: they're branded and ready to start designing pages.
+
+For the full list of commands, point them to the **life buoy (help) icon** rather
+than any typed command.
+
+Then, **on its own line** (separated from the help note), give the next-step nudge
+close to verbatim:
+
+> The quickest next step is just to describe the page you want ("a homepage with a
+> hero, three product highlights, and a newsletter signup") and I'll start designing it.
 
 ## Variations carry their own styleguide, fully siloed
 

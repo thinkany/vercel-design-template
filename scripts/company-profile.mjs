@@ -260,7 +260,7 @@ export async function runUnpack({ project = process.cwd(), input, force = false 
       const src = `/brand/${profile.logo.filename}`;
       if (!mw.includes("brand-logo")) {
         // CSS rule just before the closing </style>
-        const css = `\n    .brand-logo {\n      display: block;\n      width: 100%;\n      max-width: 360px;\n      height: auto;\n      margin: 0 auto 24px;\n      filter: grayscale(100%);\n    }\n`;
+        const css = `\n    .brand-logo {\n      display: block;\n      width: 100%;\n      max-width: 360px;\n      height: auto;\n      margin: 0 auto 24px;\n    }\n`;
         mw = mw.replace(/(\n\s*<\/style>)/, `${css}$1`);
         // <img> as first child of .brand, directly above .brand-name (same indent)
         mw = mw.replace(

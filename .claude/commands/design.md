@@ -58,6 +58,24 @@ say "stop the server" / "free port 5173" and you'll shut it down, or press
 **Remind them of `/guide`.** Mention they can type **`/guide`** at any time to see
 every command this project offers (setup, design, this guide, preview controls).
 
+## Save the original brief (first build of a design only)
+
+When a designer kicks off a design with a natural-language request ("a homepage
+with a hero, three product highlights, and a newsletter signup"), **save that
+request verbatim** so it's on record in the dashboard. On the **first** build in a
+working variation (design #1, before or right as you start building), add a
+`"brief"` field to that variation's `src/variations/{id}/variation.json` holding the
+designer's original words, unedited, not paraphrased or cleaned up. The dashboard
+card renders it under "Original brief."
+
+- Only the **first** build sets it. Don't overwrite an existing `brief` on later
+  edits/refinements, it's the *starting* request, kept as a reference point.
+- Use their actual message. If they gave the request across a couple of sentences,
+  capture the substantive design ask (skip pure pleasantries). Don't invent one, if
+  there's genuinely no stated brief (e.g. they just said "start designing"), leave
+  it unset.
+- This is a silent bookkeeping step, don't narrate it to the designer.
+
 ## 1. Fastest path, where the design goes
 
 **Every design is a variation. Base v00 is the pristine template blueprint, never
