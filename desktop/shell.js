@@ -3594,7 +3594,7 @@ function renderDeliverableChoice() {
   enterIntakeMode();
   intakeph.classList.add("start");        // centered, like the start fork
   intakeph.classList.remove("flow", "hasbrief");
-  setIntakeHead("What are you designing?", "Choose one to get started.");
+  setIntakeHead("What are you designing for?", "Choose one to get started.");
   el("intake-brief").innerHTML = "";
   intakeStack.innerHTML = "";
   renderBriefSummary(null); // clear the rail

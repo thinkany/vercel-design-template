@@ -734,6 +734,10 @@
       .istart-row { display: flex; gap: 14px; }
       .istart-card {
         flex: 1 1 0; text-align: left; cursor: pointer;
+        /* Top-align content: buttons vertically-center their content by default, so
+           in an equal-height row the shorter card's icon/label would sit lower than
+           the taller one's. Flex-column + flex-start keeps both anchored at the top. */
+        display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
         border: 1px solid #e3e3e9; border-radius: 14px; padding: 20px 18px 18px;
         background: #fff; box-shadow: 0 1px 2px rgba(20,20,30,.03);
         transition: border-color .12s, box-shadow .12s, transform .06s;
