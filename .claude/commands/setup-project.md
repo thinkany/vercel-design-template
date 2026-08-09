@@ -151,17 +151,22 @@ Follow these steps:
    > your company name, and is shown in black & white.
 
    - **On "No"** → make no changes; continue to 2b.
-   - **On "Yes"** → the logo is a real image file, and **images can't be pasted
-     into the Claude prompt**, so the designer must drop the file into the project
-     themselves. Walk them through it:
+   - **On "Yes" (or an upload)** → images can't be pasted into the prompt, so that
+     question's card carries an **📎 Upload** button (and accepts drag-drop), the
+     easy path. Get the file into **`public/brand/`**, then wire it:
 
-     1. **Where to put the file.** Have them place the logo in **`public/brand/`**
-        (create the folder if it doesn't exist). Prefer a **transparent-background
-        PNG** or an **SVG**; a horizontal lockup reads best under the 360px width
-        cap. Files in `public/` are served at the site root, so it'll be referenced
-        as **`/brand/<filename>`** (e.g. `public/brand/logo.png` → `/brand/logo.png`).
-        **Ask the designer for the exact filename** they saved, and confirm the file
-        is actually in place before editing anything.
+     1. **Get the logo into `public/brand/`.**
+        - **If they uploaded** → the answer is the **path where the app placed the
+          file** (e.g. `./public/images/<name>`). **Move it into `public/brand/`**
+          (create the folder if it doesn't exist).
+        - **If they chose "Yes" without uploading** → point them to the **Upload**
+          button on that card, or have them drop the file into **`public/brand/`**
+          and tell you the exact filename.
+        - Prefer a **transparent-background PNG** or an **SVG**; a horizontal lockup
+          reads best under the 360px width cap. Files in `public/` are served at the
+          site root, so it's referenced as **`/brand/<filename>`** (e.g.
+          `public/brand/logo.png` → `/brand/logo.png`). Confirm the file is actually
+          in place before editing anything.
 
      2. **Wire it into the gate, edit `middleware.js`:**
         - Add a `.brand-logo` rule to the inline `<style>` block:

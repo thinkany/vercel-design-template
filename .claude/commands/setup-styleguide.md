@@ -358,17 +358,19 @@ for the design, or swap in a different file?"*
 - **Use this one** (first) → nothing to do; confirm and move on.
 - **Add a different file** → give the copy-in instructions below, then rewire.
 
-**Copy-in instructions (when they choose to add/replace a file).** Images can't be
-pasted into chat, so the designer places the file themselves. Give these **exact**
-steps:
-1. **Where.** Copy the logo into the project's **`public/brand/`** folder, full
-   path **`<project-root>/public/brand/`**. **Create the `brand` folder if it isn't
-   there yet** (it won't be on a fresh copy).
-2. **What.** Prefer an **SVG** (crisp at any size) or a **transparent PNG**. Give it
-   a simple name, e.g. **`logo.svg`**.
-3. **Tell me the filename** once it's in place. Anything under `public/` is served
-   from the site root, so `public/brand/logo.svg` is referenced as **`/brand/logo.svg`**
-   (the `public/` prefix is dropped from the URL).
+**Copy-in instructions (when they choose to add/replace a file).** That question's
+card carries an **📎 Upload** button (and accepts drag-drop), the easy path since
+images can't be pasted into chat. Get the file into **`public/brand/`**:
+1. **If they uploaded** → the answer is the **path where the app placed the file**
+   (e.g. `./public/images/<name>`). **Move it into `public/brand/`** (create the
+   `brand` folder if it isn't there yet, it won't be on a fresh copy).
+2. **If they didn't upload** → point them to the **Upload** button on that card, or
+   have them copy the file into **`public/brand/`** themselves and tell you the
+   filename.
+3. **What.** Prefer an **SVG** (crisp at any size) or a **transparent PNG**, e.g.
+   **`logo.svg`**. Anything under `public/` is served from the site root, so
+   `public/brand/logo.svg` is referenced as **`/brand/logo.svg`** (the `public/`
+   prefix is dropped from the URL).
 
 **Wire it in.** Replace the text lockup in `Header.tsx` with the image, keeping the
 home-nav button wrapper:
