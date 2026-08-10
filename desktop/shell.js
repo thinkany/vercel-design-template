@@ -98,7 +98,7 @@ let deliverableType = "website"; // "website" | "app" — the first fork
 const TAKING_IN_MESSAGES = [
   "Got it, give me a moment while I take that in…",
   "Perfect, let me sit with that a second…",
-  "Great, thinking that through now…",
+  "Thanks for finishing that walkthrough…",
 ];
 let takingInIdx = 0;
 
@@ -3006,9 +3006,18 @@ window.desktop.onAgentBrief((brief) => renderBriefSummary(brief));
 // each feed their own piece; composeRail() rebuilds the rail from whichever changed.
 let lastBrief = null;
 let lastReferences = [];
+let lastDigest = null;   // digest.json from the deterministic ingest (T1)
+let refsBusy = false;    // "reading your references…" while an ingest is pending
+let railBriefRows = 0;   // prior brief-row count, so the Brief card eases in once
 
 function renderBriefSummary(brief) {
   lastBrief = brief;
+  composeRail();
+}
+
+function applyRefPayload(p) {
+  lastReferences = (p && p.assets) || [];
+  if (p && "digest" in p) lastDigest = p.digest || null;
   composeRail();
 }
 
@@ -3017,15 +3026,10 @@ function renderBriefSummary(brief) {
 // on boot the references:changed channel keeps it live thereafter.
 function loadReferences() {
   if (!window.desktop.listReferences) return;
-  window.desktop.listReferences()
-    .then((p) => { lastReferences = (p && p.assets) || []; composeRail(); })
-    .catch(() => {});
+  window.desktop.listReferences().then(applyRefPayload).catch(() => {});
 }
 
-window.desktop.onReferencesChanged((p) => {
-  lastReferences = (p && p.assets) || [];
-  composeRail();
-});
+window.desktop.onReferencesChanged(applyRefPayload);
 
 // Build the left rail: the design-references panel (design intake only) above the
 // "Your brief so far" recap. The rail shows whenever the design intake is running
@@ -3060,13 +3064,18 @@ function composeRail() {
     if (Array.isArray(brief.notes) && brief.notes.length) add("Notes", brief.notes.join("; "));
   }
 
+  if (!flow) railBriefRows = 0; // reset so the Brief eases in fresh on re-entry
+
   box.innerHTML = "";
   if (flow) box.appendChild(buildReferencesPanel());
+  let briefCard = null;
   if (rows.length) {
+    briefCard = document.createElement("div");
+    briefCard.className = "ibrief-card";
     const title = document.createElement("div");
     title.className = "ibrief-title";
     title.textContent = "Your brief so far";
-    box.appendChild(title);
+    briefCard.appendChild(title);
     for (const [key, val] of rows) {
       const row = document.createElement("div");
       row.className = "ibrief-row";
@@ -3077,10 +3086,19 @@ function composeRail() {
       v.className = "ibrief-val";
       v.textContent = val;
       row.append(k, v);
-      box.appendChild(row);
+      briefCard.appendChild(row);
     }
+    box.appendChild(briefCard);
   }
   showRail(flow || rows.length > 0);
+
+  // Ease the Brief card in the first time it appears (not a harsh pop), and softly
+  // scroll it into view as it grows, mirroring the questions column's motion.
+  if (briefCard && rows.length > railBriefRows) {
+    if (railBriefRows === 0) fadeSlideIn(briefCard, { dy: 14, duration: 520, delay: 40 });
+    try { briefCard.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch { /* older webview */ }
+  }
+  railBriefRows = rows.length;
 }
 
 // The design-references panel in the rail: a header, a hint, an upload/drop zone,
@@ -3114,11 +3132,37 @@ function buildReferencesPanel() {
   drop.addEventListener("drop", onReferenceDrop);
   panel.appendChild(drop);
 
+  if (refsBusy) {
+    const reading = document.createElement("div");
+    reading.className = "iref-reading";
+    reading.textContent = "Reading your references…";
+    panel.appendChild(reading);
+  }
+
   if (lastReferences.length) {
     const grid = document.createElement("div");
     grid.className = "iref-grid";
     for (const a of lastReferences) grid.appendChild(buildReferenceChip(a));
     panel.appendChild(grid);
+  }
+
+  // Palette pulled from the images by the deterministic ingest (exact hexes).
+  const palette = (lastDigest && lastDigest.palette) || [];
+  if (palette.length) {
+    const strip = document.createElement("div");
+    strip.className = "iref-palette";
+    const lbl = document.createElement("span");
+    lbl.className = "iref-palette-lbl";
+    lbl.textContent = "Palette";
+    strip.appendChild(lbl);
+    for (const hex of palette) {
+      const sw = document.createElement("span");
+      sw.className = "iref-swatch";
+      sw.style.background = hex;
+      sw.title = hex;
+      strip.appendChild(sw);
+    }
+    panel.appendChild(strip);
   }
   return panel;
 }
@@ -3176,8 +3220,10 @@ async function onReferenceDrop(e) {
     if (src) paths.push(src);
   }
   if (!paths.length) return;
+  refsBusy = true; composeRail();
   try { handleRefResult(await window.desktop.addReferencePaths(paths)); }
   catch (err) { addMsg("error", String(err)); }
+  finally { refsBusy = false; composeRail(); }
 }
 
 // Fold an add/remove result back into the rail and give a soft line in the chat.
@@ -3185,6 +3231,7 @@ function handleRefResult(res) {
   if (!res || res.canceled) return;
   if (!res.ok) { addMsg("error", res.error || "Could not add the references."); return; }
   lastReferences = res.assets || lastReferences;
+  if ("digest" in res) lastDigest = res.digest || lastDigest;
   composeRail();
   const added = (res.added || []).length;
   const dupes = (res.skipped || []).filter((s) => s.reason === "duplicate").length;
@@ -3208,7 +3255,7 @@ function renderIntakeGroup(id, cards) {
   // can enable itself. getValue() → the answer (null = skipped/empty); isReady()
   // → whether this card is complete enough to submit (skippable is always ready).
   const controls = (cards || []).map((card) => {
-    const r = renderIntakeCard(card, refreshReady);
+    const r = renderIntakeCard(card, refreshReady, requestSubmit);
     group.appendChild(r.el);
     return { card, ...r };
   });
@@ -3219,12 +3266,22 @@ function renderIntakeGroup(id, cards) {
   function refreshReady() { continueBtn.disabled = !controls.every((c) => c.isReady()); }
   refreshReady();
 
+  // Advance without a second click: a card (Enter in a text field, or toggling
+  // "you decide") can ask to submit; it only goes through if the whole group is
+  // ready. Keeps single-field steps to zero extra clicks.
+  function requestSubmit() {
+    if (group.classList.contains("answered")) return;
+    if (controls.every((c) => c.isReady())) submit();
+  }
+
   async function submit() {
     if (group.classList.contains("answered")) return;
     group.classList.add("answered");
     const answers = {};
     for (const c of controls) { answers[c.card.id] = c.getValue(); c.collapse(); }
-    continueBtn.replaceWith(doneNote());
+    const done = doneNote();
+    continueBtn.replaceWith(done);
+    autoDismissTool(done, 900); // flash "✓ Got it", then fade + collapse it away
     if (currentIntakeId === id) currentIntakeId = null; // answered, not cancellable now
     // Conversational feedback while the agent takes it in — cycled so the line after
     // the second answer differs from the first (works whether or not more follow).
@@ -3438,7 +3495,7 @@ function showPreparing() {
 // card shell, adds the optional skip affordance, and exposes collapse() — which,
 // on submit, swaps the live inputs for a clean read-only value so no disabled
 // field lingers (feedback #2).
-function renderIntakeCard(card, onChange) {
+function renderIntakeCard(card, onChange, requestSubmit) {
   const elc = document.createElement("div");
   elc.className = "icard";
 
@@ -3459,7 +3516,7 @@ function renderIntakeCard(card, onChange) {
   let skipped = false;
   const skippable = card.skippable === true;
   const built =
-    card.type === "open-text" ? buildOpenText(card, body, onChange)
+    card.type === "open-text" ? buildOpenText(card, body, onChange, requestSubmit)
     : card.type === "single-choice" ? buildChoice(card, body, false, onChange)
     : card.type === "multi-choice" ? buildChoice(card, body, true, onChange)
     : card.type === "chips" ? buildChips(card, body, onChange)
@@ -3483,6 +3540,8 @@ function renderIntakeCard(card, onChange) {
       skipBtn.textContent = skipped ? "Undo skip" : skipLabel;
       skipBtn.classList.toggle("undo", skipped);
       onChange();
+      // "You decide" / "Skip" should advance on its own — no extra Continue click.
+      if (skipped && requestSubmit) requestSubmit();
     });
     elc.appendChild(skipBtn);
   }
@@ -3506,11 +3565,18 @@ function renderIntakeCard(card, onChange) {
 }
 
 // open-text → single line, or a textarea when `long`. Optional maxLength counter.
-function buildOpenText(card, body, onChange) {
+function buildOpenText(card, body, onChange, requestSubmit) {
   const long = card.long === true;
   const field = document.createElement(long ? "textarea" : "input");
   field.className = long ? "icard-textarea" : "icard-input";
   if (card.placeholder) field.placeholder = card.placeholder;
+  // Enter advances (Continue with no extra click), on both a single line and a
+  // textarea; Shift+Enter inserts a newline in the textarea (chat-input convention).
+  field.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.shiftKey) return;
+    e.preventDefault();
+    if (requestSubmit) requestSubmit();
+  });
   if (card.maxLength) field.maxLength = card.maxLength;
   body.appendChild(field);
 
@@ -3701,7 +3767,19 @@ function buildColorSwatch(card, body, onChange) {
     customEl.classList.remove("selected");
   };
 
-  (card.options || []).forEach((hex) => {
+  // Seed the swatches with the exact colors pulled from the uploaded references
+  // (the ingest palette), then the card's own options, deduped. So "Pick a
+  // primary color" offers the on-brief colors first, plus the picker below.
+  const refPalette = (lastDigest && lastDigest.palette) || [];
+  const seen = new Set();
+  const options = [...refPalette, ...(card.options || [])].filter((hex) => {
+    const k = String(hex).toLowerCase();
+    if (!/^#[0-9a-f]{3,8}$/.test(k) || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
+  options.forEach((hex) => {
     const sw = document.createElement("button");
     sw.type = "button";
     sw.className = "iswatch";
@@ -3727,7 +3805,7 @@ function buildColorSwatch(card, body, onChange) {
   const picker = document.createElement("input");
   picker.type = "color";
   picker.className = "iswatch-input";
-  picker.value = (card.options && card.options[0]) || "#888888";
+  picker.value = options[0] || "#888888";
   picker.addEventListener("input", () => {
     selected = picker.value;
     clearSelected();

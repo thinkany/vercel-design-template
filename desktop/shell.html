@@ -693,9 +693,11 @@
       #intake-lead { font-size: 14px; line-height: 1.6; color: #666; margin: 0; text-wrap: balance; }
       /* "Your brief so far" — the Brief accumulated from answered cards (T5). Hidden
          by default; becomes the persistent left rail once the flow has content. */
-      #intake-brief {
-        display: none; border: 1px solid #e3e3e9; border-radius: 12px;
-        background: #fff; padding: 16px 18px; box-shadow: 0 1px 2px rgba(20,20,30,.03);
+      #intake-brief { display: none; }
+      /* The two rail blocks (References + Brief) are each their own card. */
+      .iref-panel, .ibrief-card {
+        border: 1px solid #e3e3e9; border-radius: 12px; background: #fff;
+        padding: 16px 18px; box-shadow: 0 1px 2px rgba(20,20,30,.03);
       }
       .ibrief-title { font-size: 12px; font-weight: 600; color: #111; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 11px; }
       .ibrief-row { display: flex; gap: 10px; font-size: 13px; line-height: 1.5; margin-bottom: 8px; }
@@ -706,8 +708,6 @@
 
       /* Design references panel (reference-ingest T0) — sits at the top of the rail;
          an upload/drop zone + a thumbnail grid of what's been captured. */
-      .iref-panel { margin-bottom: 14px; }
-      .iref-panel:last-child { margin-bottom: 0; }
       .iref-title { font-size: 12px; font-weight: 600; color: #111; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
       .iref-hint { font-size: 12px; line-height: 1.5; color: #8a8a93; margin-bottom: 10px; }
       .iref-drop {
@@ -736,6 +736,10 @@
       }
       .iref-chip:hover .iref-rm { opacity: 1; }
       .iref-rm:hover { background: rgba(20,20,30,.85); }
+      .iref-reading { font-size: 12px; color: #7b7bea; margin-top: 8px; }
+      .iref-palette { display: flex; align-items: center; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+      .iref-palette-lbl { font-size: 11px; color: #999; margin-right: 2px; }
+      .iref-swatch { width: 18px; height: 18px; border-radius: 5px; border: 1px solid rgba(20,20,30,.12); }
 
       /* ---- Two-column flow: brief rail (left 40%) + questions (right 60%) ----
          The design intake runs in .flow (a flex row). The brief rail starts
@@ -752,21 +756,23 @@
          .hasbrief eases it open to 40%, up into place, and fades in. Long, soft
          ease-out so it feels intentional; the questions column drifts right as the
          rail claims its space. */
+      /* The rail is now a transparent flex COLUMN of its own cards, vertically
+         centered as a unit (align-self: center → height follows the cards'
+         collective height, so a short stack sits centered and a tall one scrolls). */
       #intakeph.flow #intake-brief {
-        display: block; align-self: center; box-sizing: border-box;
-        flex: 0 0 0%; margin-left: 0; padding-left: 0; padding-right: 0;
-        opacity: 0; overflow: hidden; border-color: transparent;
+        display: flex; flex-direction: column; gap: 14px;
+        align-self: center; box-sizing: border-box;
+        flex: 0 0 0%; margin-left: 0;
+        opacity: 0; overflow: hidden;
         transform: translateY(24px); max-height: calc(100% - 56px);
         transition: flex-basis .62s cubic-bezier(.16,1,.3,1),
                     transform .62s cubic-bezier(.16,1,.3,1),
                     opacity .5s ease,
-                    margin-left .62s cubic-bezier(.16,1,.3,1),
-                    padding .5s ease;
+                    margin-left .62s cubic-bezier(.16,1,.3,1);
       }
       #intakeph.flow.hasbrief #intake-brief {
-        flex: 0 0 40%; margin-left: 32px;
-        padding-left: 18px; padding-right: 18px; opacity: 1; transform: translateY(0);
-        border-color: #e3e3e9; overflow-y: auto;
+        flex: 0 0 40%; margin-left: 32px; opacity: 1; transform: translateY(0);
+        overflow-y: auto;
       }
 
       /* A card group = one intake() call's cards + its Continue button. */
@@ -915,7 +921,9 @@
       .intake-continue:disabled { opacity: 0.4; cursor: default; }
       .intake-done {
         font-size: 12.5px; color: #111; font-weight: 600; padding: 2px 0;
+        overflow: hidden; transition: opacity .3s ease, max-height .3s ease, padding .3s ease;
       }
+      .intake-done.fade-out { opacity: 0; padding-top: 0; padding-bottom: 0; }
       /* Conversational "thinking" line shown in the pane between question batches. */
       .intake-pending {
         display: flex; align-items: center; gap: 9px;

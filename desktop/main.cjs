@@ -51,6 +51,7 @@ const vercel = require("./publish.cjs");
 const { validateCards } = require("./intake/cards.cjs");
 const { createEmptyBrief, applyAnswers } = require("./intake/brief.cjs");
 const references = require("./intake/references.cjs");
+const ingestRefs = require("./intake/ingest.cjs");
 
 const appRoot = path.resolve(__dirname, ".."); // the Electron app / template source (git worktree in dev; Resources/app when packaged)
 
@@ -1612,9 +1613,17 @@ ipcMain.handle("file:attachPath", (_event, { srcPath }) => attachToProject(srcPa
 // come in T1+. Each asset is decorated with its absolute path so the renderer can
 // show a file:// thumbnail (the assets dir is outside public/, so Vite won't serve it).
 function referencesPayload(projectDir) {
-  if (!projectDir) return { assets: [] };
+  if (!projectDir) return { assets: [], digest: null };
   const assets = references.listAssets(projectDir).map((a) => ({ ...a, abs: references.absPathFor(projectDir, a) }));
-  return { assets };
+  return { assets, digest: ingestRefs.readDigest(projectDir) };
+}
+// Run the deterministic (0-token) ingest so the digest reflects the current set.
+// Pass the just-added ids to only process those; call with none to just rebuild
+// the digest from the manifest (e.g. after a removal). Best-effort — a failed
+// ingest never blocks the upload.
+function ingestReferences(projectDir, addedIds) {
+  try { ingestRefs.ingest(projectDir, addedIds || null); }
+  catch (e) { console.error("[references] ingest failed:", e && e.message); }
 }
 function broadcastReferences() {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1635,6 +1644,7 @@ ipcMain.handle("references:add", async () => {
   if (res.canceled || !res.filePaths.length) return { ok: false, canceled: true };
   rememberDir("referenceDir", res.filePaths[0]);
   const { added, skipped } = references.addAssets(currentProject, res.filePaths);
+  if (added.length) ingestReferences(currentProject, added.map((a) => a.id));
   broadcastReferences();
   return { ok: true, added, skipped, ...referencesPayload(currentProject) };
 });
@@ -1643,6 +1653,7 @@ ipcMain.handle("references:add", async () => {
 ipcMain.handle("references:addPaths", (_event, { paths } = {}) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   const { added, skipped } = references.addAssets(currentProject, Array.isArray(paths) ? paths : []);
+  if (added.length) ingestReferences(currentProject, added.map((a) => a.id));
   broadcastReferences();
   return { ok: true, added, skipped, ...referencesPayload(currentProject) };
 });
@@ -1650,6 +1661,7 @@ ipcMain.handle("references:addPaths", (_event, { paths } = {}) => {
 ipcMain.handle("references:remove", (_event, { id } = {}) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   references.removeAsset(currentProject, id);
+  ingestReferences(currentProject); // rebuild the digest without the removed asset
   broadcastReferences();
   return { ok: true, ...referencesPayload(currentProject) };
 });
