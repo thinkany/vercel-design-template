@@ -50,6 +50,7 @@ const { startCaptureBridge, stopCaptureBridge } = require("./capture-bridge.cjs"
 const vercel = require("./publish.cjs");
 const { validateCards } = require("./intake/cards.cjs");
 const { createEmptyBrief, applyAnswers } = require("./intake/brief.cjs");
+const references = require("./intake/references.cjs");
 
 const appRoot = path.resolve(__dirname, ".."); // the Electron app / template source (git worktree in dev; Resources/app when packaged)
 
@@ -1604,6 +1605,54 @@ ipcMain.handle("file:attach", async () => {
 
 // Attach a file by path (from a drag-and-drop in the renderer).
 ipcMain.handle("file:attachPath", (_event, { srcPath }) => attachToProject(srcPath));
+
+// ---- Design references (reference-ingest T0: store + list, no model) ---------
+// Uploaded reference material lives in the project's PRIVATE .thinkany/references
+// store (see intake/references.cjs). T0 only captures + lists them; ingest/digest
+// come in T1+. Each asset is decorated with its absolute path so the renderer can
+// show a file:// thumbnail (the assets dir is outside public/, so Vite won't serve it).
+function referencesPayload(projectDir) {
+  if (!projectDir) return { assets: [] };
+  const assets = references.listAssets(projectDir).map((a) => ({ ...a, abs: references.absPathFor(projectDir, a) }));
+  return { assets };
+}
+function broadcastReferences() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("references:changed", referencesPayload(currentProject));
+  }
+}
+
+ipcMain.handle("references:list", () => referencesPayload(currentProject));
+
+ipcMain.handle("references:add", async () => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: "Add design references",
+    defaultPath: lastDir("referenceDir") || lastDir("attachDir"),
+    properties: ["openFile", "multiSelections"],
+    buttonLabel: "Add references",
+  });
+  if (res.canceled || !res.filePaths.length) return { ok: false, canceled: true };
+  rememberDir("referenceDir", res.filePaths[0]);
+  const { added, skipped } = references.addAssets(currentProject, res.filePaths);
+  broadcastReferences();
+  return { ok: true, added, skipped, ...referencesPayload(currentProject) };
+});
+
+// Add references by path (drag-and-drop of one or more files onto the rail).
+ipcMain.handle("references:addPaths", (_event, { paths } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const { added, skipped } = references.addAssets(currentProject, Array.isArray(paths) ? paths : []);
+  broadcastReferences();
+  return { ok: true, added, skipped, ...referencesPayload(currentProject) };
+});
+
+ipcMain.handle("references:remove", (_event, { id } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  references.removeAsset(currentProject, id);
+  broadcastReferences();
+  return { ok: true, ...referencesPayload(currentProject) };
+});
 
 // A custom, branded "About" window (the native macOS About panel can't show a
 // logo file or a real button). Shows the logo, version, and a thinkany.co button.

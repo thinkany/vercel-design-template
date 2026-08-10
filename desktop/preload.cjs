@@ -111,6 +111,17 @@ contextBridge.exposeInMainWorld("desktop", {
     return () => ipcRenderer.removeListener("preview:open-url", listener);
   },
 
+  // ---- Design references (reference-ingest T0: store + list, no model) ----
+  listReferences: () => ipcRenderer.invoke("references:list"),
+  addReferences: () => ipcRenderer.invoke("references:add"),
+  addReferencePaths: (paths) => ipcRenderer.invoke("references:addPaths", { paths }),
+  removeReference: (id) => ipcRenderer.invoke("references:remove", { id }),
+  onReferencesChanged: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    ipcRenderer.on("references:changed", listener);
+    return () => ipcRenderer.removeListener("references:changed", listener);
+  },
+
   // ---- File attach ----
   attachFile: () => ipcRenderer.invoke("file:attach"),
   attachFilePath: (srcPath) => ipcRenderer.invoke("file:attachPath", { srcPath }),

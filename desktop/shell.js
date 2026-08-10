@@ -3001,51 +3001,195 @@ window.desktop.onAgentIntake(({ id, cards }) => renderIntakeGroup(id, cards));
 // it here. Render it as a compact "Your brief so far" recap pinned above the cards.
 window.desktop.onAgentBrief((brief) => renderBriefSummary(brief));
 
+// Latest Brief + uploaded references, composed together into the pane's left rail.
+// The brief channel (agent:brief) and the references channel (references:changed)
+// each feed their own piece; composeRail() rebuilds the rail from whichever changed.
+let lastBrief = null;
+let lastReferences = [];
+
 function renderBriefSummary(brief) {
+  lastBrief = brief;
+  composeRail();
+}
+
+// Pull the open project's stored references into the rail. Called when the design
+// intake enters flow mode so the upload zone is present from the very start, and
+// on boot the references:changed channel keeps it live thereafter.
+function loadReferences() {
+  if (!window.desktop.listReferences) return;
+  window.desktop.listReferences()
+    .then((p) => { lastReferences = (p && p.assets) || []; composeRail(); })
+    .catch(() => {});
+}
+
+window.desktop.onReferencesChanged((p) => {
+  lastReferences = (p && p.assets) || [];
+  composeRail();
+});
+
+// Build the left rail: the design-references panel (design intake only) above the
+// "Your brief so far" recap. The rail shows whenever the design intake is running
+// (so references can be dropped from the start) or the brief has any rows.
+function composeRail() {
   const box = el("intake-brief");
   // Toggling `hasbrief` on the host is what animates the rail open (left 40%) and
   // makes room for the questions column; the CSS handles the transition.
   const showRail = (has) => intakeph.classList.toggle("hasbrief", has);
-  if (!brief) { showRail(false); box.innerHTML = ""; return; }
+  const flow = intakeph.classList.contains("flow");
+
+  const brief = lastBrief;
   const rows = [];
   const add = (key, val) => { if (val) rows.push([key, val]); };
-  if (brief.projectType) add("Type", brief.projectType === "app" ? "App" : "Web site");
-  add("Making", brief.what);
-  add("Company", brief.clientName);
-  add("Project", brief.projectName);
-  if (Array.isArray(brief.colorSources) && brief.colorSources.length) {
-    add("Colors", brief.colorSources.map((c) => c && c.value).filter(Boolean).join(", "));
+  if (brief) {
+    if (brief.projectType) add("Type", brief.projectType === "app" ? "App" : "Web site");
+    add("Making", brief.what);
+    add("Company", brief.clientName);
+    add("Project", brief.projectName);
+    if (Array.isArray(brief.colorSources) && brief.colorSources.length) {
+      add("Colors", brief.colorSources.map((c) => c && c.value).filter(Boolean).join(", "));
+    }
+    if (Array.isArray(brief.fontSources) && brief.fontSources.length) {
+      add("Fonts", brief.fontSources.map((f) => f && f.value).filter(Boolean).join(", "));
+    }
+    if (Array.isArray(brief.sections) && brief.sections.length) add("Sections", brief.sections.join(", "));
+    if (Array.isArray(brief.references) && brief.references.length) {
+      add("Likes", brief.references.map((r) => r.url + (r.reason ? ` (${r.reason})` : "")).join("; "));
+    }
+    if (Array.isArray(brief.audience) && brief.audience.length) add("For", brief.audience.join(", "));
+    add("Tone", brief.tone);
+    if (Array.isArray(brief.notes) && brief.notes.length) add("Notes", brief.notes.join("; "));
   }
-  if (Array.isArray(brief.fontSources) && brief.fontSources.length) {
-    add("Fonts", brief.fontSources.map((f) => f && f.value).filter(Boolean).join(", "));
-  }
-  if (Array.isArray(brief.sections) && brief.sections.length) add("Sections", brief.sections.join(", "));
-  if (Array.isArray(brief.references) && brief.references.length) {
-    add("Likes", brief.references.map((r) => r.url + (r.reason ? ` (${r.reason})` : "")).join("; "));
-  }
-  if (Array.isArray(brief.audience) && brief.audience.length) add("For", brief.audience.join(", "));
-  add("Tone", brief.tone);
-  if (Array.isArray(brief.notes) && brief.notes.length) add("Notes", brief.notes.join("; "));
-  if (!rows.length) { showRail(false); box.innerHTML = ""; return; }
 
   box.innerHTML = "";
-  const title = document.createElement("div");
-  title.className = "ibrief-title";
-  title.textContent = "Your brief so far";
-  box.appendChild(title);
-  for (const [key, val] of rows) {
-    const row = document.createElement("div");
-    row.className = "ibrief-row";
-    const k = document.createElement("span");
-    k.className = "ibrief-key";
-    k.textContent = key;
-    const v = document.createElement("span");
-    v.className = "ibrief-val";
-    v.textContent = val;
-    row.append(k, v);
-    box.appendChild(row);
+  if (flow) box.appendChild(buildReferencesPanel());
+  if (rows.length) {
+    const title = document.createElement("div");
+    title.className = "ibrief-title";
+    title.textContent = "Your brief so far";
+    box.appendChild(title);
+    for (const [key, val] of rows) {
+      const row = document.createElement("div");
+      row.className = "ibrief-row";
+      const k = document.createElement("span");
+      k.className = "ibrief-key";
+      k.textContent = key;
+      const v = document.createElement("span");
+      v.className = "ibrief-val";
+      v.textContent = val;
+      row.append(k, v);
+      box.appendChild(row);
+    }
   }
-  showRail(true);
+  showRail(flow || rows.length > 0);
+}
+
+// The design-references panel in the rail: a header, a hint, an upload/drop zone,
+// and the thumbnail grid of what's uploaded. Files land in the private .thinkany
+// store (reference-ingest T0) — no ingest yet, just capture + show.
+function buildReferencesPanel() {
+  const panel = document.createElement("div");
+  panel.className = "iref-panel";
+
+  const title = document.createElement("div");
+  title.className = "iref-title";
+  title.textContent = "Design references";
+  panel.appendChild(title);
+
+  const hint = document.createElement("div");
+  hint.className = "iref-hint";
+  hint.textContent = "Optional. Drop images, PDFs, or brand guides you want me to follow.";
+  panel.appendChild(hint);
+
+  const drop = document.createElement("button");
+  drop.type = "button";
+  drop.className = "iref-drop";
+  drop.innerHTML = '<span class="iref-plus">＋</span><span>Upload references</span>';
+  drop.addEventListener("click", addReferencesViaPicker);
+  ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => {
+    e.preventDefault(); e.stopPropagation(); drop.classList.add("drag");
+  }));
+  ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => {
+    e.preventDefault(); e.stopPropagation(); drop.classList.remove("drag");
+  }));
+  drop.addEventListener("drop", onReferenceDrop);
+  panel.appendChild(drop);
+
+  if (lastReferences.length) {
+    const grid = document.createElement("div");
+    grid.className = "iref-grid";
+    for (const a of lastReferences) grid.appendChild(buildReferenceChip(a));
+    panel.appendChild(grid);
+  }
+  return panel;
+}
+
+// One uploaded reference: an image thumbnail (via file://, the assets dir is
+// outside public/) or a type glyph for docs, its name, and a remove control.
+function buildReferenceChip(a) {
+  const chip = document.createElement("div");
+  chip.className = "iref-chip";
+
+  const thumb = document.createElement("div");
+  thumb.className = "iref-thumb iref-" + (a.kind || "other");
+  if (a.kind === "image" && a.abs) {
+    const img = document.createElement("img");
+    img.src = "file://" + encodeURI(a.abs);
+    img.alt = a.name || "";
+    img.onerror = () => { img.remove(); thumb.classList.add("iref-glyph"); thumb.textContent = "🖼"; };
+    thumb.appendChild(img);
+  } else {
+    thumb.classList.add("iref-glyph");
+    thumb.textContent = a.kind === "document" ? "📄" : "📎";
+  }
+
+  const name = document.createElement("div");
+  name.className = "iref-name";
+  name.textContent = a.name || (a.file || "").split("/").pop();
+  name.title = name.textContent;
+
+  const rm = document.createElement("button");
+  rm.type = "button";
+  rm.className = "iref-rm";
+  rm.textContent = "✕";
+  rm.title = "Remove reference";
+  rm.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    try { handleRefResult(await window.desktop.removeReference(a.id)); }
+    catch (err) { addMsg("error", String(err)); }
+  });
+
+  chip.append(thumb, name, rm);
+  return chip;
+}
+
+async function addReferencesViaPicker() {
+  try { handleRefResult(await window.desktop.addReferences()); }
+  catch (e) { addMsg("error", String(e)); }
+}
+
+async function onReferenceDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const paths = [];
+  for (const f of [...(e.dataTransfer?.files || [])]) {
+    const src = window.desktop.pathForFile(f);
+    if (src) paths.push(src);
+  }
+  if (!paths.length) return;
+  try { handleRefResult(await window.desktop.addReferencePaths(paths)); }
+  catch (err) { addMsg("error", String(err)); }
+}
+
+// Fold an add/remove result back into the rail and give a soft line in the chat.
+function handleRefResult(res) {
+  if (!res || res.canceled) return;
+  if (!res.ok) { addMsg("error", res.error || "Could not add the references."); return; }
+  lastReferences = res.assets || lastReferences;
+  composeRail();
+  const added = (res.added || []).length;
+  const dupes = (res.skipped || []).filter((s) => s.reason === "duplicate").length;
+  if (added) addMsg("system", `📎 Added ${added} design reference${added > 1 ? "s" : ""}.`);
+  if (dupes) addMsg("system", `${dupes} already added, skipped.`);
 }
 
 // Render ONE intake() batch as a group: its cards + a single Continue button.
@@ -3815,6 +3959,7 @@ async function pickDeliverable(type) {
   );
   el("intake-brief").innerHTML = "";
   intakeStack.innerHTML = "";
+  loadReferences(); // open the rail with the references upload zone from the start
 
   const last = head.getBoundingClientRect();
   const flip = anim(head, [
