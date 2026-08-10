@@ -3092,13 +3092,29 @@ function renderIntakeGroup(id, cards) {
   group.appendChild(continueBtn);
 
   intakeStack.appendChild(group);
-  // Entrance: the question group rises in from underneath.
-  fadeSlideIn(group, { dy: 44, duration: 720, delay: 60 });
   // In flow mode the scroll lives on the questions column, not the pane.
   const scroller = intakeph.classList.contains("flow")
     ? intakeph.querySelector(".intake-inner")
     : intakeph;
-  if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  // Center THIS question in the view, bumping the answered ones up above it. Measure
+  // before the entrance transform so we target its final resting spot, then smooth-
+  // scroll there while it rises in.
+  const centerTo = scroller ? intakeCenterTarget(scroller, group) : 0;
+  fadeSlideIn(group, { dy: 44, duration: 720, delay: 60 });
+  if (scroller) {
+    try { scroller.scrollTo({ top: centerTo, behavior: "smooth" }); }
+    catch { scroller.scrollTop = centerTo; }
+  }
+}
+
+// The scrollTop that vertically centers `elm` within `scroller` (clamped to range).
+// Used so each new intake question lands centered while answered ones bump up above.
+function intakeCenterTarget(scroller, elm) {
+  const sRect = scroller.getBoundingClientRect();
+  const eRect = elm.getBoundingClientRect();
+  const elmTop = (eRect.top - sRect.top) + scroller.scrollTop;
+  const target = elmTop - (scroller.clientHeight - eRect.height) / 2;
+  return Math.max(0, Math.min(target, scroller.scrollHeight - scroller.clientHeight));
 }
 
 function doneNote() {
@@ -3847,15 +3863,17 @@ function getDesigningPrompt(type) {
   return [
     `The designer chose "Get Designing" and is designing a ${kind}. Gather a short design brief by calling`,
     "the `intake` tool (mcp__intake__intake) — do NOT ask questions in chat; every question goes through",
-    "`intake` so it renders in the pane. Tailor the wording to a " + kind + ". Aim for TWO intake calls:",
+    "`intake` so it renders in the pane. Tailor the wording to a " + kind + ". Ask ONE QUESTION AT A TIME:",
     '1. First call: ONE open-text card, long:true, maxLength ~400 — { id:"what", field:"what" } — asking,',
     "   in a warm line, what they're making and the feeling they want.",
-    "2. Read their answer, then a second call with a few ADAPTIVE, skippable follow-ups that fit what they",
-    "   said. Include:",
-    '   - IF they did NOT give a company/brand name, an open-text card { id:"clientName", field:"clientName",',
-    '     label:"Company or brand name" };',
-    '   - IF they did NOT give a project name, an open-text card { id:"projectName", field:"projectName",',
-    '     label:"A name for this project" };',
+    "2. Then ask the follow-ups below ONE AT A TIME: a SEPARATE `intake` call per question, a SINGLE card",
+    "   each, reading the answer before the next so you can adapt and skip anything already covered. Do NOT",
+    "   batch several into one call (that dumps them on screen at once instead of one at a time). Order,",
+    "   each its own call:",
+    '   - The company/brand name AND the project name are the ONE exception: you MAY send these two in a',
+    "     SINGLE call (two cards) so they appear together as a pair. Omit either name they already gave:",
+    '     { id:"clientName", field:"clientName", label:"Company or brand name" } and',
+    '     { id:"projectName", field:"projectName", label:"A name for this project" };',
     `   - a chips card of likely ${sectionsWord} { id:"sections", field:"sections", options:[…] };`,
     '   - a reference card { id:"reference", field:"references" } for a ' + kind + ' they like and why;',
     '   - IF they did NOT mention colors, a color-swatch card { id:"primaryColor", field:"colorSources",',
@@ -3864,7 +3882,7 @@ function getDesigningPrompt(type) {
     "     options:[~4 Google-Font family names fitting the vibe] } to pick a font.",
     '   Mark every follow-up skippable:true (agentDecidesLabel like "You choose", or "Skip" for the names).',
     "   Omit any card whose value they already gave (a named color/font, a reference to pull from, a name).",
-    "   If the designer DISMISSES a question (the intake tool returns an error), stop and wait — do not retry.",
+    "   If the designer DISMISSES a question (the intake tool returns an error), stop and wait, do not retry.",
     "3. Do NOT build or edit anything yet. Reply in chat with a short, friendly recap of the brief you",
     "   gathered. Phase 2 will design from it.",
   ].join("\n");
