@@ -499,13 +499,20 @@ async function visionPass(projectDir, onlyIds = null, opts = {}) {
     if (part) { imageParts.push({ rec: a, part }); imageIds.push(a.id); }
     else skipped.push({ id: a.id, reason: "undecodable image" });
   }
-  const docs = pending.filter((x) => x.kind === "document" && (x.excerpt || "").length);
+  // Re-extract the FULLER document text (up to the pass budget), not the ~600-char
+  // rail excerpt, so a long brand guide actually contributes its content. The
+  // looksLikeText guard inside extractDocText already drops unreadable/garbage docs.
+  const docs = pending.filter((x) => x.kind === "document");
   let docBudget = VISION_MAX_DOC_CHARS;
   const docLines = [];
   const docIds = [];
   for (const a of docs) {
     if (docBudget <= 0) { skipped.push({ id: a.id, reason: "doc cap" }); continue; }
-    const slice = (a.excerpt || "").slice(0, docBudget);
+    const ext = path.extname(a.name || a.file).toLowerCase();
+    const { text } = extractDocText(references.absPathFor(projectDir, a), ext);
+    const clean = (text || "").replace(/\s+/g, " ").trim();
+    if (!clean) { skipped.push({ id: a.id, reason: "no readable text" }); continue; }
+    const slice = clean.slice(0, docBudget);
     docBudget -= slice.length;
     docLines.push(`- ${a.name}: ${slice}`);
     docIds.push(a.id);
