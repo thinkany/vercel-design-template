@@ -207,27 +207,51 @@ function pdfText(buf) {
 }
 
 // Route a document asset to its extractor by extension. Returns { text, note }.
+// Does a string read like real prose, not decoded binary/font noise? Best-effort
+// PDF/rtf extraction can pull font-glyph or stream bytes that "decode" to junk
+// (e.g. "```mmm@@@ÿÿÿ…"): lots of symbols/high bytes, almost no spaces or letters.
+// We must never feed that to the vision pass, so gate extracted text through this.
+function looksLikeText(s) {
+  if (!s) return false;
+  const str = s.slice(0, 4000);
+  const n = str.length || 1;
+  let letters = 0, spaces = 0, nonAscii = 0, ctrl = 0;
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    if (c === 9 || c === 10 || c === 13 || c === 32) { spaces++; continue; }
+    if (c < 32) { ctrl++; continue; }
+    if (c > 126) { nonAscii++; continue; }
+    if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122)) letters++;
+  }
+  // Real prose: mostly letters, some spaces between words, little binary noise.
+  return letters / n > 0.45 && spaces / n > 0.05 && nonAscii / n < 0.25 && ctrl / n < 0.05;
+}
+
 function extractDocText(absPath, ext) {
   try {
     const e = (ext || path.extname(absPath)).toLowerCase();
     if (e === ".md" || e === ".markdown" || e === ".txt") {
-      return { text: fs.readFileSync(absPath, "utf8"), note: null };
+      return { text: fs.readFileSync(absPath, "utf8"), note: null }; // trust plain text
     }
     if (e === ".rtf") {
       const raw = fs.readFileSync(absPath, "latin1");
-      const text = raw
+      let text = raw
         .replace(/\\'[0-9a-fA-F]{2}/g, "")     // hex-escaped bytes
         .replace(/\\[a-zA-Z]+-?\d* ?/g, "")     // control words
         .replace(/[{}]/g, "").replace(/\\\n/g, "\n").trim();
-      return { text, note: null };
+      if (text && !looksLikeText(text)) text = "";
+      return { text, note: text ? null : "no readable text extracted" };
     }
     if (e === ".docx" || e === ".odt") {
-      const text = docxText(fs.readFileSync(absPath));
+      let text = docxText(fs.readFileSync(absPath));
+      if (text && !looksLikeText(text)) text = "";
       return { text, note: text ? null : "no readable text in the document body" };
     }
     if (e === ".pdf") {
-      const text = pdfText(fs.readFileSync(absPath));
-      return { text, note: text ? null : "no extractable text layer (scanned or CID-font PDF)" };
+      let text = pdfText(fs.readFileSync(absPath));
+      // A vector/scanned/CID-font PDF often yields junk rather than nothing — drop it.
+      if (text && !looksLikeText(text)) text = "";
+      return { text, note: text ? null : "no readable text layer (scanned or vector PDF)" };
     }
     return { text: "", note: "unsupported document type" };
   } catch (err) {
@@ -306,18 +330,18 @@ function mergePalette(assets, max = 6) {
   return seen;
 }
 
-function writeDigest(projectDir, manifest) {
+function writeDigest(projectDir, manifest, vision = null) {
   const assets = manifest.assets;
   const images = assets.filter((a) => a.kind === "image");
   const docs = assets.filter((a) => a.kind === "document");
-  const palette = mergePalette(images);
+  const palette = mergePalette(images); // exact hexes stay authoritative (T1)
 
   const digest = {
     version: 1,
     generatedAt: new Date().toISOString(),
-    stub: true, // T1: deterministic only; the T2 vision pass fills the "vibe"
+    stub: !vision, // false once the vision pass has run (T2)
     palette,
-    fonts: [], // deterministic fonts arrive with URL-ref folding (T3) / vision (T2)
+    fonts: [], // deterministic fonts arrive with URL-ref folding (T3)
     assets: assets.map((a) => ({
       id: a.id,
       name: a.name,
@@ -331,6 +355,18 @@ function writeDigest(projectDir, manifest) {
       ingestError: a.ingestError || undefined,
     })),
   };
+  if (vision) {
+    // The rich direction from the vision pass. Palette above is NOT overwritten.
+    digest.style = {
+      overallFeel: vision.overallFeel || null,
+      type: vision.type || null,
+      layout: vision.layout || null,
+      imagery: vision.imagery || null,
+    };
+    digest.emulate = vision.emulate || null;
+    digest.avoid = vision.avoid || null;
+    digest.brandRules = Array.isArray(vision.brandRules) ? vision.brandRules.filter(Boolean) : [];
+  }
 
   const dir = references.referencesDir(projectDir);
   fs.mkdirSync(dir, { recursive: true });
@@ -344,18 +380,31 @@ function renderDigestMd(digest, nImages, nDocs) {
   const n = digest.assets.length;
   lines.push(`## Design references (distilled from ${n} upload${n === 1 ? "" : "s"})`);
   lines.push("");
-  lines.push("_Deterministic stub (exact colors + document text). The style/vibe read is added by the vision pass._");
+  lines.push(digest.stub
+    ? "_Deterministic stub (exact colors + document text). The style/vibe read is added by the vision pass._"
+    : "_Distilled from the uploaded references. Treat this as the primary style direction._");
   lines.push("");
+
+  const s = digest.style || {};
+  if (s.overallFeel) lines.push(`- **Overall feel:** ${s.overallFeel}`);
+  if (s.type) lines.push(`- **Type:** ${s.type}`);
+  if (s.layout) lines.push(`- **Layout:** ${s.layout}`);
+  if (s.imagery) lines.push(`- **Imagery:** ${s.imagery}`);
   if (digest.palette.length) {
-    lines.push(`- **Palette (from ${nImages} image${nImages === 1 ? "" : "s"}):** ${digest.palette.join(" ")}`);
+    lines.push(`- **Palette (exact, from ${nImages} image${nImages === 1 ? "" : "s"}):** ${digest.palette.join(" ")}`);
   }
+  for (const rule of digest.brandRules || []) lines.push(`- **From the docs:** ${rule}`);
+  if (digest.emulate) lines.push(`- **Emulate:** ${digest.emulate}`);
+  if (digest.avoid) lines.push(`- **Avoid:** ${digest.avoid}`);
+
+  // Per-asset lines: the vision note (if any) is now in each asset's summary.
   for (const a of digest.assets) {
-    if (a.kind === "image" && a.palette && a.palette.length) {
-      lines.push(`- **${a.name}:** image, dominant ${a.palette.slice(0, 4).join(" ")}`);
+    if (a.kind === "image" && a.summary) {
+      lines.push(`- **${a.name}:** ${a.summary}`);
     } else if (a.kind === "document" && a.excerpt) {
       lines.push(`- **${a.name}:** "${a.excerpt}"${a.truncated ? " …(truncated)" : ""}`);
     } else if (a.ingestError) {
-      lines.push(`- **${a.name}:** ${a.ingestError} (will be read by the vision pass)`);
+      lines.push(`- **${a.name}:** ${a.ingestError}${digest.stub ? " (will be read by the vision pass)" : ""}`);
     }
   }
   lines.push("");
@@ -368,8 +417,157 @@ function readDigest(projectDir) {
   } catch { return null; }
 }
 
+// ---- T2: isolated vision / doc-summarization pass ---------------------------
+// See docs/reference-ingest-spec.md §7. This is the one step that spends tokens,
+// and it does so ONCE per asset, in a SEPARATE one-shot Messages API call whose
+// transcript is discarded — the images never enter the main design conversation
+// (§11 hard rule). It turns the deterministic stub into the rich "gets the vibe"
+// digest: style, type feel, layout, imagery, emulate/avoid, per-asset notes.
+// The exact palette from T1 stays authoritative; the model only adds direction.
+
+const VISION_MAX_IMAGES = 6;   // §11 cap + disclose
+const VISION_MAX_DOC_CHARS = 6000; // bounded doc text into the pass
+
+// Downscale an image to ~1024px longest edge and return a base64 JPEG part for
+// the vision call (style/mood doesn't need full resolution — a large token saving,
+// §6.1b). Returns null when nativeImage is unavailable or the image won't decode
+// (e.g. SVG), so the caller simply skips it.
+function imageVisionPart(absPath, maxEdge = 1024) {
+  if (!nativeImage) return null;
+  let img;
+  try { img = nativeImage.createFromPath(absPath); } catch { return null; }
+  if (!img || img.isEmpty()) return null;
+  const { width, height } = img.getSize();
+  if (!width || !height) return null;
+  const scale = Math.min(1, maxEdge / Math.max(width, height));
+  if (scale < 1) {
+    try { img = img.resize({ width: Math.max(1, Math.round(width * scale)), quality: "good" }); }
+    catch { /* keep original */ }
+  }
+  let buf;
+  try { buf = img.toJPEG(80); } catch { return null; }
+  if (!buf || !buf.length) return null;
+  return { media_type: "image/jpeg", data: buf.toString("base64") };
+}
+
+// Recursively map a function over every string in a parsed JSON value.
+function sanitizeStrings(obj, fn) {
+  if (typeof obj === "string") return fn(obj);
+  if (Array.isArray(obj)) return obj.map((v) => sanitizeStrings(v, fn));
+  if (obj && typeof obj === "object") {
+    const o = {};
+    for (const k of Object.keys(obj)) o[k] = sanitizeStrings(obj[k], fn);
+    return o;
+  }
+  return obj;
+}
+
+// Pull a JSON object out of a model reply that may carry stray prose or fences.
+function parseJsonLoose(text) {
+  if (!text) return null;
+  let s = String(text).trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+  const a = s.indexOf("{");
+  const b = s.lastIndexOf("}");
+  if (a < 0 || b <= a) return null;
+  try { return JSON.parse(s.slice(a, b + 1)); } catch { return null; }
+}
+
+/**
+ * Run the isolated vision/summarization pass over the project's references and,
+ * on success, rewrite digest.json + digest.md with the rich direction and mark
+ * the analyzed assets `visionIngested`. Requires ANTHROPIC_API_KEY. Returns
+ * { ok, error?, digest?, analyzed:[ids], skipped:[...] }.
+ *
+ * `opts.model` picks the model (defaults to claude-opus-5). The call is one-shot
+ * with no session/resume, so nothing persists beyond digest.md / digest.json.
+ */
+async function visionPass(projectDir, onlyIds = null, opts = {}) {
+  if (!process.env.ANTHROPIC_API_KEY) return { ok: false, error: "no-api-key" };
+  const manifest = references.readManifest(projectDir);
+  const only = Array.isArray(onlyIds) && onlyIds.length ? new Set(onlyIds) : null;
+  const pending = manifest.assets.filter((a) => (only ? only.has(a.id) : !a.visionIngested)
+    && (a.kind === "image" || a.kind === "document"));
+  if (!pending.length) return { ok: true, digest: readDigest(projectDir), analyzed: [], skipped: [] };
+
+  // Build the batched input: downscaled images (capped) + bounded doc excerpts.
+  const imageParts = [];
+  const imageIds = [];
+  const skipped = [];
+  for (const a of pending.filter((x) => x.kind === "image")) {
+    if (imageParts.length >= VISION_MAX_IMAGES) { skipped.push({ id: a.id, reason: "image cap" }); continue; }
+    const part = imageVisionPart(references.absPathFor(projectDir, a));
+    if (part) { imageParts.push({ rec: a, part }); imageIds.push(a.id); }
+    else skipped.push({ id: a.id, reason: "undecodable image" });
+  }
+  const docs = pending.filter((x) => x.kind === "document" && (x.excerpt || "").length);
+  let docBudget = VISION_MAX_DOC_CHARS;
+  const docLines = [];
+  const docIds = [];
+  for (const a of docs) {
+    if (docBudget <= 0) { skipped.push({ id: a.id, reason: "doc cap" }); continue; }
+    const slice = (a.excerpt || "").slice(0, docBudget);
+    docBudget -= slice.length;
+    docLines.push(`- ${a.name}: ${slice}`);
+    docIds.push(a.id);
+  }
+  if (!imageParts.length && !docLines.length) return { ok: false, error: "nothing analyzable" };
+
+  const palette = mergePalette(manifest.assets.filter((a) => a.kind === "image"));
+  const instruction =
+    "Distill these design references into concise design direction for a web/app designer. " +
+    (palette.length ? `The exact palette is already extracted (keep as-is): ${palette.join(" ")}. ` : "") +
+    (docLines.length ? `Design-relevant text from documents:\n${docLines.join("\n")}\n` : "") +
+    "Reply with ONLY a JSON object (no prose, no code fences) of this shape: " +
+    '{"overallFeel":"","type":"","layout":"","imagery":"","emulate":"","avoid":"",' +
+    '"brandRules":[""],"assets":[{"name":"","note":""}]}. ' +
+    "Keep every value to one short line; assets = one note per image describing its visual style. " +
+    "brandRules = explicit do/don'ts from the documents (empty array if none). " +
+    "Do not use em-dashes (—) anywhere; use a comma or colon instead.";
+
+  const content = [
+    ...imageParts.map(({ part }) => ({ type: "image", source: { type: "base64", ...part } })),
+    { type: "text", text: instruction },
+  ];
+
+  let reply;
+  try {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    const client = new Anthropic();
+    const msg = await client.messages.create({
+      model: opts.model || "claude-opus-5",
+      max_tokens: 3000,
+      system: "You are a design-direction distiller. You produce a compact JSON style digest from reference images and notes. You do not converse.",
+      messages: [{ role: "user", content }],
+    });
+    reply = (msg.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) };
+  }
+
+  let vision = parseJsonLoose(reply);
+  if (!vision) return { ok: false, error: "unparseable model reply" };
+  // Belt-and-suspenders on the no-em-dash rule: the digest.md feel line is shown
+  // in the UI, so strip any em-dash the model slipped in (→ arrows are fine).
+  vision = sanitizeStrings(vision, (v) => v.replace(/\s*—\s*/g, ", "));
+
+  // Fold per-asset notes into the manifest summaries and mark analyzed.
+  const noteByName = new Map((Array.isArray(vision.assets) ? vision.assets : [])
+    .filter((x) => x && x.name).map((x) => [String(x.name).toLowerCase(), x.note || ""]));
+  const analyzed = [...imageIds, ...docIds];
+  for (const a of manifest.assets) {
+    if (!analyzed.includes(a.id)) continue;
+    a.visionIngested = true;
+    const note = noteByName.get(String(a.name || "").toLowerCase());
+    if (note) a.summary = a.kind === "image" ? note : `${a.summary} — ${note}`;
+  }
+  references.writeManifest(projectDir, manifest);
+
+  const digest = writeDigest(projectDir, manifest, vision);
+  return { ok: true, digest, analyzed, skipped };
+}
+
 module.exports = {
-  ingest, readDigest,
+  ingest, readDigest, visionPass,
   // exported for offline tests:
   imagePalette, extractDocText, docxText, pdfText, readZipEntry, mergePalette,
 };

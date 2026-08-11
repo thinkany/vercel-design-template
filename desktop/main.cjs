@@ -1612,18 +1612,50 @@ ipcMain.handle("file:attachPath", (_event, { srcPath }) => attachToProject(srcPa
 // store (see intake/references.cjs). T0 only captures + lists them; ingest/digest
 // come in T1+. Each asset is decorated with its absolute path so the renderer can
 // show a file:// thumbnail (the assets dir is outside public/, so Vite won't serve it).
+let refsAnalyzing = 0; // vision passes in flight — the rail shows "reading…" while > 0
 function referencesPayload(projectDir) {
-  if (!projectDir) return { assets: [], digest: null };
+  if (!projectDir) return { assets: [], digest: null, analyzing: false };
   const assets = references.listAssets(projectDir).map((a) => ({ ...a, abs: references.absPathFor(projectDir, a) }));
-  return { assets, digest: ingestRefs.readDigest(projectDir) };
+  return { assets, digest: ingestRefs.readDigest(projectDir), analyzing: refsAnalyzing > 0 };
 }
-// Run the deterministic (0-token) ingest so the digest reflects the current set.
-// Pass the just-added ids to only process those; call with none to just rebuild
-// the digest from the manifest (e.g. after a removal). Best-effort — a failed
-// ingest never blocks the upload.
+// Ingest the references: T1 deterministic (0-token, sync) then T2 the isolated
+// vision/summarization pass (async, spends tokens once). Pass the just-added ids
+// to only process those; call with none to just rebuild the digest (e.g. after a
+// removal). Best-effort — a failed ingest never blocks the upload.
 function ingestReferences(projectDir, addedIds) {
-  try { ingestRefs.ingest(projectDir, addedIds || null); }
+  try { ingestRefs.ingest(projectDir, addedIds || null); } // T1
   catch (e) { console.error("[references] ingest failed:", e && e.message); }
+
+  // T2 needs a key and only runs when new assets were added (a removal just
+  // rebuilds the stub above). The pass is one-shot + isolated (see ingest.cjs) —
+  // the images never enter the main design conversation.
+  if (process.env.ANTHROPIC_API_KEY && addedIds && addedIds.length) {
+    runVisionPass(projectDir, addedIds);
+  }
+}
+
+// Fire the isolated vision pass and track the analyzing state. `ids` = the assets
+// to analyze (null = every not-yet-analyzed one — the catch-up path).
+function runVisionPass(projectDir, ids) {
+  refsAnalyzing++;
+  broadcastReferences();
+  ingestRefs.visionPass(projectDir, ids, { model: currentModel || undefined })
+    .then((r) => { if (r && !r.ok && r.error && r.error !== "no-api-key") console.error("[references] vision pass:", r.error); })
+    .catch((e) => console.error("[references] vision pass:", e && e.message))
+    .finally(() => { refsAnalyzing = Math.max(0, refsAnalyzing - 1); broadcastReferences(); });
+}
+
+// Catch up any references whose vision pass never ran (interrupted, or added
+// before a key was set). Called when the rail loads the list, so re-opening the
+// intake finishes the job. Cheap: just a manifest read unless work is pending.
+function maybeCatchUpVision(projectDir) {
+  if (!projectDir || !process.env.ANTHROPIC_API_KEY || refsAnalyzing > 0) return;
+  let pending = false;
+  try {
+    pending = references.listAssets(projectDir).some(
+      (a) => (a.kind === "image" || a.kind === "document") && !a.visionIngested);
+  } catch { return; }
+  if (pending) runVisionPass(projectDir, null);
 }
 function broadcastReferences() {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1631,7 +1663,10 @@ function broadcastReferences() {
   }
 }
 
-ipcMain.handle("references:list", () => referencesPayload(currentProject));
+ipcMain.handle("references:list", () => {
+  maybeCatchUpVision(currentProject); // finish any interrupted vision pass on re-open
+  return referencesPayload(currentProject);
+});
 
 ipcMain.handle("references:add", async () => {
   if (!currentProject) return { ok: false, error: "No project is open." };

@@ -2995,7 +2995,18 @@ function resetIntake() {
   updateBackButton();
 }
 
-window.desktop.onAgentIntake(({ id, cards }) => renderIntakeGroup(id, cards));
+window.desktop.onAgentIntake(({ id, cards }) => {
+  // Only render intake cards while we're actively gathering the brief. A late
+  // batch from a stale agent turn (e.g. the designer hit Back, or backed all the
+  // way to the start screen) would otherwise force the pane into gathering mode
+  // and leak a question card onto the wrong screen. Cancel it instead — the
+  // agent's tool call errors out and it stops.
+  if (intakePhase !== "gathering") {
+    try { window.desktop.cancelIntake(id); } catch { /* already gone */ }
+    return;
+  }
+  renderIntakeGroup(id, cards);
+});
 
 // The Brief accumulated so far (T5) — main folds each answered batch in and pushes
 // it here. Render it as a compact "Your brief so far" recap pinned above the cards.
@@ -3006,8 +3017,9 @@ window.desktop.onAgentBrief((brief) => renderBriefSummary(brief));
 // each feed their own piece; composeRail() rebuilds the rail from whichever changed.
 let lastBrief = null;
 let lastReferences = [];
-let lastDigest = null;   // digest.json from the deterministic ingest (T1)
-let refsBusy = false;    // "reading your references…" while an ingest is pending
+let lastDigest = null;    // digest.json from the ingest (T1 stub → T2 rich)
+let refsBusy = false;     // brief local state while a drop is uploading
+let refsAnalyzing = false; // main's vision pass is running (T2)
 let railBriefRows = 0;   // prior brief-row count, so the Brief card eases in once
 
 function renderBriefSummary(brief) {
@@ -3018,6 +3030,7 @@ function renderBriefSummary(brief) {
 function applyRefPayload(p) {
   lastReferences = (p && p.assets) || [];
   if (p && "digest" in p) lastDigest = p.digest || null;
+  refsAnalyzing = !!(p && p.analyzing);
   composeRail();
 }
 
@@ -3132,10 +3145,10 @@ function buildReferencesPanel() {
   drop.addEventListener("drop", onReferenceDrop);
   panel.appendChild(drop);
 
-  if (refsBusy) {
+  if (refsBusy || refsAnalyzing) {
     const reading = document.createElement("div");
     reading.className = "iref-reading";
-    reading.textContent = "Reading your references…";
+    reading.textContent = refsAnalyzing ? "Reading your references…" : "Adding your references…";
     panel.appendChild(reading);
   }
 
@@ -3163,6 +3176,16 @@ function buildReferencesPanel() {
       strip.appendChild(sw);
     }
     panel.appendChild(strip);
+  }
+
+  // The distilled "feel" from the vision pass (T2) — a one-line signal that the
+  // references have been understood, not just captured.
+  const feel = lastDigest && lastDigest.style && lastDigest.style.overallFeel;
+  if (feel) {
+    const line = document.createElement("div");
+    line.className = "iref-feel";
+    line.textContent = feel;
+    panel.appendChild(line);
   }
   return panel;
 }
@@ -3203,7 +3226,53 @@ function buildReferenceChip(a) {
   });
 
   chip.append(thumb, name, rm);
+  chip.style.cursor = "zoom-in";
+  chip.title = "Click to view";
+  chip.addEventListener("click", () => openReferenceLightbox(a));
   return chip;
+}
+
+// Lightbox a reference: images render full-size, other files show a glyph + an
+// "Open file" action (Electron opens it in the OS default app). Filename is the
+// caption. Click the backdrop or press Escape to close.
+function openReferenceLightbox(a) {
+  const overlay = document.createElement("div");
+  overlay.className = "iref-lightbox";
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  function close() { overlay.classList.remove("show"); document.removeEventListener("keydown", onKey); setTimeout(() => overlay.remove(), 180); }
+  overlay.addEventListener("click", close);
+
+  const fig = document.createElement("figure");
+  fig.className = "iref-lb-fig";
+  fig.addEventListener("click", (e) => e.stopPropagation()); // clicks inside don't dismiss
+
+  if (a.kind === "image" && a.abs) {
+    const img = document.createElement("img");
+    img.src = "file://" + encodeURI(a.abs);
+    img.alt = a.name || "";
+    fig.appendChild(img);
+  } else {
+    const glyph = document.createElement("div");
+    glyph.className = "iref-lb-glyph";
+    glyph.textContent = a.kind === "document" ? "📄" : "📎";
+    fig.appendChild(glyph);
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "iref-lb-open";
+    open.textContent = "Open file";
+    open.addEventListener("click", () => { if (a.abs) window.desktop.openExternal("file://" + encodeURI(a.abs)); });
+    fig.appendChild(open);
+  }
+
+  const cap = document.createElement("figcaption");
+  cap.className = "iref-lb-cap";
+  cap.textContent = a.name || (a.file || "").split("/").pop();
+  fig.appendChild(cap);
+
+  overlay.appendChild(fig);
+  document.body.appendChild(overlay);
+  document.addEventListener("keydown", onKey);
+  requestAnimationFrame(() => overlay.classList.add("show"));
 }
 
 async function addReferencesViaPicker() {

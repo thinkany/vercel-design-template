@@ -736,7 +736,25 @@
       }
       .iref-chip:hover .iref-rm { opacity: 1; }
       .iref-rm:hover { background: rgba(20,20,30,.85); }
-      .iref-reading { font-size: 12px; color: #7b7bea; margin-top: 8px; }
+      .iref-reading { font-size: 12px; color: #7b7bea; margin-top: 8px; animation: irefpulse 1.4s ease-in-out infinite; }
+      @keyframes irefpulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+      .iref-feel { font-size: 12px; line-height: 1.5; color: #555; margin-top: 10px; font-style: italic; }
+      /* Reference lightbox — full-size view on click, filename as caption. */
+      .iref-lightbox {
+        position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center;
+        background: rgba(16,16,22,.72); padding: 40px; cursor: zoom-out;
+        opacity: 0; transition: opacity .18s ease;
+      }
+      .iref-lightbox.show { opacity: 1; }
+      .iref-lb-fig { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 14px; max-width: 90vw; max-height: 90vh; cursor: default; }
+      .iref-lb-fig img { max-width: 90vw; max-height: 80vh; border-radius: 8px; box-shadow: 0 12px 40px rgba(0,0,0,.5); display: block; }
+      .iref-lb-glyph { font-size: 72px; }
+      .iref-lb-open {
+        border: none; border-radius: 999px; background: #fff; color: #222;
+        padding: 8px 18px; font: inherit; font-size: 13px; cursor: pointer;
+      }
+      .iref-lb-open:hover { background: #f0f0f0; }
+      .iref-lb-cap { font-size: 13px; color: #eee; text-align: center; word-break: break-all; max-width: 90vw; }
       .iref-palette { display: flex; align-items: center; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
       .iref-palette-lbl { font-size: 11px; color: #999; margin-right: 2px; }
       .iref-swatch { width: 18px; height: 18px; border-radius: 5px; border: 1px solid rgba(20,20,30,.12); }
