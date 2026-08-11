@@ -1093,10 +1093,33 @@ function buildDesignPrompt(brief) {
   if (b.tone) parts.push(`Tone: ${b.tone}`);
   if (list(b.deviceTargets).length) parts.push(`Devices: ${b.deviceTargets.join(", ")}`);
   if (list(b.notes).length) parts.push(`Also: ${b.notes.join("; ")}`);
+  // Reference-ingest (T3): if the designer uploaded references, point the build at
+  // the distilled digest and make it the PRIMARY style direction. The digest (not
+  // the raw assets) is what rides the build — the agent reads it once from disk.
+  if (b.referenceDigest) {
+    parts.push(
+      "The designer uploaded design references. A distilled style digest is at " +
+      "`.thinkany/references/digest.md`, with the exact palette and fonts in " +
+      "`.thinkany/references/digest.json`. Read the digest FIRST and treat it as the " +
+      "PRIMARY style direction (feel, type, layout, imagery, emulate/avoid), and apply " +
+      "the EXACT palette hexes from the json. Only open the raw reference files if you " +
+      "are specifically asked"
+    );
+  }
   const body = parts.join(". ");
   return "/design-brief " + (body || "a clean, modern marketing website");
 }
-ipcMain.handle("intake:designPrompt", () => ({ prompt: buildDesignPrompt(intakeBrief) }));
+ipcMain.handle("intake:designPrompt", () => {
+  // Fold the on-disk reference digest into the Brief so the build consumes it.
+  if (intakeBrief && currentProject) {
+    const dg = ingestRefs.readDigest(currentProject);
+    if (dg && Array.isArray(dg.assets) && dg.assets.length) {
+      intakeBrief.referenceDigest = ingestRefs.readDigestMd(currentProject);
+      intakeBrief.referenceAssets = dg.assets;
+    }
+  }
+  return { prompt: buildDesignPrompt(intakeBrief) };
+});
 
 // The pane submitted the designer's intake answers → fold them into the running
 // Brief (mapping each card's `field`), push the updated Brief to the pane, and

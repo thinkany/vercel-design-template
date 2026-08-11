@@ -417,6 +417,13 @@ function readDigest(projectDir) {
   } catch { return null; }
 }
 
+// The human-readable digest.md text — the artifact that rides the design build.
+function readDigestMd(projectDir) {
+  try {
+    return fs.readFileSync(path.join(references.referencesDir(projectDir), "digest.md"), "utf8");
+  } catch { return null; }
+}
+
 // ---- T2: isolated vision / doc-summarization pass ---------------------------
 // See docs/reference-ingest-spec.md §7. This is the one step that spends tokens,
 // and it does so ONCE per asset, in a SEPARATE one-shot Messages API call whose
@@ -574,7 +581,7 @@ async function visionPass(projectDir, onlyIds = null, opts = {}) {
 }
 
 module.exports = {
-  ingest, readDigest, visionPass,
+  ingest, readDigest, readDigestMd, visionPass,
   // exported for offline tests:
   imagePalette, extractDocText, docxText, pdfText, readZipEntry, mergePalette,
 };

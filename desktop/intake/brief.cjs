@@ -28,12 +28,16 @@
  * @property {string|null} clientName        The company / brand the site is for.
  * @property {string|null} projectName       A name for this project / site.
  * @property {string[]|null} notes           Free-form extra context the designer added.
+ * @property {object[]|null} referenceAssets  Uploaded design references (mirrors the ingest manifest).
+ * @property {string|null} referenceDigest    The distilled reference direction (digest.md text).
  */
 
 const BRIEF_FIELDS = [
   "deliverableType", "projectType", "what", "audience", "references", "colorSources", "fontSources",
   "sections", "variationAxes", "existingCode", "tone", "deviceTargets",
   "clientName", "projectName", "notes",
+  // Reference-ingest (set from the ingest, not from a card — see references.cjs / ingest.cjs):
+  "referenceAssets", "referenceDigest",
 ];
 
 /** A fresh Brief with everything unanswered (null = agent decides). */
@@ -57,9 +61,12 @@ function applyAnswers(brief, answers) {
   return next;
 }
 
-/** The fields still null — i.e. the ones the agent will decide on its own. */
+/** The fields still null — i.e. the ones the agent will decide on its own. The
+ * reference fields are set by the ingest (not designer choices), so they never
+ * count as "unspecified"; deliverableType is the flow's own routing key. */
+const NON_DESIGNER_FIELDS = new Set(["deliverableType", "referenceAssets", "referenceDigest"]);
 function unspecifiedFields(brief) {
-  return BRIEF_FIELDS.filter((f) => brief[f] == null && f !== "deliverableType");
+  return BRIEF_FIELDS.filter((f) => brief[f] == null && !NON_DESIGNER_FIELDS.has(f));
 }
 
 module.exports = { BRIEF_FIELDS, createEmptyBrief, applyAnswers, unspecifiedFields };
