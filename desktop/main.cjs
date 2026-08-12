@@ -696,9 +696,29 @@ async function fetchModels() {
   }
 }
 
+// Kill the WHOLE Vite process tree, not just the direct child. In dev we spawn
+// `npm run dev`; a bare viteProc.kill() signals npm but leaves the `vite` child npm
+// spawned ORPHANED, still holding its port. That orphan is why a later project's
+// Vite drifts off 5173 (and why stale servers pile up across crashes). We spawn Vite
+// detached (its own process group), so a negative-pid signal takes down npm + vite
+// together.
+function killTree(proc) {
+  const pid = proc && proc.pid;
+  if (!pid) return;
+  if (process.platform === "win32") {
+    try { spawn("taskkill", ["/pid", String(pid), "/T", "/F"]); } catch { /* best-effort */ }
+    return;
+  }
+  try { process.kill(-pid, "SIGTERM"); }   // -pid = the process group (npm + vite)
+  catch { try { proc.kill(); } catch { /* already gone */ } } // fall back to the child
+  // Escalate if the group is still alive a beat later. Targets the OLD group's pid,
+  // so a freshly spawned Vite (different pid/group) is never hit.
+  setTimeout(() => { try { process.kill(-pid, "SIGKILL"); } catch { /* gone */ } }, 2500);
+}
+
 function stopVite() {
   if (viteProc) {
-    viteProc.kill();
+    killTree(viteProc);
     viteProc = null;
   }
   viteUrl = null;
@@ -736,6 +756,9 @@ function startViteFor(projectDir) {
       cwd: projectDir,
       env: launch.env,
       shell: launch.shell,
+      // Own process group (POSIX) so killTree() can take down npm + its vite child
+      // together. Windows uses taskkill /T instead, so detached isn't needed there.
+      detached: process.platform !== "win32",
     });
     let settled = false;
     // Tailwind v4's IN-PROCESS config reload can fail in this spawned Vite on an
