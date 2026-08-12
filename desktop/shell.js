@@ -2737,6 +2737,19 @@ function isFileQuestion(q) {
   return (q.options || []).some((o) => /upload|attach|choose a file/i.test(o.label || ""));
 }
 
+// A design-references question (setup-styleguide's "share reference material" step)
+// → the 📎 Upload routes files through the reference-INGEST pipeline (stored under
+// .thinkany/references + distilled into the digest, PDFs rasterized), NOT a plain
+// file attach. Checked BEFORE isFileQuestion so a "Upload references" option doesn't
+// fall through to the plain-attach path. The skill uses the header "Design references".
+function isReferenceQuestion(q) {
+  const h = (q.header || "").toLowerCase();
+  const t = (q.question || "").toLowerCase();
+  if (h.includes("reference")) return true;
+  return /upload.*(reference|brand guide|moodboard)/i.test(t) ||
+    (q.options || []).some((o) => /(reference|brand guide|moodboard)/i.test(o.label || ""));
+}
+
 // A font/typeface question → render each option in its ACTUAL typefaces so the
 // designer can see a pairing, not just read font names. Heuristic on the header/
 // question wording (the model composes these at the styleguide's Fonts step).
@@ -2776,6 +2789,25 @@ function renderQuestionCard(id, questions) {
     if (refs) {
       refs.uploadBtn.classList.add("selected");
       refs.uploadNote.textContent = `✓ ${res.name} attached`;
+    }
+    maybeComplete();
+  }
+
+  // Uploaded references were ingested (references:add) → set an answer that TELLS the
+  // agent to read the digest and use it as the styleguide basis.
+  function applyReferences(res, qi) {
+    const added = (res.added || []).length;
+    if (!added) return;
+    const names = (res.added || []).map((a) => a.name).filter(Boolean).slice(0, 6).join(", ");
+    fileAnswer[qi] =
+      `Uploaded ${added} design reference${added > 1 ? "s" : ""}${names ? ` (${names})` : ""}. ` +
+      "They are ingested: read `.thinkany/references/digest.json` for the exact palette and fonts " +
+      "(and `digest.md` for the style direction) and use them as the basis for the colors and fonts below.";
+    optButtonsByQ[qi]?.forEach((b) => b.classList.remove("selected"));
+    const refs = uploadRefs[qi];
+    if (refs) {
+      refs.uploadBtn.classList.add("selected");
+      refs.uploadNote.textContent = `✓ ${added} reference${added > 1 ? "s" : ""} added`;
     }
     maybeComplete();
   }
@@ -2841,9 +2873,40 @@ function renderQuestionCard(id, questions) {
     otherInput.hidden = true;
     otherInputs[qi] = otherInput;
 
-    // Injected first option for file questions: 📎 Upload (opens the picker;
-    // a dropped file fulfills it too).
-    if (isFileQuestion(q)) {
+    // References question → 📎 Upload routes to the ingest pipeline (multi-file
+    // picker via references:add), distinct from the plain file attach below.
+    if (isReferenceQuestion(q)) {
+      const uploadBtn = document.createElement("button");
+      uploadBtn.className = "qopt qupload";
+      const ul = document.createElement("div");
+      ul.className = "lbl";
+      ul.textContent = "📎 Upload references…";
+      const ud = document.createElement("div");
+      ud.className = "desc";
+      ud.textContent = "Images, PDFs, or brand guides — I'll read them and pull the palette + fonts";
+      uploadBtn.append(ul, ud);
+      const uploadNote = document.createElement("div");
+      uploadNote.className = "qupload-note";
+      uploadBtn.addEventListener("click", async () => {
+        if (card.classList.contains("answered")) return;
+        uploadNote.textContent = "Reading your references…";
+        try {
+          const res = await window.desktop.addReferences(); // references:add → ingest
+          if (res && res.canceled) { uploadNote.textContent = ""; return; }
+          if (res && res.ok) {
+            handleRefResult(res); // fold into the rail + a soft chat line (reuse)
+            if ((res.added || []).length) applyReferences(res, qi);
+            else uploadNote.textContent = "Those were already added.";
+          } else {
+            uploadNote.textContent = (res && res.error) || "Could not add the references.";
+          }
+        } catch (e) {
+          uploadNote.textContent = String(e);
+        }
+      });
+      uploadRefs[qi] = { uploadBtn, uploadNote };
+      block.append(uploadBtn, uploadNote);
+    } else if (isFileQuestion(q)) {
       const uploadBtn = document.createElement("button");
       uploadBtn.className = "qopt qupload";
       const ul = document.createElement("div");
