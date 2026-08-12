@@ -2883,26 +2883,42 @@ function renderQuestionCard(id, questions) {
       ul.textContent = "📎 Upload references…";
       const ud = document.createElement("div");
       ud.className = "desc";
-      ud.textContent = "Images, PDFs, or brand guides — I'll read them and pull the palette + fonts";
+      ud.textContent = "Click or drop images, PDFs, or brand guides — I'll read them and pull the palette + fonts";
       uploadBtn.append(ul, ud);
       const uploadNote = document.createElement("div");
       uploadNote.className = "qupload-note";
-      uploadBtn.addEventListener("click", async () => {
+      // Shared by the picker AND drag-drop: run the ingest, then WAIT for the vision
+      // pass to finish so the digest is complete before the agent reads it, then answer.
+      async function ingestFromCard(resultPromise) {
         if (card.classList.contains("answered")) return;
         uploadNote.textContent = "Reading your references…";
         try {
-          const res = await window.desktop.addReferences(); // references:add → ingest
+          const res = await resultPromise;
           if (res && res.canceled) { uploadNote.textContent = ""; return; }
-          if (res && res.ok) {
-            handleRefResult(res); // fold into the rail + a soft chat line (reuse)
-            if ((res.added || []).length) applyReferences(res, qi);
-            else uploadNote.textContent = "Those were already added.";
-          } else {
-            uploadNote.textContent = (res && res.error) || "Could not add the references.";
+          if (!res || !res.ok) { uploadNote.textContent = (res && res.error) || "Could not add the references."; return; }
+          handleRefResult(res); // fold into the rail + a soft chat line (reuse)
+          if (!(res.added || []).length) { uploadNote.textContent = "Those were already added."; return; }
+          if (res.analyzing) { // T2 vision still running → wait so the digest is whole
+            uploadNote.textContent = "Reading your references… distilling the style";
+            await waitForIngest();
           }
-        } catch (e) {
-          uploadNote.textContent = String(e);
+          applyReferences(res, qi);
+        } catch (e) { uploadNote.textContent = String(e); }
+      }
+      uploadBtn.addEventListener("click", () => ingestFromCard(window.desktop.addReferences()));
+      ["dragenter", "dragover"].forEach((t) => uploadBtn.addEventListener(t, (e) => {
+        e.preventDefault(); e.stopPropagation(); uploadBtn.classList.add("drag");
+      }));
+      ["dragleave", "drop"].forEach((t) => uploadBtn.addEventListener(t, (e) => {
+        e.preventDefault(); e.stopPropagation(); uploadBtn.classList.remove("drag");
+      }));
+      uploadBtn.addEventListener("drop", (e) => {
+        const paths = [];
+        for (const f of [...(e.dataTransfer?.files || [])]) {
+          const src = window.desktop.pathForFile(f);
+          if (src) paths.push(src);
         }
+        if (paths.length) ingestFromCard(window.desktop.addReferencePaths(paths));
       });
       uploadRefs[qi] = { uploadBtn, uploadNote };
       block.append(uploadBtn, uploadNote);
@@ -3105,6 +3121,17 @@ function applyRefPayload(p) {
   if (p && "digest" in p) lastDigest = p.digest || null;
   refsAnalyzing = !!(p && p.analyzing);
   composeRail();
+}
+
+// Wait for the reference-ingest vision pass to finish (refsAnalyzing is kept live by
+// references:changed broadcasts) so a caller reads a COMPLETE digest, not the T1 stub.
+// Bounded so a failed/hung/keyless pass never blocks the flow.
+async function waitForIngest(timeoutMs = 30000) {
+  const start = Date.now();
+  await new Promise((r) => setTimeout(r, 300)); // let the "analyzing" broadcast land
+  while (refsAnalyzing && Date.now() - start < timeoutMs) {
+    await new Promise((r) => setTimeout(r, 400));
+  }
 }
 
 // Pull the open project's stored references into the rail. Called when the design
