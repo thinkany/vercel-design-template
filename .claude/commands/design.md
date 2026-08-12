@@ -42,8 +42,9 @@ plainly and briefly.
 The design only appears if the Vite dev server is running. On the **first** build
 request of a session, check before diving in:
 
-- **Is it up?** `curl -s -o /dev/null -w "%{http_code}" http://localhost:5173`,
-  `200` means live; anything else means it isn't.
+- **Is it up?** `curl -s -o /dev/null -w "%{http_code}" "${TA_PREVIEW_URL:-http://localhost:5173}"`,
+  `200` means live; anything else means it isn't. (`$TA_PREVIEW_URL` is the app's
+  actual preview port; it falls back to `:5173` outside the app.)
 - **If it's not running, OFFER to start it** (it's a command, ask first, don't
   silently launch): run **`npm run dev`** in the background. This project needs
   **Node ≥ 20.19** (`.nvmrc` pins 22); if the shell's active node is older, select

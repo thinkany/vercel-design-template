@@ -11,11 +11,17 @@ fix it. This is the playbook.
 ## 0. THE reflex, screenshot the capture route FIRST, then LOOK
 
 Before theorizing, **see what the designer sees.** The design surface renders in
-an isolated, chrome-free capture mode at:
+an isolated, chrome-free capture mode at the running preview's base URL:
 
 ```
-http://localhost:5173/?v={id}&capture={view}
+{preview}/?v={id}&capture={view}
 ```
+
+`{preview}` is the live dev-server base: **use `$TA_PREVIEW_URL`** (the app exports
+it, set to this project's actual port), falling back to `http://localhost:5173`
+when it isn't set. **Never hardcode `:5173`**, with more than one project open the
+port can be `:5174`/`:5175`, and a stale capture against the wrong port silently
+returns nothing.
 
 - `{id}`, the variation in the preview URL (`v00` is the base). Check the `?v=`
   the designer is on; when unsure, `v00`.
@@ -34,7 +40,9 @@ the shell node is older):
 import puppeteer from "puppeteer";
 const WIDTHS = { desktop: 1440, tablet: 664, mobile: 370 }; // scaffold defaults
 const view = process.argv[2] || "mobile";
-const url  = process.argv[3] || `http://localhost:5173/?v=v00&capture=${view}`;
+// The app sets TA_PREVIEW_URL to this project's real Vite port; fall back to :5173.
+const base = (process.env.TA_PREVIEW_URL || "http://localhost:5173").replace(/\/+$/, "");
+const url  = process.argv[3] || `${base}/?v=v00&capture=${view}`;
 const b = await puppeteer.launch();
 const p = await b.newPage();
 await p.setViewport({ width: WIDTHS[view], height: 900, deviceScaleFactor: 2 });
