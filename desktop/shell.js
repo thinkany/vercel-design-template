@@ -3126,6 +3126,16 @@ function buildReferencesPanel() {
   title.textContent = "Design references";
   panel.appendChild(title);
 
+  // Thin-line "?" in the corner → opens the "how references work" overlay.
+  const info = document.createElement("button");
+  info.type = "button";
+  info.className = "iref-info";
+  info.title = "How design references work";
+  info.setAttribute("aria-label", "How design references work");
+  info.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>';
+  info.addEventListener("click", (e) => { e.stopPropagation(); openReferencesHelp(); });
+  panel.appendChild(info);
+
   const hint = document.createElement("div");
   hint.className = "iref-hint";
   hint.textContent = "Optional. Drop images, PDFs, or brand guides you want me to follow.";
@@ -3270,6 +3280,55 @@ function openReferenceLightbox(a) {
   fig.appendChild(cap);
 
   overlay.appendChild(fig);
+  document.body.appendChild(overlay);
+  document.addEventListener("keydown", onKey);
+  requestAnimationFrame(() => overlay.classList.add("show"));
+}
+
+// The "how references work" overlay: what ingest attempts + guidance on what works
+// best. Same dismiss pattern as the lightbox (backdrop / Escape / the × button).
+function openReferencesHelp() {
+  const overlay = document.createElement("div");
+  overlay.className = "iref-help";
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  function close() { overlay.classList.remove("show"); document.removeEventListener("keydown", onKey); setTimeout(() => overlay.remove(), 180); }
+  overlay.addEventListener("click", close);
+
+  const card = document.createElement("div");
+  card.className = "iref-help-card";
+  card.addEventListener("click", (e) => e.stopPropagation()); // clicks inside don't dismiss
+  card.innerHTML = `
+    <div class="iref-help-head">
+      <div class="iref-help-title">How design references work</div>
+      <button type="button" class="iref-help-x" aria-label="Close">✕</button>
+    </div>
+    <p>Upload anything you have already collected that captures the look you want: images, screenshots, moodboards, PDFs, brand or style guides. I read them once, up front, and distill them into a compact style direction that guides the design.</p>
+
+    <h4>What I pull out</h4>
+    <ul>
+      <li><b>Exact colors</b>, from images and from the pages of a PDF.</li>
+      <li><b>Type feel</b> and <b>layout patterns</b> (grid, spacing, density).</li>
+      <li><b>Imagery style</b> and overall mood.</li>
+      <li><b>Rules from brand docs</b>: voice, do's and don'ts, named colors and fonts.</li>
+    </ul>
+
+    <h4>What works best</h4>
+    <ul>
+      <li><b>Fewer, stronger</b> references beat many weak ones. A handful that truly represent the look is ideal.</li>
+      <li><b>Images:</b> clear and representative (JPG, PNG, WebP, and similar).</li>
+      <li><b>PDFs:</b> brand and style guides are perfect. Text PDFs and scanned or vector ones both work, I render the pages and read them. The first few pages carry the most weight, so lead with your strongest.</li>
+      <li><b>Color swatches:</b> if your guide shows swatches, I pick up those exact hex values.</li>
+      <li><b>File size:</b> smaller is faster. Very large PDFs (100MB and up) still work, they just take a little longer to read.</li>
+    </ul>
+
+    <h4>Private by design</h4>
+    <p>References are working material only. They are stored locally with your project, never committed, and never published to your shared preview. Because I read them once and keep just the distilled summary, they do not sit in the conversation or run up token cost.</p>
+
+    <div class="iref-help-note">Add or remove references at any time. Removing one updates the distilled direction automatically.</div>
+  `;
+  card.querySelector(".iref-help-x").addEventListener("click", close);
+
+  overlay.appendChild(card);
   document.body.appendChild(overlay);
   document.addEventListener("keydown", onKey);
   requestAnimationFrame(() => overlay.classList.add("show"));
