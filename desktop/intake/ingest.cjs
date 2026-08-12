@@ -6,7 +6,12 @@
 // It routes each stored asset to the cheapest local reader:
 //   - image    → dominant palette via Electron nativeImage (pixel quantization)
 //   - document → plain-text extract (md/txt/rtf, docx via a builtin zip reader,
-//                pdf best-effort text layer)
+//                pdf best-effort text layer). A PDF's PAGES are also rendered (via the
+//                mupdf WASM engine, pure Node) for the vision pass so its visual
+//                design + swatch colors are seen, not just its words — always for a
+//                brand PDF (Gap 3), and as the only read for a text-less scanned/
+//                vector PDF (§13, Gap 2). Render + palette harvest live in the T2
+//                pass (visionPass).
 // then writes digest.json (machine) + digest.md (human) alongside the manifest.
 // The rich "gets the vibe" style read is the T2 vision pass; this is the stub
 // that already flows exact colors + doc excerpts into the design for free.
@@ -15,16 +20,20 @@
 // the dependency-light rule). If nativeImage quantization proves too coarse or
 // inaccurate in practice, swap imagePalette() for an image-decode dep
 // (get-image-colors / sharp) — that's the intended escape hatch, isolated here.
-// Everything else is pure Node (zlib for docx), so the doc extractors are testable
-// offline; only imagePalette needs the Electron runtime.
+// PDF page rasterization uses `mupdf` (WASM, pure JS, no native build) — the one
+// added dependency, loaded lazily so non-PDF ingest never pays for it. Everything
+// else is pure Node (zlib for docx), so the doc extractors + the PDF rasterizer are
+// testable offline; only imagePalette needs the Electron runtime.
 
 const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
 const references = require("./references.cjs");
 
-// nativeImage is Electron-only; guard the require so the doc extractors below
-// stay runnable under plain Node (offline tests, CI).
+// nativeImage is Electron-only; guard the require so the doc extractors + the mupdf
+// PDF rasterizer below stay runnable under plain Node (offline tests, CI). It drives
+// the image palette + vision downscale; PDF rasterization uses mupdf (WASM, pure JS)
+// instead, so it needs no Electron runtime at all.
 let nativeImage = null;
 try { ({ nativeImage } = require("electron")); } catch { /* plain Node — image palette disabled */ }
 
@@ -42,13 +51,12 @@ function colorDist(a, b) {
   return Math.sqrt(dr * dr + dg * dg + db * db);
 }
 
-// Dominant colors of an image, most-frequent first, near-duplicates merged.
-// A popularity quantizer on a downscaled bitmap — exact-ish, good enough to seed
-// a palette. Returns [] when nativeImage is unavailable or the image won't decode.
-function imagePalette(absPath, maxColors = 5) {
-  if (!nativeImage) return [];
-  let img;
-  try { img = nativeImage.createFromPath(absPath); } catch { return []; }
+// Dominant colors of an already-decoded nativeImage, most-frequent first, near-
+// duplicates merged. A popularity quantizer on a downscaled bitmap — exact-ish,
+// good enough to seed a palette. Shared by imagePalette (from a file) and the PDF
+// page rasterizer (from a captured page), so swatch colors on a rendered brand
+// page survive as exact hexes. Returns [] when the image is empty/undecodable.
+function imagePaletteFromNativeImage(img, maxColors = 5) {
   if (!img || img.isEmpty()) return [];
   const { width, height } = img.getSize();
   if (!width || !height) return [];
@@ -82,6 +90,15 @@ function imagePalette(absPath, maxColors = 5) {
     if (picked.length >= maxColors) break;
   }
   return picked.map((rgb) => rgbHex(rgb[0], rgb[1], rgb[2]));
+}
+
+// Dominant colors of an image FILE. Returns [] when nativeImage is unavailable or
+// the image won't decode.
+function imagePalette(absPath, maxColors = 5) {
+  if (!nativeImage) return [];
+  let img;
+  try { img = nativeImage.createFromPath(absPath); } catch { return []; }
+  return imagePaletteFromNativeImage(img, maxColors);
 }
 
 // ---- Document text ----------------------------------------------------------
@@ -334,7 +351,9 @@ function writeDigest(projectDir, manifest, vision = null) {
   const assets = manifest.assets;
   const images = assets.filter((a) => a.kind === "image");
   const docs = assets.filter((a) => a.kind === "document");
-  const palette = mergePalette(images); // exact hexes stay authoritative (T1)
+  // Exact hexes stay authoritative. Source them from every asset carrying a palette:
+  // uploaded images (T1) AND brand PDFs whose pages were quantized (Gap 3).
+  const palette = mergePalette(assets.filter((a) => Array.isArray(a.palette) && a.palette.length));
 
   const digest = {
     version: 1,
@@ -391,7 +410,9 @@ function renderDigestMd(digest, nImages, nDocs) {
   if (s.layout) lines.push(`- **Layout:** ${s.layout}`);
   if (s.imagery) lines.push(`- **Imagery:** ${s.imagery}`);
   if (digest.palette.length) {
-    lines.push(`- **Palette (exact, from ${nImages} image${nImages === 1 ? "" : "s"}):** ${digest.palette.join(" ")}`);
+    // Palette can come from images and/or brand PDFs, so count contributing sources.
+    const nPal = digest.assets.filter((a) => Array.isArray(a.palette) && a.palette.length).length;
+    lines.push(`- **Palette (exact, from ${nPal} reference${nPal === 1 ? "" : "s"}):** ${digest.palette.join(" ")}`);
   }
   for (const rule of digest.brandRules || []) lines.push(`- **From the docs:** ${rule}`);
   if (digest.emulate) lines.push(`- **Emulate:** ${digest.emulate}`);
@@ -403,6 +424,9 @@ function renderDigestMd(digest, nImages, nDocs) {
       lines.push(`- **${a.name}:** ${a.summary}`);
     } else if (a.kind === "document" && a.excerpt) {
       lines.push(`- **${a.name}:** "${a.excerpt}"${a.truncated ? " …(truncated)" : ""}`);
+    } else if (a.kind === "document" && a.summary && !a.ingestError) {
+      // A document read without a text excerpt (e.g. a scanned PDF read as page images).
+      lines.push(`- **${a.name}:** ${a.summary}`);
     } else if (a.ingestError) {
       lines.push(`- **${a.name}:** ${a.ingestError}${digest.stub ? " (will be read by the vision pass)" : ""}`);
     }
@@ -432,8 +456,9 @@ function readDigestMd(projectDir) {
 // digest: style, type feel, layout, imagery, emulate/avoid, per-asset notes.
 // The exact palette from T1 stays authoritative; the model only adds direction.
 
-const VISION_MAX_IMAGES = 6;   // §11 cap + disclose
+const VISION_MAX_IMAGES = 6;   // §11 cap + disclose (shared by images + PDF pages)
 const VISION_MAX_DOC_CHARS = 6000; // bounded doc text into the pass
+const PDF_RASTER_PAGES = 3;    // first N pages of a PDF rendered for the visual read
 
 // Downscale an image to ~1024px longest edge and return a base64 JPEG part for
 // the vision call (style/mood doesn't need full resolution — a large token saving,
@@ -455,6 +480,136 @@ function imageVisionPart(absPath, maxEdge = 1024) {
   try { buf = img.toJPEG(80); } catch { return null; }
   if (!buf || !buf.length) return null;
   return { media_type: "image/jpeg", data: buf.toString("base64") };
+}
+
+// Popularity quantizer over raw RGB(A) pixel bytes (mupdf pixmaps are RGB, so this
+// runs in plain Node — no Electron). Same 5-bit-per-channel bucketing + near-dup
+// merge as imagePaletteFromNativeImage, but reads tightly-packed RGB and samples
+// every Nth pixel (a page bitmap is ~1M pixels, full scan is needless). Returns hex[].
+function paletteFromRGBBytes(pixels, bpp, maxColors = 6, sampleStride = 4) {
+  const counts = new Map();
+  const step = bpp * Math.max(1, sampleStride);
+  for (let i = 0; i + 2 < pixels.length; i += step) {
+    if (bpp === 4 && pixels[i + 3] < 16) continue; // skip near-transparent
+    const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
+    const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+    const e = counts.get(key);
+    if (e) { e.n++; e.r += r; e.g += g; e.b += b; }
+    else counts.set(key, { n: 1, r, g, b });
+  }
+  const buckets = [...counts.values()].sort((a, b) => b.n - a.n);
+  const picked = [];
+  for (const bk of buckets) {
+    const rgb = [Math.round(bk.r / bk.n), Math.round(bk.g / bk.n), Math.round(bk.b / bk.n)];
+    if (picked.some((p) => colorDist(p, rgb) < 48)) continue;
+    picked.push(rgb);
+    if (picked.length >= maxColors) break;
+  }
+  return picked.map((rgb) => rgbHex(rgb[0], rgb[1], rgb[2]));
+}
+
+// Saturation + lightness of a hex, for filtering page-background noise (below).
+function hexSL(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2, d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  return { s, l };
+}
+
+// A rasterized brand-guide page is mostly white with black text and gray rules, so
+// those neutrals are the MOST FREQUENT colors and, ranked by pixel count, would lead
+// the palette ahead of the actual brand hues (Rob's report: palette led with #ffffff).
+// That's a page-render artifact of ranking by frequency, so we RE-RANK (not delete):
+// neutral colors sort behind the chromatic brand hues, but every color is kept. A
+// "neutral" is low-chroma (white / gray / near-black) or effectively pure white/black;
+// a saturated pale tint (e.g. a sticky-note yellow) has real chroma → treated as brand.
+function isNeutral(hex) {
+  const { s, l } = hexSL(hex);
+  return s < 0.12 || l > 0.97 || l < 0.06;
+}
+
+// mupdf is an ESM module with top-level await (WASM init), so it can't be require()d
+// from this CJS file — load it lazily via dynamic import (cached), the same pattern
+// visionPass uses for @anthropic-ai/sdk. Lazy so non-PDF ingest never pays for it.
+let _mupdf = null;
+async function loadMupdf() {
+  if (_mupdf) return _mupdf;
+  const m = await import("mupdf");
+  _mupdf = m.default || m;
+  return _mupdf;
+}
+
+// Rasterize the first pages of a PDF into base64 JPEG vision parts, plus the exact
+// palette harvested from those pages. Two jobs, one render:
+//   • §13 / Gap 2 — a scanned / image-only / vector PDF has no readable text layer,
+//     so its rendered pages are the only way to see it; and
+//   • Gap 3 — even a normal brand PDF's *visual* design (swatches, logos, layout) is
+//     invisible to a text-only read, so we render it too (the caller runs this
+//     additively, not just on text-failure), and quantize each page for exact swatch
+//     hexes (so color defined as a swatch, not written as text, survives).
+// Rendering uses the mupdf WASM engine (pure JS/WASM, no window/renderer/plugin, no
+// native build), so it works offline and identically in dev and the packaged app.
+// Best-effort: any failure yields empty and the caller keeps going (§13 — "report it
+// as unreadable and keep going", never hard-fail the intake).
+//
+// Palette caveat: a brand-guide page is mostly white with small swatches, so the page
+// background (white) and body text (near-black) dominate and take palette slots ahead
+// of the brand colors. We pull a few extra colors per page to give the brand hues a
+// chance, but the merged palette can still lead with white/black — the exact swatch
+// values are present, just not guaranteed first.
+async function rasterizePdfPages(absPath, opts = {}) {
+  const maxPages = Math.max(1, opts.maxPages || 3);
+  const maxEdge = opts.maxEdge || 1024;
+
+  let mupdf;
+  try { mupdf = await loadMupdf(); } catch { return { parts: [], palette: [] }; }
+
+  let doc = null;
+  const parts = [];
+  const colorAcc = []; // hexes harvested across pages, merged at the end
+  try {
+    const bytes = new Uint8Array(fs.readFileSync(absPath));
+    doc = mupdf.Document.openDocument(bytes, "application/pdf");
+    const pages = Math.min(maxPages, Math.max(1, doc.countPages()));
+    for (let i = 0; i < pages; i++) {
+      let page = null, pix = null;
+      try {
+        page = doc.loadPage(i);
+        const b = page.getBounds(); // [x0, y0, x1, y1] in points (72dpi)
+        const wpt = Math.abs(b[2] - b[0]) || 612;
+        const hpt = Math.abs(b[3] - b[1]) || 792;
+        // Scale so the longest edge ≈ maxEdge px (mupdf scale 1 = 72dpi), clamped sane.
+        const scale = Math.min(3, Math.max(0.5, maxEdge / Math.max(wpt, hpt)));
+        pix = page.toPixmap(mupdf.Matrix.scale(scale, scale), mupdf.ColorSpace.DeviceRGB, false);
+
+        const jpeg = pix.asJPEG(80);
+        if (jpeg && jpeg.length) parts.push({ media_type: "image/jpeg", data: Buffer.from(jpeg).toString("base64") });
+
+        const px = pix.getPixels();
+        const bpp = Math.max(3, Math.round(px.length / (pix.getWidth() * pix.getHeight() || 1)));
+        // Harvest a few extra colors per page so more brand hues clear the neutrals.
+        colorAcc.push(...paletteFromRGBBytes(px, bpp, 8));
+      } catch { /* skip this page, keep the rest */ }
+      finally {
+        try { pix && pix.destroy(); } catch { /* already freed */ }
+        try { page && page.destroy(); } catch { /* already freed */ }
+      }
+    }
+  } catch { /* best-effort: unreadable/encrypted PDF → empty, caller keeps going */ }
+  finally { try { doc && doc.destroy(); } catch { /* already freed */ } }
+
+  // Dedupe near-duplicate hexes across pages, then RE-RANK: chromatic brand hues lead,
+  // page-background neutrals (white/gray/near-black) sink to the back. Nothing is
+  // dropped — this only fixes the order (white led purely on pixel frequency). A stable
+  // partition, so frequency order is preserved within each group.
+  if (!colorAcc.length) return { parts, palette: [] };
+  const merged = mergePalette([{ palette: colorAcc }], 8);
+  const chromatic = merged.filter((h) => !isNeutral(h));
+  const neutral = merged.filter((h) => isNeutral(h));
+  return { parts, palette: [...chromatic, ...neutral].slice(0, 6) };
 }
 
 // Recursively map a function over every string in a parsed JSON value.
@@ -512,17 +667,48 @@ async function visionPass(projectDir, onlyIds = null, opts = {}) {
   const docs = pending.filter((x) => x.kind === "document");
   let docBudget = VISION_MAX_DOC_CHARS;
   const docLines = [];
-  const docIds = [];
+  const docTextIds = [];              // docs that contributed extracted text
+  const rasterizedPages = new Map();  // pdf id → #pages rendered as images (Gap 2/3)
   for (const a of docs) {
-    if (docBudget <= 0) { skipped.push({ id: a.id, reason: "doc cap" }); continue; }
     const ext = path.extname(a.name || a.file).toLowerCase();
-    const { text } = extractDocText(references.absPathFor(projectDir, a), ext);
-    const clean = (text || "").replace(/\s+/g, " ").trim();
-    if (!clean) { skipped.push({ id: a.id, reason: "no readable text" }); continue; }
-    const slice = clean.slice(0, docBudget);
-    docBudget -= slice.length;
-    docLines.push(`- ${a.name}: ${slice}`);
-    docIds.push(a.id);
+    const abs = references.absPathFor(projectDir, a);
+
+    // 1) Text layer (bounded by the shared doc budget), when the doc has one.
+    if (docBudget > 0) {
+      const { text } = extractDocText(abs, ext);
+      const clean = (text || "").replace(/\s+/g, " ").trim();
+      if (clean) {
+        const slice = clean.slice(0, docBudget);
+        docBudget -= slice.length;
+        docLines.push(`- ${a.name}: ${slice}`);
+        docTextIds.push(a.id);
+      }
+    }
+
+    // 2) Visual: render a PDF's pages so its swatches/logos/layout are seen too
+    //    (Gap 3 — additive, runs even when the text layer read fine), which also
+    //    covers the text-less scanned/vector case (Gap 2). Harvest exact hexes from
+    //    those pages so swatch-defined color survives, not just color named in text.
+    const room = VISION_MAX_IMAGES - imageParts.length;
+    if (ext === ".pdf" && room > 0) {
+      const { parts: pdfPages, palette: pdfPalette } =
+        await rasterizePdfPages(abs, { maxPages: Math.min(PDF_RASTER_PAGES, room) });
+      if (pdfPages.length) {
+        for (const part of pdfPages) imageParts.push({ rec: a, part });
+        rasterizedPages.set(a.id, pdfPages.length);
+        if (pdfPalette.length) a.palette = pdfPalette; // exact hexes → mergePalette
+      }
+    }
+
+    // 3) Nothing usable at all: disclose why (never silently drop).
+    if (!docTextIds.includes(a.id) && !rasterizedPages.has(a.id)) {
+      skipped.push({
+        id: a.id,
+        reason: (ext === ".pdf" && room <= 0) ? "page images skipped (image cap)"
+          : ext === ".pdf" ? "no text layer; could not rasterize"
+          : "no readable text",
+      });
+    }
   }
   if (!imageParts.length && !docLines.length) return { ok: false, error: "nothing analyzable" };
 
@@ -567,12 +753,28 @@ async function visionPass(projectDir, onlyIds = null, opts = {}) {
   // Fold per-asset notes into the manifest summaries and mark analyzed.
   const noteByName = new Map((Array.isArray(vision.assets) ? vision.assets : [])
     .filter((x) => x && x.name).map((x) => [String(x.name).toLowerCase(), x.note || ""]));
+  const docIds = [...new Set([...docTextIds, ...rasterizedPages.keys()])];
   const analyzed = [...imageIds, ...docIds];
   for (const a of manifest.assets) {
     if (!analyzed.includes(a.id)) continue;
     a.visionIngested = true;
     const note = noteByName.get(String(a.name || "").toLowerCase());
-    if (note) a.summary = a.kind === "image" ? note : `${a.summary} — ${note}`;
+    const pc = rasterizedPages.get(a.id);
+    const hadText = docTextIds.includes(a.id);
+    if (pc && !hadText) {
+      // Pure scanned/vector PDF: understood only via its page images. Clear the
+      // "no text layer" error and describe how it was read (with the model's note).
+      a.rasterized = true;
+      a.ingestError = null;
+      const base = `scanned/vector PDF, read as ${pc} page image${pc === 1 ? "" : "s"}`;
+      a.summary = note ? `${base}, ${note}` : base;
+    } else if (pc && hadText) {
+      // Mixed brand PDF: keep the text summary/excerpt, note it was also read visually.
+      a.rasterized = true;
+      if (note) a.summary = `${a.summary}, ${note}`;
+    } else if (note) {
+      a.summary = a.kind === "image" ? note : `${a.summary}, ${note}`;
+    }
   }
   references.writeManifest(projectDir, manifest);
 
@@ -584,4 +786,5 @@ module.exports = {
   ingest, readDigest, readDigestMd, visionPass,
   // exported for offline tests:
   imagePalette, extractDocText, docxText, pdfText, readZipEntry, mergePalette,
+  rasterizePdfPages, paletteFromRGBBytes,
 };
