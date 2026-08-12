@@ -952,6 +952,11 @@ let intakeSeq = 0;
 // begins (intake:begin); each answered batch folds in via its cards' `field`s.
 let intakeBrief = null;
 
+// The live Agent SDK query for the in-flight turn, so agent:interrupt can stop it
+// (the designer hitting Back mid-intake). runPrompt sets it via onQuery and clears
+// it (onQuery(null)) when the turn ends.
+let activeQuery = null;
+
 ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
   if (!currentProject) {
     event.sender.send("agent:event", { type: "error", message: "No project is open." });
@@ -989,9 +994,19 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
   // Image mode: "placeholder" = don't source images, hold each spot with an FPO
   // block; else "on" (the normal gather-into-public/ flow). Same env channel.
   process.env.TA_DESIGN_IMAGES = loadImagesPlaceholder() ? "placeholder" : "on";
-  const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, askIntake, model: currentModel, copyVoice: effectiveVoice(currentProject) });
+  const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, askIntake, model: currentModel, copyVoice: effectiveVoice(currentProject), onQuery: (q) => { activeQuery = q; } });
   if (result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it
   return result;
+});
+
+// Stop the in-flight agent turn (the designer hit Back mid-intake). interrupt() ends
+// the SDK turn so no further output streams and its completion can't hijack a fresh
+// turn's state. Best-effort: no active turn, or an interrupt that throws, is a no-op.
+ipcMain.handle("agent:interrupt", async () => {
+  const q = activeQuery;
+  if (!q) return { ok: false, error: "no active turn" };
+  try { await q.interrupt(); return { ok: true }; }
+  catch (e) { console.error("[agent] interrupt failed:", e && e.message); return { ok: false, error: e && e.message }; }
 });
 
 // ---- Research toggle IPC ----------------------------------------------------

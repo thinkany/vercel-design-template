@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("desktop", {
   // ---- Agent ----
   sendPrompt: (prompt, sessionId) =>
     ipcRenderer.invoke("agent:prompt", { prompt, sessionId }),
+  interruptAgent: () => ipcRenderer.invoke("agent:interrupt"),
   onAgentEvent: (cb) => {
     const listener = (_e, evt) => cb(evt);
     ipcRenderer.on("agent:event", listener);

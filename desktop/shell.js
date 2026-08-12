@@ -109,6 +109,14 @@ let assistantEl = null;
 let viteUrl = null;
 let design = { active: false, variationId: null, previewReady: false };
 let agentBusy = false;
+// Serialization gate: a re-picked deliverable can't start a new turn until the prior
+// turn's result/error EVENT has been handled (i.e. after showBriefComplete has already
+// decided). Without it, a backed-out turn's completion hijacks the fresh turn's
+// "gathering" state → the false "review" screen + fragmented chat (the Back bug).
+let turnGate = Promise.resolve();
+let releaseTurnGate = null;
+function beginTurnGate() { turnGate = new Promise((r) => { releaseTurnGate = r; }); }
+function endTurnGate() { const r = releaseTurnGate; releaseTurnGate = null; if (r) r(); }
 let conversationStarted = false; // once true, don't re-show the fresh-start welcome
 let tabs = [];
 let activeTab = null;
@@ -2678,6 +2686,7 @@ window.desktop.onAgentEvent((evt) => {
       clearIntakePending();
       // Turn ended mid-intake → the brief is complete: show the review actions.
       if (intakeActive && intakeph.classList.contains("flow")) showBriefComplete();
+      endTurnGate(); // release serialization AFTER showBriefComplete decided for this turn
       updateSessionGauge(evt.usage, evt.modelUsage); // refresh the context gauge + maybe nudge
       // Home was revealed mid-build under a cover → the design is done: uncover it.
       if (homeBuilding) { finishBuildReveal(); break; }
@@ -2702,6 +2711,7 @@ window.desktop.onAgentEvent((evt) => {
       updateThinking(); // turn errored → clear the dots
       clearIntakePending();
       addMsg("error", "✖ " + evt.message);
+      endTurnGate(); // release serialization on error too
       // Even on error, settle-then-reveal so the designer isn't stuck behind a
       // cover (the chat carries the error detail).
       if (homeBuilding) { finishBuildReveal(); break; }
@@ -4149,6 +4159,9 @@ function renderDeliverableChoice() {
 
 // Deliverable picked → FLIP the head up into the flow and kick off the questions.
 async function pickDeliverable(type) {
+  // Let any backed-out turn's result settle before we flip into gathering, so a
+  // late completion can't hijack this fresh turn (the Back-during-questioning bug).
+  try { await turnGate; } catch { /* prior turn already reported */ }
   deliverableType = type;
   addMsg("system", `Designing ${type === "app" ? "an app" : "a website"}. I'll ask you a few quick things here in the panel, then put your brief together.`);
 
@@ -4193,6 +4206,9 @@ async function pickDeliverable(type) {
 function goBack() {
   conversationStarted = false;
   if (intakePhase === "gathering") {
+    // Stop the running turn, not just the pending intake tool: a turn left running
+    // would finish and hijack a fresh turn's state (the false "review" screen).
+    try { window.desktop.interruptAgent(); } catch { /* best-effort */ }
     if (currentIntakeId != null) { try { window.desktop.cancelIntake(currentIntakeId); } catch {} currentIntakeId = null; }
     clearIntakePending();
     renderDeliverableChoice();
@@ -4242,6 +4258,9 @@ function getDesigningPrompt(type) {
 // Core send: fire a prompt at the agent. `echoText`, when given, is shown as the
 // user's chat bubble; omit it to run a prompt silently (Get Designing's kickoff).
 async function runAgent(toSend, echoText) {
+  // Never overlap turns: wait for any in-flight turn's result to be handled first.
+  try { await turnGate; } catch { /* prior turn already reported its error */ }
+  beginTurnGate();
   dismissWelcome();
   if (echoText) addMsg("user", echoText);
   input.value = "";
@@ -4260,6 +4279,7 @@ async function runAgent(toSend, echoText) {
     updateThinking();
     addMsg("error", String(e));
     refreshPreview();
+    endTurnGate(); // no result/error EVENT will arrive for an IPC-level failure
   } finally {
     send.disabled = false;
     input.focus();

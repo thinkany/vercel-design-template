@@ -139,7 +139,7 @@ function buildIntakeServer(sdk, askIntake) {
   return sdk.createSdkMcpServer({ name: "intake", version: "1.0.0", tools: [intakeTool] });
 }
 
-export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, askIntake, model, copyVoice }) {
+export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, askIntake, model, copyVoice, onQuery }) {
   let resolvedSession = sessionId;
 
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -223,6 +223,9 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
         },
       },
     });
+    // Hand the live query up so the app can interrupt this turn (e.g. the designer
+    // hit Back mid-intake). Cleared in the finally below when the turn ends.
+    if (onQuery) { try { onQuery(iterator); } catch { /* non-fatal */ } }
 
     // Track the usage of the LAST single model call in this turn. Its input side
     // (fresh input + both cache tiers) ≈ the current context-window occupancy —
@@ -290,6 +293,8 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
     }
   } catch (err) {
     onEvent({ type: "error", message: err?.message ?? String(err) });
+  } finally {
+    if (onQuery) { try { onQuery(null); } catch { /* non-fatal */ } }
   }
 
   return { sessionId: resolvedSession };
