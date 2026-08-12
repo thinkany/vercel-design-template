@@ -82,6 +82,45 @@ configures THAT variation, never the base.**
 `src/variations/{id}/styles/…` (and its `components/` for the logo step), **never the
 base.**
 
+## 0.5. Design references, optional, seeds the palette + fonts
+
+Before choosing colors and fonts from scratch, offer to base them on any reference
+material the designer already has, a **brand guide, moodboard, screenshots, or an
+existing site**. If they share some, the app **ingests it** (stores it privately under
+`.thinkany/references/`, rasterizes PDF pages, and distills a digest with the **exact
+palette + fonts**), and you use that as the starting point for Steps 1a/1b, the same
+references pipeline the "Get Designing" path uses.
+
+**Ask once** with `AskUserQuestion`, header **"Design references"** (that exact header
+is what turns the card's 📎 button into a *references upload*, ingested, not a plain
+file attach). `question`:
+
+> Do you have design references to base this on, a brand guide, moodboard,
+> screenshots, or an existing site? Upload them with the button and I'll pull the
+> palette and fonts, or we can set them together.
+
+Options (the app adds the **📎 Upload references** button automatically, so these are
+just the alternatives):
+- **No references, we'll choose colors and fonts together** (first / default)
+- **I'll paste a website URL in the color step** (→ handled by Step 1a, Method B)
+
+**If they upload references** (the answer will say the references were ingested and
+point you at the digest):
+1. **Read `.thinkany/references/digest.json`.** Use its `palette` (exact hexes) as the
+   basis for the colors and its `fonts` for the type roles; `digest.md` carries the
+   style direction (overall feel, imagery, do/don'ts), let it inform the role names and
+   mood, not just raw values. (The exact palette is written immediately; the richer
+   "vibe" read may still be finishing, that's fine, the palette is what you need now.)
+2. **Then do Steps 1a/1b with those values:** map the digest palette to the seven roles
+   and write `tokens.css` + `brand.ts`, wire the digest fonts in `fonts.css` +
+   `tokens.css`, exactly as below, but you already have the values, so **skip re-asking
+   "how would you like to supply the palette"** and go straight to write → preview →
+   adjust live. Tell the designer in one line what you pulled ("I took the palette and
+   type from your brand guide, here they are, tweak anything").
+
+**If they skip or choose the URL path,** proceed to Step 1a normally (the URL path is
+Method B there). Never block on this step, it's an optional shortcut.
+
 ## 1. Set the Primitives, the token layer (colors first, then fonts)
 
 The single source of truth is **`src/styles/tokens.css`:** pure CSS custom
@@ -130,7 +169,11 @@ that whole class of breakage is gone. (If the designer supplies extra colors bey
 the seven roles, add them as additional tokens/groups, but keep the seven roles
 filled, components depend on them.)
 
-**First, ask how the designer wants to supply the palette:** one
+**If Step 0.5 already ingested references,** you already have the exact palette + fonts
+from `.thinkany/references/digest.json`, **skip the supply question below** and go
+straight to mapping those values to the seven roles + write → preview → adjust live.
+
+**Otherwise, ask how the designer wants to supply the palette:** one
 `AskUserQuestion`, header **"Client Palette"**, `question` text below (blank
 line before the parenthetical, a real `\n\n` in the string):
 
