@@ -109,8 +109,9 @@ point you at the digest):
 1. **Read `.thinkany/references/digest.json`.** Use its `palette` (exact hexes) as the
    basis for the colors and its `fonts` for the type roles; `digest.md` carries the
    style direction (overall feel, imagery, do/don'ts), let it inform the role names and
-   mood, not just raw values. (The exact palette is written immediately; the richer
-   "vibe" read may still be finishing, that's fine, the palette is what you need now.)
+   mood, not just raw values. (The app waits for the ingest to finish before handing
+   off, so the digest is complete when you read it, exact palette **and** the style
+   read. On a very large upload that timed out, the exact palette is still there.)
 2. **Then do Steps 1a/1b with those values:** map the digest palette to the seven roles
    and write `tokens.css` + `brand.ts`, wire the digest fonts in `fonts.css` +
    `tokens.css`, exactly as below, but you already have the values, so **skip re-asking
