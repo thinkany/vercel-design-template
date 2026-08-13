@@ -451,7 +451,14 @@ document.querySelectorAll(".qlink").forEach((b) =>
 );
 // A preview page's target=_blank / window.open (e.g. dashboard "View Design ↗")
 // → open it as a new tab in this browser.
-window.desktop.onPreviewOpenUrl((url) => openTab(url));
+window.desktop.onPreviewOpenUrl((url) => {
+  // A preview button can run an app command via window.open("tacmd:/command"), e.g. the
+  // dashboard "Brand This Project" button (tacmd:/setup-project). Run it in the chat
+  // instead of opening a tab. Restricted to slash-commands so a page can't run arbitrary text.
+  const m = typeof url === "string" && url.match(/^tacmd:(\/[\w-]+.*)$/);
+  if (m) { sendText(m[1]); return; }
+  openTab(url);
+});
 
 // Rotating status shown in the preview while the agent works and the browser
 // is still closed (during setup).
