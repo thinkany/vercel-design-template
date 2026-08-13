@@ -624,6 +624,15 @@
       .navbtn { border: none; background: #f1f1f4; border-radius: 6px; width: 26px; height: 26px; cursor: pointer; font-size: 14px; color: #333; }
       .navbtn:hover { background: #e6e6ea; }
       #urlbar { flex: 1; padding: 5px 9px; font-size: 12px; border: 1px solid #d8d8de; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, monospace; color: #444; }
+      /* Post-update recovery banner: shown after a design update, points at the tab
+         reload, then a "Refresh Browser" recovery button (validate → reload/restart). */
+      #preview-help { display: flex; align-items: center; gap: 10px; padding: 7px 12px; background: #fff8e1; border-bottom: 1px solid #f0e0a8; font-size: 12px; line-height: 1.4; color: #6b5a1e; }
+      #preview-help[hidden] { display: none; }
+      #preview-help b { font-weight: 600; }
+      #preview-refresh { border: 1px solid #caa93a; background: #fff; color: #6b5a1e; border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; }
+      #preview-refresh:hover { background: #fdf3d0; }
+      #preview-help-x { margin-left: auto; border: none; background: none; color: #a9962f; cursor: pointer; font-size: 13px; line-height: 1; padding: 2px 4px; }
+      #preview-help-x:hover { color: #6b5a1e; }
       #quicklinks { display: flex; gap: 4px; }
       .qlink { border: 1px solid #d8d8de; background: #fafafb; border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; color: #333; white-space: nowrap; }
       .qlink:hover { border-color: #111; color: #111; }
@@ -1112,6 +1121,11 @@
               <button class="qlink" data-nav="styleguide">Style guide</button>
               <button class="qlink" data-nav="dashboard">Dashboard</button>
             </span>
+          </div>
+          <div id="preview-help" hidden>
+            <span>Preview looks blank? First try the tab's <b>⟳</b> reload. Still blank?</span>
+            <button id="preview-refresh">Refresh Browser</button>
+            <button id="preview-help-x" title="Dismiss">✕</button>
           </div>
           <div id="views">
             <!-- Progress cover for the Home tab while it's still being designed

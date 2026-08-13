@@ -295,18 +295,20 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && feedbackOn) setFeedbackMode(false);
 });
 
-function openTab(url, title) {
+// Build a preview <webview> element for a tab (its src + all listeners). Extracted so
+// the blank/crashed recovery (restartWebview) can rebuild a tab's webview with the
+// exact same wiring, not just reload it.
+function buildPreviewWebview(tab) {
   const wv = document.createElement("webview");
   wv.setAttribute("partition", "persist:preview");
   wv.setAttribute("allowpopups", "true"); // let target=_blank reach the window-open handler (→ new tab)
   if (PREVIEW_PRELOAD) wv.setAttribute("preload", PREVIEW_PRELOAD); // point & comment inspector
-  wv.setAttribute("src", url);
+  wv.setAttribute("src", tab.url);
   // Messages from the inspector (point & comment) running inside the preview.
   wv.addEventListener("ipc-message", (e) => {
     if (e.channel === "feedback:submit") handleFeedbackSubmit(e.args[0]);
     else if (e.channel === "feedback:state") setFeedbackButton(!!e.args[0]);
   });
-  const tab = { id: ++tabSeq, wv, title: title || "Loading…", fixedTitle: !!title, url, retries: 0 };
   wv.addEventListener("page-title-updated", (e) => {
     if (!tab.fixedTitle) { tab.title = e.title; renderTabs(); }
   });
@@ -323,10 +325,30 @@ function openTab(url, title) {
       setTimeout(() => navigate(tab, tab.url), 600);
     }
   });
-  views.appendChild(wv);
+  return wv;
+}
+
+function openTab(url, title) {
+  const tab = { id: ++tabSeq, wv: null, title: title || "Loading…", fixedTitle: !!title, url, retries: 0 };
+  tab.wv = buildPreviewWebview(tab);
+  views.appendChild(tab.wv);
   tabs.push(tab);
   setActiveTab(tab);
   return tab;
+}
+
+// Restart a tab's webview PROCESS (blank/crashed recovery). Swaps in a fresh webview
+// element loading the same URL — the renderer is tied to the element, so this truly
+// restarts it, beyond what a reload can fix.
+function restartWebview(tab) {
+  if (!tab || !tab.wv) return;
+  tab.retries = 0;
+  const fresh = buildPreviewWebview(tab);
+  const wasActive = tab === activeTab;
+  fresh.style.display = wasActive ? "flex" : "none";
+  tab.wv.replaceWith(fresh);
+  tab.wv = fresh;
+  if (wasActive) syncNav();
 }
 
 function closeTab(tab) {
@@ -359,6 +381,49 @@ function syncNav() {
 navback.addEventListener("click", () => { if (activeTab && activeTab.wv.canGoBack()) activeTab.wv.goBack(); });
 navfwd.addEventListener("click", () => { if (activeTab && activeTab.wv.canGoForward()) activeTab.wv.goForward(); });
 navreload.addEventListener("click", () => { if (activeTab) navigate(activeTab, activeTab.url); });
+
+// ---- Blank-preview recovery: post-update help banner + "Refresh Browser" ----------
+// Blanks can happen after a design update (a broken HMR push, a wedged/crashed
+// preview renderer). After each update we surface a small banner pointing at the tab
+// reload, then a "Refresh Browser" button that recovers for real.
+const previewHelp = el("preview-help");
+const previewRefreshBtn = el("preview-refresh");
+const previewHelpX = el("preview-help-x");
+let previewHelpTimer = null;
+function showPreviewHelp() {
+  if (!previewHelp || browser.hidden) return; // only while a preview is actually shown
+  previewHelp.hidden = false;
+  clearTimeout(previewHelpTimer);
+  previewHelpTimer = setTimeout(hidePreviewHelp, 15000); // auto-dismiss
+}
+function hidePreviewHelp() {
+  if (!previewHelp) return;
+  previewHelp.hidden = true;
+  clearTimeout(previewHelpTimer);
+}
+// "Refresh Browser": validate the active preview, then take the lightest fix that
+// works. Responsive renderer → reload the tab; crashed/wedged (no answer) → restart
+// the webview process, since reload alone can't recover a dead renderer.
+async function refreshBrowser() {
+  const tab = activeTab;
+  if (!tab || !tab.wv) return;
+  hidePreviewHelp();
+  let responsive = false;
+  try {
+    if (!(tab.wv.isCrashed && tab.wv.isCrashed())) {
+      // A live renderer answers executeJavaScript; a wedged/crashed one throws or hangs.
+      await Promise.race([
+        tab.wv.executeJavaScript("1"),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 2500)),
+      ]);
+      responsive = true;
+    }
+  } catch { responsive = false; }
+  if (responsive) navigate(tab, tab.url); // reload — clears a stale/broken HMR blank
+  else restartWebview(tab);               // renderer gone — rebuild the webview process
+}
+if (previewRefreshBtn) previewRefreshBtn.addEventListener("click", refreshBrowser);
+if (previewHelpX) previewHelpX.addEventListener("click", hidePreviewHelp);
 urlbar.addEventListener("keydown", (e) => {
   if (e.key !== "Enter" || !activeTab) return;
   const u = resolveUrl(urlbar.value);
@@ -511,6 +576,7 @@ async function revealPreviewAfterEdit() {
   stopWorking();
   previewph.hidden = true;
   browser.hidden = false;
+  showPreviewHelp(); // updated preview shown → offer the blank-recovery help
 }
 
 // ---- Progressive build reveal (styleguide live, home still designing) --------
@@ -567,6 +633,7 @@ function finishBuildReveal() {
     homeTab.wv.style.display = activeTab === homeTab ? "flex" : "none";
   }
   applyBuildOverlay();
+  showPreviewHelp(); // finished design shown → offer the blank-recovery help
 }
 
 async function showBrowser() {
