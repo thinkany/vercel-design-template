@@ -139,6 +139,10 @@ export function Dashboard() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Sign Out clears the preview-gate cookies — only meaningful on the deployed
+              (Vercel) preview where middleware.js sets them. Hidden in the app / local
+              dev, where there is no gate to sign out of. */}
+          {import.meta.env.PROD && (
           <button
             onClick={() => {
               document.cookie = "ta-auth=; path=/; max-age=0";
@@ -161,6 +165,31 @@ export function Dashboard() {
           >
             Sign Out
           </button>
+          )}
+          {/* Brand This Project — shown only while the project is UNBRANDED (a designer
+              who used "Get Designing" skipped /setup-project). Runs /setup-project in the
+              app chat via the window.open("tacmd:…") → preview:open-url command bridge.
+              Dev + admin only (branding is an in-app action; no chat on the Vercel deploy). */}
+          {!siteConfig.isBranded && isAdmin && import.meta.env.DEV && (
+          <button
+            onClick={() => window.open("tacmd:/setup-project")}
+            style={{
+              background: "transparent",
+              border: "1px solid var(--admin-accent)",
+              borderRadius: 3,
+              padding: "9px 18px",
+              fontSize: 11,
+              fontWeight: 500,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              cursor: "pointer",
+              color: "var(--admin-accent)",
+              fontFamily: "inherit",
+            }}
+          >
+            Brand This Project
+          </button>
+          )}
         {isAdmin && import.meta.env.DEV && (
           <button
             onClick={() => setShowMakeModal(true)}
