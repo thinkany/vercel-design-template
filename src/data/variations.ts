@@ -20,6 +20,11 @@ export interface Variation {
   brief?: string;     // the designer's original, verbatim design request that kicked this design
                       // off (written by /design or /design-brief on the first build); shown on the
                       // dashboard card for reference. Kept as-is, never paraphrased.
+  // Captured design identity, written alongside `brief` by /setup-styleguide + /design(-brief)
+  // + apply-brand.mjs, shown in the dashboard's brief modal (the manifest carries no font
+  // family, only a CSS-var ref, so the font is captured here to display it accurately).
+  primaryColor?: string; // the variation's --ta-primary hex (e.g. "#1e4b96")
+  primaryFont?: string;  // the variation's primary/display font family (e.g. "Playfair Display")
   screenshot?: string; // static thumbnail image URL
   removed?: boolean;   // hidden from the gallery (files kept); set by the remove action
   // Per-variation styleguide state. "needs-review" shows the setup banner on this

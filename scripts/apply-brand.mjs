@@ -114,6 +114,27 @@ function setPreviewReady(dir, ready) {
   }
 }
 
+// Merge fields into variation.json (used to capture primaryColor/primaryFont for the
+// dashboard brief modal). Missing file → skip.
+function patchMeta(dir, patch) {
+  const p = path.join(dir, "variation.json");
+  try {
+    const meta = readJson(p);
+    Object.assign(meta, patch);
+    write(p, JSON.stringify(meta, null, 2) + "\n");
+  } catch {
+    /* leave as-is */
+  }
+}
+
+// First family name from a font-family stack ("'Playfair Display', serif" → "Playfair
+// Display"). A bare var(...) ref yields "" (nothing displayable).
+function firstFamily(stack) {
+  if (!stack) return "";
+  const first = String(stack).split(",")[0].trim().replace(/^['"]|['"]$/g, "").trim();
+  return /^var\(/i.test(first) ? "" : first;
+}
+
 // ---- the apply --------------------------------------------------------------
 const ROLES = ["primary", "accent", "surface", "ink", "body", "muted", "border"];
 const FONT_ROLES = { display: "--ta-font-display", serif: "--ta-font-serif", sans: "--ta-font-sans", mono: "--ta-font-mono" };
@@ -197,6 +218,15 @@ function main() {
   const importedFonts = fonts?.import?.url ? applyFontsCss(fontsCssPath, fonts.import.url) : false;
   const envWrote = applyEnv();
   setPreviewReady(dir, true);
+
+  // Capture the design's identity for the dashboard brief modal (primary color hex +
+  // primary/display font family). The manifest only carries a CSS-var ref for fonts,
+  // so recording the family here is what lets the modal show it accurately.
+  const primaryFont = firstFamily(fonts?.roles?.display?.stack);
+  const idPatch = {};
+  if (roles.primary?.value) idPatch.primaryColor = roles.primary.value;
+  if (primaryFont) idPatch.primaryFont = primaryFont;
+  if (Object.keys(idPatch).length) patchMeta(dir, idPatch);
 
   const summary = {
     variation: VAR,

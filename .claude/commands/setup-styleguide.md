@@ -344,6 +344,14 @@ is created and the palette + fonts are set, then opens the styleguide + home tab
 real design. Flip it **once, here at the end of fonts:** not earlier, not per-color, and
 never before the fonts are in.
 
+**In the same edit, capture the design's identity** for the dashboard's brief modal:
+add **`primaryColor`** (the `--ta-primary` hex you set in 1a) and **`primaryFont`** (the
+primary/display font family, the first family in `--ta-font-display`) to
+`variation.json`. The modal shows these; the brand manifest stores only a CSS-var ref
+for fonts, so recording the family here is what lets it display accurately. (The
+`/design-brief` path writes these automatically via `apply-brand.mjs`; this line covers
+the manual setup path.)
+
 ### 1c. Bridge the shadcn primitives to the brand
 
 The `--ta-*` tokens above style the *designed pages*. But the 40 shadcn/ui

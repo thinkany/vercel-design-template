@@ -1,8 +1,9 @@
 // ©2026 thinkany llc. All rights reserved.
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import type { Variation } from "@/data/variations";
 import { getVariationUrl, getStylesUrl } from "@/data/variations";
+import { resolveBrand } from "@/app/brandRegistry";
 
 interface Props {
   variation: Variation;
@@ -26,6 +27,25 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
   const [hoveringThumb, setHoveringThumb] = useState(false);
   const [tooltipPos, setTooltipPos] = useState({ top: 0, right: 0 });
   const btnRef = useRef<HTMLAnchorElement>(null);
+  const [briefOpen, setBriefOpen] = useState(false);
+
+  // The design's identity for the brief modal. Colors come live from the variation's
+  // brand manifest (exact hexes); the primary FONT family isn't in the manifest (only a
+  // CSS-var ref), so it reads the captured `primaryFont`, falling back to the role name.
+  const brand = resolveBrand(variation.id);
+  const swatches = brand.paletteGroups.flatMap((g) => g.colors);
+  const primarySwatch = swatches.find((c) => c.token === "--ta-primary") || swatches[0];
+  const primaryColor = variation.primaryColor || primarySwatch?.value || "";
+  const primaryColorName = primarySwatch?.name || "Primary";
+  const primaryFont = variation.primaryFont || brand.fonts[0]?.name || "";
+  const hasBriefCard = !!(variation.brief || primaryColor || primaryFont);
+
+  useEffect(() => {
+    if (!briefOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setBriefOpen(false); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [briefOpen]);
 
   function handleMouseEnter() {
     if (btnRef.current) {
@@ -36,6 +56,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
   }
 
   return (
+    <>
     <div style={{
       display: "flex",
       alignItems: "stretch",
@@ -222,36 +243,32 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
           {variation.description}
         </p>
 
-        {/* Original brief — the designer's verbatim request that started this design,
-            saved for reference. Only shown when one was captured. */}
-        {variation.brief && (
-          <div style={{
-            borderLeft: "2px solid rgba(0,0,0,0.14)",
-            paddingLeft: 12,
-            margin: "2px 0",
-          }}>
-            <div style={{
-              fontSize: 10,
-              fontWeight: 500,
-              letterSpacing: "0.1em",
-              color: "var(--admin-gray-mid)",
-              textTransform: "uppercase",
-              marginBottom: 4,
+        {/* Brief & palette — opens a modal (moved off the card so the thumbnail fills the
+            zone instead of leaving dead space below a fixed-height frame). */}
+        {hasBriefCard && (
+          <button
+            onClick={() => setBriefOpen(true)}
+            style={{
+              alignSelf: "flex-start",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              margin: "2px 0",
+              padding: "6px 12px 6px 8px",
+              background: "transparent",
+              border: "1px solid rgba(0,0,0,0.14)",
+              borderRadius: 999,
+              cursor: "pointer",
               fontFamily: "var(--admin-font-body)",
-            }}>
-              Original brief
-            </div>
-            <p style={{
-              fontSize: 13.5,
-              fontStyle: "italic",
+              fontSize: 12,
               color: "var(--admin-gray-dark)",
-              lineHeight: 1.6,
-              margin: 0,
-              fontFamily: "var(--admin-font-body)",
-            }}>
-              “{variation.brief}”
-            </p>
-          </div>
+            }}
+          >
+            {primaryColor && (
+              <span style={{ width: 12, height: 12, borderRadius: 3, background: primaryColor, border: "1px solid rgba(0,0,0,0.14)" }} />
+            )}
+            {variation.brief ? "Brief & palette" : "Palette & type"}
+          </button>
         )}
 
         {/* Styleguide setup nudge — same amber language as the styleguide's own
@@ -432,5 +449,63 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
         )}
       </div>
     </div>
+
+    {/* Brief modal — the design's brief + captured palette & type, on demand. */}
+    {briefOpen && createPortal(
+      <div
+        onClick={() => setBriefOpen(false)}
+        style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(16,16,22,0.62)", padding: 40 }}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{ background: "#fff", borderRadius: 8, width: "min(480px, 92vw)", maxHeight: "84vh", overflowY: "auto", padding: "22px 24px 24px", boxShadow: "0 18px 60px rgba(0,0,0,0.4)", cursor: "default" }}
+        >
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+            <div>
+              <div style={{ fontFamily: "var(--admin-font-heading)", fontStyle: "italic", fontSize: 18, fontWeight: 700, color: "var(--admin-ink)", lineHeight: 1.2 }}>{variation.title}</div>
+              <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginTop: 3 }}>{variation.version}</div>
+            </div>
+            <button onClick={() => setBriefOpen(false)} aria-label="Close" style={{ flex: "0 0 auto", width: 28, height: 28, border: "none", borderRadius: 999, background: "#f2f2f5", color: "#666", fontSize: 14, cursor: "pointer" }}>✕</button>
+          </div>
+
+          {variation.brief && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginBottom: 6 }}>Original brief</div>
+              <p style={{ fontFamily: "var(--admin-font-body)", fontStyle: "italic", fontSize: 14, lineHeight: 1.6, color: "var(--admin-gray-dark)", margin: 0 }}>“{variation.brief}”</p>
+            </div>
+          )}
+
+          {primaryColor && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginBottom: 8 }}>Palette</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ width: 40, height: 40, borderRadius: 6, background: primaryColor, border: "1px solid rgba(0,0,0,0.12)", flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 13, color: "var(--admin-ink)", fontWeight: 600 }}>{primaryColorName}</div>
+                  <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, color: "var(--admin-gray-mid)" }}>{primaryColor}</div>
+                </div>
+              </div>
+              {swatches.length > 1 && (
+                <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
+                  {swatches.map((c) => (
+                    <span key={c.token} title={`${c.name} · ${c.value}`} style={{ width: 22, height: 22, borderRadius: 4, background: c.value, border: "1px solid rgba(0,0,0,0.12)" }} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {primaryFont && (
+            <div>
+              <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginBottom: 6 }}>Type</div>
+              <div style={{ fontSize: 24, lineHeight: 1.2, color: "var(--admin-ink)", fontFamily: variation.primaryFont ? `'${variation.primaryFont}', Georgia, serif` : "var(--admin-font-heading)" }}>{primaryFont}</div>
+              <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 12, color: "var(--admin-gray-mid)", marginTop: 2 }}>Primary typeface</div>
+            </div>
+          )}
+        </div>
+      </div>,
+      document.body
+    )}
+    </>
   );
 }
