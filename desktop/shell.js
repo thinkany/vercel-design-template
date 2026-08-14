@@ -642,6 +642,10 @@ function finishBuildReveal() {
   applyBuildOverlay();
   showPreviewHelp(); // finished design shown → offer the blank-recovery help
   healBuildPreview(); // auto-clear a blank/premature first paint (fire-and-forget)
+  // The build (esp. Get Designing) captures the client/project name into .env, but
+  // the chat-bar title was set at project-open BEFORE that existed. Refresh it now
+  // from the updated project meta so the bar shows the real name once built.
+  window.desktop.getProjectStatus().then((p) => { if (p) setProjTitle(p); }).catch(() => {});
 }
 
 // A large fresh design can PAINT a beat before Vite finishes compiling it, so the
