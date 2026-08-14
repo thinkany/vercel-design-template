@@ -5,6 +5,39 @@ import type { Variation } from "@/data/variations";
 import { getVariationUrl, getStylesUrl } from "@/data/variations";
 import { resolveBrand } from "@/app/brandRegistry";
 
+// The `brief` field can hold the assembled Get-Designing prompt: a freeform lead
+// sentence followed by ". Label: value" (and a few colon-less "Model … / Colors from
+// … / Fonts …") segments. Split it into a lead quote + a tidy labeled list so the
+// modal reads like the walkthrough's brief rail instead of one run-on paragraph. A
+// plain chat-authored brief (no labels) just becomes the lead quote — backward safe.
+const BRIEF_LABELS = [
+  "Project type", "Client / company", "Project name",
+  "Model the structure and feel on", "Colors from", "Fonts",
+  "Include these sections", "Audience", "Tone", "Devices", "Also",
+];
+function parseBrief(raw: string): { lead: string; rows: { label: string; value: string }[] } {
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const boundary = new RegExp(`\\.\\s+(?=(?:${BRIEF_LABELS.map(esc).join("|")})\\b)`);
+  const parts = raw.split(boundary).map((s) => s.trim().replace(/\.\s*$/, "")).filter(Boolean);
+  let lead = "";
+  const rows: { label: string; value: string }[] = [];
+  for (const p of parts) {
+    const colon = p.match(/^([^:]+):\s*(.+)$/s);
+    if (colon && BRIEF_LABELS.includes(colon[1].trim())) {
+      rows.push({ label: colon[1].trim(), value: colon[2].trim() });
+      continue;
+    }
+    const prose = p.match(/^(Model the structure and feel on|Colors from|Fonts)\s+(.+)$/s);
+    if (prose) {
+      const label = prose[1] === "Model the structure and feel on" ? "Model on" : prose[1];
+      rows.push({ label, value: prose[2].trim() });
+      continue;
+    }
+    if (!lead) lead = p; else rows.push({ label: "", value: p });
+  }
+  return { lead, rows };
+}
+
 interface Props {
   variation: Variation;
   isAdmin: boolean;
@@ -60,6 +93,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
   const primaryColorName = primarySwatch?.name || "Primary";
   const primaryFont = variation.primaryFont || brand.fonts[0]?.name || "";
   const hasBriefCard = !!(variation.brief || primaryColor || primaryFont);
+  const parsedBrief = variation.brief ? parseBrief(variation.brief) : null;
 
   useEffect(() => {
     if (!briefOpen) return;
@@ -492,10 +526,24 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
             <button onClick={() => setBriefOpen(false)} aria-label="Close" style={{ flex: "0 0 auto", width: 28, height: 28, border: "none", borderRadius: 999, background: "#f2f2f5", color: "#666", fontSize: 14, cursor: "pointer" }}>✕</button>
           </div>
 
-          {variation.brief && (
+          {parsedBrief && (
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginBottom: 6 }}>Original brief</div>
-              <p style={{ fontFamily: "var(--admin-font-body)", fontStyle: "italic", fontSize: 14, lineHeight: 1.6, color: "var(--admin-gray-dark)", margin: 0 }}>“{variation.brief}”</p>
+              {parsedBrief.lead && (
+                <p style={{ fontFamily: "var(--admin-font-body)", fontStyle: "italic", fontSize: 14, lineHeight: 1.55, color: "var(--admin-gray-dark)", margin: 0 }}>“{parsedBrief.lead}”</p>
+              )}
+              {parsedBrief.rows.length > 0 && (
+                <div style={{ marginTop: parsedBrief.lead ? 12 : 0, display: "flex", flexDirection: "column", gap: 7 }}>
+                  {parsedBrief.rows.map((r, i) => (
+                    <div key={i} style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
+                      {r.label && (
+                        <div style={{ flex: "0 0 84px", fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--admin-gray-mid)" }}>{r.label}</div>
+                      )}
+                      <div style={{ flex: 1, fontFamily: "var(--admin-font-body)", fontSize: 13, lineHeight: 1.45, color: "var(--admin-gray-dark)" }}>{r.value}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
