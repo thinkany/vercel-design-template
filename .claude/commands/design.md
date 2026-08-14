@@ -264,7 +264,10 @@ file only when you're about to **change** it:
    resizes as the browser resizes and diverges from the frame + the export.
 2. **Tokens only, via utilities.** `bg-ta-*` / `text-ta-*` / `border-ta-*` for
    colors, `font-ta-display|serif|sans|mono` for type. Never raw hex/font stacks.
-   Fall back to inline `style={{}}` only as a last resort.
+   Fall back to inline `style={{}}` only as a last resort. **Image scrims count:**
+   the dark wash over a hero/CTA photo is still a token, use **`from-ta-ink/NN`**
+   on the gradient (not `from-[#…]`), and for a rgba scrim inside an arbitrary value
+   use `color-mix(in_srgb,var(--ta-ink)_NN%,transparent)`, never a raw `rgba(…)`.
 3. **Mark every major section** on its root element with
    `data-block="{id}" data-block-name="{Name}"` (hero, feature grid, CTA, …).
    That marker is the entire declaration the Figma Block Library export needs.
