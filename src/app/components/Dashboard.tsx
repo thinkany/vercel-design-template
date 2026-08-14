@@ -170,7 +170,7 @@ export function Dashboard() {
               who used "Get Designing" skipped /setup-project). Runs /setup-project in the
               app chat via the window.open("tacmd:…") → preview:open-url command bridge.
               Dev + admin only (branding is an in-app action; no chat on the Vercel deploy). */}
-          {!siteConfig.isBranded && isAdmin && import.meta.env.DEV && (
+          {!siteConfig.isCompanyBranded && isAdmin && import.meta.env.DEV && (
           <button
             onClick={() => window.open("tacmd:/setup-project")}
             style={{

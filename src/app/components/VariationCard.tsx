@@ -29,6 +29,27 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
   const btnRef = useRef<HTMLAnchorElement>(null);
   const [briefOpen, setBriefOpen] = useState(false);
 
+  // The thumbnail zone stretches to the card's full height (flex align-stretch),
+  // so a fixed fit-width scale on the live-capture iframe leaves empty space below
+  // it. Measure the zone and scale the iframe to COVER that height (top-anchored,
+  // matching the static-screenshot path's object-position). Width overflow is
+  // cropped by the zone's overflow:hidden.
+  const thumbRef = useRef<HTMLDivElement>(null);
+  const [thumbH, setThumbH] = useState(220);
+  useEffect(() => {
+    const elz = thumbRef.current;
+    if (!elz || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([entry]) => {
+      const h = entry.contentRect.height;
+      if (h > 0) setThumbH(h);
+    });
+    ro.observe(elz);
+    return () => ro.disconnect();
+  }, []);
+  const THUMB_W = 260;
+  // COVER: fill both the fixed 260 width and the measured height, take the larger.
+  const coverScale = Math.max(THUMB_W / 1280, thumbH / 900);
+
   // The design's identity for the brief modal. Colors come live from the variation's
   // brand manifest (exact hexes); the primary FONT family isn't in the manifest (only a
   // CSS-var ref), so it reads the captured `primaryFont`, falling back to the role name.
@@ -66,7 +87,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
       overflow: "hidden",
     }}>
       {/* Thumbnail zone */}
-      <div style={{
+      <div ref={thumbRef} style={{
         width: 260,
         minWidth: 260,
         flexShrink: 0,
@@ -117,10 +138,13 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
               aria-hidden="true"
               title=""
               style={{
+                position: "absolute",
+                top: 0,
+                left: "50%",
                 width: 1280,
                 height: 900,
-                transform: `scale(${260 / 1280})`,
-                transformOrigin: "top left",
+                transform: `translateX(-50%) scale(${coverScale})`,
+                transformOrigin: "top center",
                 border: "none",
                 pointerEvents: "none",
                 opacity: hoveringThumb ? 0.7 : 0.42,

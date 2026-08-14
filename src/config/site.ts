@@ -17,9 +17,22 @@ const rawProject = (import.meta.env.VITE_PROJECT_NAME ?? "").trim();
 // The template is considered "branded" once a client name has been provided.
 const isBranded = rawClient.length > 0;
 
+// Company / agency branding — the layer `/setup-project` uniquely owns (company
+// name, admin/gate fonts, login logo). The "Get Designing" flow sets only the
+// CLIENT name, so this stays false until /setup-project actually runs. It's the
+// signal for the dashboard's "Brand This Project" button (isBranded is the wrong
+// proxy there: Get Designing flips it true while leaving the project un-set-up).
+const isCompanyBranded = rawCompany.length > 0;
+
 export const siteConfig = {
   /** False until the site has been branded (via /setup-project or by hand). */
   isBranded,
+  /**
+   * False until the COMPANY layer is branded (VITE_COMPANY_NAME, set by
+   * /setup-project). Distinct from isBranded, which only tracks the client name a
+   * Get-Designing brief already provides. Drives "Brand This Project".
+   */
+  isCompanyBranded,
   /** Client name. Falls back to a placeholder only while fully unbranded. */
   clientName: rawClient || PLACEHOLDER_CLIENT,
   /**
