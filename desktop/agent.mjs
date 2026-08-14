@@ -106,7 +106,7 @@ const CARD_SHAPE = z.object({
   long: z.boolean().optional().describe("open-text only: render a multi-line textarea (use for the 'what are we making' lead card)"),
   maxLength: z.number().optional().describe("open-text / reference: cap length and show a live 'N / max' counter"),
   skippable: z.boolean().optional().describe("if true the designer can skip; a skip records null (= you decide)"),
-  agentDecidesLabel: z.string().optional().describe("label for the skip affordance, e.g. 'Let you pick'"),
+  agentDecidesLabel: z.string().optional().describe("label for the skip affordance, e.g. \"I'll let you choose\""),
 });
 
 // Build the in-process `intake` MCP server for ONE runPrompt call. The tool handler

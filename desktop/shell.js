@@ -3833,7 +3833,7 @@ function renderIntakeCard(card, onChange, requestSubmit) {
     skipBtn = document.createElement("button");
     skipBtn.type = "button";
     skipBtn.className = "icard-skip";
-    const skipLabel = card.agentDecidesLabel || "Skip, you decide";
+    const skipLabel = card.agentDecidesLabel || "I'll let you choose";
     skipBtn.textContent = skipLabel;
     skipBtn.addEventListener("click", () => {
       skipped = !skipped;
@@ -4411,7 +4411,7 @@ function getDesigningPrompt(type) {
     "     options:[~5 tasteful hex values fitting the vibe] } to pick a primary color;",
     '   - IF they did NOT mention fonts, a font-pick card { id:"font", field:"fontSources",',
     "     options:[~4 Google-Font family names fitting the vibe] } to pick a font.",
-    '   Mark every follow-up skippable:true (agentDecidesLabel like "You choose", or "Skip" for the names).',
+    '   Mark every follow-up skippable:true (agentDecidesLabel like "I\'ll let you choose", or "Skip" for the names).',
     "   Omit any card whose value they already gave (a named color/font, a reference to pull from, a name).",
     "   If the designer DISMISSES a question (the intake tool returns an error), stop and wait, do not retry.",
     "3. Do NOT build or edit anything yet. Reply in chat with a short, friendly recap of the brief you",

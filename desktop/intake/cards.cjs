@@ -23,7 +23,7 @@
 //   long              — OPTIONAL (open-text): render a multi-line textarea instead of one line.
 //   maxLength         — OPTIONAL (open-text / reference): cap + show a "N / max" counter.
 //   skippable         — if true, the designer may skip; a skip records `null` (= agent decides).
-//   agentDecidesLabel — optional label for the skip affordance (e.g. "Let you pick").
+//   agentDecidesLabel — optional label for the skip affordance (e.g. "I'll let you choose").
 //
 // Answer VALUE shapes (host-interpreted downstream in T4; T2 passes them through
 // opaquely and does NOT enforce them):
