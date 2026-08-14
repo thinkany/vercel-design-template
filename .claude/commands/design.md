@@ -37,14 +37,39 @@ Keep technical detail for when the designer explicitly asks "how did you…". If
 something genuinely blocks you (a missing token, an ambiguous request), say so
 plainly and briefly.
 
+## 0b. Work in as few calls as it takes, tool discipline
+
+A build is a long chain of calls, and **every call re-sends the whole growing
+context**, so fewer calls is a direct saving. Keep the loop tight:
+
+- **Batch independent calls in one message.** Reading two files, or editing two
+  unrelated spots, go in a single turn (parallel tool calls), not one per turn.
+- **Build a section in one write, not a trickle of edits.** Compose the whole
+  section's markup (or the whole `HomeContent`) in one Write/Edit; don't nudge it
+  line-by-line across many tiny Edits.
+- **Don't re-verify with Bash.** The scaffold layout, token names, and file roles
+  are inlined here (§2, §3, §3b), so **no `ls` / `grep` / `cat` / `git status` to
+  "check"**, and don't test that a file exists before Reading it (a failed Read
+  tells you). Don't `curl` the preview to confirm a change landed (the designer is
+  watching it live; you don't screenshot to self-verify either, §5).
+- **One session-start check, batched.** On the first build of a session, the single
+  command in "Preview server" below does the server ping AND the three env flags
+  (`IMAGES` / `RESEARCH` / `BROAD`) in one call. Read them there; §2b and §4b then
+  reference that result instead of each running its own `echo`.
+
 ## Preview server, make sure it's live (do this on the FIRST build of a session)
 
 The design only appears if the Vite dev server is running. On the **first** build
 request of a session, check before diving in:
 
-- **Is it up?** `curl -s -o /dev/null -w "%{http_code}" "${TA_PREVIEW_URL:-http://localhost:5173}"`,
-  `200` means live; anything else means it isn't. (`$TA_PREVIEW_URL` is the app's
-  actual preview port; it falls back to `:5173` outside the app.)
+- **Is it up + what mode am I in? One batched call** does the server ping AND reads
+  the three design-mode flags together, so §2b/§4b never spawn their own `echo`:
+  ```bash
+  echo "http=$(curl -s -o /dev/null -w '%{http_code}' "${TA_PREVIEW_URL:-http://localhost:5173}") IMAGES=${TA_DESIGN_IMAGES:-off} RESEARCH=${TA_DESIGN_RESEARCH:-off} BROAD=${TA_DESIGN_RESEARCH_BROAD:-off}"
+  ```
+  `http=200` means the preview is live (anything else, it isn't; `$TA_PREVIEW_URL`
+  is the app's real port, falling back to `:5173`). Note the three flags for §2b
+  (research) and §4b (images), don't re-`echo` them later in the build.
 - **If it's not running, OFFER to start it** (it's a command, ask first, don't
   silently launch): run **`npm run dev`** in the background. This project needs
   **Node ≥ 20.19** (`.nvmrc` pins 22); if the shell's active node is older, select
@@ -122,9 +147,10 @@ contrast, or to see which fonts the project picked): read the active variation's
 authoring the role names above are all you need, skip the read.
 
 ## 2b. Research the field (licensed + gated, usually SKIP)
-**Run `echo $TA_DESIGN_RESEARCH` once at the start of a build.** If it prints
+**Check `RESEARCH=` from the session-start call (§ Preview server).** If it's
 anything other than `on`, **skip this step entirely** (the default, it's a licensed
-add-on, per the active variation's toggle). Don't mention it when off.
+add-on, per the active variation's toggle). Don't mention it when off, and don't
+re-`echo` it, you already have it.
 
 When it prints `on`, apply research **only to a SUBSTANTIAL (re)design:** a whole
 page, a fresh hero, a major new/re-imagined section ("re-imagine the home page", "new
@@ -141,7 +167,7 @@ few comparable sites to shape this, it'll take a little longer than usual."*), t
 3. **Synthesize** the common structure (table stakes) vs. what strong ones do differently,
    and let it inform the (re)design, **grammar only, never clone a site.**
 
-**Broad mode, run `echo $TA_DESIGN_RESEARCH_BROAD`.** If it prints `on`, look **beyond
+**Broad mode, `BROAD=` from that same session-start call.** If it's `on`, look **beyond
 same-category competitors** (say so, it takes even longer). Decompose the intent into three
 axes and search each SEPARATELY: **function** (what it is → structure/IA), **aesthetic/tone**
 (the *feel*, "luxury", "lifestyle", "editorial" → **cross-category** exemplars that embody
@@ -263,7 +289,8 @@ file only when you're about to **change** it:
 
 ## 4b. Images, non-browser, download to `public/`, else placeholder
 
-**FIRST run `echo $TA_DESIGN_IMAGES`.** If it prints **`placeholder`**, the designer
+**Check `IMAGES=` from the session-start call (§ Preview server), don't re-`echo`.**
+If it's **`placeholder`**, the designer
 chose *No images, placeholders only* (Claude Settings), **do NOT source any images**,
 skip the whole gather flow below (no `curl`, no `credits.json`). For **every** image
 spot, hold it with the FPO component instead:
