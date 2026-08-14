@@ -172,7 +172,7 @@ export function Dashboard() {
               Dev + admin only (branding is an in-app action; no chat on the Vercel deploy). */}
           {!siteConfig.isCompanyBranded && isAdmin && import.meta.env.DEV && (
           <button
-            onClick={() => window.open("tacmd:/setup-project")}
+            onClick={() => window.open("tacmd:brand-company")}
             style={{
               background: "transparent",
               border: "1px solid var(--admin-accent)",
