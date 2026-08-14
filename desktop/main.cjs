@@ -20,7 +20,7 @@ const { app, BrowserWindow, ipcMain, safeStorage, shell, dialog, Menu } = requir
 // path the packaged bundle name doesn't already override. Safe to rename: userData
 // is pinned below so the display name no longer dictates where state is stored.
 app.setName("thinkany design");
-const { spawn, execSync } = require("node:child_process");
+const { spawn, execSync, execFileSync } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -636,12 +636,44 @@ function detectDesign(projectDir) {
   return { active: false, variationId: null, previewReady: false };
 }
 
+// Vite and its deps WRITE into the node_modules root at runtime — the `.vite-temp`
+// config bundle and the `.vite` dep-optimization cache. In a packaged build the
+// bundled node_modules lives INSIDE the signed, immutable .app (Contents/Resources/
+// app/node_modules); writing there breaks the code-signature seal, and macOS then
+// refuses to open the app ("damaged … move to Trash"). So on a packaged build we
+// materialize a WRITABLE copy of the bundled node_modules under userData — once per
+// app version, via an APFS clone (`cp -Rc`, copy-on-write: near-instant, no extra
+// disk) — and run Vite + link every project against THAT. Dev builds run from the
+// writable worktree node_modules directly.
+let _modulesRoot = null;
+function modulesRoot() {
+  if (_modulesRoot) return _modulesRoot;
+  const bundled = path.join(appRoot, "node_modules");
+  if (!app.isPackaged) { _modulesRoot = bundled; return bundled; }
+  const runtimeDir = path.join(app.getPath("userData"), "runtime");
+  const dest = path.join(runtimeDir, "node_modules");
+  const stamp = path.join(runtimeDir, "node_modules.version");
+  const want = app.getVersion();
+  let have = null;
+  try { have = fs.readFileSync(stamp, "utf8").trim(); } catch { /* first run */ }
+  if (have !== want || !fs.existsSync(dest)) {
+    fs.rmSync(dest, { recursive: true, force: true });
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    // APFS copy-on-write clone (same volume as the .app); deep-copy fallback off-APFS.
+    try { execFileSync("/bin/cp", ["-Rc", bundled, dest]); }
+    catch { fs.cpSync(bundled, dest, { recursive: true, verbatimSymlinks: true }); }
+    fs.writeFileSync(stamp, want);
+  }
+  _modulesRoot = dest;
+  return dest;
+}
+
 // Point a project folder at the app's installed deps so Vite runs without a
 // per-project `npm install`. (A packaged build would run a real install.)
 function linkNodeModules(projectDir) {
   const projModules = path.join(projectDir, "node_modules");
   if (!fs.existsSync(projModules)) {
-    fs.symlinkSync(path.join(appRoot, "node_modules"), projModules, "dir");
+    fs.symlinkSync(modulesRoot(), projModules, "dir");
   }
 }
 
@@ -739,7 +771,7 @@ function viteLaunch(projectDir) {
   if (!app.isPackaged) {
     return { cmd: "npm", args: ["run", "dev"], env: process.env, shell: process.platform === "win32" };
   }
-  const viteBin = path.join(appRoot, "node_modules", "vite", "bin", "vite.js");
+  const viteBin = path.join(modulesRoot(), "vite", "bin", "vite.js");
   return {
     cmd: process.execPath,
     args: [viteBin],
