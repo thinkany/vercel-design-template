@@ -95,14 +95,31 @@ upgrades can refresh the framework without ever touching the designer's work.
   (one click, copies base → `v01`), then design in `v01`. **Don't design into the
   base as a shortcut.**
 
-## 2. The one live read, the palette
+## 2. The palette cheat-sheet, know these, don't re-read to recall them
 
-Tokens change per project, and per variation, after `/setup-styleguide`, so
-**read the active variation's `src/variations/{id}/styles/tokens.css` once** (it
-falls back to base `src/styles/tokens.css` if the variation hasn't diverged its
-palette) for the live `--ta-*` colors and `--ta-font-*` families. Use those tokens
-(via the Tailwind utilities below), **never hardcode a hex or font stack.** That
-single read replaces crawling six files.
+The `--ta-*` **role names are stable across every project**, only their VALUES
+change per project/variation. So you already know the utilities, don't re-Read
+`tokens.css` / `theme.css` / `brand.ts` to remember them:
+
+**Color roles**, each is a `bg-ta-*` / `text-ta-*` / `border-ta-*` utility:
+`primary` (links, buttons, active states) · `accent` (highlights, badges) ·
+`surface` (page/section/card backgrounds) · `ink` (headings, strong text) ·
+`body` (paragraphs) · `muted` (captions, metadata) · `border` (dividers,
+hairlines). A design needing an extra named color can add another `--ta-*` token,
+but fill these seven first.
+
+**Font roles**, each a `font-ta-*` utility: `display` (headings) · `serif` ·
+`sans` (body) · `mono`.
+
+Use these utilities, **never a raw hex or font stack** (inline `style={{}}` only as
+a last resort). For **spacing & radius** use Tailwind's own scale (`p-*`, `gap-*`,
+`rounded-*`), already on-brand, no token lookup needed.
+
+**The one live read, only if you need actual VALUES** (an exact hue to judge
+contrast, or to see which fonts the project picked): read the active variation's
+`src/variations/{id}/styles/tokens.css` **once** (it falls back to base
+`src/styles/tokens.css` if the variation hasn't diverged its palette). For plain
+authoring the role names above are all you need, skip the read.
 
 ## 2b. Research the field (licensed + gated, usually SKIP)
 **Run `echo $TA_DESIGN_RESEARCH` once at the start of a build.** If it prints
@@ -191,6 +208,24 @@ Then **register it** with one row in `src/app/pages.ts`:
 routing (`?v={id}&about`), rendering, the nav link, and Figma export. No
 `App.tsx` edit. Full-bleed landing with no Header/Footer? add `chrome={false}` to
 `<DesignSurface>`.
+
+## 3b. Read only what you EDIT, the rest is already inlined
+
+The shape of the scaffold's shared files is captured in this doc, so **don't re-Read
+them to "recall the pattern"**, each full Read is ~0.5–2k tokens that then sit in
+context the rest of the session (the single biggest source of re-read waste). Read a
+file only when you're about to **change** it:
+
+- **Editing → Read first** (you must, before an Edit): the section's `Home.tsx`, or
+  the specific page/component you're modifying, under `src/variations/{id}/components/`.
+- **Already inlined here, don't re-Read to recall:** `DesignSurface.tsx` + `pages.ts`
+  (contract + registration, §3), `Header.tsx` / `Footer.tsx` / `menu.ts` (global
+  chrome, §4c), `tokens.css` / `theme.css` / `brand.ts` (token names, §2). Open one
+  only to actually edit it, e.g. `Header.tsx` when the designer wants different nav,
+  `brand.ts` + `tokens.css` together for a palette change.
+- **`brand.ts`** holds the styleguide manifest + the `spacing`/`radii`/`typeScale`
+  scales; you rarely need it mid-design (use Tailwind's scales). Never open it just to
+  recall a color, §2 is the source for that.
 
 ## 4. The five rules that matter (the rest is noise for this phase)
 
