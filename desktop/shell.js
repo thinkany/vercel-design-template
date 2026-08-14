@@ -103,6 +103,13 @@ const TAKING_IN_MESSAGES = [
 let takingInIdx = 0;
 
 let sessionId = null;
+// Set true when a design finishes building (finishBuildReveal). The FIRST edit after
+// a build then starts a FRESH, lean editing session instead of resuming the heavy
+// build history (which carries ~100k+ tokens + any diagnose screenshots, re-cached on
+// every follow-up). The design lives on disk, so a lean preamble pointing at the files
+// reconstructs everything the edit needs at a fraction of the cost. See the
+// design-build efficiency work.
+let leanEditPending = false;
 let assistantEl = null;
 
 // Preview state
@@ -649,6 +656,9 @@ function finishBuildReveal() {
   // the chat-bar title was set at project-open BEFORE that existed. Refresh it now
   // from the updated project meta so the bar shows the real name once built.
   window.desktop.getProjectStatus().then((p) => { if (p) setProjTitle(p); }).catch(() => {});
+  // The build session is now heavy (full build history + any diagnose screenshots).
+  // The next turn is an edit → start it fresh + lean instead of resuming all that.
+  leanEditPending = true;
 }
 
 // A large fresh design can PAINT a beat before Vite finishes compiling it, so the
@@ -4587,11 +4597,35 @@ function getDesigningPrompt(type) {
 
 // Core send: fire a prompt at the agent. `echoText`, when given, is shown as the
 // user's chat bubble; omit it to run a prompt silently (Get Designing's kickoff).
+// The preamble that opens the fresh editing session — points the model at the design
+// on disk so it reconstructs context cheaply, and steers it away from the expensive
+// habits (re-reading the whole project, screenshotting) that a build accumulates.
+function leanEditPreamble() {
+  const id = (design && design.variationId) || "v01";
+  return (
+    `[Editing an existing, already-built design — do NOT rebuild from scratch.] ` +
+    `The current design is in \`src/variations/${id}/components/Home.tsx\`, its tokens in ` +
+    `\`src/variations/${id}/styles/tokens.css\`, and the original brief in ` +
+    `\`src/variations/${id}/variation.json\`. Read only what you need from those, follow the ` +
+    `/design rules, and make just the change below. Don't re-read the whole project or ` +
+    `screenshot unless something is actually reported visually broken.`
+  );
+}
+
 async function runAgent(toSend, echoText) {
   // Never overlap turns: wait for any in-flight turn's result to be handled first.
   try { await turnGate; } catch { /* prior turn already reported its error */ }
   beginTurnGate();
   dismissWelcome();
+  // One-time lean reset at the build→edit boundary: archive the heavy build session and
+  // start this edit fresh with a disk-pointer preamble, so it (and the edits after it)
+  // run on a slim base instead of re-caching the whole build every turn.
+  if (leanEditPending) {
+    leanEditPending = false;
+    if (sessionId) { try { await window.desktop.archiveSession(sessionId); } catch {} }
+    sessionId = null;
+    toSend = leanEditPreamble() + "\n\n" + toSend;
+  }
   if (echoText) addMsg("user", echoText);
   input.value = "";
   input.placeholder = DEFAULT_PLACEHOLDER;
