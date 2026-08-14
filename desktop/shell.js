@@ -455,6 +455,9 @@ window.desktop.onPreviewOpenUrl((url) => {
   // A preview button can run an app command via window.open("tacmd:/command"), e.g. the
   // dashboard "Brand This Project" button (tacmd:/setup-project). Run it in the chat
   // instead of opening a tab. Restricted to slash-commands so a page can't run arbitrary text.
+  // Company Setup (P3): the dashboard "Brand This Project" button opens the in-pane
+  // company form instead of running a chat command.
+  if (url === "tacmd:brand-company") { renderCompanyForm(); return; }
   const m = typeof url === "string" && url.match(/^tacmd:(\/[\w-]+.*)$/);
   if (m) { sendText(m[1]); return; }
   openTab(url);
@@ -3854,6 +3857,7 @@ function renderIntakeCard(card, onChange, requestSubmit) {
     : card.type === "reference" ? buildReference(card, body, onChange)
     : card.type === "color-swatch" ? buildColorSwatch(card, body, onChange)
     : card.type === "font-pick" ? buildFontPick(card, body, onChange)
+    : card.type === "logo" ? buildLogoUpload(card, body, onChange)
     : buildOpenText(card, body, onChange); // defensive fallback
 
   // Skippable cards get a "let you decide" affordance that records null.
@@ -4195,6 +4199,61 @@ function buildFontPick(card, body, onChange) {
   };
 }
 
+// Logo upload — a drop/click zone that reads an image file to base64. Used only by
+// the local company form (renderCompanyForm), not an agent-sent card. getValue →
+// { filename, mime, b64 } | null, matching the buildCompanyProfile logo shape.
+function buildLogoUpload(card, body, onChange) {
+  let value = null;
+  let disabled = false;
+  const zone = document.createElement("label");
+  zone.style.cssText =
+    "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;" +
+    "min-height:92px;padding:16px;border:1.5px dashed rgba(0,0,0,0.22);border-radius:10px;" +
+    "cursor:pointer;text-align:center;transition:border-color .15s ease,background .15s ease;";
+  const preview = document.createElement("img");
+  preview.style.cssText = "max-height:56px;max-width:180px;object-fit:contain;display:none;";
+  const hint = document.createElement("div");
+  hint.style.cssText = "font-size:13px;color:#777;";
+  hint.textContent = card.placeholder || "Drop a logo, or click to choose";
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/png,image/jpeg,image/webp,image/svg+xml";
+  input.style.display = "none";
+  zone.append(preview, hint, input);
+  body.appendChild(zone);
+
+  function read(file) {
+    if (!file || disabled || !/^image\//.test(file.type || "")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "");
+      const b64 = dataUrl.split(",")[1] || "";
+      if (!b64) return;
+      value = { filename: (file.name || "logo").replace(/[^\w.-]+/g, "-"), mime: file.type, b64 };
+      preview.src = dataUrl;
+      preview.style.display = "block";
+      hint.textContent = value.filename;
+      onChange();
+    };
+    reader.readAsDataURL(file);
+  }
+  input.addEventListener("change", () => read(input.files && input.files[0]));
+  zone.addEventListener("dragover", (e) => { e.preventDefault(); if (!disabled) zone.style.borderColor = "#111"; });
+  zone.addEventListener("dragleave", () => { zone.style.borderColor = "rgba(0,0,0,0.22)"; });
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    zone.style.borderColor = "rgba(0,0,0,0.22)";
+    read(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]);
+  });
+
+  return {
+    getValue: () => value,
+    hasValue: () => !!value,
+    setDisabled: (d) => { disabled = d; zone.style.opacity = d ? "0.5" : "1"; zone.style.pointerEvents = d ? "none" : "auto"; },
+    display: () => (value ? value.filename : ""),
+  };
+}
+
 // Inject a Google Fonts stylesheet for the given families (deduped). Best-effort —
 // no CSP blocks it in the chrome; a failed load just leaves the name in a fallback.
 const _loadedFonts = new Set();
@@ -4207,6 +4266,82 @@ function loadGoogleFonts(families) {
   link.rel = "stylesheet";
   link.href = `https://fonts.googleapis.com/css2?${q}&display=swap`;
   document.head.appendChild(link);
+}
+
+// ---- Company Setup form (in-pane "Brand This Project") ----------------------
+// A deterministic, agent-free pane form (P3): the dashboard "Brand This Project"
+// button (tacmd:brand-company) opens it to brand the COMPANY layer only — name,
+// admin/gate fonts, login logo — which Get Designing skips. Reuses the intake card
+// renderers; on submit it POSTs to company:apply (slice 1). Curated font pools
+// (common Google families with 400 & 700 so the css2 request never fails).
+const COMPANY_HEADING_FONTS = ["DM Sans", "Poppins", "Space Grotesk", "Fraunces", "Libre Franklin"];
+const COMPANY_BODY_FONTS = ["Inter", "Work Sans", "IBM Plex Sans", "Source Sans 3", "Nunito Sans"];
+
+function renderCompanyForm() {
+  enterIntakeMode();
+  intakePhase = "idle"; // NOT the agent 'gathering' flow — a stale agent:intake batch is cancelled
+  startChoicesShown = false;
+  exitReview();
+  intakeph.classList.remove("start", "hasbrief");
+  intakeph.classList.add("flow");
+  updateBackButton();
+  setIntakeHead("Brand this project", "Your company identity, set once and reused across every project.");
+  el("intake-brief").innerHTML = "";
+  intakeStack.innerHTML = "";
+
+  const cards = [
+    { id: "companyName", type: "open-text", label: "Company or agency name", placeholder: "e.g. Northlight Studio", maxLength: 60 },
+    { id: "headingFont", type: "font-pick", label: "Wordmark / heading font", help: "Used on the login gate and admin chrome.", options: COMPANY_HEADING_FONTS, skippable: true, agentDecidesLabel: "Use default" },
+    { id: "bodyFont", type: "font-pick", label: "Body / secondary font", options: COMPANY_BODY_FONTS, skippable: true, agentDecidesLabel: "Use default" },
+    { id: "logo", type: "logo", label: "Login logo (optional)", placeholder: "Drop a logo image, or click to choose", skippable: true },
+  ];
+
+  const group = document.createElement("div");
+  group.className = "intake-group";
+  function refreshReady() { applyBtn.disabled = !controls.every((c) => c.isReady()); }
+  const controls = cards.map((card) => {
+    const r = renderIntakeCard(card, refreshReady, () => {});
+    group.appendChild(r.el);
+    return { card, ...r };
+  });
+
+  const applyBtn = document.createElement("button");
+  applyBtn.className = "intake-continue";
+  applyBtn.textContent = "Apply branding";
+  refreshReady();
+  applyBtn.addEventListener("click", async () => {
+    if (group.classList.contains("answered")) return;
+    const vals = {};
+    for (const c of controls) vals[c.card.id] = c.getValue();
+    if (!vals.companyName) return; // name is the one required field
+    group.classList.add("answered");
+    controls.forEach((c) => c.collapse());
+    applyBtn.replaceWith(doneNote());
+    showIntakePending("Applying your company branding…");
+    try {
+      const res = await window.desktop.applyCompany({
+        companyName: vals.companyName,
+        headingFont: vals.headingFont || null,
+        bodyFont: vals.bodyFont || null,
+        logo: vals.logo || null,
+      });
+      clearIntakePending();
+      if (!res || !res.ok) { showIntakePending((res && res.error) || "Couldn't apply the branding."); return; }
+      // Leave the form back to the preview. Reload the active tab to pick up the new
+      // admin fonts/logo; Vite also auto-restarts on the .env change (VITE_COMPANY_NAME),
+      // which clears the dashboard's "Brand This Project" button (isCompanyBranded).
+      resetIntake();
+      previewph.hidden = true;
+      browser.hidden = false;
+      if (activeTab) navigate(activeTab, activeTab.url);
+      window.desktop.getProjectStatus().then((p) => { if (p) setProjTitle(p); }).catch(() => {});
+    } catch (e) {
+      showIntakePending("Couldn't apply the branding: " + e.message);
+    }
+  });
+  group.appendChild(applyBtn);
+  intakeStack.appendChild(group);
+  fadeSlideIn(group, { dy: 44, duration: 720, delay: 60 });
 }
 
 // ---- Start path picker (fresh-start choices in the pane) --------------------
