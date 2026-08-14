@@ -90,6 +90,7 @@ contextBridge.exposeInMainWorld("desktop", {
   getDesignState: () => ipcRenderer.invoke("project:design"),
   probePreview: (url) => ipcRenderer.invoke("preview:probe", { url }),
   getCompanyStatus: () => ipcRenderer.invoke("company:status"),
+  applyCompany: (form) => ipcRenderer.invoke("company:apply", form),
   downloadCompany: () => ipcRenderer.invoke("company:download"),
   getDefaultCompany: () => ipcRenderer.invoke("company:defaultStatus"),
   saveDefaultCompany: () => ipcRenderer.invoke("company:saveDefault"),

@@ -169,16 +169,47 @@ export async function runPack({ project = process.cwd(), out } = {}) {
   };
 }
 
+// Build a company profile OBJECT (same shape as a packed profile.json) straight from
+// form fields — the in-pane "Brand This Project" form's data, so it can be handed to
+// runUnpack without a file on disk. Fonts entered as Google-Font family NAMES become
+// an external stylesheet (loaded by both the gate and, via runUnpack §6, the app).
+export function buildCompanyProfile({ companyName, headingFont, bodyFont, logo } = {}) {
+  const heading = headingFont ? `'${headingFont}', system-ui, sans-serif` : DEFAULT_HEADING;
+  const body = bodyFont ? `'${bodyFont}', system-ui, sans-serif` : DEFAULT_BODY;
+  const names = [...new Set([headingFont, bodyFont].filter(Boolean))];
+  // wght@400;700 only — virtually every Google font has both, so the css2 request
+  // never 400s (an unavailable weight fails the whole stylesheet).
+  const fam = (n) => `family=${encodeURIComponent(n).replace(/%20/g, "+")}:wght@400;700`;
+  const fonts = names.length
+    ? {
+        mode: "external",
+        headingFamily: heading,
+        bodyFamily: body,
+        stylesheetHref: `https://fonts.googleapis.com/css2?${names.map(fam).join("&")}&display=swap`,
+        preconnect: "https://fonts.gstatic.com",
+      }
+    : { mode: "default", headingFamily: DEFAULT_HEADING, bodyFamily: DEFAULT_BODY };
+  return {
+    kind: PROFILE_KIND,
+    version: PROFILE_VERSION,
+    companyName: (companyName || "").trim(),
+    fonts,
+    logo: logo && logo.b64 ? { filename: logo.filename, mime: logo.mime || "image/png", b64: logo.b64 } : null,
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // UNPACK — apply a profile onto a target project (pristine CORE files)
 // ─────────────────────────────────────────────────────────────────────────────
-export async function runUnpack({ project = process.cwd(), input, force = false } = {}) {
+// `profile` (in-memory, from buildCompanyProfile) takes precedence over `input` (a
+// packed profile.json path); one of the two must be provided.
+export async function runUnpack({ project = process.cwd(), input, profile: inlineProfile, force = false } = {}) {
   const root = path.resolve(project);
   const p = (rel) => path.join(root, rel);
   const applied = [];
   const manualSteps = [];
 
-  const profile = JSON.parse(await read(path.resolve(input)));
+  const profile = inlineProfile || JSON.parse(await read(path.resolve(input)));
   if (profile.kind !== PROFILE_KIND) {
     throw new Error(`Not a company profile (kind="${profile.kind}").`);
   }
@@ -315,11 +346,30 @@ export async function runUnpack({ project = process.cwd(), input, force = false 
     }
   }
 
-  // ── 6. external app font load → fonts.css note ───────────────────────────────
+  // ── 6. external app font load → fonts.css @import (auto-wired) ───────────────
+  // The gate loads its own copy (§3b); the APP loads its admin fonts from
+  // src/styles/fonts.css. Add the stylesheet as a second @import (still valid: it
+  // stays at the top, before any non-import rule). Idempotent.
   if (fonts.mode === "external" && fonts.stylesheetHref) {
-    manualSteps.push(
-      `App font load: ensure ${headingFamily} / ${bodyFamily} are loaded for the app — add them to the @import in src/styles/fonts.css (Google) or a <link> in index.html (other hosts). The gate loads its own copy.`
-    );
+    const fPath = p("src/styles/fonts.css");
+    if (exists(fPath)) {
+      let f = await read(fPath);
+      if (!f.includes(fonts.stylesheetHref)) {
+        const line = `@import url('${fonts.stylesheetHref}');`;
+        const lastImport = f.lastIndexOf("@import");
+        if (lastImport >= 0) {
+          const eol = f.indexOf("\n", lastImport);
+          const at = eol >= 0 ? eol + 1 : f.length;
+          f = f.slice(0, at) + line + "\n" + f.slice(at);
+        } else {
+          f = `${line}\n${f}`;
+        }
+        await writeFile(fPath, f, "utf8");
+        applied.push("fonts.css → app @import (admin fonts)");
+      }
+    } else {
+      manualSteps.push(`App font load: add ${headingFamily} / ${bodyFamily} for the app (fonts.css @import / index.html <link>).`);
+    }
   }
 
   return { applied, manualSteps, summary: runPackSummary(profile) };

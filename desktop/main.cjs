@@ -1509,6 +1509,24 @@ ipcMain.handle("preview:probe", async (_event, { url }) => {
 });
 ipcMain.handle("company:status", () => ({ exists: hasCompanyProfile(currentProject) }));
 
+// Apply the COMPANY layer (company name + admin/gate fonts + logo) to the current
+// project — the backend for the in-pane "Brand This Project" form. Builds a profile
+// from the form fields and runs it through the SAME apply engine as /import-company
+// (writes .env VITE_COMPANY_NAME, admin fonts → tokens.css + gate middleware, logo →
+// public/brand + gate wiring, app font @import → fonts.css). form = { companyName,
+// headingFont, bodyFont, logo?: { filename, mime, b64 } }.
+ipcMain.handle("company:apply", async (_event, form) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  try {
+    const { buildCompanyProfile, runUnpack } = await companyProfileEngine();
+    const profile = buildCompanyProfile(form || {});
+    const res = await runUnpack({ project: currentProject, profile });
+    return { ok: true, applied: res.applied, manualSteps: res.manualSteps, summary: res.summary };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
 // Save the project's company-profile.json out to a location the user picks —
 // it's a portable artifact meant to move between projects.
 ipcMain.handle("company:download", async () => {
