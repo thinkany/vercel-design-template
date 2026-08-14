@@ -289,67 +289,44 @@ file only when you're about to **change** it:
 
 ## 4b. Images, non-browser, download to `public/`, else placeholder
 
-**Check `IMAGES=` from the session-start call (§ Preview server), don't re-`echo`.**
-If it's **`placeholder`**, the designer
-chose *No images, placeholders only* (Claude Settings), **do NOT source any images**,
-skip the whole gather flow below (no `curl`, no `credits.json`). For **every** image
-spot, hold it with the FPO component instead:
+**Check `IMAGES=` from the session-start call.** If it's **`placeholder`**, the
+designer chose *No images, placeholders only*: source nothing (no `curl`, no
+`credits.json`), and hold every image spot with the FPO component,
 `<ImagePlaceholder className="aspect-video w-full rounded-xl" label="Hero image" />`
-(import from `@/app/components/ImagePlaceholder`; give the real aspect/rounding for
-that spot and a short `label` of what it'll be). In the closing summary, say the
-image spots are held with placeholders **by preference** (not failures), ready for
-the designer's own art. Anything other than `placeholder` (or unset) = the normal
-sourcing flow below.
+(from `@/app/components/ImagePlaceholder`; real aspect/rounding + a short `label`).
+Note in the wrap-up they're placeholders **by preference**, not failures. Any other
+value = the sourcing flow below.
 
-Design generation is code, no browser. Gathering images is the same:
-**never open a headless/automation browser or screenshot to find images** (it gets
-permission-gated and is inconsistent). Source them over plain HTTP instead:
+**Never open a headless browser or screenshot to find images** (gated, inconsistent).
+Source over plain HTTP:
 
-1. **Default: download into `public/`.** A same-origin local file always resolves,
-   in the live preview **and** in the Figma export's asset-fetch (external CDN URLs
-   render in preview but the export *skips* any that block/stall, see below). One
-   **bounded, fast** attempt from a stable URL, e.g.
-   `curl -fsS --max-time 8 -o public/images/hero.jpg "<url>"` (`-f` = fail on
-   non-200, `--max-time` = don't hang). Reference it as `/images/hero.jpg`.
-2. **Quick 200 → use it. Anything else → placeholder, move on.** The fetch is
-   **non-interactive** (the scaffold allowlists `curl`, so it never prompts) and
-   **bounded** (it can't hang). If it isn't a fast success (timeout, non-200,
-   error), **do not retry, do not escalate to a browser, do not stop to ask**,
-   drop in the **network-free FPO placeholder** at the right aspect ratio,
-   `<ImagePlaceholder className="aspect-video w-full rounded" label="Hero image" />`
-   (from `@/app/components/ImagePlaceholder`), and keep building. **Don't interrupt
-   the design over a missing image.**
-3. **Track placeholders → report them in the closing summary.** Keep a running list
-   of every image that fell back to a placeholder (which section, what it should
-   be). When the design is ready to view, tell the designer plainly in the wrap-up,
-   e.g. "Heads-up: 2 images couldn't be fetched, so I used placeholders in the hero
-   and the testimonial, send me those and I'll drop them in." Never leave silent
-   placeholders.
-4. **Single-source still applies** (rule 4): author the image once; `DesignSurface`
-   renders it across every device frame.
-5. **Record each image's licence → `public/images/credits.json`.** A gathered photo is
-   often **copyrighted**, the designer must know which ones aren't free before they
-   ship. As you fetch images, maintain a manifest so the preview can flag them:
+1. **Download into `public/`.** A same-origin file resolves in both the preview and
+   the Figma export; external CDN URLs render in preview but the export *skips* any
+   that stall/CORS. One bounded attempt:
+   `curl -fsS --max-time 8 -o public/images/hero.jpg "<url>"`, reference `/images/hero.jpg`.
+2. **Fast 200 → use it. Anything else (timeout/non-200/error) → placeholder, move on.**
+   The `curl` is allowlisted (never prompts) and bounded (can't hang). **Don't retry,
+   escalate to a browser, or stop to ask**, drop the network-free `<ImagePlaceholder>`
+   at the right aspect ratio and keep building.
+3. **Track every placeholder and report them in the closing summary** (which section,
+   what it should be), e.g. "2 images couldn't be fetched, placeholders in the hero and
+   testimonial, send them and I'll drop them in." Never leave silent placeholders.
+4. **Single-source** (rule 4): author each image once; `DesignSurface` renders it in
+   every device frame.
+5. **Record each image's licence → `public/images/credits.json`** (fresh per design,
+   only images you actually used; placeholders get no entry):
    ```json
    { "images": [
      { "file": "hero.jpg",  "source": "unsplash.com", "url": "<url>", "free": true },
      { "file": "team1.jpg", "source": "acme.com",     "url": "<url>", "free": false }
    ] }
    ```
-   Set **`free: true` ONLY** for images from a known free-to-use source (Unsplash,
-   Pexels, Pixabay, Wikimedia Commons, or an explicitly public-domain/CC0 source).
-   **Everything else, a brand site, a generic CDN, a search result, is `free: false`**
-   (when unsure, `false`, that's the safe default). `source` = the origin domain and
-   `url` = the exact URL you fetched it from, the badge turns them into a "visit
-   source ↗" link so the designer can go see where the image came from, so record
-   both accurately. Placeholders (network-free token blocks) get **no** entry. Write the manifest fresh
-   for this design (list the images you actually used). `DesignSurface` reads it and
-   shows one small "not free to reuse" badge (lower-left, local-dev only) listing the
-   flagged images, it's excluded from the Figma export and the shared Vercel preview.
-
-Why local over hotlinking: the Figma export fetches each image URL with a bounded
-timeout and **skips a slow/blocked/CORS'd CDN image** (empty box in Figma), so a
-`public/` file is the only source guaranteed to survive both preview and export.
+   **`free: true` ONLY** for a known free source (Unsplash, Pexels, Pixabay, Wikimedia,
+   explicit public-domain/CC0); everything else (brand site, generic CDN, search result)
+   is **`free: false`** (unsure → false). `source` = origin domain, `url` = the exact URL
+   fetched (the badge links to it). `DesignSurface` reads this and shows a small "not free
+   to reuse" badge (lower-left, local-dev only, excluded from the Figma export + Vercel
+   preview).
 
 ## 4c. Global chrome & menus, shipped by DesignSurface, don't rebuild
 
