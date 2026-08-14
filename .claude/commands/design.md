@@ -319,17 +319,27 @@ hand-rolls site nav. What you touch:
   none. A single page opts out with **`chrome={false}`** on `<DesignSurface>` (e.g. a
   full-bleed landing).
 
-## 5. Verify
+## 5. Verify, the designer's eyes, not a screenshot
 
 The dev server hot-reloads, so the change is live at http://localhost:5173 the
-moment you save, that's the verification surface (not Vercel, not a test suite).
-Glance at the preview, then invite the next adjustment.
+moment you save, and **the designer is watching it there.** That live preview is
+the verification surface (not Vercel, not a test suite, and **not a screenshot**).
+Save, note the milestone in plain language, and invite the next adjustment.
 
-**Something not showing / cut off / mispositioned / hidden behind another
-element?** Don't spelunk the code blind or ask the designer to open dev tools,
-invoke [`/diagnose`](diagnose.md). It carries the reflex (headlessly screenshot
-the `?capture=` route and *look*) plus a symptom→cause→fix table for this
-scaffold's layering, clipping, and container-query gotchas.
+**Do NOT screenshot your own work to "check it looks right."** You have no eyes on
+the browser, the designer does, and every capture you Read costs ~1k+ tokens and
+piles up fast across a build (a dozen self-checks is a dozen images sitting in
+context for the rest of the session). Trust the hot-reload; let the designer be the
+one to say something's off. Screenshotting is a **diagnostic** tool, reserved for a
+reported symptom, not a routine post-section habit.
+
+**Only when a visual bug is actually reported**, the designer says something isn't
+showing, is cut off, mispositioned, or hidden behind another element, do you reach
+for the capture route: invoke [`/diagnose`](diagnose.md). It carries the reflex
+(headlessly screenshot the `?capture=` route and *look*) plus a symptom→cause→fix
+table for this scaffold's layering, clipping, and container-query gotchas. Don't
+spelunk the code blind, don't ask the designer to open dev tools, and don't
+screenshot speculatively before there's a symptom to chase.
 
 **Ignore IDE type noise.** Editing a `.tsx` here often lights up a wall of
 `JSX.IntrinsicElements` / `Cannot find module '@/config/site'` /

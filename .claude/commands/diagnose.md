@@ -8,6 +8,14 @@ another element, or looks different from what they expect:** in the live preview
 or the Figma export. The designer is not going to open dev tools; **you** find and
 fix it. This is the playbook.
 
+**This is REACTIVE only.** The screenshot reflex below is for a symptom someone has
+reported (or one you can already see is concretely broken), **never a proactive
+"let me make sure the build looks right" check.** During a normal build you do not
+screenshot your own work, the designer is watching the live preview and will tell
+you if something's off (see [`/design`](design.md) §5). Each capture you Read costs
+~1k+ tokens and stays in context the rest of the session, so spend one only on a
+real symptom, not on speculation.
+
 ## 0. THE reflex, screenshot the capture route FIRST, then LOOK
 
 Before theorizing, **see what the designer sees.** The design surface renders in
