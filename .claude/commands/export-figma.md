@@ -215,8 +215,19 @@ pattern) drive the design-system half. Read the Figma skill **MCP resources**
   **componentizes** each block into a `View=…` set. So the block LIST is the union
   of `[data-block]` markers (no `blocks.ts`); `ta-export reconstruct` builds
   the whole manifest (specs + palette + assets) offline in one pass. Add a block by
-  marking a new `[data-block]` section, nothing else. (Interaction states like an
-  open mobile menu aren't captured yet, default rendered state per breakpoint.)
+  marking a new `[data-block]` section, nothing else. **Two open-state overlays are
+  captured beyond the page sections** (global chrome, so never added to any page's
+  compose order): the **mobile-menu drawer**, via one extra `&menu=open` pass on the
+  mobile breakpoint (DesignSurface forces the drawer open, which is when it carries its
+  `[data-block="mobile-menu"]` marker), as a standalone **"Mobile Menu"** block; and
+  each **desktop dropdown/mega** nav panel (menu-bearing items carry `data-menu-item`),
+  captured with its panel forced open (`&menu=open&item={id}`) as a **`menu-{id}`**
+  block. **By default only the FIRST menu-bearing desktop item is built** (one
+  representative panel, because each is a full load+settle and mega panels are large);
+  **`--menus all`** builds every item, **`--only menu-{id}`** targets one. When the nav
+  has more than one menu-bearing item, **tell the designer only the first panel was built
+  and the rest are one command away** (the script also logs `building 1 of N` to stderr).
+  Other interaction states (hover, scroll) remain the default rendered state per breakpoint.
 
   **Why reconstruct beats capture.** The old path screenshotted each section into
   Figma via html.to.design, which was both the slowest stage (serial mint → submit

@@ -207,6 +207,15 @@ routing (`?v={id}&about`), rendering, the nav link, and Figma export. No
 3. **Mark every major section** on its root element with
    `data-block="{id}" data-block-name="{Name}"` (hero, feature grid, CTA, …).
    That marker is the entire declaration the Figma Block Library export needs.
+   **Put it on the element that owns the section's spacing & background, not an
+   inner card.** A block's box is exactly the marked element, and composed pages
+   stack blocks flush (no gap added between them, the gap comes from each block's
+   own `py-*`). So if the `py-*`/full-bleed `bg-*` lives on a **wrapper**
+   (`<Reveal className="… pb-24">`, a `bg-* w-full` ancestor) while the marker sits
+   on an inner card, that spacing/background is **outside** the block and the
+   section exports flush / bare. Mark the outermost element carrying the `py-*`/`bg-*`
+   (or, if a component wrapper like `Reveal` can't take the marker, wrap the card in
+   a `<div data-block=…>` that holds the padding).
 4. **Content is single-source.** Author copy/images once; `DesignSurface` renders
    that one node in every device frame. Make breakpoints differ only through
    responsive *styling*, never branch content on `view`, never duplicate text
@@ -279,6 +288,36 @@ permission-gated and is inconsistent). Source them over plain HTTP instead:
 Why local over hotlinking: the Figma export fetches each image URL with a bounded
 timeout and **skips a slow/blocked/CORS'd CDN image** (empty box in Figma), so a
 `public/` file is the only source guaranteed to survive both preview and export.
+
+## 4c. Global chrome & menus, shipped by DesignSurface, don't rebuild
+
+The **Header, Footer, and mobile menu are already built and rendered globally** by
+`DesignSurface` (once, for every page/breakpoint/variation), so a design page never
+hand-rolls site nav. What you touch:
+
+- **Header/Footer live in the variation's own components** (`src/variations/{id}/
+  components/Header.tsx` / `Footer.tsx`, resolved per-variation, falling back to base).
+  Both map [`pages.ts`](../../src/app/pages.ts), so **adding a page auto-adds its nav
+  link**, don't wire nav by hand. Edit these once; the change cascades everywhere
+  (single-source, rule 4).
+- **Mobile menu ships by default** ([MobileMenu.tsx](../../src/app/components/MobileMenu.tsx)),
+  a slide-in drawer, the designer never has to ask for one. It's an **in-frame overlay**
+  (not a portal), the Header hamburger toggles it via shared state, and it slides from
+  **`MENU_SIDE`** (the same edge the hamburger sits on, one constant positions both).
+  Diverge per variation by dropping `MobileMenu.tsx` into the variation folder.
+- **Desktop nav dropdown/mega panels** are configured per nav item in
+  [`menu.ts`](../../src/app/menu.ts) (`none` / `dropdown` / `mega`, seeded from the
+  setup `VITE_MENU_STYLE`, mix per item there). Panels are in-frame overlays in the
+  Header (mega spans the content column). Open/active state is shared via
+  [`menuState.ts`](../../src/app/menuState.ts).
+- **In-frame chrome must not portal.** shadcn `Sheet`/`Dialog`/`Drawer`/`Popover`
+  render to `document.body` and escape the device frame, use inline absolute
+  positioning (like `MobileMenu` / the Header menus) for anything meant to live inside
+  the frame. (If a menu/overlay shows in the wrong place, that's the classic symptom
+  for [`/diagnose`](diagnose.md).)
+- **Chrome is website-only** (`projectType === "website"`); app/brand projects render
+  none. A single page opts out with **`chrome={false}`** on `<DesignSurface>` (e.g. a
+  full-bleed landing).
 
 ## 5. Verify
 
