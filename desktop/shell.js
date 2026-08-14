@@ -641,6 +641,31 @@ function finishBuildReveal() {
   }
   applyBuildOverlay();
   showPreviewHelp(); // finished design shown → offer the blank-recovery help
+  healBuildPreview(); // auto-clear a blank/premature first paint (fire-and-forget)
+}
+
+// A large fresh design can PAINT a beat before Vite finishes compiling it, so the
+// first reveal sometimes shows a blank (empty #root) or error-overlay'd tab. Auto-
+// heal ONCE, a short settle after the reveal: reload any build tab that reads blank
+// or broken (or is unresponsive), so the designer's first result never LOOKS broken.
+// Healthy tabs (root already populated) are left alone — no reload, no flash. The
+// manual "Refresh Browser" button stays as the backstop.
+async function healBuildPreview() {
+  await new Promise((r) => setTimeout(r, 1600));
+  for (const t of tabs.slice()) {
+    if (!t || !t.wv) continue;
+    let broken = false;
+    try {
+      broken = await Promise.race([
+        t.wv.executeJavaScript(
+          "!!document.querySelector('vite-error-overlay') || " +
+          "!((document.getElementById('root') || {}).childElementCount)"
+        ),
+        new Promise((res) => setTimeout(() => res(true), 2500)), // unresponsive → treat as broken
+      ]);
+    } catch { broken = true; }
+    if (broken) navigate(t, t.url); // one reload clears a stale/blank HMR paint
+  }
 }
 
 async function showBrowser() {
@@ -4414,8 +4439,10 @@ function getDesigningPrompt(type) {
     '   Mark every follow-up skippable:true (agentDecidesLabel like "I\'ll let you choose", or "Skip" for the names).',
     "   Omit any card whose value they already gave (a named color/font, a reference to pull from, a name).",
     "   If the designer DISMISSES a question (the intake tool returns an error), stop and wait, do not retry.",
-    "3. Do NOT build or edit anything yet. Reply in chat with a short, friendly recap of the brief you",
-    "   gathered. Phase 2 will design from it.",
+    "3. Do NOT build or edit anything in THIS turn — the designer launches the build from the pane's",
+    '   "Start designing" button, which runs as its own step. Just reply with ONE short, warm recap line',
+    "   of the brief you gathered, then stop. Do NOT mention phases, a \"step 2\", setup, or ask them to",
+    '   confirm or "say the word" — the build starts on its own from the pane.',
   ].join("\n");
 }
 
