@@ -58,6 +58,25 @@ const { ipcRenderer } = require("electron");
     return parts.join(" > ");
   }
 
+  // Classify what was pointed at so the shell can route the edit: a scoped
+  // "element" (a leaf/atomic node → direct Read→Edit) vs a "section" (the block
+  // wrapper, a structural landmark, a node containing a block, or a large content
+  // container → may warrant /design). The shell turns this into a routing hint.
+  const LANDMARKS = ["SECTION", "HEADER", "FOOTER", "MAIN", "ARTICLE", "NAV", "ASIDE"];
+  function scopeFor(el, block) {
+    if (block && block === el) return "section"; // clicked the section wrapper itself
+    const tag = el.tagName ? el.tagName.toUpperCase() : "";
+    if (LANDMARKS.includes(tag)) return "section";
+    if (el.querySelector && el.querySelector("[data-block]")) return "section"; // wraps a block
+    const kids = el.children ? el.children.length : 0;
+    try {
+      const r = el.getBoundingClientRect();
+      const big = r.width * r.height > 0.45 * window.innerWidth * window.innerHeight;
+      if (big && kids >= 3) return "section"; // large multi-child container
+    } catch { /* detached */ }
+    return "element";
+  }
+
   function contextFor(el) {
     const block = el.closest && el.closest("[data-block]");
     return {
@@ -67,6 +86,7 @@ const { ipcRenderer } = require("electron");
       selector: selectorFor(el),
       dataBlock: block ? block.getAttribute("data-block") : null,
       dataBlockName: block ? block.getAttribute("data-block-name") : null,
+      scope: scopeFor(el, block),
       variation: new URLSearchParams(location.search).get("v") || null,
       note: "",
     };

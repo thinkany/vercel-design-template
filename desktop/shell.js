@@ -95,11 +95,7 @@ let intakePhase = "idle"; // idle | deliverable | gathering | review | designing
 let currentIntakeId = null; // the pending intake batch's id (for Back → cancel)
 let deliverableType = "website"; // "website" | "app" — the first fork
 // Post-answer "taking it in" lines, cycled so consecutive waits read differently.
-const TAKING_IN_MESSAGES = [
-  "Got it, give me a moment while I take that in…",
-  "Perfect, let me sit with that a second…",
-  "Thanks for finishing that walkthrough…",
-];
+const TAKING_IN_MESSAGES = COPY.preview.takingInMessages;
 let takingInIdx = 0;
 
 let sessionId = null;
@@ -244,7 +240,7 @@ function renderTabs() {
   const add = document.createElement("button");
   add.className = "tabadd";
   add.textContent = "+";
-  add.title = "New tab";
+  add.title = COPY.chrome.newTab;
   // New user tab: no fixed title, so it reflects the real page (and updates as
   // they navigate) instead of always reading "Home".
   add.addEventListener("click", () => openTab(quickUrl("home")));
@@ -282,6 +278,17 @@ function setFeedbackMode(on) {
   }
   setFeedbackButton(on);
 }
+// A one-line routing hint keyed off what was pointed at (ctx.scope from the
+// inspector), so a scoped element tweak edits directly instead of loading the whole
+// /design skill, while a section-level target can still escalate. It's a default the
+// model may override from the note (e.g. a note that asks for a layout rework). No
+// em-dashes: this text is read by a person in the chat.
+function feedbackRouting(scope) {
+  if (scope === "section") {
+    return "Scope: section. Edit in the working variation's components (never the base). If this is styling or content, edit the file directly; use /design only if it needs structural, layout, or responsive rules.";
+  }
+  return "Scope: single element. Make this as a localized edit in the working variation's components (never the base): find the node and Read, then Edit, its file. Do not run /design unless my note asks for a brand-new section, a layout or responsive rework, or changes spanning multiple sections.";
+}
 function handleFeedbackSubmit(ctx) {
   if (!ctx || !ctx.note) return;
   const lines = ["Design feedback, pointed at an element in the live preview:", ""];
@@ -292,7 +299,7 @@ function handleFeedbackSubmit(ctx) {
   if (ctx.text) lines.push(`- Text: "${ctx.text}"`);
   if (ctx.selector) lines.push(`- Selector: ${ctx.selector}`);
   if (ctx.variation) lines.push(`- Variation: ${ctx.variation}`);
-  lines.push("", `My note: ${ctx.note}`, "", "Make this change in the working variation's components (not the base).");
+  lines.push("", `My note: ${ctx.note}`, "", feedbackRouting(ctx.scope));
   sendText(lines.join("\n"));
 }
 feedbackBtn.addEventListener("click", () => setFeedbackMode(!feedbackOn));
@@ -475,13 +482,7 @@ window.desktop.onPreviewOpenUrl((url) => {
 // Generic rotation shown between live-activity updates. Timer-based, NOT tied to
 // real progress — so keep every line progress-neutral (no "almost there" / "just
 // a moment" that would over-promise while setup is still going).
-const WORKING_MESSAGES = [
-  "We're getting your workspace set up…",
-  "Setting things up for you…",
-  "Getting everything ready…",
-  "Your live preview will open on its own once it's ready…",
-  "Thanks for hanging in there with us…",
-];
+const WORKING_MESSAGES = COPY.preview.workingMessages;
 function startWorking(messages = WORKING_MESSAGES) {
   if (workingTimer) return;
   let i = 0;
@@ -546,7 +547,7 @@ function showWorking() {
   browser.hidden = true;
   previewph.hidden = false;
   phEmoji.textContent = "✨";
-  phTitle.textContent = "Getting set up";
+  phTitle.textContent = COPY.preview.gettingSetUp;
   phProgress.hidden = false;
   startWorking();
 }
@@ -563,7 +564,7 @@ function guardPreviewForEdit(activityText) {
   browser.hidden = true;
   previewph.hidden = false;
   phEmoji.textContent = "✨";
-  phTitle.textContent = "Updating your design";
+  phTitle.textContent = COPY.preview.updatingDesign;
   phProgress.hidden = false;
   stopWorking();
   phText.textContent = activityText || "We're applying your changes…";
@@ -601,13 +602,7 @@ async function revealPreviewAfterEdit() {
 // apply-brand writes as soon as the styleguide tokens land). On the flip, reveal
 // the Style guide tab LIVE and open the Home tab under a progress cover; the turn
 // end (finishBuildReveal) uncovers the finished home.
-const BUILD_MESSAGES = [
-  "Laying out your sections…",
-  "Placing your hero and headline…",
-  "Building out the page…",
-  "Adding your content and imagery…",
-  "Bringing it all together…",
-];
+const BUILD_MESSAGES = COPY.preview.buildMessages;
 function startBuildRotation() {
   stopBuildRotation();
   let i = 0;
@@ -722,27 +717,15 @@ function refreshPreview() {
   // Otherwise the browser stays closed.
   if (agentBusy) return showWorking();
   if (!viteUrl) {
-    return showPlaceholder({
-      emoji: "⏳",
-      title: "We're spinning up your preview…",
-      text: "Just a moment while your dev server starts up.",
-    });
+    return showPlaceholder(COPY.preview.spinningUp);
   }
   // Idle, preview not open yet. Only greet on a TRULY fresh start — once the
   // conversation has begun or a design exists, setup is underway, so show a
   // gentle "in progress" line instead of re-welcoming.
   if (conversationStarted || design.active) {
-    return showPlaceholder({
-      emoji: "✨",
-      title: "Setting up your project",
-      text: "Your live preview opens on its own once your design's ready. Pick up in the chat.",
-    });
+    return showPlaceholder(COPY.preview.settingUp);
   }
-  showPlaceholder({
-    emoji: "👋",
-    title: "Pick a starting point to your left",
-    text: "Choose Client Setup or Get Designing in the chat pane. Your live preview opens here on its own once your design is ready for viewing.",
-  });
+  showPlaceholder(COPY.preview.pickStart);
 }
 
 // ---- Stage routing -----------------------------------------------------------
@@ -754,7 +737,7 @@ function showStage(stage) {
   // future app-level message/alert (update, license, activity). The connect /
   // no-project states keep their labels since those screens rely on them.
   status.textContent =
-    stage === "key" ? "not connected" : stage === "project" ? "no project" : "";
+    stage === "key" ? COPY.status.notConnected : stage === "project" ? COPY.status.noProject : "";
   if (stage === "key") keyinput.focus();
   if (stage === "workspace") input.focus();
 }
@@ -766,11 +749,7 @@ function noProjectPlaceholder() {
   conversationStarted = false; // a new/blank project greets fresh again
   resetIntake();
   closeAllTabs();
-  showPlaceholder({
-    emoji: "👋",
-    title: "The live preview appears here",
-    text: "Open or create a project to begin.",
-  });
+  showPlaceholder(COPY.preview.noProject);
 }
 
 // The Claude + Figma rail icons show their brand colors only once their key /
@@ -836,11 +815,11 @@ async function saveKey() {
   keyerror.textContent = "";
   const key = keyinput.value.trim();
   if (!key) {
-    keyerror.textContent = "Paste your key first.";
+    keyerror.textContent = COPY.keygate.pasteFirst;
     return;
   }
   keysave.disabled = true;
-  keysave.textContent = "Checking…";
+  keysave.textContent = COPY.keygate.checking;
   try {
     const res = await window.desktop.saveKey(key);
     if (res.ok) {
@@ -853,7 +832,7 @@ async function saveKey() {
     keyerror.textContent = String(e);
   } finally {
     keysave.disabled = false;
-    keysave.textContent = "Save & connect";
+    keysave.textContent = COPY.keygate.save;
   }
 }
 keysave.addEventListener("click", saveKey);
@@ -870,7 +849,7 @@ async function chooseProject(kind) {
   createproject.disabled = openproject.disabled = true;
   const busyBtn = kind === "create" ? createproject : openproject;
   const label = busyBtn.textContent;
-  busyBtn.textContent = kind === "create" ? "Creating…" : "Opening…";
+  busyBtn.textContent = kind === "create" ? COPY.project.creating : COPY.project.opening;
   try {
     const res =
       kind === "create"
@@ -887,7 +866,7 @@ async function chooseProject(kind) {
       // Optionally resume the last session; otherwise offer the two starting paths.
       if (!(await maybeAutoRestoreSession())) renderStartChoices();
     } else {
-      projecterror.textContent = res.error || "Could not open the project.";
+      projecterror.textContent = res.error || COPY.project.couldNotOpen;
     }
   } catch (e) {
     projecterror.textContent = String(e);
@@ -902,13 +881,13 @@ openproject.addEventListener("click", () => chooseProject("open"));
 // ---- Sidebar panels ----------------------------------------------------------
 const RAILS = { help: railHelp, projects: railProjects, publish: railPublish, company: railCompany, figma: railFigma, voice: railVoice, claude: railClaude };
 const PANELS = {
-  help: { title: "Commands", render: renderHelp },
-  projects: { title: "Switch Project", render: renderProjects },
-  publish: { title: "Publish", render: renderPublish },
-  company: { title: "Company Profile", render: renderCompany },
-  figma: { title: "Figma Export", render: renderFigma },
-  voice: { title: "Copy Voice", render: renderVoice },
-  claude: { title: "Claude Settings", render: renderClaude },
+  help: { title: COPY.panels.help, render: renderHelp },
+  projects: { title: COPY.panels.projects, render: renderProjects },
+  publish: { title: COPY.panels.publish, render: renderPublish },
+  company: { title: COPY.panels.company, render: renderCompany },
+  figma: { title: COPY.panels.figma, render: renderFigma },
+  voice: { title: COPY.panels.voice, render: renderVoice },
+  claude: { title: COPY.panels.claude, render: renderClaude },
 };
 
 function closeModal() {
@@ -965,7 +944,7 @@ const setGear = (deg) => { railGear.style.transform = `rotate(${deg}deg)`; };
 function applySidebarCollapsed() {
   const collapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
   document.body.classList.toggle("rail-collapsed", collapsed);
-  const label = collapsed ? "Expand sidebar" : "Collapse sidebar";
+  const label = collapsed ? COPY.chrome.expandSidebar : COPY.chrome.collapseSidebar;
   railCollapse.title = label;
   railCollapse.setAttribute("aria-label", label);
 }
@@ -975,7 +954,7 @@ railCollapse.addEventListener("mouseleave", () => { gearConsumed = false; setGea
 const RAIL_ANIM_MS = 500; // last icon: 5*45ms stagger + 250ms transition
 let railAnimTimer = null;
 function railLabel() {
-  const label = document.body.classList.contains("rail-collapsed") ? "Expand sidebar" : "Collapse sidebar";
+  const label = document.body.classList.contains("rail-collapsed") ? COPY.chrome.expandSidebar : COPY.chrome.collapseSidebar;
   railCollapse.title = label;
   railCollapse.setAttribute("aria-label", label);
 }
@@ -1015,17 +994,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 // --- Help: the project's commands ---
-const COMMANDS = [
-  ["/setup-project", "Brand the template: client/company name, project type, fonts, logo, menu style."],
-  ["/setup-styleguide", "Set the client's fonts, colors, and example styleguide sections."],
-  ["/design", "Build or edit a page (hero, sections, landing) in the design phase."],
-  ["/guide", "Show the list of commands."],
-  ["/clear", "Start a fresh session, clearing the chat for faster replies (saved work is kept)."],
-  ["/export-company", "Save your agency identity (name, admin fonts, logo) as a portable file."],
-  ["/import-company", "Apply a saved company profile into this project."],
-  ["export to Figma", "Ask in plain language to push the styleguide, blocks, or pages to Figma."],
-  ["/upgrade", "Apply the latest template version (keeps your design work)."],
-];
+const COMMANDS = COPY.commands.list;
 
 // The composer's "Commands ▾" popover — same list as the Help drawer, one click
 // away above the input. Each item runs its command exactly like typing it.
@@ -1056,7 +1025,7 @@ async function renderHelp(body) {
   const intro = document.createElement("p");
   intro.className = "muted";
   intro.style.margin = "0 0 12px";
-  intro.textContent = "Click a command to run it in the chat, or type it yourself. Setup runs first, then design freely.";
+  intro.textContent = COPY.commands.helpIntro;
   body.appendChild(intro);
   COMMANDS.forEach(([cmd, desc]) => {
     const row = document.createElement("div");
@@ -1065,12 +1034,12 @@ async function renderHelp(body) {
     // (same as typing it and hitting enter), then reveal the chat.
     const btn = document.createElement("button");
     btn.className = "cmdbtn";
-    btn.title = `Run: ${cmd}`;
+    btn.title = COPY.commands.runTitle(cmd);
     const label = document.createElement("span");
     label.textContent = cmd;
     const run = document.createElement("span");
     run.className = "run";
-    run.textContent = "▸ run";
+    run.textContent = COPY.commands.run;
     btn.append(label, run);
     btn.addEventListener("click", () => { closeModal(); sendText(cmd); });
     const d = document.createElement("div");
@@ -1089,7 +1058,7 @@ async function renderHelp(body) {
   footer.className = "help-footer";
   const ver = document.createElement("div");
   ver.className = "help-version";
-  try { ver.textContent = "Version " + (await window.desktop.getAppVersion()); } catch { ver.textContent = ""; }
+  try { ver.textContent = COPY.about.versionPrefix + (await window.desktop.getAppVersion()); } catch { ver.textContent = ""; }
   footer.appendChild(ver);
 
   const credit = document.createElement("div");
@@ -1099,7 +1068,7 @@ async function renderHelp(body) {
   const link = document.createElement("a");
   link.className = "help-link";
   link.href = "https://thinkany.co";
-  link.textContent = "thinkany.co";
+  link.textContent = COPY.about.siteLink;
   link.addEventListener("click", (e) => { e.preventDefault(); window.desktop.openExternal("https://thinkany.co"); });
   credit.appendChild(link);
   footer.appendChild(credit);
@@ -1168,7 +1137,7 @@ async function renderProjects(body) {
     body.appendChild(setRow("Project", "None open"));
     const note = document.createElement("div");
     note.className = "muted";
-    note.textContent = "Create or open a project from the chooser to get started.";
+    note.textContent = COPY.project.emptyNote;
     body.appendChild(note);
     return;
   }
@@ -1183,11 +1152,11 @@ async function renderProjects(body) {
     body.appendChild(sep);
     const rl = document.createElement("div");
     rl.className = "sess-label";
-    rl.textContent = "Recent projects";
+    rl.textContent = COPY.project.recentTitle;
     body.appendChild(rl);
     const rd = document.createElement("div");
     rd.className = "sess-desc";
-    rd.textContent = "Jump straight back into a project you had open.";
+    rd.textContent = COPY.project.recentDesc;
     body.appendChild(rd);
 
     const list = document.createElement("div");
@@ -1229,18 +1198,18 @@ async function renderProjects(body) {
   body.appendChild(csep);
   const clabel = document.createElement("div");
   clabel.className = "sess-label";
-  clabel.textContent = "Create or switch project";
+  clabel.textContent = COPY.project.createSwitch;
   body.appendChild(clabel);
 
   const btnRow = document.createElement("div");
   btnRow.className = "projbtns";
   const createBtn = document.createElement("button");
   createBtn.className = "panelbtn primary";
-  createBtn.textContent = "Create new";
+  createBtn.textContent = COPY.project.createNew;
   createBtn.addEventListener("click", createNewProject);
   const switchBtn = document.createElement("button");
   switchBtn.className = "panelbtn";
-  switchBtn.textContent = "Switch project…";
+  switchBtn.textContent = COPY.project.switchExisting;
   switchBtn.addEventListener("click", switchToExisting);
   btnRow.append(createBtn, switchBtn);
   body.appendChild(btnRow);
@@ -1250,7 +1219,7 @@ async function renderProjects(body) {
 // incoming project. Returns true on success. Shared by all three entry points.
 async function enterProjectFromResult(res) {
   if (!res || res.canceled) return false;
-  if (!res.ok) { addMsg("error", res.error || "Could not open the project."); return false; }
+  if (!res.ok) { addMsg("error", res.error || COPY.project.couldNotOpen); return false; }
   sessionId = null;
   conversationStarted = false;
   resetChatUi();   // clears chat log + gauge + any live intake
@@ -1284,16 +1253,16 @@ async function renderCompany(body) {
   row.className = "setrow";
   const k = document.createElement("div");
   k.className = "k";
-  k.textContent = "Default company profile";
+  k.textContent = COPY.company.defaultTitle;
   const badge = document.createElement("span");
   badge.className = "badge " + (def.has ? "ok" : "off");
-  badge.textContent = def.has ? (def.companyName ? `Active · ${def.companyName}` : "Active") : "Not set";
+  badge.textContent = def.has ? (def.companyName ? COPY.company.activeWith(def.companyName) : COPY.common.active) : COPY.common.notSet;
   row.append(k, badge);
   body.appendChild(row);
 
   const defNote = document.createElement("div");
   defNote.className = "muted";
-  defNote.textContent = "Applied automatically to every new project. Set your agency identity once and skip it on every future setup.";
+  defNote.textContent = COPY.company.defaultNote;
   body.appendChild(defNote);
 
   const proj = await window.desktop.getProjectStatus();
@@ -1301,21 +1270,21 @@ async function renderCompany(body) {
   if (proj.hasProject) {
     const saveBtn = document.createElement("button");
     saveBtn.className = "panelbtn primary";
-    saveBtn.textContent = "Save this project's identity as my default";
+    saveBtn.textContent = COPY.company.saveDefault;
     const msg = document.createElement("div");
     msg.className = "muted";
     saveBtn.addEventListener("click", async () => {
       saveBtn.disabled = true;
-      saveBtn.textContent = "Saving…";
+      saveBtn.textContent = COPY.common.saving;
       msg.textContent = "";
       const res = await window.desktop.saveDefaultCompany();
       if (res.ok) {
         openModal("company"); // refresh → Active
       } else {
-        msg.textContent = res.error || "Could not save.";
+        msg.textContent = res.error || COPY.common.couldNotSave;
         msg.style.color = "#e5484d";
         saveBtn.disabled = false;
-        saveBtn.textContent = "Save this project's identity as my default";
+        saveBtn.textContent = COPY.company.saveDefault;
       }
     });
     body.append(saveBtn, msg);
@@ -1323,7 +1292,7 @@ async function renderCompany(body) {
   if (def.has) {
     const clearBtn = document.createElement("button");
     clearBtn.className = "panelbtn danger";
-    clearBtn.textContent = "Clear default";
+    clearBtn.textContent = COPY.company.clearDefault;
     clearBtn.addEventListener("click", async () => {
       await window.desktop.clearDefaultCompany();
       openModal("company");
@@ -1339,25 +1308,25 @@ async function renderCompany(body) {
   if (!proj.hasProject) {
     const note = document.createElement("div");
     note.className = "muted";
-    note.textContent = "Open a project to export its company profile to a file.";
+    note.textContent = COPY.company.exportNeedsProject;
     body.appendChild(note);
     return;
   }
   const intro = document.createElement("p");
   intro.className = "muted";
   intro.style.margin = "0 0 12px";
-  intro.textContent = "Export this project's agency identity as a portable file (to move between machines or share).";
+  intro.textContent = COPY.company.exportIntro;
   body.appendChild(intro);
   const exportBtn = document.createElement("button");
   exportBtn.className = "panelbtn";
-  exportBtn.textContent = "⬇ Export company profile to a file";
+  exportBtn.textContent = COPY.company.exportBtn;
   exportBtn.disabled = !proj.companyProfile;
   exportBtn.addEventListener("click", () => exportCompany(exportBtn));
   body.appendChild(exportBtn);
   if (!proj.companyProfile) {
     const note = document.createElement("div");
     note.className = "muted";
-    note.textContent = "No company-profile.json yet. Run /export-company in the chat to create one first.";
+    note.textContent = COPY.company.noProfileYet;
     body.appendChild(note);
   }
 }
@@ -1367,7 +1336,7 @@ async function renderFigma(body) {
   const lic = await window.desktop.getLicenseStatus();
   railFigma.classList.toggle("activated", !!lic.hasLicense); // color the icon on save/clear
 
-  body.appendChild(connStatusRow("Figma export license", lic.hasLicense, lic.hasLicense ? "Active" : "Not set", "Remove license",
+  body.appendChild(connStatusRow(COPY.figma.licenseLabel, lic.hasLicense, lic.hasLicense ? COPY.common.active : COPY.common.notSet, COPY.figma.removeLicense,
     async () => { await window.desktop.clearLicense(); openModal("figma"); }));
 
   if (lic.hasLicense) {
@@ -1376,26 +1345,26 @@ async function renderFigma(body) {
     const input = document.createElement("input");
     input.className = "field";
     input.type = "password";
-    input.placeholder = "Paste your license key";
+    input.placeholder = COPY.figma.pasteKey;
     const saveBtn = document.createElement("button");
     saveBtn.className = "panelbtn primary";
-    saveBtn.textContent = "Save license";
+    saveBtn.textContent = COPY.figma.saveLicense;
     const msg = document.createElement("div");
     msg.className = "muted";
     const doSave = async () => {
       const key = input.value.trim();
       if (!key) return;
       saveBtn.disabled = true;
-      saveBtn.textContent = "Validating…";
+      saveBtn.textContent = COPY.figma.validating;
       msg.textContent = "";
       const res = await window.desktop.saveLicense(key);
       if (res.ok) {
         openModal("figma"); // refresh → shows Active
       } else {
-        msg.textContent = res.error || "Could not save the license.";
+        msg.textContent = res.error || COPY.figma.couldNotSave;
         msg.style.color = "#e5484d";
         saveBtn.disabled = false;
-        saveBtn.textContent = "Save license";
+        saveBtn.textContent = COPY.figma.saveLicense;
       }
     };
     saveBtn.addEventListener("click", doSave);
@@ -1405,7 +1374,7 @@ async function renderFigma(body) {
 
   const note = document.createElement("div");
   note.className = "muted";
-  note.textContent = "Unlocks Figma export. Validated with the derive service; stored encrypted in your OS keychain.";
+  note.textContent = COPY.figma.note;
   body.appendChild(note);
 }
 
@@ -1415,10 +1384,10 @@ function copyBtn(getText) {
   const b = document.createElement("button");
   b.className = "panelbtn";
   b.style.cssText = "padding:2px 10px;font-size:12px;flex:0 0 auto;";
-  b.textContent = "Copy";
+  b.textContent = COPY.common.copy;
   b.addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText(getText()); b.textContent = "Copied ✓"; setTimeout(() => (b.textContent = "Copy"), 1400); }
-    catch { b.textContent = "Copy failed"; }
+    try { await navigator.clipboard.writeText(getText()); b.textContent = COPY.common.copied; setTimeout(() => (b.textContent = COPY.common.copy), 1400); }
+    catch { b.textContent = COPY.common.copyFailed; }
   });
   return b;
 }
@@ -1481,7 +1450,7 @@ function paintPublishResult(host, res) {
       const pwLabel = document.createElement("div");
       pwLabel.className = "muted";
       pwLabel.style.cssText = "font-size:12px;margin-bottom:6px;";
-      pwLabel.textContent = "Preview password (share with your client)";
+      pwLabel.textContent = COPY.publish.previewPasswordLabel;
       const pwRow = document.createElement("div");
       pwRow.style.cssText = "display:flex;gap:8px;align-items:center;";
       const pw = document.createElement("code");
@@ -1496,7 +1465,7 @@ function paintPublishResult(host, res) {
     const err = document.createElement("div");
     err.className = "muted";
     err.style.cssText = "margin-top:10px;color:#e5484d;";
-    err.textContent = res.error || "Publish failed.";
+    err.textContent = res.error || COPY.publish.publishFailed;
     host.appendChild(err);
   }
 }
@@ -1523,7 +1492,7 @@ function reattachPublish(host, btn) {
   if (!ap || !ap.running) return false;
   ap.host = host; ap.btn = btn;
   btn.disabled = true;
-  btn.textContent = "Publishing…";
+  btn.textContent = COPY.publish.publishing;
   repaintPublish();
   return true;
 }
@@ -1535,7 +1504,7 @@ async function runPublishFlow(btn, host, opts) {
   const label = btn.textContent;
   const ap = activePublish = { opts: opts || {}, label, events: [], result: null, running: true, host, btn };
   btn.disabled = true;
-  btn.textContent = "Publishing…";
+  btn.textContent = COPY.publish.publishing;
   const unsub = window.desktop.onPublishProgress((evt) => { ap.events.push(evt); repaintPublish(); });
   repaintPublish();
   try {
@@ -1564,28 +1533,7 @@ async function runPublishFlow(btn, host, opts) {
 }
 
 // --- Publish help: a tabbed, step-by-step walkthrough (assumes no Vercel account) ---
-const PUBHELP = {
-  start: {
-    intro: "Publishing puts your design online behind a password so you can share it with a client. It uses Vercel, a free hosting service. Connecting takes about a minute, once.",
-    steps: [
-      { h: "Have a free Vercel account", d: "If you do not have one yet, sign up at vercel.com. It is free for design previews, no credit card needed.", link: { label: "Open vercel.com/signup", url: "https://vercel.com/signup" } },
-      { h: "Click Connect with Vercel", d: "In the Publish panel, click Connect with Vercel. Your browser opens a Vercel page, there is no token to create, copy, or paste." },
-      { h: "Approve, and you are in", d: "Sign into your Vercel account if asked, approve the request, then return to the app. The panel shows you are connected.", note: "Nothing to configure. If you would rather use a token instead, there is an \"or paste an access token\" option under the button." },
-      { h: "You are ready to publish", d: "Switch to the How to publish tab for the rest." },
-    ],
-  },
-  how: {
-    intro: "Once Vercel is connected, publishing a design is a few clicks.",
-    steps: [
-      { h: "Open a finished design", d: "Open the project you want to share. The Publish button stays greyed out until a design is ready to show." },
-      { h: "Choose where it goes (optional)", d: "Under Deploy to, pick your personal account or a team. Under Preview domain, keep the default vercel.app address or put it on a subdomain of a domain you own.", note: "The domain choice is remembered per project; Deploy to is shared across projects." },
-      { h: "Click Publish this design", d: "The app creates the site, uploads your design, and Vercel builds it. This usually takes a minute or two, and you will see the progress." },
-      { h: "Copy your link and password", d: "You get a live link and a preview password, both shown in the panel with copy buttons.", note: "The password stays visible in the panel. Use Reset preview password to rotate it." },
-      { h: "Share with your client", d: "Send them the link and the password. The site stays locked until they enter it, so the link is safe to share." },
-      { h: "Update anytime", d: "Made changes? Click Publish changes to refresh the same link." },
-    ],
-  },
-};
+const PUBHELP = COPY.publish.help;
 const pubhelp = el("pubhelp");
 const pubhelpBody = el("pubhelp-body");
 const pubhelpTabs = Array.from(document.querySelectorAll(".pubhelp-tab"));
@@ -1669,15 +1617,15 @@ async function renderPublish(body) {
     helpBtn.className = "pubhelp-open";
     helpBtn.style.margin = "0"; // spacing comes from the separator above
     // Life-buoy icon — the same "help" mark used in the rail.
-    helpBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/><circle cx="12" cy="12" r="4"/></svg><span>Help with publishing</span>';
+    helpBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/><circle cx="12" cy="12" r="4"/></svg><span>' + COPY.publish.helpButton + '</span>';
     helpBtn.addEventListener("click", () => openPubHelp(st.connected ? "how" : "start"));
     foot.append(sep, helpBtn);
     col.appendChild(foot);
   };
 
   // ── Connection ──
-  const badgeText = st.connected ? (st.user ? `Connected · ${st.user}` : "Connected") : "Not connected";
-  body.appendChild(connStatusRow("Vercel", st.connected, badgeText, "Disconnect Vercel",
+  const badgeText = st.connected ? (st.user ? COPY.publish.connectedWith(st.user) : COPY.publish.connected) : COPY.publish.notConnected;
+  body.appendChild(connStatusRow(COPY.publish.vercelLabel, st.connected, badgeText, COPY.publish.disconnect,
     async () => { await window.desktop.clearVercel(); refreshRailActivation(); openModal("publish"); }));
 
   // ── Company info nudge — the shared preview's sign-in screen shows the agency's
@@ -1691,20 +1639,20 @@ async function renderPublish(body) {
     rule.style.cssText = "height: 2px; background: #c0261e; border-radius: 2px; margin-bottom: 12px;";
     const title = document.createElement("div");
     title.style.cssText = "font-size: 13px; font-weight: 600; color: #c0261e; margin-bottom: 5px;";
-    title.textContent = "Your Company Information";
+    title.textContent = COPY.publish.companyNudge.title;
     const desc = document.createElement("div");
     desc.className = "sess-desc";
     desc.style.marginTop = "0";
-    desc.textContent = "The private link you share opens on a sign-in screen branded with YOUR company name and logo, that's what your client sees first. It isn't set for this project yet. Add it so the preview looks like yours (you can still publish without it).";
+    desc.textContent = COPY.publish.companyNudge.desc;
     const btns = document.createElement("div");
     btns.className = "projbtns";
     const upload = document.createElement("button");
     upload.className = "panelbtn primary";
-    upload.textContent = "Upload a profile";
+    upload.textContent = COPY.publish.companyNudge.upload;
     upload.addEventListener("click", () => { closeModal(); sendText("/import-company"); });
     const setup = document.createElement("button");
     setup.className = "panelbtn";
-    setup.textContent = "Set up project";
+    setup.textContent = COPY.publish.companyNudge.setup;
     setup.addEventListener("click", () => { closeModal(); sendText("/setup-project"); });
     btns.append(upload, setup);
     wrap.append(rule, title, desc, btns);
@@ -1715,28 +1663,28 @@ async function renderPublish(body) {
     const intro = document.createElement("p");
     intro.className = "muted";
     intro.style.margin = "0 0 12px";
-    intro.textContent = "Publish your design straight to a private, password-gated URL you can send a client. Connect your Vercel account to start.";
+    intro.textContent = COPY.publish.connectIntro;
     body.appendChild(intro);
 
     // Primary: Sign in with Vercel (OAuth) — opens the browser, no token to copy.
     const connectBtn = document.createElement("button");
     connectBtn.className = "panelbtn primary";
-    connectBtn.textContent = "Connect with Vercel";
+    connectBtn.textContent = COPY.publish.connect;
     const connMsg = document.createElement("div");
     connMsg.className = "muted";
     connMsg.style.marginTop = "6px";
     connectBtn.addEventListener("click", async () => {
       connectBtn.disabled = true;
-      connectBtn.textContent = "Waiting for authorization…";
+      connectBtn.textContent = COPY.publish.waitingAuth;
       connMsg.style.color = "";
-      connMsg.textContent = "A Vercel page opened in your browser. Approve it there, then come back.";
+      connMsg.textContent = COPY.publish.browserOpened;
       const res = await window.desktop.connectVercel();
       if (res.ok) { refreshRailActivation(); openModal("publish"); }
       else {
-        connMsg.textContent = res.error || "Could not connect.";
+        connMsg.textContent = res.error || COPY.publish.couldNotConnect;
         connMsg.style.color = "#e5484d";
         connectBtn.disabled = false;
-        connectBtn.textContent = "Connect with Vercel";
+        connectBtn.textContent = COPY.publish.connect;
       }
     });
     body.append(connectBtn, connMsg);
@@ -1745,31 +1693,31 @@ async function renderPublish(body) {
     const orSep = document.createElement("div");
     orSep.className = "muted";
     orSep.style.cssText = "text-align:center;font-size:11.5px;margin:16px 0 8px;";
-    orSep.textContent = "or paste an access token";
+    orSep.textContent = COPY.publish.orToken;
     body.appendChild(orSep);
 
     const input = document.createElement("input");
     input.className = "field";
     input.type = "password";
-    input.placeholder = "Paste your Vercel token";
+    input.placeholder = COPY.publish.pasteToken;
     const saveBtn = document.createElement("button");
     saveBtn.className = "panelbtn";
-    saveBtn.textContent = "Save token";
+    saveBtn.textContent = COPY.publish.saveToken;
     const msg = document.createElement("div");
     msg.className = "muted";
     const doSave = async () => {
       const token = input.value.trim();
       if (!token) return;
       saveBtn.disabled = true;
-      saveBtn.textContent = "Connecting…";
+      saveBtn.textContent = COPY.publish.connecting;
       msg.textContent = "";
       const res = await window.desktop.saveVercelToken(token);
       if (res.ok) { refreshRailActivation(); openModal("publish"); }
       else {
-        msg.textContent = res.error || "Could not connect.";
+        msg.textContent = res.error || COPY.publish.couldNotConnect;
         msg.style.color = "#e5484d";
         saveBtn.disabled = false;
-        saveBtn.textContent = "Save token";
+        saveBtn.textContent = COPY.publish.saveToken;
       }
     };
     saveBtn.addEventListener("click", doSave);
@@ -1778,13 +1726,13 @@ async function renderPublish(body) {
 
     const tokenLink = document.createElement("button");
     tokenLink.className = "panelbtn";
-    tokenLink.textContent = "Create a token on Vercel ↗";
+    tokenLink.textContent = COPY.publish.createToken;
     tokenLink.addEventListener("click", () => window.desktop.openExternal("https://vercel.com/account/tokens"));
     body.appendChild(tokenLink);
 
     const note = document.createElement("div");
     note.className = "muted";
-    note.textContent = "Stored encrypted in your OS keychain. Only used to deploy your design.";
+    note.textContent = COPY.publish.tokenNote;
     body.appendChild(note);
     addHelp();
     return;
@@ -1807,12 +1755,12 @@ async function renderPublish(body) {
     scopeRow.className = "setrow";
     const sk = document.createElement("div");
     sk.className = "k";
-    sk.textContent = "Deploy to";
+    sk.textContent = COPY.publish.deployTo;
     const sel = document.createElement("select");
     sel.className = "field";
     const personal = document.createElement("option");
     personal.value = "";
-    personal.textContent = "Personal account";
+    personal.textContent = COPY.publish.personalAccount;
     sel.appendChild(personal);
     teams.forEach((t) => {
       const o = document.createElement("option");
@@ -1835,7 +1783,7 @@ async function renderPublish(body) {
   if (!pub.hasProject) {
     const note = document.createElement("div");
     note.className = "muted";
-    note.textContent = "Open a project to publish it.";
+    note.textContent = COPY.publish.needsProject;
     body.appendChild(note);
   } else {
     // Existing live URL (if already published).
@@ -1855,7 +1803,7 @@ async function renderPublish(body) {
         pwRow.style.cssText = "display:flex;gap:8px;align-items:center;min-height:38px;margin-bottom:4px;";
         const lab = document.createElement("span");
         lab.className = "muted"; lab.style.cssText = "font-size:12px;flex:0 0 auto;";
-        lab.textContent = "Password:";
+        lab.textContent = COPY.publish.passwordLabel;
         const pw = document.createElement("code");
         pw.textContent = pub.gatePassword;
         pw.style.cssText = "flex:1;font-size:13px;letter-spacing:.5px;word-break:break-all;";
@@ -1867,8 +1815,8 @@ async function renderPublish(body) {
       lead.className = "muted";
       lead.style.margin = "0 0 12px";
       lead.textContent = pub.canPublish
-        ? "Publish this design to a private URL. The first publish sets a preview password you share with your client."
-        : "Finish a design first — then you can publish it here.";
+        ? COPY.publish.publishLead
+        : COPY.publish.finishFirst;
       body.appendChild(lead);
     }
 
@@ -1877,7 +1825,7 @@ async function renderPublish(body) {
     domSec.style.cssText = "margin: 2px 0 4px;";
     const domLabel = document.createElement("div");
     domLabel.className = "k";
-    domLabel.textContent = "Preview domain";
+    domLabel.textContent = COPY.publish.domainLabel;
     const domBody = document.createElement("div"); // filled once Vercel responds
     domSec.append(domLabel, domBody);
     body.appendChild(domSec);
@@ -1905,7 +1853,7 @@ async function renderPublish(body) {
         const domSel = document.createElement("select");
         domSel.className = "field";
         const optDefault = document.createElement("option");
-        optDefault.value = ""; optDefault.textContent = "Vercel subdomain (default)";
+        optDefault.value = ""; optDefault.textContent = COPY.publish.domainDefault;
         domSel.appendChild(optDefault);
         (domains || []).forEach((d) => { const o = document.createElement("option"); o.value = d.name; o.textContent = d.name; domSel.appendChild(o); });
         domSel.value = curBase;
@@ -1913,7 +1861,7 @@ async function renderPublish(body) {
         const subWrap = document.createElement("div");
         subWrap.style.cssText = "display:flex;align-items:center;gap:6px;margin-top:6px;";
         const subInput = document.createElement("input");
-        subInput.className = "field"; subInput.placeholder = "subdomain"; subInput.style.cssText = "flex:0 1 140px;";
+        subInput.className = "field"; subInput.placeholder = COPY.publish.subdomain; subInput.style.cssText = "flex:0 1 140px;";
         subInput.value = curLabel || (curBase ? baseSlug : "");
         const domPreview = document.createElement("span");
         domPreview.className = "muted"; domPreview.style.cssText = "font-size:12px;word-break:break-all;";
@@ -1940,11 +1888,11 @@ async function renderPublish(body) {
         domBody.append(domSel, subWrap);
         updateDomPreview();
         domNote.textContent = (domains && domains.length)
-          ? "A subdomain of a domain you own on Vercel. Applied on the next publish."
-          : "No domains on your Vercel account yet. Add one in Vercel and it'll appear here.";
+          ? COPY.publish.ownedDomainNote
+          : COPY.publish.noDomainsNote;
       }).catch(() => {
         domBody.innerHTML = "";
-        domNote.textContent = "Couldn't load your Vercel domains — check your connection.";
+        domNote.textContent = COPY.publish.domainsError;
       });
     };
     refreshDomains();
@@ -1954,7 +1902,7 @@ async function renderPublish(body) {
 
     const publishBtn = document.createElement("button");
     publishBtn.className = "panelbtn primary";
-    publishBtn.textContent = pub.url ? "Publish changes" : "Publish this design";
+    publishBtn.textContent = pub.url ? COPY.publish.publishChanges : COPY.publish.publishDesign;
     publishBtn.disabled = !pub.canPublish;
     publishBtn.addEventListener("click", () => runPublishFlow(publishBtn, host, { resetPassword: false }));
     body.appendChild(publishBtn);
@@ -1963,8 +1911,8 @@ async function renderPublish(body) {
     if (pub.url) {
       resetBtn = document.createElement("button");
       resetBtn.className = "panelbtn";
-      resetBtn.textContent = "Reset preview password";
-      resetBtn.title = "Generate a new client password and republish";
+      resetBtn.textContent = COPY.publish.resetPassword;
+      resetBtn.title = COPY.publish.resetPasswordTitle;
       resetBtn.addEventListener("click", () => runPublishFlow(resetBtn, host, { resetPassword: true }));
       body.appendChild(resetBtn);
     }
@@ -1980,7 +1928,7 @@ async function renderPublish(body) {
       const last = document.createElement("div");
       last.className = "muted";
       last.style.marginTop = "8px";
-      try { last.textContent = "Last published " + new Date(pub.lastDeployAt).toLocaleString(); } catch { last.textContent = ""; }
+      try { last.textContent = COPY.publish.lastPublishedPrefix + new Date(pub.lastDeployAt).toLocaleString(); } catch { last.textContent = ""; }
       body.appendChild(last);
     }
   }
@@ -1989,8 +1937,8 @@ async function renderPublish(body) {
 }
 
 // --- Copy voice: per-project tone + rules, plus global rules ---
-const TONE_EXAMPLES = ["Soft, professional, not pushy", "Confident and direct", "Warm and conversational", "Understated, editorial", "Playful and energetic"];
-const RULE_EXAMPLES = ["No em dashes", "Short, clear sentences", "Active voice", "No exclamation points", "Avoid jargon", "Sentence case headings"];
+const TONE_EXAMPLES = COPY.voice.toneExamples;
+const RULE_EXAMPLES = COPY.voice.ruleExamples;
 
 // A row of clickable "+ example" chips; onPick(text) adds/sets it.
 function exampleChips(examples, onPick) {
@@ -2014,7 +1962,7 @@ function ruleListEl(arr, opts = {}) {
     rows.innerHTML = "";
     if (!arr.length) {
       const e = document.createElement("div"); e.className = "muted rule-empty";
-      e.textContent = opts.emptyText || "None yet."; rows.appendChild(e);
+      e.textContent = opts.emptyText || COPY.ruleList.emptyDefault; rows.appendChild(e);
     }
     arr.forEach((r, i) => {
       const row = document.createElement("div"); row.className = "rulerow";
@@ -2034,9 +1982,9 @@ function ruleListEl(arr, opts = {}) {
   };
   if (!opts.disabled) {
     const addRow = document.createElement("div"); addRow.className = "rule-add";
-    const inp = document.createElement("input"); inp.className = "field"; inp.placeholder = opts.placeholder || "Add a rule…";
+    const inp = document.createElement("input"); inp.className = "field"; inp.placeholder = opts.placeholder || COPY.ruleList.addPlaceholder;
     inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { add(inp.value); inp.value = ""; } });
-    const btn = document.createElement("button"); btn.className = "panelbtn"; btn.type = "button"; btn.textContent = "Add";
+    const btn = document.createElement("button"); btn.className = "panelbtn"; btn.type = "button"; btn.textContent = COPY.ruleList.add;
     btn.addEventListener("click", () => { add(inp.value); inp.value = ""; });
     addRow.append(inp, btn); box.appendChild(addRow);
     box.appendChild(exampleChips(opts.examples || [], add));
@@ -2063,30 +2011,30 @@ async function renderVoice(body) {
 
   const intro = document.createElement("p");
   intro.className = "muted"; intro.style.margin = "-8px 0 6px"; // tighten the space above by ~50%
-  intro.textContent = "Shape the words the AI writes into this design's copy. Nothing is set by default.";
+  intro.textContent = COPY.voice.intro;
   body.appendChild(intro);
 
   // ── This project ──
-  body.appendChild(voiceHeader("This project"));
-  const toneLabel = document.createElement("div"); toneLabel.className = "voice-label"; toneLabel.textContent = "Tone";
+  body.appendChild(voiceHeader(COPY.voice.thisProject));
+  const toneLabel = document.createElement("div"); toneLabel.className = "voice-label"; toneLabel.textContent = COPY.voice.tone;
   body.appendChild(toneLabel);
   const toneInput = document.createElement("input");
-  toneInput.className = "field"; toneInput.placeholder = "e.g. soft, professional, not pushy"; toneInput.value = state.tone;
+  toneInput.className = "field"; toneInput.placeholder = COPY.voice.tonePlaceholder; toneInput.value = state.tone;
   toneInput.addEventListener("input", () => { state.tone = toneInput.value; });
   body.appendChild(toneInput);
   body.appendChild(exampleChips(TONE_EXAMPLES, (ex) => { state.tone = ex; toneInput.value = ex; }));
 
-  const prLabel = document.createElement("div"); prLabel.className = "voice-label"; prLabel.textContent = "Rules for this project";
+  const prLabel = document.createElement("div"); prLabel.className = "voice-label"; prLabel.textContent = COPY.voice.projectRulesLabel;
   body.appendChild(prLabel);
-  body.appendChild(ruleListEl(state.projRules, { examples: RULE_EXAMPLES, placeholder: "Add a project rule…", emptyText: "No project-specific rules." }));
+  body.appendChild(ruleListEl(state.projRules, { examples: RULE_EXAMPLES, placeholder: COPY.voice.projectRulePlaceholder, emptyText: COPY.voice.projectRulesEmpty }));
 
   // ── Global rules ── (divider to set it apart from the project grouping)
   const divider = document.createElement("div"); divider.className = "voice-divider";
   body.appendChild(divider);
-  body.appendChild(voiceHeader("Global rules", "Apply to every project."));
+  body.appendChild(voiceHeader(COPY.voice.globalRules, COPY.voice.globalRulesSub));
   const toggle = document.createElement("label"); toggle.className = "voice-toggle";
   const chk = document.createElement("input"); chk.type = "checkbox"; chk.checked = state.decline;
-  const tTxt = document.createElement("span"); tTxt.textContent = "Ignore global rules for this project";
+  const tTxt = document.createElement("span"); tTxt.textContent = COPY.voice.ignoreGlobal;
   toggle.append(chk, tTxt); body.appendChild(toggle);
 
   // Re-render the global list when Decline flips (read-only + struck when declined).
@@ -2094,8 +2042,8 @@ async function renderVoice(body) {
   const renderGlobal = () => {
     globalWrap.innerHTML = "";
     globalWrap.appendChild(ruleListEl(state.globalRules, {
-      examples: RULE_EXAMPLES, placeholder: "Add a global rule…",
-      emptyText: "No global rules yet.", disabled: state.decline,
+      examples: RULE_EXAMPLES, placeholder: COPY.voice.globalRulePlaceholder,
+      emptyText: COPY.voice.globalRulesEmpty, disabled: state.decline,
     }));
   };
   chk.addEventListener("change", () => { state.decline = chk.checked; renderGlobal(); });
@@ -2103,15 +2051,15 @@ async function renderVoice(body) {
   body.appendChild(globalWrap);
 
   // ── Save (both project + global) ──
-  const save = document.createElement("button"); save.className = "panelbtn primary"; save.textContent = "Save";
+  const save = document.createElement("button"); save.className = "panelbtn primary"; save.textContent = COPY.voice.save;
   save.style.marginTop = "16px";
   const msg = document.createElement("div"); msg.className = "muted"; msg.style.marginTop = "8px";
   save.addEventListener("click", async () => {
-    save.disabled = true; save.textContent = "Saving…";
+    save.disabled = true; save.textContent = COPY.common.saving;
     await window.desktop.saveProjectVoice({ tone: state.tone, rules: state.projRules, declineGlobal: state.decline });
     await window.desktop.saveGlobalRules(state.globalRules);
-    save.disabled = false; save.textContent = "Save";
-    msg.textContent = "Saved, applies to your next message.";
+    save.disabled = false; save.textContent = COPY.voice.save;
+    msg.textContent = COPY.voice.saved;
   });
   body.appendChild(save);
   body.appendChild(msg);
@@ -2125,7 +2073,7 @@ const TRASH_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 function triSelect(value) {
   const sel = document.createElement("select");
   sel.className = "field";
-  [["", "Inherit default"], ["on", "On"], ["off", "Off"]].forEach(([v, t]) => {
+  [["", COPY.tri.inherit], ["on", COPY.tri.on], ["off", COPY.tri.off]].forEach(([v, t]) => {
     const o = document.createElement("option");
     o.value = v;
     o.textContent = t;
@@ -2144,20 +2092,20 @@ function relTime(iso) {
     (new Date(now.getFullYear(), now.getMonth(), now.getDate()) -
       new Date(then.getFullYear(), then.getMonth(), then.getDate())) / 86400000
   );
-  if (days === 0) return "Today " + time;
-  if (days === 1) return "Yesterday " + time;
+  if (days === 0) return COPY.time.todayPrefix + time;
+  if (days === 1) return COPY.time.yesterdayPrefix + time;
   if (days < 7) return then.toLocaleDateString([], { weekday: "short" }) + " " + time;
   return then.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
 async function renderClaude(body) {
   const status = await window.desktop.getKeyStatus();
-  body.appendChild(connStatusRow("Claude API key", status.hasKey, status.hasKey ? "Connected" : "Not connected", "Disconnect", disconnectKey));
+  body.appendChild(connStatusRow(COPY.claude.keyLabel, status.hasKey, status.hasKey ? COPY.claude.connected : COPY.claude.notConnected, COPY.claude.disconnect, disconnectKey));
 
   if (!status.hasKey) {
     const note = document.createElement("div");
     note.className = "muted";
-    note.textContent = "Close this and paste your key on the connect screen.";
+    note.textContent = COPY.claude.pasteKeyNote;
     body.appendChild(note);
     return;
   }
@@ -2169,11 +2117,11 @@ async function renderClaude(body) {
   modelRow.className = "setrow";
   const mk = document.createElement("div");
   mk.className = "k";
-  mk.textContent = "Model";
+  mk.textContent = COPY.claude.model;
   const select = document.createElement("select");
   select.className = "field";
   const loadingOpt = document.createElement("option");
-  loadingOpt.textContent = "Loading models…";
+  loadingOpt.textContent = COPY.claude.loadingModels;
   select.appendChild(loadingOpt);
   modelRow.append(mk, select);
   body.appendChild(modelRow);
@@ -2185,7 +2133,7 @@ async function renderClaude(body) {
   select.innerHTML = "";
   const def = document.createElement("option");
   def.value = "";
-  def.textContent = "Default (Claude Code picks)";
+  def.textContent = COPY.claude.modelDefault;
   select.appendChild(def);
   if (res.ok) {
     res.models.forEach((m) => {
@@ -2197,20 +2145,20 @@ async function renderClaude(body) {
   } else {
     const o = document.createElement("option");
     o.disabled = true;
-    o.textContent = res.error || "Couldn't load models";
+    o.textContent = res.error || COPY.claude.couldNotLoadModels;
     select.appendChild(o);
   }
   select.value = current || "";
   select.addEventListener("change", async () => {
     await window.desktop.setModel(select.value || null);
     const label = select.options[select.selectedIndex].textContent;
-    addMsg("system", select.value ? `✓ Model set to ${label}` : "✓ Model set to default");
+    addMsg("system", select.value ? COPY.claude.modelSetTo(label) : COPY.claude.modelSetDefault);
   });
 
   // Disconnect lives in the status header (top-right unplug), matching Vercel/Figma.
   const keyNote = document.createElement("div");
   keyNote.className = "muted";
-  keyNote.textContent = "Key stored encrypted in your OS keychain.";
+  keyNote.textContent = COPY.claude.keyNote;
   body.appendChild(keyNote);
 
   // ── Images ──────────────────────────────────────────────────────────────────
@@ -2219,11 +2167,11 @@ async function renderClaude(body) {
   body.appendChild(imgSep);
   const imgLabel = document.createElement("div");
   imgLabel.className = "sess-label";
-  imgLabel.textContent = "Images";
+  imgLabel.textContent = COPY.claude.imagesLabel;
   body.appendChild(imgLabel);
   const imgDesc = document.createElement("div");
   imgDesc.className = "sess-desc";
-  imgDesc.textContent = "By default the design sources real images. Turn this on to skip that and hold every image spot with a marked placeholder instead, so you can drop in your own.";
+  imgDesc.textContent = COPY.claude.imagesDesc;
   body.appendChild(imgDesc);
 
   const imgMode = await window.desktop.getImagesMode();
@@ -2233,11 +2181,11 @@ async function renderClaude(body) {
   imgCb.type = "checkbox";
   imgCb.checked = !!imgMode.placeholder;
   const imgTxt = document.createElement("span");
-  imgTxt.textContent = "No images, placeholders only";
+  imgTxt.textContent = COPY.claude.imagesToggle;
   imgRow.append(imgCb, imgTxt);
   imgCb.addEventListener("change", () => {
     window.desktop.setImagesMode(imgCb.checked);
-    addMsg("system", imgCb.checked ? "✓ Placeholders only, I won't source images." : "✓ Image sourcing back on.");
+    addMsg("system", imgCb.checked ? COPY.claude.imagesOnPlaceholders : COPY.claude.imagesOnSourcing);
   });
   body.appendChild(imgRow);
 
@@ -2249,11 +2197,11 @@ async function renderClaude(body) {
     body.appendChild(rsep);
     const rlabel = document.createElement("div");
     rlabel.className = "sess-label";
-    rlabel.textContent = "Research the field";
+    rlabel.textContent = COPY.claude.researchLabel;
     body.appendChild(rlabel);
     const rlead = document.createElement("div");
     rlead.className = "sess-desc";
-    rlead.textContent = "Studies a few comparable sites to ground the layout, colors, and flow, so the first design and later changes take a little longer when this is on.";
+    rlead.textContent = COPY.claude.researchDesc;
     body.appendChild(rlead);
 
     const gRow = document.createElement("label");
@@ -2262,7 +2210,7 @@ async function renderClaude(body) {
     gCb.type = "checkbox";
     gCb.checked = research.global;
     const gTxt = document.createElement("span");
-    gTxt.textContent = "On by default (all projects)";
+    gTxt.textContent = COPY.claude.researchGlobal;
     gRow.append(gCb, gTxt);
     body.appendChild(gRow);
 
@@ -2275,7 +2223,7 @@ async function renderClaude(body) {
     bgCb.checked = research.broadGlobal;
     bgCb.disabled = !research.global;
     const bgTxt = document.createElement("span");
-    bgTxt.textContent = "Also look beyond competitors for style & regional references";
+    bgTxt.textContent = COPY.claude.researchBroad;
     bgRow.append(bgCb, bgTxt);
     body.appendChild(bgRow);
 
@@ -2289,7 +2237,7 @@ async function renderClaude(body) {
       pRow.className = "setrow";
       const pk = document.createElement("div");
       pk.className = "k";
-      pk.textContent = `Research for this design (${research.variationId})`;
+      pk.textContent = COPY.claude.researchForDesign(research.variationId);
       const pSel = triSelect(research.variation);
       pRow.append(pk, pSel);
       body.appendChild(pRow);
@@ -2298,7 +2246,7 @@ async function renderClaude(body) {
       bpRow.className = "setrow";
       const bpk = document.createElement("div");
       bpk.className = "k";
-      bpk.textContent = "Broad references for this design";
+      bpk.textContent = COPY.claude.researchBroadForDesign;
       const bpSel = triSelect(research.broadVariation);
       bpSel.disabled = !(research.variation === null ? research.global : research.variation);
       bpRow.append(bpk, bpSel);
@@ -2321,12 +2269,12 @@ async function renderClaude(body) {
 
   const sh = document.createElement("div");
   sh.className = "sess-label";
-  sh.textContent = "Sessions";
+  sh.textContent = COPY.claude.sessionsLabel;
   body.appendChild(sh);
 
   const sdesc = document.createElement("div");
   sdesc.className = "sess-desc";
-  sdesc.textContent = "Saved chats for this project. They appear here when you start a new session or leave the project.";
+  sdesc.textContent = COPY.claude.sessionsDesc;
   body.appendChild(sdesc);
 
   // Auto-restore the most recent session when a project opens (global preference).
@@ -2336,7 +2284,7 @@ async function renderClaude(body) {
   autoCb.type = "checkbox";
   autoCb.checked = localStorage.getItem(AUTO_RESTORE_KEY) === "1";
   const autoTxt = document.createElement("span");
-  autoTxt.textContent = "Auto-restore last session when a project opens";
+  autoTxt.textContent = COPY.claude.autoRestore;
   autoRow.append(autoCb, autoTxt);
   autoCb.addEventListener("change", () => localStorage.setItem(AUTO_RESTORE_KEY, autoCb.checked ? "1" : "0"));
   body.appendChild(autoRow);
@@ -2347,19 +2295,19 @@ async function renderClaude(body) {
   actions.className = "sess-actions";
   const newBtn = document.createElement("button");
   newBtn.className = "sess-new";
-  newBtn.textContent = "+ New";
-  newBtn.title = "Start a new session (saves the current one here)";
+  newBtn.textContent = COPY.claude.newSession;
+  newBtn.title = COPY.claude.newSessionTitle;
   newBtn.addEventListener("click", async () => { closeModal(); await clearSession(); });
   const delAllBtn = document.createElement("button");
   delAllBtn.className = "sess-delall";
-  delAllBtn.title = "Delete all saved sessions";
+  delAllBtn.title = COPY.claude.deleteAllTitle;
   delAllBtn.innerHTML = TRASH_SVG;
   delAllBtn.disabled = !sessions.length;
   delAllBtn.addEventListener("click", () => showConfirm({
-    title: "Delete all saved sessions?",
-    okLabel: "Delete all",
+    title: COPY.claude.deleteAllConfirmTitle,
+    okLabel: COPY.claude.deleteAllOk,
     danger: true,
-    message: "This permanently removes every saved session for this project from the Claude panel. Your project files and design work are not affected.",
+    message: COPY.claude.deleteAllMessage,
     onOk: async () => { await window.desktop.deleteAllSessions(); openModal("claude"); },
   }));
   actions.append(newBtn, delAllBtn);
@@ -2374,10 +2322,10 @@ async function renderClaude(body) {
     row.className = "sessrow";
     const open = document.createElement("button");
     open.className = "sessrow-open";
-    open.title = "Reopen this session";
+    open.title = COPY.claude.reopenSession;
     const t = document.createElement("div");
     t.className = "sess-title";
-    t.textContent = s.title || "Untitled session";
+    t.textContent = s.title || COPY.claude.untitledSession;
     const d = document.createElement("div");
     d.className = "sess-date";
     d.textContent = relTime(s.createdAt);
@@ -2385,15 +2333,15 @@ async function renderClaude(body) {
     open.addEventListener("click", async () => { closeModal(); await openSession(s.id); });
     const del = document.createElement("button");
     del.className = "sessrow-del";
-    del.title = "Delete this session";
+    del.title = COPY.claude.deleteSessionTooltip;
     del.innerHTML = TRASH_SVG;
     del.addEventListener("click", (e) => {
       e.stopPropagation();
       showConfirm({
-        title: "Delete this session?",
-        okLabel: "Delete",
+        title: COPY.claude.deleteSessionTitle,
+        okLabel: COPY.claude.deleteSessionOk,
         danger: true,
-        message: `Permanently remove "${s.title || "Untitled session"}"? Your project files and design work are not affected.`,
+        message: COPY.claude.deleteSessionMessage(s.title || COPY.claude.untitledSession),
         onOk: async () => { await window.desktop.deleteSession(s.id); openModal("claude"); },
       });
     });
@@ -2404,7 +2352,7 @@ async function renderClaude(body) {
   const modelNote = document.createElement("div");
   modelNote.className = "muted";
   modelNote.style.marginTop = "14px";
-  modelNote.textContent = "Applies to your next message; switching keeps the conversation.";
+  modelNote.textContent = COPY.claude.modelNote;
   body.appendChild(modelNote);
 }
 
@@ -2416,7 +2364,7 @@ async function disconnectKey() {
 async function exportCompany(btn) {
   try {
     btn.disabled = true;
-    btn.textContent = "Saving…";
+    btn.textContent = COPY.common.saving;
     const res = await window.desktop.downloadCompany();
     if (!res.canceled) {
       if (res.ok) addMsg("system", `✓ Company profile saved to ${res.path}`);
@@ -2465,11 +2413,7 @@ function offsetTopWithin(child, parent) {
 // (and its shell command) is technical noise the designer shouldn't see, so we swap
 // it for a rotating action verb, a small "something's happening" cue that fades out
 // with the bubble. Any other tool keeps its normal name + input.
-const BASH_VERBS = [
-  "Working", "Cooking", "Crunching", "Tinkering", "Wrangling", "Assembling",
-  "Piecing things together", "Rustling something up", "Noodling on it", "Conjuring",
-  "Fiddling with the bits", "Making it happen",
-];
+const BASH_VERBS = COPY.chat.bashVerbs;
 function toolBubbleLabel(evt) {
   if (evt.name === "Bash") {
     return `⚙ ${BASH_VERBS[Math.floor(Math.random() * BASH_VERBS.length)]}…`;
@@ -2551,10 +2495,7 @@ function autoDismissTool(node, delay = 1100) {
 const DEFAULT_CONTEXT_WINDOW = 200000;
 const GAUGE_CIRCUMFERENCE = 81.68; // 2π·13, matches the SVG radius
 // Fire each nudge once per session as the context crosses these fractions.
-const SESSION_NUDGES = [
-  { at: 0.6, msg: "This conversation is getting long (~60% of the context window). If replies start to slow, type /clear to begin a fresh session. Your project files and design work are saved on disk and won't be lost." },
-  { at: 0.85, msg: "Heads up: this conversation is ~85% full. /clear starts a clean, faster session (your saved work stays intact)." },
-];
+const SESSION_NUDGES = COPY.chat.sessionNudges;
 let sessionTokens = 0;
 let sessionPct = 0;
 const nudgesFired = new Set();
@@ -2629,7 +2570,7 @@ async function clearSession() {
   if (old) { try { await window.desktop.archiveSession(old); } catch {} }
   sessionId = null;
   resetChatUi();
-  addMsg("system", "Started a fresh session. Your previous one is saved in the Claude panel (Sessions).");
+  addMsg("system", COPY.chat.startedFresh);
 }
 
 // Reopen a past session: replay its chat (Part B) and resume its model context
@@ -2646,7 +2587,7 @@ async function openSession(id) {
     if (m.role === "assistant") { const elx = addMsg("assistant", ""); renderMarkdownInto(elx, m.text); }
     else addMsg("user", m.text);
   }
-  addMsg("system", "Resumed this session. Pick up where you left off.");
+  addMsg("system", COPY.chat.resumedSession);
   log.scrollTop = log.scrollHeight;
 }
 
@@ -2680,14 +2621,9 @@ function closeConfirm() { confirmEl.hidden = true; confirmAction = null; }
 // Clicking the gauge offers to start a new session (which archives the current one).
 function openClearConfirm() {
   showConfirm({
-    title: "Start a new session?",
-    okLabel: "New session",
-    message:
-      "Starting a new session gives you a fresh, fast chat. Your current session is SAVED to the Claude " +
-      "panel's Sessions list (not lost), reopen it anytime to pick up where you left off. Project files and " +
-      "design work are unaffected.\n\n" +
-      `You're currently at about ${sessionTokens.toLocaleString()} tokens (${sessionPct}% of the context window). ` +
-      "It's a good time to start fresh when this climbs high (the ring turns amber, then red) or you're moving to a new task.",
+    title: COPY.chat.newConfirmTitle,
+    okLabel: COPY.chat.newConfirmOk,
+    message: COPY.chat.newConfirmMessage(sessionTokens.toLocaleString(), sessionPct),
     onOk: () => sendText("/clear"),
   });
 }
@@ -2904,7 +2840,7 @@ function renderQuestionCard(id, questions) {
     const refs = uploadRefs[qi];
     if (refs) {
       refs.uploadBtn.classList.add("selected");
-      refs.uploadNote.textContent = `✓ ${res.name} attached`;
+      refs.uploadNote.textContent = COPY.intake.attached(res.name);
     }
     maybeComplete();
   }
@@ -2923,14 +2859,14 @@ function renderQuestionCard(id, questions) {
     const refs = uploadRefs[qi];
     if (refs) {
       refs.uploadBtn.classList.add("selected");
-      refs.uploadNote.textContent = `✓ ${added} reference${added > 1 ? "s" : ""} added`;
+      refs.uploadNote.textContent = COPY.intake.referencesAdded(added);
     }
     maybeComplete();
   }
 
   const submitBtn = document.createElement("button");
   submitBtn.className = "qsubmit";
-  submitBtn.textContent = "Submit";
+  submitBtn.textContent = COPY.intake.submit;
   submitBtn.disabled = true;
 
   function valueFor(qi) {
@@ -2976,7 +2912,7 @@ function renderQuestionCard(id, questions) {
     block.className = "qblock";
     const hdr = document.createElement("span");
     hdr.className = "qheader";
-    hdr.textContent = q.header || "Question";
+    hdr.textContent = q.header || COPY.intake.questionFallback;
     const txt = document.createElement("div");
     txt.className = "qtext";
     txt.textContent = q.question;
@@ -2985,7 +2921,7 @@ function renderQuestionCard(id, questions) {
     const optButtons = [];
     const otherInput = document.createElement("input");
     otherInput.className = "qother-input";
-    otherInput.placeholder = "Type your own answer";
+    otherInput.placeholder = COPY.intake.otherPlaceholder;
     otherInput.hidden = true;
     otherInputs[qi] = otherInput;
 
@@ -2996,10 +2932,10 @@ function renderQuestionCard(id, questions) {
       uploadBtn.className = "qopt qupload";
       const ul = document.createElement("div");
       ul.className = "lbl";
-      ul.textContent = "📎 Upload references…";
+      ul.textContent = COPY.intake.uploadReferences;
       const ud = document.createElement("div");
       ud.className = "desc";
-      ud.textContent = "Click or drop images, PDFs, or brand guides — I'll read them and pull the palette + fonts";
+      ud.textContent = COPY.intake.uploadReferencesDesc;
       uploadBtn.append(ul, ud);
       const uploadNote = document.createElement("div");
       uploadNote.className = "qupload-note";
@@ -3007,15 +2943,15 @@ function renderQuestionCard(id, questions) {
       // pass to finish so the digest is complete before the agent reads it, then answer.
       async function ingestFromCard(resultPromise) {
         if (card.classList.contains("answered")) return;
-        uploadNote.textContent = "Reading your references…";
+        uploadNote.textContent = COPY.intake.readingReferences;
         try {
           const res = await resultPromise;
           if (res && res.canceled) { uploadNote.textContent = ""; return; }
-          if (!res || !res.ok) { uploadNote.textContent = (res && res.error) || "Could not add the references."; return; }
+          if (!res || !res.ok) { uploadNote.textContent = (res && res.error) || COPY.intake.couldNotAddReferences; return; }
           handleRefResult(res); // fold into the rail + a soft chat line (reuse)
-          if (!(res.added || []).length) { uploadNote.textContent = "Those were already added."; return; }
+          if (!(res.added || []).length) { uploadNote.textContent = COPY.intake.alreadyAdded; return; }
           if (res.analyzing) { // T2 vision still running → wait so the digest is whole
-            uploadNote.textContent = "Reading your references… distilling the style";
+            uploadNote.textContent = COPY.intake.readingReferencesDistilling;
             await waitForIngest();
           }
           applyReferences(res, qi);
@@ -3043,10 +2979,10 @@ function renderQuestionCard(id, questions) {
       uploadBtn.className = "qopt qupload";
       const ul = document.createElement("div");
       ul.className = "lbl";
-      ul.textContent = "📎 Upload a file…";
+      ul.textContent = COPY.intake.uploadFile;
       const ud = document.createElement("div");
       ud.className = "desc";
-      ud.textContent = "Choose or drag a file (e.g. company-profile.json)";
+      ud.textContent = COPY.intake.uploadFileDesc;
       uploadBtn.append(ul, ud);
       const uploadNote = document.createElement("div");
       uploadNote.className = "qupload-note";
@@ -3122,7 +3058,7 @@ function renderQuestionCard(id, questions) {
     otherBtn.className = "qopt";
     const olbl = document.createElement("div");
     olbl.className = "lbl";
-    olbl.textContent = "Other…";
+    olbl.textContent = COPY.intake.other;
     otherBtn.appendChild(olbl);
     otherBtn.addEventListener("click", () => {
       if (card.classList.contains("answered")) return;
@@ -3303,7 +3239,7 @@ function composeRail() {
     briefCard.className = "ibrief-card";
     const title = document.createElement("div");
     title.className = "ibrief-title";
-    title.textContent = "Your brief so far";
+    title.textContent = COPY.intake.briefTitle;
     briefCard.appendChild(title);
     for (const [key, val] of rows) {
       const row = document.createElement("div");
@@ -3339,28 +3275,28 @@ function buildReferencesPanel() {
 
   const title = document.createElement("div");
   title.className = "iref-title";
-  title.textContent = "Design references";
+  title.textContent = COPY.intake.referencesTitle;
   panel.appendChild(title);
 
   // Thin-line "?" in the corner → opens the "how references work" overlay.
   const info = document.createElement("button");
   info.type = "button";
   info.className = "iref-info";
-  info.title = "How design references work";
-  info.setAttribute("aria-label", "How design references work");
+  info.title = COPY.intake.referencesHelpTitle;
+  info.setAttribute("aria-label", COPY.intake.referencesHelpTitle);
   info.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>';
   info.addEventListener("click", (e) => { e.stopPropagation(); openReferencesHelp(); });
   panel.appendChild(info);
 
   const hint = document.createElement("div");
   hint.className = "iref-hint";
-  hint.textContent = "Optional. Drop images, PDFs, or brand guides you want me to follow.";
+  hint.textContent = COPY.intake.referencesHint;
   panel.appendChild(hint);
 
   const drop = document.createElement("button");
   drop.type = "button";
   drop.className = "iref-drop";
-  drop.innerHTML = '<span class="iref-plus">＋</span><span>Upload references</span>';
+  drop.innerHTML = '<span class="iref-plus">＋</span><span>' + COPY.intake.uploadReferencesShort + '</span>';
   drop.addEventListener("click", addReferencesViaPicker);
   ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => {
     e.preventDefault(); e.stopPropagation(); drop.classList.add("drag");
@@ -3374,7 +3310,7 @@ function buildReferencesPanel() {
   if (refsBusy || refsAnalyzing) {
     const reading = document.createElement("div");
     reading.className = "iref-reading";
-    reading.textContent = refsAnalyzing ? "Reading your references…" : "Adding your references…";
+    reading.textContent = refsAnalyzing ? COPY.intake.readingReferences : COPY.intake.addingReferences;
     panel.appendChild(reading);
   }
 
@@ -3392,7 +3328,7 @@ function buildReferencesPanel() {
     strip.className = "iref-palette";
     const lbl = document.createElement("span");
     lbl.className = "iref-palette-lbl";
-    lbl.textContent = "Palette";
+    lbl.textContent = COPY.intake.palette;
     strip.appendChild(lbl);
     for (const hex of palette) {
       const sw = document.createElement("span");
@@ -3444,7 +3380,7 @@ function buildReferenceChip(a) {
   rm.type = "button";
   rm.className = "iref-rm";
   rm.textContent = "✕";
-  rm.title = "Remove reference";
+  rm.title = COPY.intake.removeReference;
   rm.addEventListener("click", async (e) => {
     e.stopPropagation();
     try { handleRefResult(await window.desktop.removeReference(a.id)); }
@@ -3453,7 +3389,7 @@ function buildReferenceChip(a) {
 
   chip.append(thumb, name, rm);
   chip.style.cursor = "zoom-in";
-  chip.title = "Click to view";
+  chip.title = COPY.intake.clickToView;
   chip.addEventListener("click", () => openReferenceLightbox(a));
   return chip;
 }
@@ -3485,7 +3421,7 @@ function openReferenceLightbox(a) {
     const open = document.createElement("button");
     open.type = "button";
     open.className = "iref-lb-open";
-    open.textContent = "Open file";
+    open.textContent = COPY.intake.openFile;
     open.addEventListener("click", () => { if (a.abs) window.desktop.openExternal("file://" + encodeURI(a.abs)); });
     fig.appendChild(open);
   }
@@ -3513,35 +3449,7 @@ function openReferencesHelp() {
   const card = document.createElement("div");
   card.className = "iref-help-card";
   card.addEventListener("click", (e) => e.stopPropagation()); // clicks inside don't dismiss
-  card.innerHTML = `
-    <div class="iref-help-head">
-      <div class="iref-help-title">How design references work</div>
-      <button type="button" class="iref-help-x" aria-label="Close">✕</button>
-    </div>
-    <p>Upload anything you have already collected that captures the look you want: images, screenshots, moodboards, PDFs, brand or style guides. I read them once, up front, and distill them into a compact style direction that guides the design.</p>
-
-    <h4>What I pull out</h4>
-    <ul>
-      <li><b>Exact colors</b>, from images and from the pages of a PDF.</li>
-      <li><b>Type feel</b> and <b>layout patterns</b> (grid, spacing, density).</li>
-      <li><b>Imagery style</b> and overall mood.</li>
-      <li><b>Rules from brand docs</b>: voice, do's and don'ts, named colors and fonts.</li>
-    </ul>
-
-    <h4>What works best</h4>
-    <ul>
-      <li><b>Fewer, stronger</b> references beat many weak ones. A handful that truly represent the look is ideal.</li>
-      <li><b>Images:</b> clear and representative (JPG, PNG, WebP, and similar).</li>
-      <li><b>PDFs:</b> brand and style guides are perfect. Text PDFs and scanned or vector ones both work, I render the pages and read them. The first few pages carry the most weight, so lead with your strongest.</li>
-      <li><b>Color swatches:</b> if your guide shows swatches, I pick up those exact hex values.</li>
-      <li><b>File size:</b> smaller is faster. Very large PDFs (100MB and up) still work, they just take a little longer to read.</li>
-    </ul>
-
-    <h4>Private by design</h4>
-    <p>References are working material only. They are stored locally with your project, never committed, and never published to your shared preview. Because I read them once and keep just the distilled summary, they do not sit in the conversation or run up token cost.</p>
-
-    <div class="iref-help-note">Add or remove references at any time. Removing one updates the distilled direction automatically.</div>
-  `;
+  card.innerHTML = COPY.intake.referencesHelpHtml;
   card.querySelector(".iref-help-x").addEventListener("click", close);
 
   overlay.appendChild(card);
@@ -3606,7 +3514,7 @@ function renderIntakeGroup(id, cards) {
 
   const continueBtn = document.createElement("button");
   continueBtn.className = "intake-continue";
-  continueBtn.textContent = "Continue";
+  continueBtn.textContent = COPY.intake.continue;
   function refreshReady() { continueBtn.disabled = !controls.every((c) => c.isReady()); }
   refreshReady();
 
@@ -3665,7 +3573,7 @@ function intakeCenterTarget(scroller, elm) {
 function doneNote() {
   const d = document.createElement("div");
   d.className = "intake-done";
-  d.textContent = "✓ Got it";
+  d.textContent = COPY.intake.gotIt;
   return d;
 }
 
@@ -3740,16 +3648,16 @@ function renderReviewActions() {
 
   const q = document.createElement("div");
   q.className = "intake-review-q";
-  q.textContent = "That's a solid start. Ready to design, or want to add more context first?";
+  q.textContent = COPY.intake.reviewQuestion;
 
   const primary = document.createElement("button");
   primary.className = "intake-continue";
-  primary.textContent = "Looks good, start designing";
+  primary.textContent = COPY.intake.startDesigning;
   primary.addEventListener("click", startDesigning);
 
   const secondary = document.createElement("button");
   secondary.className = "ireview-secondary";
-  secondary.textContent = "Wait, let me add more context";
+  secondary.textContent = COPY.intake.addMoreContext;
 
   // Hidden "more context" input, revealed by the secondary button.
   const more = document.createElement("div");
@@ -3757,17 +3665,17 @@ function renderReviewActions() {
   more.hidden = true;
   const ta = document.createElement("textarea");
   ta.className = "icard-textarea";
-  ta.placeholder = "Anything else that matters: company or site name, the client, the audience, must-haves…";
+  ta.placeholder = COPY.intake.moreContextPlaceholder;
   const send = document.createElement("button");
   send.className = "intake-continue";
-  send.textContent = "Add this and continue";
+  send.textContent = COPY.intake.addAndContinue;
   send.addEventListener("click", async () => {
     const text = ta.value.trim();
     if (!text) { ta.focus(); return; }
     intakePhase = "gathering"; // the turn's result brings us back to review
     anim(wrap, [{ opacity: 1 }, { opacity: 0, transform: "translateY(-12px)" }], { duration: 320 });
     if (wrap.remove) setTimeout(() => wrap.remove(), 320);
-    showIntakePending("Thanks, folding that into your brief…");
+    showIntakePending(COPY.intake.foldingIntoBrief);
     // Update the brief rail in the pane (not just the chat), then let the agent see it too.
     try { await window.desktop.addBriefNote(text); } catch {}
     runAgent("A bit more context for the brief before we design: " + text);
@@ -3813,19 +3721,13 @@ function startDesigning() {
   else go();
 }
 
-const PREPARING_MESSAGES = [
-  "Please use the chat pane to make changes once your design is revealed.",
-  "Laying out your sections…",
-  "Bringing your colors and type together…",
-  "Assembling your first draft…",
-  "Your live preview opens here on its own once it's ready…",
-];
+const PREPARING_MESSAGES = COPY.preview.preparingMessages;
 function showPreparing() {
   resetIntake(); // leave the intake host; the preview placeholder takes the pane
   browser.hidden = true;
   previewph.hidden = false;
   phEmoji.textContent = "✨";
-  phTitle.textContent = "Getting your site design elements prepared";
+  phTitle.textContent = COPY.preview.preparingElements;
   phProgress.hidden = false;
   stopWorking(); // clear any stale rotation so ours (build-flavored) takes over
   startWorking(PREPARING_MESSAGES);
@@ -3876,13 +3778,13 @@ function renderIntakeCard(card, onChange, requestSubmit) {
     skipBtn = document.createElement("button");
     skipBtn.type = "button";
     skipBtn.className = "icard-skip";
-    const skipLabel = card.agentDecidesLabel || "I'll let you choose";
+    const skipLabel = card.agentDecidesLabel || COPY.intake.letYouChoose;
     skipBtn.textContent = skipLabel;
     skipBtn.addEventListener("click", () => {
       skipped = !skipped;
       elc.classList.toggle("skipped", skipped);
       built.setDisabled(skipped);
-      skipBtn.textContent = skipped ? "Undo skip" : skipLabel;
+      skipBtn.textContent = skipped ? COPY.intake.undoSkip : skipLabel;
       skipBtn.classList.toggle("undo", skipped);
       onChange();
       // "You decide" / "Skip" should advance on its own — no extra Continue click.
@@ -3902,7 +3804,7 @@ function renderIntakeCard(card, onChange, requestSubmit) {
       body.innerHTML = "";
       const ans = document.createElement("div");
       ans.className = "icard-answer" + (text ? "" : " empty");
-      ans.textContent = text || "Skipped";
+      ans.textContent = text || COPY.intake.skipped;
       body.appendChild(ans);
       if (skipBtn) skipBtn.remove();
     },
@@ -4032,7 +3934,7 @@ function buildReference(card, body, onChange) {
   const addBtn = document.createElement("button");
   addBtn.type = "button";
   addBtn.className = "iref-add";
-  addBtn.textContent = "+ Add another site";
+  addBtn.textContent = COPY.intake.addAnotherSite;
 
   function updateAddBtn() { addBtn.hidden = entries.length >= MAX; }
 
@@ -4056,14 +3958,14 @@ function buildReference(card, body, onChange) {
       row.appendChild(f);
       return inp;
     };
-    const url = mk("Link", card.placeholder || "https://…", false);
-    const why = mk("What do you like about it?", "The feel, the layout, a detail…", true);
+    const url = mk(COPY.intake.refLinkCap, card.placeholder || COPY.intake.refUrlPlaceholder, false);
+    const why = mk(COPY.intake.refWhyCap, COPY.intake.refWhyPlaceholder, true);
     // Entries past the first get a Remove control.
     if (entries.length >= 1) {
       const rm = document.createElement("button");
       rm.type = "button";
       rm.className = "iref-remove";
-      rm.textContent = "Remove";
+      rm.textContent = COPY.intake.refRemove;
       rm.addEventListener("click", () => {
         const i = entries.findIndex((e) => e.row === row);
         if (i >= 0) entries.splice(i, 1);
@@ -4146,7 +4048,7 @@ function buildColorSwatch(card, body, onChange) {
   // True color picker (native): a rainbow "custom" swatch wrapping <input type=color>.
   const customEl = document.createElement("label");
   customEl.className = "iswatch iswatch-custom";
-  customEl.title = "Custom color";
+  customEl.title = COPY.intake.customColor;
   const picker = document.createElement("input");
   picker.type = "color";
   picker.className = "iswatch-input";
@@ -4224,7 +4126,7 @@ function buildLogoUpload(card, body, onChange) {
   preview.style.cssText = "max-height:56px;max-width:180px;object-fit:contain;display:none;";
   const hint = document.createElement("div");
   hint.style.cssText = "font-size:13px;color:#777;";
-  hint.textContent = card.placeholder || "Drop a logo, or click to choose";
+  hint.textContent = card.placeholder || COPY.intake.logoDropDefault;
   const input = document.createElement("input");
   input.type = "file";
   input.accept = "image/png,image/jpeg,image/webp,image/svg+xml";
@@ -4295,15 +4197,15 @@ function renderCompanyForm() {
   intakeph.classList.remove("start", "hasbrief");
   intakeph.classList.add("flow");
   updateBackButton();
-  setIntakeHead("Brand this project", "Your company identity, set once and reused across every project.");
+  setIntakeHead(COPY.companyForm.headTitle, COPY.companyForm.headSubtitle);
   el("intake-brief").innerHTML = "";
   intakeStack.innerHTML = "";
 
   const cards = [
-    { id: "companyName", type: "open-text", label: "Company or agency name", placeholder: "e.g. Northlight Studio", maxLength: 60 },
-    { id: "headingFont", type: "font-pick", label: "Wordmark / heading font", help: "Used on the login gate and admin chrome.", options: COMPANY_HEADING_FONTS, skippable: true, agentDecidesLabel: "Use default" },
-    { id: "bodyFont", type: "font-pick", label: "Body / secondary font", options: COMPANY_BODY_FONTS, skippable: true, agentDecidesLabel: "Use default" },
-    { id: "logo", type: "logo", label: "Login logo (optional)", placeholder: "Drop a logo image, or click to choose", skippable: true },
+    { id: "companyName", type: "open-text", label: COPY.companyForm.nameLabel, placeholder: COPY.companyForm.namePlaceholder, maxLength: 60 },
+    { id: "headingFont", type: "font-pick", label: COPY.companyForm.headingFontLabel, help: COPY.companyForm.headingFontHelp, options: COMPANY_HEADING_FONTS, skippable: true, agentDecidesLabel: COPY.companyForm.useDefault },
+    { id: "bodyFont", type: "font-pick", label: COPY.companyForm.bodyFontLabel, options: COMPANY_BODY_FONTS, skippable: true, agentDecidesLabel: COPY.companyForm.useDefault },
+    { id: "logo", type: "logo", label: COPY.companyForm.logoLabel, placeholder: COPY.companyForm.logoPlaceholder, skippable: true },
   ];
 
   const group = document.createElement("div");
@@ -4317,7 +4219,7 @@ function renderCompanyForm() {
 
   const applyBtn = document.createElement("button");
   applyBtn.className = "intake-continue";
-  applyBtn.textContent = "Apply branding";
+  applyBtn.textContent = COPY.companyForm.apply;
   refreshReady();
   applyBtn.addEventListener("click", async () => {
     if (group.classList.contains("answered")) return;
@@ -4327,7 +4229,7 @@ function renderCompanyForm() {
     group.classList.add("answered");
     controls.forEach((c) => c.collapse());
     applyBtn.replaceWith(doneNote());
-    showIntakePending("Applying your company branding…");
+    showIntakePending(COPY.companyForm.applying);
     try {
       const res = await window.desktop.applyCompany({
         companyName: vals.companyName,
@@ -4336,7 +4238,7 @@ function renderCompanyForm() {
         logo: vals.logo || null,
       });
       clearIntakePending();
-      if (!res || !res.ok) { showIntakePending((res && res.error) || "Couldn't apply the branding."); return; }
+      if (!res || !res.ok) { showIntakePending((res && res.error) || COPY.companyForm.applyError); return; }
       // Leave the form back to the preview. Reload the active tab to pick up the new
       // admin fonts/logo; Vite also auto-restarts on the .env change (VITE_COMPANY_NAME),
       // which clears the dashboard's "Brand This Project" button (isCompanyBranded).
@@ -4346,7 +4248,7 @@ function renderCompanyForm() {
       if (activeTab) navigate(activeTab, activeTab.url);
       window.desktop.getProjectStatus().then((p) => { if (p) setProjTitle(p); }).catch(() => {});
     } catch (e) {
-      showIntakePending("Couldn't apply the branding: " + e.message);
+      showIntakePending(COPY.companyForm.applyErrorPrefix + e.message);
     }
   });
   group.appendChild(applyBtn);
@@ -4379,7 +4281,7 @@ function renderStartChoices() {
   updateBackButton();
   intakeph.classList.add("start"); // center the fork vertically + center the head text
   intakeph.classList.remove("flow", "hasbrief");
-  setIntakeHead("Let's make something", "Pick how you'd like to begin.");
+  setIntakeHead(COPY.intake.start.headTitle, COPY.intake.start.headSubtitle);
   el("intake-brief").innerHTML = "";
   intakeStack.innerHTML = "";
 
@@ -4392,15 +4294,15 @@ function renderStartChoices() {
 
   const opts = [
     {
-      label: "Client Setup",
-      desc: "Brand a new project step by step (logo, fonts, colors), then design.",
+      label: COPY.intake.start.clientSetupLabel,
+      desc: COPY.intake.start.clientSetupDesc,
       icon: ICON_LIST_ORDERED,
       // A chat-driven flow → leave the pane so the working/preview view takes over.
       onClick: () => { resetIntake(); sendText("/setup-project"); },
     },
     {
-      label: "Get Designing",
-      desc: "Jump straight in: tell me about the site and I'll gather the brief.",
+      label: COPY.intake.start.getDesigningLabel,
+      desc: COPY.intake.start.getDesigningDesc,
       icon: ICON_PENCIL_LINE,
       onClick: enterDesignBriefMode,
     },
@@ -4458,14 +4360,14 @@ function renderDeliverableChoice() {
   enterIntakeMode();
   intakeph.classList.add("start");        // centered, like the start fork
   intakeph.classList.remove("flow", "hasbrief");
-  setIntakeHead("What are you designing for?", "Choose one to get started.");
+  setIntakeHead(COPY.intake.deliverable.headTitle, COPY.intake.deliverable.headSubtitle);
   el("intake-brief").innerHTML = "";
   intakeStack.innerHTML = "";
   renderBriefSummary(null); // clear the rail
 
   const opts = [
-    { type: "website", label: "Website", desc: "A marketing site or landing pages.", icon: ICON_WEBSITE },
-    { type: "app", label: "App", desc: "Product UI, dashboards, in-app screens.", icon: ICON_APP },
+    { type: "website", label: COPY.intake.deliverable.websiteLabel, desc: COPY.intake.deliverable.websiteDesc, icon: ICON_WEBSITE },
+    { type: "app", label: COPY.intake.deliverable.appLabel, desc: COPY.intake.deliverable.appDesc, icon: ICON_APP },
   ];
   const row = document.createElement("div");
   row.className = "istart-row";
@@ -4501,7 +4403,7 @@ async function pickDeliverable(type) {
   // late completion can't hijack this fresh turn (the Back-during-questioning bug).
   try { await turnGate; } catch { /* prior turn already reported */ }
   deliverableType = type;
-  addMsg("system", `Designing ${type === "app" ? "an app" : "a website"}. I'll ask you a few quick things here in the panel, then put your brief together.`);
+  addMsg("system", COPY.intake.designingMessage(type));
 
   const head = intakeph.querySelector(".intake-head");
   const first = head.getBoundingClientRect();
@@ -4510,10 +4412,7 @@ async function pickDeliverable(type) {
   intakeph.classList.add("flow"); // two-column mode: questions right, brief rail left
   intakeph.classList.remove("start", "hasbrief");
   enterIntakeMode();
-  setIntakeHead(
-    "Let's design something",
-    "Tell me a little about what you're making. The more you share, the closer the first draft lands."
-  );
+  setIntakeHead(COPY.intake.gathering.headTitle, COPY.intake.gathering.headSubtitle);
   el("intake-brief").innerHTML = "";
   intakeStack.innerHTML = "";
   loadReferences(); // open the rail with the references upload zone from the start
@@ -4529,7 +4428,7 @@ async function pickDeliverable(type) {
   updateBackButton();
   const showKickoff = () => {
     if (intakePhase === "gathering" && !intakeStack.querySelector(".intake-group")) {
-      showIntakePending("Hold tight while we get things started. I'll ask you a few quick things right here.");
+      showIntakePending(COPY.intake.kickoffPending);
     }
   };
   if (flip && flip.finished) flip.finished.then(showKickoff, showKickoff);
