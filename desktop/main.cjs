@@ -668,13 +668,28 @@ function modulesRoot() {
   return dest;
 }
 
-// Point a project folder at the app's installed deps so Vite runs without a
-// per-project `npm install`. (A packaged build would run a real install.)
+// Point a project folder at the app's writable deps (modulesRoot) so Vite runs
+// without a per-project `npm install`. CRUCIAL: also REPOINT a stale symlink. A
+// project scaffolded by an OLDER app version carries `node_modules` → that app's
+// BUNDLE node_modules; opening it here and running Vite would make Vite write
+// .vite-temp / .vite into that SIGNED bundle and break its code signature (macOS
+// then says "damaged, move to Trash"). So if node_modules is a symlink pointing
+// anywhere other than the current modulesRoot, replace it. Never touch a REAL
+// node_modules directory (a project that has its own installed deps).
 function linkNodeModules(projectDir) {
   const projModules = path.join(projectDir, "node_modules");
-  if (!fs.existsSync(projModules)) {
-    fs.symlinkSync(modulesRoot(), projModules, "dir");
+  const want = modulesRoot();
+  let info = null;
+  try { info = fs.lstatSync(projModules); } catch { /* missing */ }
+  if (info && info.isSymbolicLink()) {
+    let cur = null;
+    try { cur = fs.readlinkSync(projModules); } catch { /* unreadable link */ }
+    if (cur === want) return;                       // already points at the clone
+    try { fs.unlinkSync(projModules); } catch {}    // stale/broken link → drop it
+    info = null;
   }
+  if (!info) fs.symlinkSync(want, projModules, "dir");
+  // else: a real node_modules directory — leave it alone.
 }
 
 // Scaffold a pristine project into targetDir, then link node_modules.
