@@ -10,6 +10,11 @@
 // add or reword a shell string, do it here, not at the call site. House style:
 // no em-dashes.
 window.COPY = {
+  // ── Launch splash (logo + welcome, shown briefly on open) ───────────────────
+  splash: {
+    welcome: "Welcome to thinkany design studio.",
+  },
+
   // ── Status label in the top bar for the connect / no-project stages ─────────
   status: {
     notConnected: "not connected",
@@ -37,6 +42,11 @@ window.COPY = {
       emoji: "👋",
       title: "The live preview appears here",
       text: "Open or create a project to begin.",
+    },
+    clientSetupStart: {
+      emoji: "💬",
+      title: "Let's set up your project",
+      text: "I'll walk you through it in the chat, one question at a time. Answer along and your project takes shape here.",
     },
     gettingSetUp: "Getting set up",
     updatingDesign: "Updating your design",
@@ -95,11 +105,79 @@ window.COPY = {
       "It's a good time to start fresh when this climbs high (the ring turns amber, then red) or you're moving to a new task.",
   },
 
-  // ── Global chrome: browser tabs + collapsible sidebar ───────────────────────
+  // ── Global chrome: browser tabs, sidebar, shared controls ───────────────────
   chrome: {
     newTab: "New tab",
     expandSidebar: "Expand sidebar",
     collapseSidebar: "Collapse sidebar",
+    close: "Close",
+    dragResize: "Drag to resize the chat",
+  },
+
+  // ── Icon rail tooltips (data-tip + aria-label) ──────────────────────────────
+  rail: {
+    help: "Help with Commands",
+    projects: "Switch Projects",
+    publish: "Publish",
+    company: "Company Profile",
+    voice: "Copy Voice",
+    figma: "Figma Export",
+    claude: "Claude Settings",
+    sessionUsage: "Claude Session Usage",
+    sessionUsageAria: "Claude Session Usage, click to clear the session",
+  },
+
+  // ── Composer (chat input row) ───────────────────────────────────────────────
+  composer: {
+    jumpLatest: "Jump to the latest message",
+    commands: "Commands",
+    attach: "Attach a file (or drag one onto the chat)",
+    attachAria: "Attach a file",
+    placeholder: "Message the agent…  (Enter to send · Shift+Enter for newline)",
+    send: "Send",
+  },
+
+  // ── Point & Comment feedback toggle ─────────────────────────────────────────
+  feedback: {
+    label: "Point & Comment",
+    pointing: "Pointing… (Esc to exit)",
+    toggleTitle: "Point at an element in the preview and leave a note for Claude",
+    toggleAria: "Point and Comment",
+  },
+
+  // ── Preview browser: nav buttons + quick links ──────────────────────────────
+  nav: {
+    back: "Back",
+    forward: "Forward",
+    reload: "Reload",
+    home: "Home",
+    styleguide: "Style guide",
+    dashboard: "Dashboard",
+  },
+
+  // ── Preview "looks blank?" help strip ───────────────────────────────────────
+  previewHelp: {
+    blankHtml: "Preview looks blank? First try the tab's <b>⟳</b> reload. Still blank?",
+    refresh: "Refresh Browser",
+    dismiss: "Dismiss",
+  },
+
+  // ── Home-build progress cover ───────────────────────────────────────────────
+  buildOverlay: {
+    title: "Designing your home page…",
+    hint: "Your Style guide is ready, have a look while this finishes.",
+  },
+
+  // ── Publish help overlay (static chrome: title + tabs) ──────────────────────
+  pubhelp: {
+    title: "Publishing, step by step",
+    tabStart: "Getting started",
+    tabHow: "How to publish",
+  },
+
+  // ── Confirm dialog (static cancel; title/ok are set per call) ───────────────
+  confirm: {
+    cancel: "Cancel",
   },
 
   // ── Commands: the Help drawer + composer "Commands ▾" popover ────────────────
@@ -131,11 +209,26 @@ window.COPY = {
     claude: "Claude Settings",
   },
 
-  // ── Key gate (Connect Claude) ───────────────────────────────────────────────
+  // ── Key gate (Connect Claude) — big-pane onboarding screen ──────────────────
   keygate: {
+    heading: "Connect your Claude API key",
+    intro: "The studio runs on the Claude Agent SDK, which authenticates with an API key. Paste yours to begin.",
+    placeholder: "sk-ant-…",
+    getKeyLink: "Get a key at platform.claude.com →",
+    note: "Stored encrypted in your OS keychain,<br>never written into a project.",
     pasteFirst: "Paste your key first.",
     checking: "Checking…",
     save: "Save & connect",
+    couldNotSave: "Could not save the key.",
+  },
+
+  // ── Project gate — first-run pick-a-project screen ──────────────────────────
+  projectGate: {
+    heading: "Choose a project",
+    intro: "Your design work lives in a project folder, separate from the app, so the studio itself stays a pristine, unbranded template.",
+    create: "New project…",
+    open: "Open existing project…",
+    note: "“New project” copies the blank template into an empty folder you pick, then runs it live.",
   },
 
   // ── Project gate + Switch Project drawer ────────────────────────────────────

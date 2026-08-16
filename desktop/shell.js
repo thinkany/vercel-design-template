@@ -270,7 +270,7 @@ let feedbackOn = false;
 function setFeedbackButton(on) {
   feedbackOn = !!on;
   feedbackBtn.classList.toggle("active", feedbackOn);
-  feedbackLabel.textContent = feedbackOn ? "Pointing… (Esc to exit)" : "Point & Comment";
+  feedbackLabel.textContent = feedbackOn ? COPY.feedback.pointing : COPY.feedback.label;
 }
 function setFeedbackMode(on) {
   if (activeTab && activeTab.wv) {
@@ -291,6 +291,9 @@ function feedbackRouting(scope) {
 }
 function handleFeedbackSubmit(ctx) {
   if (!ctx || !ctx.note) return;
+  setFeedbackMode(false);   // exit pointing mode
+  setChatCollapsed(false);  // make sure the chat pane is open to receive the note
+  dismissWelcome();
   const lines = ["Design feedback, pointed at an element in the live preview:", ""];
   if (ctx.dataBlockName || ctx.dataBlock) {
     lines.push(`- Section: ${ctx.dataBlockName || ctx.dataBlock}${ctx.dataBlock ? ` (data-block="${ctx.dataBlock}")` : ""}`);
@@ -300,7 +303,18 @@ function handleFeedbackSubmit(ctx) {
   if (ctx.selector) lines.push(`- Selector: ${ctx.selector}`);
   if (ctx.variation) lines.push(`- Variation: ${ctx.variation}`);
   lines.push("", `My note: ${ctx.note}`, "", feedbackRouting(ctx.scope));
-  sendText(lines.join("\n"));
+
+  // Send Claude the full technical context, but show a clean, human note in the chat.
+  const toClaude = lines.join("\n");
+  const section = ctx.dataBlockName || ctx.dataBlock;
+  const text = ctx.text ? (ctx.text.length > 60 ? ctx.text.slice(0, 57) + "…" : ctx.text) : "";
+  let where;
+  if (section && text) where = `the ${section} section (“${text}”)`;
+  else if (section) where = `the ${section} section`;
+  else if (text) where = `“${text}”`;
+  else where = "an element";
+  const echo = `Design note, pointed at ${where}:\n${ctx.note}`;
+  runAgent(toClaude, echo);
 }
 feedbackBtn.addEventListener("click", () => setFeedbackMode(!feedbackOn));
 // Escape exits pointing even when focus is in the shell (the webview's own Esc
@@ -445,7 +459,7 @@ urlbar.addEventListener("keydown", (e) => {
   // nav label (Home/Style guide/Dashboard) by a quick-link earlier.
   if (u) { activeTab.fixedTitle = false; navigate(activeTab, u); }
 });
-const NAV_LABEL = { home: "Home", styleguide: "Style guide", dashboard: "Dashboard" };
+const NAV_LABEL = { home: COPY.nav.home, styleguide: COPY.nav.styleguide, dashboard: COPY.nav.dashboard };
 document.querySelectorAll(".qlink").forEach((b) =>
   b.addEventListener("click", () => {
     if (!viteUrl) return;
@@ -729,16 +743,101 @@ function refreshPreview() {
 }
 
 // ---- Stage routing -----------------------------------------------------------
+// Soft show/hide for a big-pane onboarding gate (key / project): unhide → fade the
+// backdrop in + rise the card; on hide, fade out then set hidden. A pending hide is
+// cancelled if the same gate is re-shown before it lands.
+const gateHideTimers = new WeakMap();
+function toggleGate(gateEl, on) {
+  if (!gateEl) return;
+  const pending = gateHideTimers.get(gateEl);
+  if (pending) { clearTimeout(pending); gateHideTimers.delete(gateEl); }
+  if (on) {
+    gateEl.hidden = false;
+    requestAnimationFrame(() => requestAnimationFrame(() => gateEl.classList.add("show")));
+  } else if (!gateEl.hidden) {
+    gateEl.classList.remove("show");
+    gateHideTimers.set(gateEl, setTimeout(() => { gateEl.hidden = true; gateHideTimers.delete(gateEl); }, 480));
+  }
+}
+
+// Opening the chat pane out of the collapsed state: ease it to its minimum width
+// (the drag handle can widen it afterward). Only fires when we were actually
+// collapsed (never on a normal launch, where the saved width is kept).
+let chatWasCollapsed = false;
+function settleChatWidthToMin() {
+  const chatPanel = el("chat");
+  if (!chatPanel) return;
+  chatPanel.classList.add("chat-opening"); // clip content only during the open animation
+  chatPanel.style.width = "400px";
+  try { localStorage.setItem("chatWidth", "400"); } catch {}
+  setTimeout(() => chatPanel.classList.remove("chat-opening"), 620);
+}
+
+// Slide the chat pane closed (0 width) or open (eased to its minimum). Used across
+// the onboarding flow: closed for the key screen, the project fork, and the
+// Get-Designing questions; open for Client Setup, once a design starts, and the
+// normal workspace. Idempotent, so callers can fire it freely.
+function setChatCollapsed(collapsed) {
+  const app = el("app");
+  if (!app) return;
+  if (collapsed) {
+    app.classList.add("chat-collapsed");
+    chatWasCollapsed = true;
+  } else {
+    app.classList.remove("chat-collapsed");
+    if (chatWasCollapsed) { chatWasCollapsed = false; settleChatWidthToMin(); }
+  }
+}
+
+// Resolve a dotted path (e.g. "rail.help", "preview.buildMessages.0") against COPY.
+function C(path) {
+  return path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), COPY);
+}
+
+// Populate every static-markup string from the copy catalog. Elements carry the
+// copy KEY (data-copy / -html / -tip / -aria / -title / -ph), so wording lives
+// only in copy.js. Runs once before the first stage renders; runtime code may
+// overwrite individual nodes afterward (rotating placeholders, per-context titles).
+let staticCopyApplied = false;
+function applyStaticCopy() {
+  if (staticCopyApplied) return;
+  staticCopyApplied = true;
+  const set = (sel, ds, fn) => document.querySelectorAll(sel).forEach((e) => {
+    const v = C(e.dataset[ds]);
+    if (v != null) fn(e, v);
+  });
+  set("[data-copy]", "copy", (e, v) => { e.textContent = v; });
+  set("[data-copy-html]", "copyHtml", (e, v) => { e.innerHTML = v; });
+  set("[data-copy-tip]", "copyTip", (e, v) => e.setAttribute("data-tip", v));
+  set("[data-copy-aria]", "copyAria", (e, v) => e.setAttribute("aria-label", v));
+  set("[data-copy-title]", "copyTitle", (e, v) => e.setAttribute("title", v));
+  set("[data-copy-ph]", "copyPh", (e, v) => e.setAttribute("placeholder", v));
+}
+
 function showStage(stage) {
-  keygate.hidden = stage !== "key";
-  projectgate.hidden = stage !== "project";
-  chatmain.hidden = stage !== "workspace";
+  applyStaticCopy();
+  const app = el("app");
+  app.classList.toggle("onboarding-key", stage === "key"); // rail muting during the key screen
+  setChatCollapsed(stage === "key"); // collapsed at the key screen; the start flow closes/opens it after
+  // The rail is inert until the key is connected (no focus/keyboard either).
+  const sidebar = el("sidebar");
+  if (sidebar) sidebar.inert = stage === "key";
+  toggleGate(keygate, stage === "key");
+  toggleGate(projectgate, stage === "project");
+  // Chat content is ready from the project stage on (empty & waiting); only the
+  // key stage hides it, and there the whole pane is collapsed anyway.
+  chatmain.hidden = stage === "key";
   // Workspace label left BLANK on purpose — the #status slot is reserved for a
   // future app-level message/alert (update, license, activity). The connect /
   // no-project states keep their labels since those screens rely on them.
   status.textContent =
     stage === "key" ? COPY.status.notConnected : stage === "project" ? COPY.status.noProject : "";
-  if (stage === "key") keyinput.focus();
+  // Enable pane transitions only after the first stage paints, so the initial
+  // collapsed/open state doesn't animate on launch.
+  if (app.classList.contains("preload")) {
+    requestAnimationFrame(() => requestAnimationFrame(() => app.classList.remove("preload")));
+  }
+  if (stage === "key") setTimeout(() => { try { keyinput.focus(); } catch {} }, 120);
   if (stage === "workspace") input.focus();
 }
 
@@ -826,7 +925,7 @@ async function saveKey() {
       keyinput.value = "";
       await boot();
     } else {
-      keyerror.textContent = res.error || "Could not save the key.";
+      keyerror.textContent = res.error || COPY.keygate.couldNotSave;
     }
   } catch (e) {
     keyerror.textContent = String(e);
@@ -3126,6 +3225,7 @@ function setIntakeHead(title, lead) {
 function resetIntake() {
   intakeActive = false;
   startChoicesShown = false;
+  refsRevealed = false;
   intakePhase = "idle";
   currentIntakeId = null;
   exitReview(); // clear the review's head-hidden state
@@ -3162,6 +3262,7 @@ let lastDigest = null;    // digest.json from the ingest (T1 stub → T2 rich)
 let refsBusy = false;     // brief local state while a drop is uploading
 let refsAnalyzing = false; // main's vision pass is running (T2)
 let railBriefRows = 0;   // prior brief-row count, so the Brief card eases in once
+let refsRevealed = false; // the rail (Design References) stays hidden until the first question is answered
 
 function renderBriefSummary(brief) {
   lastBrief = brief;
@@ -3232,7 +3333,8 @@ function composeRail() {
   if (!flow) railBriefRows = 0; // reset so the Brief eases in fresh on re-entry
 
   box.innerHTML = "";
-  if (flow) box.appendChild(buildReferencesPanel());
+  // Design References only appear once the first question has been answered.
+  if (flow && refsRevealed) box.appendChild(buildReferencesPanel());
   let briefCard = null;
   if (rows.length) {
     briefCard = document.createElement("div");
@@ -3255,7 +3357,7 @@ function composeRail() {
     }
     box.appendChild(briefCard);
   }
-  showRail(flow || rows.length > 0);
+  showRail((flow && refsRevealed) || rows.length > 0);
 
   // Ease the Brief card in the first time it appears (not a harsh pop), and softly
   // scroll it into view as it grows, mirroring the questions column's motion.
@@ -3535,6 +3637,8 @@ function renderIntakeGroup(id, cards) {
     continueBtn.replaceWith(done);
     autoDismissTool(done, 900); // flash "✓ Got it", then fade + collapse it away
     if (currentIntakeId === id) currentIntakeId = null; // answered, not cancellable now
+    // First answer is in → fade the Design References rail in (it stayed hidden until now).
+    if (!refsRevealed) { refsRevealed = true; composeRail(); }
     // Conversational feedback while the agent takes it in — cycled so the line after
     // the second answer differs from the first (works whether or not more follow).
     showIntakePending(TAKING_IN_MESSAGES[takingInIdx % TAKING_IN_MESSAGES.length]);
@@ -3699,6 +3803,7 @@ function renderReviewActions() {
 // with a persistent "preparing" status + rotating messages until the design shows.
 function startDesigning() {
   intakePhase = "designing";
+  setChatCollapsed(false); // questions are answered → slide the chat open for the build
   updateBackButton();
   clearIntakePending();
   const leaving = [intakeph.querySelector(".intake-head"), el("intake-brief"), ...Array.from(intakeStack.children)].filter(Boolean);
@@ -4260,7 +4365,7 @@ function renderCompanyForm() {
 // On a truly fresh project the BIG PANE shows two choices instead of guessing from
 // a typed "hello": "Client Setup" (deterministic /setup-project) and "Get Designing"
 // (the pane intake). Clicking a card is that path's "hello".
-const DEFAULT_PLACEHOLDER = input.placeholder;
+const DEFAULT_PLACEHOLDER = COPY.composer.placeholder; // catalog is the source (HTML sets it at runtime)
 let startChoicesShown = false; // the pane is showing the start fork right now
 
 // If the start fork is up and the user does something else (types a message,
@@ -4273,6 +4378,10 @@ function renderStartChoices() {
   // Only greet on a truly fresh start: a project is open, no design yet, and
   // nothing has been said. Self-guards so callers can fire it freely.
   if (conversationStarted || (design && design.active)) return;
+
+  // A fresh project starts with the fork in the big pane and the chat slid shut;
+  // Client Setup / Get-Designing decide when it opens again.
+  setChatCollapsed(true);
 
   // The start fork lives in the BIG PANE now (feedback #1), as two side-by-side
   // choice cards — not a chat card. The chat rail stays for the conversation.
@@ -4297,8 +4406,13 @@ function renderStartChoices() {
       label: COPY.intake.start.clientSetupLabel,
       desc: COPY.intake.start.clientSetupDesc,
       icon: ICON_LIST_ORDERED,
-      // A chat-driven flow → leave the pane so the working/preview view takes over.
-      onClick: () => { resetIntake(); sendText("/setup-project"); },
+      // Chat-driven: slide the chat open, point the big pane at it, then kick off.
+      onClick: () => {
+        resetIntake();                              // leave the fork
+        setChatCollapsed(false);                    // slide the chat pane open
+        showPlaceholder(COPY.preview.clientSetupStart); // big-pane "get started in the chat" message
+        sendText("/setup-project");
+      },
     },
     {
       label: COPY.intake.start.getDesigningLabel,
@@ -4409,7 +4523,8 @@ async function pickDeliverable(type) {
   const first = head.getBoundingClientRect();
 
   startChoicesShown = false;
-  intakeph.classList.add("flow"); // two-column mode: questions right, brief rail left
+  refsRevealed = false; // rail stays hidden until the first question is answered
+  intakeph.classList.add("flow"); // two-column mode: questions left, references rail right
   intakeph.classList.remove("start", "hasbrief");
   enterIntakeMode();
   setIntakeHead(COPY.intake.gathering.headTitle, COPY.intake.gathering.headSubtitle);
@@ -4639,6 +4754,21 @@ log.addEventListener("drop", async (e) => {
 // Don't let the window navigate when a file is dropped outside the chat.
 window.addEventListener("dragover", (e) => e.preventDefault());
 window.addEventListener("drop", (e) => e.preventDefault());
+
+// ---- Launch splash -----------------------------------------------------------
+// Show the welcome + logo for 3s, then fade it out to reveal the app (which boots
+// underneath in the meantime). All soft: the logo/welcome ease in, the whole
+// screen fades out.
+(function initSplash() {
+  const splash = el("splash");
+  if (!splash) return;
+  applyStaticCopy(); // populate the welcome line before it's shown
+  const SPLASH_MS = 3000, FADE_MS = 650;
+  setTimeout(() => {
+    splash.classList.add("hide");
+    setTimeout(() => { splash.hidden = true; }, FADE_MS);
+  }, SPLASH_MS);
+})();
 
 // ---- Boot --------------------------------------------------------------------
 boot();
