@@ -473,6 +473,30 @@ preview's header (and in the phone frame, where it should scale down cleanly).
 > at `/brand/<file>`. If the client would rather it not live in this project, keep
 > the wordmark instead.
 
+## 1.5. Copy voice, optional, rules for how the words read
+
+The design's **copy voice** is how the AI writes the words *in* the design (rules like
+"no em dashes", "active voice", "sentence-case headings"), separate from the visual look
+you just set. Any **global** rules the designer carries across projects are already in
+effect and appear in your working context, this step lets them add rules for **this**
+project.
+
+- **Ask once, with `AskUserQuestion`** (header **"Copy voice"**), and make it clearly
+  optional (most will skip): *"Any rules for how I should write this design's copy?"*.
+  Offer a few examples as options (e.g. *No em dashes*, *Short, clear sentences*,
+  *Active voice*, *Sentence-case headings*); the tool appends "Other → type your own", so
+  they can add their own. If global rules are already in effect, mention them in one line
+  so the designer sees what's in play before adding.
+- **If they add any**, save them as this project's rules: read
+  `.thinkany/copy-voice.json` if it exists (shape
+  `{ "tone": "", "rules": [], "declineGlobal": false }`, default to that if absent),
+  **append** the new rules to `rules` (trim, drop case-insensitive duplicates), and write
+  the file back (create `.thinkany/` if needed). Only add to this project's `rules`, never
+  touch global rules, they live outside the project.
+- **If they skip**, write nothing and move on.
+
+One question, no recap. Then continue to step 2.
+
 ## 2. The working variation's name (just inform)
 
 The dashboard lists each design as a **variation**. Step 0 already titled the working
