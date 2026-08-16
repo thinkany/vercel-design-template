@@ -32,8 +32,10 @@
 //   multi-choice  → string[] | null
 //   chips         → string[] | null
 //   reference     → { url: string, reason: string|null } | null
+//   voice         → string[] | null  (rules for THIS design; also persisted to the
+//                   project's copy-voice by the renderer, so `field` is optional)
 
-const CARD_TYPES = ["open-text", "single-choice", "multi-choice", "chips", "reference", "color-swatch", "font-pick"];
+const CARD_TYPES = ["open-text", "single-choice", "multi-choice", "chips", "reference", "color-swatch", "font-pick", "voice"];
 
 // Card types that must carry a non-empty `options` pool.
 //   color-swatch options = hex colors (e.g. "#2b3a67"); the answer is the picked hex.

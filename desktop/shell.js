@@ -2068,7 +2068,7 @@ function ruleListEl(arr, opts = {}) {
       const t = document.createElement("span"); t.className = "rule-t"; t.textContent = r; row.appendChild(t);
       if (!opts.disabled) {
         const x = document.createElement("button"); x.className = "rule-x"; x.type = "button"; x.textContent = "×";
-        x.addEventListener("click", () => { arr.splice(i, 1); rerender(); });
+        x.addEventListener("click", () => { arr.splice(i, 1); rerender(); opts.onChange && opts.onChange(); });
         row.appendChild(x);
       }
       rows.appendChild(row);
@@ -2077,7 +2077,7 @@ function ruleListEl(arr, opts = {}) {
   box.appendChild(rows);
   const add = (text) => {
     const t = (text || "").trim();
-    if (t && !arr.some((r) => r.toLowerCase() === t.toLowerCase())) { arr.push(t); rerender(); }
+    if (t && !arr.some((r) => r.toLowerCase() === t.toLowerCase())) { arr.push(t); rerender(); opts.onChange && opts.onChange(); }
   };
   if (!opts.disabled) {
     const addRow = document.createElement("div"); addRow.className = "rule-add";
@@ -3295,6 +3295,14 @@ function loadReferences() {
   window.desktop.listReferences().then(applyRefPayload).catch(() => {});
 }
 
+// Copy-voice state for the intake's "voice" card (globals for reference + this
+// project's rules). Loaded when a design flow starts so the card renders synchronously.
+let lastVoice = null;
+function loadVoice() {
+  if (!window.desktop.getVoice) return;
+  window.desktop.getVoice().then((v) => { lastVoice = v || { project: {}, global: [] }; }).catch(() => {});
+}
+
 window.desktop.onReferencesChanged(applyRefPayload);
 
 // Build the left rail: the design-references panel (design intake only) above the
@@ -3875,6 +3883,7 @@ function renderIntakeCard(card, onChange, requestSubmit) {
     : card.type === "color-swatch" ? buildColorSwatch(card, body, onChange)
     : card.type === "font-pick" ? buildFontPick(card, body, onChange)
     : card.type === "logo" ? buildLogoUpload(card, body, onChange)
+    : card.type === "voice" ? buildVoiceRules(card, body, onChange)
     : buildOpenText(card, body, onChange); // defensive fallback
 
   // Skippable cards get a "let you decide" affordance that records null.
@@ -4271,6 +4280,37 @@ function buildLogoUpload(card, body, onChange) {
   };
 }
 
+// voice → review the GLOBAL copy-voice rules (read-only reference) and add rules for
+// THIS design. Additions persist to the project voice as they change (so the design's
+// copy uses them; the resolved voice is auto-handed to the agent). Value = the project
+// rules; the card usually carries no `field`, so it doesn't fold into the Brief.
+function buildVoiceRules(card, body, onChange) {
+  const v = lastVoice || { project: {}, global: [] };
+  const globals = (v.global || []).filter(Boolean);
+  const proj = v.project || {};
+  const projRules = [...((proj.rules) || [])];
+
+  if (globals.length) {
+    body.appendChild(voiceHeader(COPY.voice.globalRules, COPY.voice.globalRulesSub));
+    body.appendChild(ruleListEl(globals, { disabled: true })); // reference only
+  }
+  body.appendChild(voiceHeader(COPY.voice.projectRulesLabel));
+  const persist = () => { try { window.desktop.saveProjectVoice({ ...proj, rules: projRules.filter(Boolean) }); } catch {} };
+  body.appendChild(ruleListEl(projRules, {
+    examples: RULE_EXAMPLES,
+    placeholder: COPY.voice.projectRulePlaceholder,
+    emptyText: COPY.voice.projectRulesEmpty,
+    onChange: () => { persist(); onChange(); },
+  }));
+
+  return {
+    getValue: () => { const r = projRules.filter(Boolean); return r.length ? r : null; },
+    hasValue: () => projRules.filter(Boolean).length > 0,
+    setDisabled: (d) => body.querySelectorAll("input, button").forEach((e) => { e.disabled = d; }),
+    display: () => projRules.filter(Boolean).join(", "),
+  };
+}
+
 // Inject a Google Fonts stylesheet for the given families (deduped). Best-effort —
 // no CSP blocks it in the chrome; a failed load just leaves the name in a fallback.
 const _loadedFonts = new Set();
@@ -4531,6 +4571,7 @@ async function pickDeliverable(type) {
   el("intake-brief").innerHTML = "";
   intakeStack.innerHTML = "";
   loadReferences(); // open the rail with the references upload zone from the start
+  loadVoice();      // prime copy-voice (globals + project rules) for the voice card
 
   const last = head.getBoundingClientRect();
   const flip = anim(head, [
@@ -4599,6 +4640,10 @@ function getDesigningPrompt(type) {
     "     options:[~5 tasteful hex values fitting the vibe] } to pick a primary color;",
     '   - IF they did NOT mention fonts, a font-pick card { id:"font", field:"fontSources",',
     "     options:[~4 Google-Font family names fitting the vibe] } to pick a font.",
+    '   - a voice card { id:"voice", type:"voice", label:"How should the words sound?",',
+    '     help:"Your global copy rules are shown for reference; add any just for this design.", skippable:true }.',
+    "     ALWAYS send this one (it needs no options/field): the pane shows the global copy-voice rules and lets",
+    "     them add rules for THIS design. Place it LAST, after colors/fonts.",
     '   Mark every follow-up skippable:true (agentDecidesLabel like "I\'ll let you choose", or "Skip" for the names).',
     "   Omit any card whose value they already gave (a named color/font, a reference to pull from, a name).",
     "   If the designer DISMISSES a question (the intake tool returns an error), stop and wait, do not retry.",
