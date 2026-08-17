@@ -73,7 +73,7 @@ function deriveTags(inputs) {
   const out = new Set();
   const push = (v) => { if (v == null) return; String(v).toLowerCase().split(/[^a-z0-9+]+/).forEach((t) => t && out.add(t)); };
   const add = (v) => (Array.isArray(v) ? v.forEach(push) : push(v));
-  add(inputs.vertical); add(inputs.tone); add(inputs.projectType);
+  add(inputs.vertical); add(inputs.tone); add(inputs.projectType); add(inputs.what);
   if (inputs.brand && typeof inputs.brand === "object") { add(inputs.brand.vertical); add(inputs.brand.industry); }
   return out;
 }

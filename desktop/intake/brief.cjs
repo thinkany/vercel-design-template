@@ -38,6 +38,9 @@ const BRIEF_FIELDS = [
   "clientName", "projectName", "notes",
   // Reference-ingest (set from the ingest, not from a card — see references.cjs / ingest.cjs):
   "referenceAssets", "referenceDigest",
+  // Design-variety: the sampled Direction (design-variety-spec.md), set at build handoff,
+  // not a designer card. Persisted with the design for reproduction + the P2 knobs.
+  "direction",
 ];
 
 /** A fresh Brief with everything unanswered (null = agent decides). */
@@ -64,7 +67,7 @@ function applyAnswers(brief, answers) {
 /** The fields still null — i.e. the ones the agent will decide on its own. The
  * reference fields are set by the ingest (not designer choices), so they never
  * count as "unspecified"; deliverableType is the flow's own routing key. */
-const NON_DESIGNER_FIELDS = new Set(["deliverableType", "referenceAssets", "referenceDigest"]);
+const NON_DESIGNER_FIELDS = new Set(["deliverableType", "referenceAssets", "referenceDigest", "direction"]);
 function unspecifiedFields(brief) {
   return BRIEF_FIELDS.filter((f) => brief[f] == null && !NON_DESIGNER_FIELDS.has(f));
 }

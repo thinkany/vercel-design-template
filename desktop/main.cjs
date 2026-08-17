@@ -1222,6 +1222,17 @@ ipcMain.handle("intake:designPrompt", () => {
       intakeBrief.referenceAssets = dg.assets;
     }
   }
+  // Design-variety (T5): sample a Direction at build handoff so the build is conditioned
+  // onto a distinct compositional direction, not the model's default. Auto by default;
+  // skipped if one is already set (a future reroll / knob path will set it first). The
+  // signals available here are the designer's description, tone (voice step), and type.
+  if (intakeBrief && !intakeBrief.direction) {
+    intakeBrief.direction = sampleDirection({
+      what: intakeBrief.what,
+      tone: intakeBrief.tone,
+      projectType: intakeBrief.projectType,
+    });
+  }
   return { prompt: buildDesignPrompt(intakeBrief) };
 });
 
