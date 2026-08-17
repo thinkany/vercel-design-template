@@ -3785,6 +3785,114 @@ function renderVoiceStep() {
   if (scroller) { try { scroller.scrollTo({ top: centerTo, behavior: "smooth" }); } catch { scroller.scrollTop = centerTo; } }
 }
 
+// ---- Client-rendered intake (no model turn) ---------------------------------
+// The fixed brief questions (what / names / reference) are posed by the RENDERER and
+// folded straight into the Brief via applyIntakeAnswers — zero tokens, same rails as
+// the agent path. The questions whose OPTIONS need judgment (sections tailored to the
+// type, plus taste-matched color + font) stay model-driven in one turn afterward
+// (beginModelIntakeTurn). This mirrors the voice step, which already proved a
+// client-owned intake card.
+const CLIENT_STEP_DELAY = 620; // a short "taking it in" beat between client questions
+
+// Render ONE batch of client cards (usually one card; the name pair is two) with a
+// Continue button, persist the answers to the Brief, then call onDone().
+function renderClientBatch(cards, onDone) {
+  enterIntakeMode();
+  clearIntakePending();
+  exitReview();
+  intakePhase = "gathering";
+  currentIntakeId = null; // client questions aren't a cancellable agent tool batch
+  updateBackButton();
+
+  const group = document.createElement("div");
+  group.className = "intake-group";
+
+  const controls = (cards || []).map((card) => {
+    const r = renderIntakeCard(card, refreshReady, requestSubmit);
+    group.appendChild(r.el);
+    return { card, ...r };
+  });
+
+  const continueBtn = document.createElement("button");
+  continueBtn.className = "intake-continue";
+  continueBtn.textContent = COPY.intake.continue;
+  function refreshReady() { continueBtn.disabled = !controls.every((c) => c.isReady()); }
+  refreshReady();
+  function requestSubmit() {
+    if (group.classList.contains("answered")) return;
+    if (controls.every((c) => c.isReady())) submit();
+  }
+
+  async function submit() {
+    if (group.classList.contains("answered")) return;
+    group.classList.add("answered");
+    const answers = {};
+    const meta = [];
+    for (const c of controls) {
+      answers[c.card.id] = c.getValue();
+      meta.push({ id: c.card.id, field: c.card.field, type: c.card.type });
+      c.collapse();
+    }
+    const done = doneNote();
+    continueBtn.replaceWith(done);
+    autoDismissTool(done, 900);
+    if (!refsRevealed) { refsRevealed = true; composeRail(); } // first answer reveals the rail
+    showIntakePending(TAKING_IN_MESSAGES[takingInIdx % TAKING_IN_MESSAGES.length]);
+    takingInIdx++;
+    try { await window.desktop.applyIntakeAnswers(meta, answers); } catch {}
+    onDone();
+  }
+  continueBtn.addEventListener("click", submit);
+  group.appendChild(continueBtn);
+
+  intakeStack.appendChild(group);
+  const scroller = intakeph.classList.contains("flow") ? intakeph.querySelector(".intake-inner") : intakeph;
+  const centerTo = scroller ? intakeCenterTarget(scroller, group) : 0;
+  fadeSlideIn(group, { dy: 44, duration: 720, delay: 60 });
+  if (scroller) {
+    try { scroller.scrollTo({ top: centerTo, behavior: "smooth" }); }
+    catch { scroller.scrollTop = centerTo; }
+  }
+}
+
+// A monotonic token so a Back + re-pick invalidates any in-flight question chain
+// (a stale step timer from the abandoned run bails instead of injecting its card).
+let clientIntakeGen = 0;
+
+// Build the fixed question script for this deliverable and walk it, one batch at a
+// time, then hand off to the model turn (sections + color + font, tailored to type).
+function startClientIntake(type) {
+  const gen = ++clientIntakeGen;
+  const kind = type === "app" ? "app" : "web site";
+  const script = [
+    [{ id: "what", field: "what", type: "open-text", long: true, maxLength: 400, label: COPY.intake.q.what, placeholder: COPY.intake.q.whatPlaceholder }],
+    [
+      { id: "clientName", field: "clientName", type: "open-text", label: COPY.intake.q.clientName, skippable: true, agentDecidesLabel: COPY.intake.skip },
+      { id: "projectName", field: "projectName", type: "open-text", label: COPY.intake.q.projectName, skippable: true, agentDecidesLabel: COPY.intake.skip },
+    ],
+    [{ id: "reference", field: "references", type: "reference", maxLength: 200, label: COPY.intake.q.reference(kind), skippable: true }],
+  ];
+  runClientScript(script, 0, type, gen);
+}
+
+function runClientScript(script, i, type, gen) {
+  if (intakePhase !== "gathering" || gen !== clientIntakeGen) return; // backed out / superseded
+  if (i >= script.length) { beginModelIntakeTurn(type); return; }
+  renderClientBatch(script[i], () => {
+    setTimeout(() => runClientScript(script, i + 1, type, gen), CLIENT_STEP_DELAY);
+  });
+}
+
+// After the fixed questions, spend ONE short model turn on the questions whose options
+// need judgment: the sections/screens list (tailored to type + vibe) and, unless the
+// designer already named them, a color and a font. Ends → showBriefComplete.
+function beginModelIntakeTurn(type) {
+  const b = lastBrief || {};
+  const hasColor = Array.isArray(b.colorSources) && b.colorSources.length > 0;
+  const hasFont = Array.isArray(b.fontSources) && b.fontSources.length > 0;
+  runAgent(getModelIntakePrompt(type, b, hasColor, hasFont)); // silent; ends → showBriefComplete
+}
+
 function showBriefComplete() {
   if (intakePhase !== "gathering") return; // only from the gathering state
   if (!voiceStepDone) { renderVoiceStep(); return; } // the Tone/rules step is the last question
@@ -4711,15 +4819,12 @@ async function pickDeliverable(type) {
   intakePhase = "gathering";
   takingInIdx = 0;
   updateBackButton();
-  const showKickoff = () => {
-    if (intakePhase === "gathering" && !intakeStack.querySelector(".intake-group")) {
-      showIntakePending(COPY.intake.kickoffPending);
-    }
-  };
-  if (flip && flip.finished) flip.finished.then(showKickoff, showKickoff);
-  else showKickoff();
   try { await window.desktop.beginIntake("web-pages", type); } catch {}
-  runAgent(getDesigningPrompt(type)); // silent kickoff — no user bubble for the instruction
+  // The fixed questions are now client-rendered (zero tokens); only color/font later
+  // spend a model turn. Start the question script once the head flip settles.
+  const startQuestions = () => { if (intakePhase === "gathering") startClientIntake(type); };
+  if (flip && flip.finished) flip.finished.then(startQuestions, startQuestions);
+  else startQuestions();
 }
 
 // Step back through the flow. During questioning → back to the Web Site / App fork
@@ -4744,43 +4849,35 @@ function updateBackButton() {
 }
 intakeBack.addEventListener("click", goBack);
 
-// The instruction that turns "Get Designing" into an agent-driven, in-pane intake,
-// tailored to the picked type (web site vs app).
-function getDesigningPrompt(type) {
+// The ONE model turn in Get Designing: the fixed brief questions are already collected
+// client-side (startClientIntake), so the model only supplies the questions whose
+// OPTIONS need judgment — the sections/screens list (fitted to the type + vibe) and,
+// unless the designer already named them, a color and a font. It reads the designer's
+// own description (passed in) to tailor every option, asks only for what's still
+// missing, then a one-line recap.
+function getModelIntakePrompt(type, brief, hasColor, hasFont) {
   const kind = type === "app" ? "app" : "web site";
   const sectionsWord = type === "app" ? "screens/views (e.g. dashboard, settings, profile)" : "sections (e.g. hero, features, pricing)";
-  return [
-    `The designer chose "Get Designing" and is designing a ${kind}. Gather a short design brief by calling`,
-    "the `intake` tool (mcp__intake__intake) — do NOT ask questions in chat; every question goes through",
-    "`intake` so it renders in the pane. Tailor the wording to a " + kind + ". In ALL card text (labels,",
-    "help, options), use a typographic apostrophe (’) and no em-dashes, never a straight ' or a --. Ask",
-    "ONE QUESTION AT A TIME:",
-    '1. First call: ONE open-text card, long:true, maxLength ~400 — { id:"what", field:"what" } — asking,',
-    "   in a warm line, what they're making and the feeling they want.",
-    "2. Then ask the follow-ups below ONE AT A TIME: a SEPARATE `intake` call per question, a SINGLE card",
-    "   each, reading the answer before the next so you can adapt and skip anything already covered. Do NOT",
-    "   batch several into one call (that dumps them on screen at once instead of one at a time). Order,",
-    "   each its own call:",
-    '   - The company/brand name AND the project name are the ONE exception: you MAY send these two in a',
-    "     SINGLE call (two cards) so they appear together as a pair. Omit either name they already gave:",
-    '     { id:"clientName", field:"clientName", label:"Company or brand name" } and',
-    '     { id:"projectName", field:"projectName", label:"A name for this project" };',
-    `   - a chips card of likely ${sectionsWord} { id:"sections", field:"sections", options:[…] };`,
-    '   - a reference card { id:"reference", field:"references" } for a ' + kind + ' they like and why;',
-    '   - IF they did NOT mention colors, a color-swatch card { id:"primaryColor", field:"colorSources",',
-    "     options:[~5 tasteful hex values fitting the vibe] } to pick a primary color;",
-    '   - IF they did NOT mention fonts, a font-pick card { id:"font", field:"fontSources",',
-    "     options:[~4 Google-Font family names fitting the vibe] } to pick a font.",
-    "   Do NOT ask anything about TONE or copy voice/rules — the pane adds that step on its own after your",
-    "   questions, so never send a tone or copy-rules card yourself.",
-    '   Mark every follow-up skippable:true (agentDecidesLabel like "I\'ll let you choose", or "Skip" for the names).',
-    "   Omit any card whose value they already gave (a named color/font, a reference to pull from, a name).",
-    "   If the designer DISMISSES a question (the intake tool returns an error), stop and wait, do not retry.",
-    "3. Do NOT build or edit anything in THIS turn — the designer launches the build from the pane's",
-    '   "Start designing" button, which runs as its own step. Just reply with ONE short, warm recap line',
-    "   of the brief you gathered, then stop. Do NOT mention phases, a \"step 2\", setup, or ask them to",
-    '   confirm or "say the word" — the build starts on its own from the pane.',
-  ].join("\n");
+  const b = brief || {};
+  const desc = b.what ? String(b.what).trim() : "";
+  const lines = [
+    `The designer is making a ${kind} and already gave the core of their brief. In their words:`,
+    desc ? `“${desc}”` : "(they did not describe it in words)",
+    "Offer ONLY the card(s) below via the `intake` tool (mcp__intake__intake) — one card per call, one at a",
+    "time, rendered in the pane (never in chat). In ALL card text use a typographic apostrophe (’) and no",
+    "em-dashes, never a straight ' or a --. Tailor every option to the vibe of their description AND to a " + kind + ":",
+    `  - a chips card of likely ${sectionsWord} { id:"sections", field:"sections", options:[~8-10 fitting a ${kind} and the vibe] }, skippable:true;`,
+  ];
+  if (!hasColor) lines.push('  - a color-swatch card { id:"primaryColor", field:"colorSources", options:[~5 tasteful hex values fitting the vibe] }, skippable:true;');
+  if (!hasFont) lines.push('  - a font-pick card { id:"font", field:"fontSources", options:[~4 Google-Font family names fitting the vibe] }, skippable:true;');
+  lines.push("If their description already lists specific sections, names a color, or names a font, OMIT that card —");
+  lines.push("only offer what they have NOT already decided. Do NOT ask about tone/voice, names, or references —");
+  lines.push("those are already handled, never send those cards. If the designer DISMISSES a question (the tool");
+  lines.push("returns an error), stop and wait, do not retry. Do NOT build or edit anything — the build launches");
+  lines.push("from the pane's \"Start designing\" button. After the card(s) are answered, reply with ONE short, warm");
+  lines.push("recap line of the brief, then stop. Do NOT mention phases, a \"step 2\", or ask them to confirm — the");
+  lines.push("build starts on its own from the pane.");
+  return lines.filter(Boolean).join("\n");
 }
 
 // Core send: fire a prompt at the agent. `echoText`, when given, is shown as the

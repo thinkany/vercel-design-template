@@ -495,6 +495,16 @@ window.COPY = {
     logoDropDefault: "Drop a logo, or click to choose",
     designingMessage: (type) => `Designing ${type === "app" ? "an app" : "a website"}. I’ll ask you a few questions here and then we’ll get designing.`,
     kickoffPending: "Hold tight while we get things started. I’ll ask you a few questions right here.",
+    skip: "Skip",
+    // Client-rendered intake questions, asked in the pane with NO model turn. Sections,
+    // color, and font stay model-driven (one turn) so their options fit the vibe + type.
+    q: {
+      what: "In your words, what are you making, and how should it feel?",
+      whatPlaceholder: "A few sentences: what it’s for, who it’s for, the mood you’re after…",
+      clientName: "Company or brand name",
+      projectName: "A name for this project",
+      reference: (kind) => `Is there a ${kind} you love? Share it and what draws you to it.`,
+    },
     // The two-panel start fork (Client Setup vs Get Designing).
     start: {
       headTitle: "Let’s make something",

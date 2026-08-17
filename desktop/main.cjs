@@ -1216,6 +1216,27 @@ ipcMain.handle("intake:designPrompt", () => {
   return { prompt: buildDesignPrompt(intakeBrief) };
 });
 
+// Translate a card batch's answers (keyed by card id) into Brief FIELD values,
+// normalizing per card type. Shared by the agent path (agent:intakeAnswer) and the
+// client-rendered path (intake:applyAnswers) so both fold answers identically.
+function foldCardAnswers(cards, answers) {
+  const byField = {};
+  for (const c of Array.isArray(cards) ? cards : []) {
+    if (!c.field || !answers || !(c.id in answers)) continue;
+    let v = answers[c.id];
+    // Brief.references is a SourceRef[]. A reference card yields an array of
+    // {url,reason} (up to 3); tolerate a lone object from older callers.
+    if (c.type === "reference" && v && !Array.isArray(v)) v = [v];
+    // color-swatch / font-pick yield a scalar (hex / font name); the Brief's
+    // colorSources & fontSources are SourceRef[] — wrap into { value }.
+    if ((c.field === "colorSources" || c.field === "fontSources") && v && !Array.isArray(v)) {
+      v = [{ value: v, reason: null }];
+    }
+    byField[c.field] = v;
+  }
+  return byField;
+}
+
 // The pane submitted the designer's intake answers → fold them into the running
 // Brief (mapping each card's `field`), push the updated Brief to the pane, and
 // resolve the waiting tool call so the agent continues.
@@ -1224,26 +1245,23 @@ ipcMain.handle("agent:intakeAnswer", (event, { id, answers }) => {
   if (p) {
     pendingIntakes.delete(id);
     if (intakeBrief && Array.isArray(p.cards)) {
-      const byField = {};
-      for (const c of p.cards) {
-        if (!c.field || !answers || !(c.id in answers)) continue;
-        let v = answers[c.id];
-        // Brief.references is a SourceRef[]. A reference card yields an array of
-        // {url,reason} (up to 3); tolerate a lone object from older callers.
-        if (c.type === "reference" && v && !Array.isArray(v)) v = [v];
-        // color-swatch / font-pick yield a scalar (hex / font name); the Brief's
-        // colorSources & fontSources are SourceRef[] — wrap into { value }.
-        if ((c.field === "colorSources" || c.field === "fontSources") && v && !Array.isArray(v)) {
-          v = [{ value: v, reason: null }];
-        }
-        byField[c.field] = v;
-      }
-      intakeBrief = applyAnswers(intakeBrief, byField);
+      intakeBrief = applyAnswers(intakeBrief, foldCardAnswers(p.cards, answers));
       if (!event.sender.isDestroyed()) event.sender.send("agent:brief", intakeBrief);
     }
     p.resolve(answers || {});
   }
   return { ok: true };
+});
+
+// Client-rendered intake questions (no model turn) fold their answers straight into
+// the Brief here — same mapping as the agent path, but there is no pending tool to
+// resolve. `cards` carries each answered card's {id, field, type} so foldCardAnswers
+// can map + normalize; `answers` is keyed by card id.
+ipcMain.handle("intake:applyAnswers", (event, { cards, answers } = {}) => {
+  if (!intakeBrief) intakeBrief = createEmptyBrief("web-pages");
+  intakeBrief = applyAnswers(intakeBrief, foldCardAnswers(cards, answers));
+  if (!event.sender.isDestroyed()) event.sender.send("agent:brief", intakeBrief);
+  return { ok: true, brief: intakeBrief };
 });
 
 // The designer dismissed the intake → reject so the tool returns an error (not a hang)
