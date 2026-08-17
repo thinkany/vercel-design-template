@@ -18,6 +18,19 @@ const CLIENT_NAME = escapeHtml(process.env.CLIENT_NAME || 'Preview')
 const PROJECT_TITLE = escapeHtml(process.env.PROJECT_TITLE || 'A Design System')
 //const COMPANY_NAME = escapeHtml(process.env.COMPANY_NAME || '')
 
+// Gate UI copy. This edge function can't import the app's src/copy catalog (separate
+// runtime), so it keeps its own local catalog following the same convention. Static
+// literals, safe to interpolate into LOGIN_PAGE (HTML + inline script) without escaping.
+const COPY = {
+  previewAccess: 'Preview Access',
+  passwordPlaceholder: 'Enter password',
+  showPassword: 'Show password',
+  hidePassword: 'Hide password',
+  error: 'Incorrect password, please check and try again.',
+  submit: 'Enter',
+  footer: 'Design preview environment, not meant for distribution',
+}
+
 const LOGIN_PAGE = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -216,13 +229,13 @@ const LOGIN_PAGE = `<!DOCTYPE html>
     </div>
 
     <div class="gate">
-      <div class="label">Preview Access</div>
+      <div class="label">${COPY.previewAccess}</div>
       <div class="divider"></div>
 
       <form class="field" id="form" onsubmit="attempt(event)">
         <div class="pw-wrap">
-          <input type="password" id="pw" placeholder="Enter password" autocomplete="current-password" autofocus />
-          <button type="button" class="toggle-vis" id="toggle" onclick="toggleVis()" aria-label="Show password">
+          <input type="password" id="pw" placeholder="${COPY.passwordPlaceholder}" autocomplete="current-password" autofocus />
+          <button type="button" class="toggle-vis" id="toggle" onclick="toggleVis()" aria-label="${COPY.showPassword}">
             <svg id="icon-eye" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
               <circle cx="12" cy="12" r="3"/>
@@ -234,12 +247,12 @@ const LOGIN_PAGE = `<!DOCTYPE html>
             </svg>
           </button>
         </div>
-        <div class="error-msg" id="err">Incorrect password — please check and try again.</div>
-        <button type="submit">Enter</button>
+        <div class="error-msg" id="err">${COPY.error}</div>
+        <button type="submit">${COPY.submit}</button>
       </form>
     </div>
 
-    <p class="footer-note">Design preview environment &mdash; not meant for distribution</p>
+    <p class="footer-note">${COPY.footer}</p>
   </div>
 
   <script>
@@ -281,12 +294,12 @@ const LOGIN_PAGE = `<!DOCTYPE html>
         input.type = 'text';
         eyeOn.style.display = 'none';
         eyeOff.style.display = 'block';
-        toggle.setAttribute('aria-label', 'Hide password');
+        toggle.setAttribute('aria-label', '${COPY.hidePassword}');
       } else {
         input.type = 'password';
         eyeOn.style.display = 'block';
         eyeOff.style.display = 'none';
-        toggle.setAttribute('aria-label', 'Show password');
+        toggle.setAttribute('aria-label', '${COPY.showPassword}');
       }
     }
   </script>

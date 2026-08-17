@@ -7,6 +7,7 @@ import {
   createVariation,
   defaultVariationMeta,
 } from "@/data/variations";
+import { copy } from "@/copy";
 
 const SRC_THUMB_W = 80;
 const SRC_THUMB_H = Math.round(SRC_THUMB_W * 9 / 16); // 45
@@ -68,7 +69,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
         brandStatus: needsStyleguide ? "needs-review" : "established",
       });
     } catch {
-      setApiError("Couldn't create the variation — is the dev server running?");
+      setApiError(copy.makeVariation.error);
       setIsCreating(false);
       return;
     }
@@ -119,7 +120,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
               textTransform: "uppercase",
               marginBottom: 6,
             }}>
-              New Variation — {newVersion}
+              {copy.makeVariation.eyebrow(newVersion)}
             </div>
             <h2 style={{
               fontFamily: "var(--admin-font-heading)",
@@ -129,7 +130,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
               margin: 0,
               letterSpacing: "-0.01em",
             }}>
-              Make New Variation
+              {copy.makeVariation.title}
             </h2>
           </div>
           <button
@@ -162,7 +163,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
               textTransform: "uppercase",
               marginBottom: 12,
             }}>
-              Duplicate from
+              {copy.makeVariation.duplicateFrom}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {variations.map((v) => {
@@ -233,7 +234,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                         {v.title}
                       </div>
                       <div style={{ fontSize: 11, color: "var(--admin-gray-mid)" }}>
-                        Modified {v.modifiedAt}
+                        {copy.makeVariation.modifiedPrefix(v.modifiedAt)}
                       </div>
                     </div>
 
@@ -278,13 +279,13 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                 textTransform: "uppercase",
                 marginBottom: 8,
               }}>
-                Variation Title
+                {copy.makeVariation.titleLabel}
               </label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => { setTitle(e.target.value); setTitleDirty(true); }}
-                placeholder={`Variation ${String(variations.length).padStart(2, "0")}`}
+                placeholder={copy.makeVariation.titlePlaceholder(String(variations.length).padStart(2, "0"))}
                 style={{
                   width: "100%",
                   padding: "10px 14px",
@@ -310,12 +311,12 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
                 textTransform: "uppercase",
                 marginBottom: 8,
               }}>
-                Description
+                {copy.makeVariation.descriptionLabel}
               </label>
               <textarea
                 value={description}
                 onChange={(e) => { setDescription(e.target.value); setDescDirty(true); }}
-                placeholder="Describe what's different about this variation…"
+                placeholder={copy.makeVariation.descriptionPlaceholder}
                 rows={3}
                 style={{
                   width: "100%",
@@ -346,10 +347,10 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
               />
               <span>
                 <span style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--admin-ink)", marginBottom: 3 }}>
-                  This variation needs its own styleguide changes
+                  {copy.makeVariation.needsStyleguideTitle}
                 </span>
                 <span style={{ display: "block", fontSize: 12, color: "var(--admin-gray-mid)", lineHeight: 1.5 }}>
-                  The source styleguide is copied either way. Check this to flag the copy for review — its styleguide will show a setup reminder until you mark it updated.
+                  {copy.makeVariation.needsStyleguideHint}
                 </span>
               </span>
             </label>
@@ -384,7 +385,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
               color: "var(--admin-gray-dark)",
             }}
           >
-            Cancel
+            {copy.makeVariation.cancel}
           </button>
           <button
             onClick={handleCreate}
@@ -404,7 +405,7 @@ export function MakeVariationModal({ variations, onClose, onCreate }: Props) {
               transition: "background 0.15s",
             }}
           >
-            {isCreating ? "Creating…" : "Create Variation"}
+            {isCreating ? copy.makeVariation.creating : copy.makeVariation.create}
           </button>
         </div>
       </div>

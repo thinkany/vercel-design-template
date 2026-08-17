@@ -1,4 +1,6 @@
 // ©2026 thinkany llc. All rights reserved.
+import { copy } from "@/copy";
+
 const DesktopIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
     <rect x="2" y="3" width="20" height="14" rx="1" />
@@ -67,7 +69,7 @@ export function ViewToggle({ view, onChange, views = ["desktop", "tablet", "mobi
       }}
     >
       <span style={{ fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginRight: 6 }}>
-        View
+        {copy.viewToggle.view}
       </span>
       {views.map((v) => {
         const Icon = ICONS[v];
@@ -92,15 +94,15 @@ export function ViewToggle({ view, onChange, views = ["desktop", "tablet", "mobi
           }}
         >
           <Icon />
-          {v.charAt(0).toUpperCase() + v.slice(1)}
+          {copy.viewToggle.devices[v]}
         </button>
         );
       })}
       {canRotate && (
         <button
           onClick={onRotate}
-          title={`Rotate to ${orientation === "portrait" ? "landscape" : "portrait"}`}
-          aria-label="Rotate device"
+          title={copy.viewToggle.rotateTitle(orientation === "portrait" ? copy.viewToggle.orientation.landscape : copy.viewToggle.orientation.portrait)}
+          aria-label={copy.viewToggle.rotateAria}
           style={{
             background: "transparent",
             border: "1px solid rgba(0,0,0,0.2)",
@@ -125,7 +127,7 @@ export function ViewToggle({ view, onChange, views = ["desktop", "tablet", "mobi
           >
             <RotateIcon />
           </span>
-          Rotate
+          {copy.viewToggle.rotate}
         </button>
       )}
     </div>

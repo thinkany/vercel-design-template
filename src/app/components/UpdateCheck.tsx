@@ -13,6 +13,7 @@ import {
   compareVersions,
   type VersionManifest,
 } from "@/version";
+import { copy } from "@/copy";
 
 type Status =
   | { kind: "idle" }
@@ -80,7 +81,7 @@ export function UpdateCheck() {
     setRevert({ kind: "doing" });
     fetch("/api/upgrade/revert", { method: "POST" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((res) => setRevert({ kind: "done", msg: res.message || "Reverted." }))
+      .then((res) => setRevert({ kind: "done", msg: res.message || copy.updateCheck.revertModal.defaultMsg }))
       .catch((e) => setRevert({ kind: "error", msg: String(e.message || e) }));
   }
 
@@ -114,11 +115,11 @@ export function UpdateCheck() {
   const hasUpdate = status.kind === "available";
   const label = (() => {
     switch (status.kind) {
-      case "checking": return "Checking…";
-      case "available": return `Update available · v${status.latest.version}`;
-      case "current": return `v${TEMPLATE_VERSION} · up to date`;
-      case "error": return `v${TEMPLATE_VERSION} · check for updates`;
-      default: return `v${TEMPLATE_VERSION}`;
+      case "checking": return copy.updateCheck.checking;
+      case "available": return copy.updateCheck.available(status.latest.version);
+      case "current": return copy.updateCheck.current(TEMPLATE_VERSION);
+      case "error": return copy.updateCheck.checkForUpdates(TEMPLATE_VERSION);
+      default: return copy.updateCheck.idle(TEMPLATE_VERSION);
     }
   })();
 
@@ -126,7 +127,7 @@ export function UpdateCheck() {
     <>
       <button
         onClick={() => (hasUpdate ? openUpgrade() : check())}
-        title={hasUpdate ? (latest?.notes ?? "A newer template version is available.") : "Check for template updates"}
+        title={hasUpdate ? (latest?.notes ?? copy.updateCheck.titleAvailable) : copy.updateCheck.titleCheck}
         style={{
           display: "inline-flex", alignItems: "center", gap: 6,
           background: hasUpdate ? "var(--admin-accent)" : "transparent",
@@ -144,7 +145,7 @@ export function UpdateCheck() {
       {revertInfo?.canRevert && (
         <button
           onClick={() => setRevert({ kind: "confirm" })}
-          title={`Undo the last update (v${revertInfo.to ?? "?"} → v${revertInfo.from ?? "?"})`}
+          title={copy.updateCheck.revertTitle(revertInfo.to ?? "?", revertInfo.from ?? "?")}
           style={{
             display: "inline-flex", alignItems: "center", gap: 5,
             background: "transparent", border: "1px solid rgba(0,0,0,0.15)",
@@ -153,7 +154,7 @@ export function UpdateCheck() {
             color: "var(--admin-gray-mid)", fontFamily: "inherit",
           }}
         >
-          ↩ Revert update
+          {copy.updateCheck.revert}
         </button>
       )}
 
@@ -205,16 +206,16 @@ function UpgradeModal({
       <div style={{ background: "#fff", borderRadius: 4, width: "90%", maxWidth: 520, maxHeight: "85vh", overflow: "auto", boxShadow: "0 24px 64px rgba(0,0,0,0.22)" }}>
         <div style={{ padding: "22px 26px 16px", borderBottom: "1px solid rgba(0,0,0,0.08)" }}>
           <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.15em", color: "var(--admin-gray-mid)", textTransform: "uppercase", marginBottom: 6 }}>
-            Template update · v{latest.version}
+            {copy.updateCheck.modal.eyebrow(latest.version)}
           </div>
           <h2 style={{ fontFamily: "var(--admin-font-heading)", fontSize: 20, fontWeight: 300, color: "var(--admin-ink)", margin: 0 }}>
-            {state.kind === "done" ? "Update applied" : "Update this project"}
+            {state.kind === "done" ? copy.updateCheck.modal.titleApplied : copy.updateCheck.modal.titleApply}
           </h2>
         </div>
 
         <div style={{ padding: "20px 26px", fontSize: 13, color: "var(--admin-gray-dark)", lineHeight: 1.6 }}>
-          {state.kind === "loading" && <p style={{ margin: 0 }}>Preparing update…</p>}
-          {state.kind === "applying" && <p style={{ margin: 0 }}>Applying update — writing files…</p>}
+          {state.kind === "loading" && <p style={{ margin: 0 }}>{copy.updateCheck.modal.preparing}</p>}
+          {state.kind === "applying" && <p style={{ margin: 0 }}>{copy.updateCheck.modal.applying}</p>}
 
           {state.kind === "error" && (
             <p style={{ margin: 0, color: "var(--admin-danger)" }}>{state.message}</p>
@@ -224,11 +225,13 @@ function UpgradeModal({
             <>
               {latest.notes && <p style={{ margin: "0 0 14px" }}>{latest.notes}</p>}
               <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 14 }}>
-                <Row label="Version" value={`${state.report.version.from ?? "?"} → ${state.report.version.to ?? latest.version}`} />
-                <Row label="Files to update" value={String(state.report.applied.length)} />
-                {state.report.review.length > 0 && <Row label="Need review (sidecar)" value={String(state.report.review.length)} />}
-                <Row label="Your files kept" value={String(state.report.kept.length)} />
+                <Row label={copy.updateCheck.modal.rowVersion} value={`${state.report.version.from ?? "?"} → ${state.report.version.to ?? latest.version}`} />
+                <Row label={copy.updateCheck.modal.rowApplied} value={String(state.report.applied.length)} />
+                {state.report.review.length > 0 && <Row label={copy.updateCheck.modal.rowReview} value={String(state.report.review.length)} />}
+                <Row label={copy.updateCheck.modal.rowKept} value={String(state.report.kept.length)} />
               </div>
+              {/* copy: the multi-<code>-chip upgrade-guidance paragraphs below stay inline
+                  (fragmenting them into src/copy strands glue words); Phase-2 slot renderer. */}
               {dirty ? (
                 <div style={{ background: "#fef3c7", border: "1px solid #f0d488", borderRadius: 4, padding: "10px 12px", fontSize: 12, color: "#663d00" }}>
                   <strong>{state.report.gitDirty.length} uncommitted change(s).</strong> Commit or stash first so the
@@ -269,18 +272,18 @@ function UpgradeModal({
         <div style={{ padding: "14px 26px", borderTop: "1px solid rgba(0,0,0,0.08)", display: "flex", gap: 10, justifyContent: "flex-end" }}>
           {state.kind === "preview" && (
             <>
-              <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-              <AccentBtn onClick={() => onApply(dirty)}>{dirty ? "Apply anyway" : "Apply update"}</AccentBtn>
+              <GhostBtn onClick={onClose}>{copy.updateCheck.modal.cancel}</GhostBtn>
+              <AccentBtn onClick={() => onApply(dirty)}>{dirty ? copy.updateCheck.modal.applyAnyway : copy.updateCheck.modal.apply}</AccentBtn>
             </>
           )}
           {state.kind === "done" && (
             <>
-              <GhostBtn onClick={onClose}>Close</GhostBtn>
-              <AccentBtn onClick={() => window.location.reload()}>Refresh</AccentBtn>
+              <GhostBtn onClick={onClose}>{copy.updateCheck.modal.close}</GhostBtn>
+              <AccentBtn onClick={() => window.location.reload()}>{copy.updateCheck.modal.refresh}</AccentBtn>
             </>
           )}
-          {state.kind === "error" && <GhostBtn onClick={onClose}>Close</GhostBtn>}
-          {busy && <span style={{ fontSize: 12, color: "var(--admin-gray-mid)" }}>Working…</span>}
+          {state.kind === "error" && <GhostBtn onClick={onClose}>{copy.updateCheck.modal.close}</GhostBtn>}
+          {busy && <span style={{ fontSize: 12, color: "var(--admin-gray-mid)" }}>{copy.updateCheck.modal.working}</span>}
         </div>
       </div>
     </div>
@@ -304,7 +307,7 @@ function RevertModal({
       <div style={{ background: "#fff", borderRadius: 4, width: "90%", maxWidth: 460, boxShadow: "0 24px 64px rgba(0,0,0,0.22)" }}>
         <div style={{ padding: "22px 26px 16px", borderBottom: "1px solid rgba(0,0,0,0.08)" }}>
           <h2 style={{ fontFamily: "var(--admin-font-heading)", fontSize: 20, fontWeight: 300, color: "var(--admin-ink)", margin: 0 }}>
-            {state.kind === "done" ? "Update reverted" : "Revert the last update?"}
+            {state.kind === "done" ? copy.updateCheck.revertModal.titleReverted : copy.updateCheck.revertModal.titleConfirm}
           </h2>
         </div>
         <div style={{ padding: "20px 26px", fontSize: 13, color: "var(--admin-gray-dark)", lineHeight: 1.6 }}>
@@ -315,15 +318,15 @@ function RevertModal({
               Your work — <code>.env</code>, your variations, your palette — is untouched either way.
             </p>
           )}
-          {state.kind === "doing" && <p style={{ margin: 0 }}>Restoring…</p>}
+          {state.kind === "doing" && <p style={{ margin: 0 }}>{copy.updateCheck.revertModal.restoring}</p>}
           {state.kind === "done" && <p style={{ margin: 0 }}>{state.msg} Reload to see the restored version, then restart the dev server if anything looks off.</p>}
           {state.kind === "error" && <p style={{ margin: 0, color: "var(--admin-danger)" }}>{state.msg}</p>}
         </div>
         <div style={{ padding: "14px 26px", borderTop: "1px solid rgba(0,0,0,0.08)", display: "flex", gap: 10, justifyContent: "flex-end" }}>
-          {state.kind === "confirm" && (<><GhostBtn onClick={onClose}>Cancel</GhostBtn><AccentBtn onClick={onConfirm}>Revert</AccentBtn></>)}
-          {state.kind === "done" && <AccentBtn onClick={onClose}>Reload</AccentBtn>}
-          {state.kind === "error" && <GhostBtn onClick={onClose}>Close</GhostBtn>}
-          {busy && <span style={{ fontSize: 12, color: "var(--admin-gray-mid)" }}>Working…</span>}
+          {state.kind === "confirm" && (<><GhostBtn onClick={onClose}>{copy.updateCheck.revertModal.cancel}</GhostBtn><AccentBtn onClick={onConfirm}>{copy.updateCheck.revertModal.revert}</AccentBtn></>)}
+          {state.kind === "done" && <AccentBtn onClick={onClose}>{copy.updateCheck.revertModal.reload}</AccentBtn>}
+          {state.kind === "error" && <GhostBtn onClick={onClose}>{copy.updateCheck.revertModal.close}</GhostBtn>}
+          {busy && <span style={{ fontSize: 12, color: "var(--admin-gray-mid)" }}>{copy.updateCheck.revertModal.working}</span>}
         </div>
       </div>
     </div>

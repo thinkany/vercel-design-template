@@ -10,6 +10,7 @@ import {
   type Variation,
 } from "@/data/variations";
 import { siteConfig } from "@/config/site";
+import { copy } from "@/copy";
 import { getRole } from "@/data/role";
 import { VariationCard } from "./VariationCard";
 import { MakeVariationModal } from "./MakeVariationModal";
@@ -125,7 +126,7 @@ export function Dashboard() {
             color: "var(--admin-gray-light)",
             textTransform: "uppercase",
           }}>
-            Designed by
+            {copy.dashboard.designedBy}
           </span>
           <span style={{
             fontSize: 11,
@@ -163,7 +164,7 @@ export function Dashboard() {
               fontFamily: "inherit",
             }}
           >
-            Sign Out
+            {copy.dashboard.signOut}
           </button>
           )}
           {/* Brand This Project — shown only while the project is UNBRANDED (a designer
@@ -187,7 +188,7 @@ export function Dashboard() {
               fontFamily: "inherit",
             }}
           >
-            Brand This Project
+            {copy.dashboard.brandProject}
           </button>
           )}
         {isAdmin && import.meta.env.DEV && (
@@ -207,7 +208,7 @@ export function Dashboard() {
               fontFamily: "inherit",
             }}
           >
-            + Make New Variation
+            {copy.dashboard.makeVariation}
           </button>
         )}
         </div>
@@ -235,7 +236,7 @@ export function Dashboard() {
             )}
           </h1>
           <p style={{ fontSize: 14, color: "var(--admin-gray-mid)", margin: 0 }}>
-            {visibleVariations.length} design variation{visibleVariations.length !== 1 ? "s" : ""}
+            {copy.dashboard.variationCount(visibleVariations.length)}
           </p>
         </div>
 
@@ -270,11 +271,10 @@ export function Dashboard() {
             }}
           >
             <span style={{ fontSize: 14, fontWeight: 600, color: "var(--admin-ink)" }}>
-              {isStarting ? "Creating your first design…" : "▶  Start designing"}
+              {isStarting ? copy.dashboard.startDesigningBusy : copy.dashboard.startDesigning}
             </span>
             <span style={{ fontSize: 12, color: "var(--admin-gray-mid)" }}>
-              Creates your working copy from the base template — your design lives
-              there, base stays the clean starting point.
+              {copy.dashboard.startDesigningHint}
             </span>
           </button>
         )}
@@ -305,10 +305,10 @@ export function Dashboard() {
       {dialog?.type === "base-guard" && (
         <Overlay onClose={() => setDialog(null)}>
           <h3 style={{ fontFamily: "var(--admin-font-heading)", fontSize: 22, fontWeight: 300, color: "var(--admin-ink)", margin: "0 0 12px" }}>
-            Can't remove this one
+            {copy.dashboard.baseGuard.title}
           </h3>
           <p style={{ fontSize: 14, color: "var(--admin-gray-dark)", lineHeight: 1.65, margin: "0 0 28px" }}>
-            Oh sorry! We can not remove the base variation, we need it as our foundation.
+            {copy.dashboard.baseGuard.body}
           </p>
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <button
@@ -325,7 +325,7 @@ export function Dashboard() {
                 fontWeight: 500,
               }}
             >
-              Got it
+              {copy.dashboard.baseGuard.dismiss}
             </button>
           </div>
         </Overlay>
@@ -335,13 +335,13 @@ export function Dashboard() {
       {dialog?.type === "remove" && (
         <Overlay onClose={() => setDialog(null)}>
           <h3 style={{ fontFamily: "var(--admin-font-heading)", fontSize: 22, fontWeight: 300, color: "var(--admin-ink)", margin: "0 0 10px" }}>
-            Remove this variation?
+            {copy.dashboard.remove.title}
           </h3>
           <p style={{ fontSize: 14, fontWeight: 500, color: "var(--admin-ink)", margin: "0 0 6px" }}>
             {dialog.variation.title}
           </p>
           <p style={{ fontSize: 13, color: "var(--admin-gray-mid)", lineHeight: 1.65, margin: "0 0 28px" }}>
-            This removes it from the dashboard. Files on disk are not deleted.
+            {copy.dashboard.remove.body}
           </p>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <button
@@ -356,7 +356,7 @@ export function Dashboard() {
                 fontFamily: "inherit",
               }}
             >
-              Cancel
+              {copy.dashboard.remove.cancel}
             </button>
             <button
               onClick={() => confirmRemove(dialog.variation.id)}
@@ -372,7 +372,7 @@ export function Dashboard() {
                 fontWeight: 500,
               }}
             >
-              Remove
+              {copy.dashboard.remove.confirm}
             </button>
           </div>
         </Overlay>

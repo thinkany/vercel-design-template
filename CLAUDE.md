@@ -167,6 +167,12 @@ Before hand-rolling UI, use what's installed:
 ## Conventions
 
 - **`@` alias → `src/`** ([vite.config.ts](vite.config.ts)).
+- **Admin/chrome copy is keyed, not inline.** Framework UI strings (Dashboard, VariationCard,
+  MakeVariationModal, …) live in [src/copy/en.ts](src/copy/en.ts) and render via
+  `import { copy } from "@/copy"` (`copy.area.item`, parameterized entries are functions). Add or
+  reword there, never hardcode a label in a component. **Designer page content stays inline** in the
+  variation components (it's their design, not framework copy). Locale files are added later beside
+  `en.ts`; `index.ts` picks one. (Shell/gate/skill copy are separate catalogs, same convention.)
 - Components are `.tsx`; capitalized function exports are treated as components by the registry
   (lowercase/data exports are skipped).
 - **Content is single-source, never fork it by breakpoint.** Author copy/images once;
@@ -198,6 +204,11 @@ Invoke the skill the moment its phase begins, don't re-derive its rules from thi
   how, the one live token read) + the low-chatter, TodoWrite-driven progress protocol. **Invoke
   it whenever a designer asks to build/design/create/lay out/edit a page/section/hero/landing.**
   Every design is a variation, design #1 edits the working variation's `Home.tsx`, never the base.
+  **Carve-out: a single point-to-comment element edit is NOT a `/design` trigger.** A scoped tweak
+  (the "Design feedback, pointed at an element" prompts, which carry a `Scope:` line) is a direct
+  Read→Edit in the variation's component, don't load `/design` for it. Escalate to `/design` only
+  when the scope is a whole section, a new section/page, a layout/responsive rework, or a change
+  spanning multiple sections (the prompt's `Scope: section` hint, or the note asks for it).
 - **[`/diagnose`](.claude/commands/diagnose.md)** → a **reported visual bug** (something not
   showing, cut off, mispositioned, overlapping, hidden behind another element). Headlessly
   screenshot the `?capture=` route and look; carries the symptom→cause→fix table for this

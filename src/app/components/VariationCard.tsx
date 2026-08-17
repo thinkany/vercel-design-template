@@ -1,9 +1,11 @@
 // ©2026 thinkany llc. All rights reserved.
 import { useState, useRef, useEffect } from "react";
+import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { Variation } from "@/data/variations";
 import { getVariationUrl, getStylesUrl } from "@/data/variations";
 import { resolveBrand } from "@/app/brandRegistry";
+import { copy } from "@/copy";
 
 // The `brief` field can hold the assembled Get-Designing prompt: a freeform lead
 // sentence followed by ". Label: value" (and a few colon-less "Model … / Colors from
@@ -36,6 +38,29 @@ function parseBrief(raw: string): { lead: string; rows: { label: string; value: 
     if (!lead) lead = p; else rows.push({ label: "", value: p });
   }
   return { lead, rows };
+}
+
+// A brief-row value may contain hex colors (e.g. the "Colors from" row). Render each
+// hex with a small circle swatch for reference; everything else stays plain text.
+function renderBriefValue(value: string): ReactNode {
+  const HEX = /#[0-9a-fA-F]{3,8}\b/g;
+  const parts: ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = HEX.exec(value)) !== null) {
+    if (m.index > last) parts.push(value.slice(last, m.index));
+    const hex = m[0];
+    parts.push(
+      <span key={m.index} style={{ display: "inline-flex", alignItems: "center", gap: 5, verticalAlign: "middle" }}>
+        <span style={{ width: 12, height: 12, borderRadius: "50%", background: hex, border: "1px solid rgba(0,0,0,0.15)", display: "inline-block" }} />
+        {hex}
+      </span>
+    );
+    last = m.index + hex.length;
+  }
+  if (parts.length === 0) return value; // no hex → plain text
+  if (last < value.length) parts.push(value.slice(last));
+  return parts;
 }
 
 interface Props {
@@ -90,7 +115,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
   const swatches = brand.paletteGroups.flatMap((g) => g.colors);
   const primarySwatch = swatches.find((c) => c.token === "--ta-primary") || swatches[0];
   const primaryColor = variation.primaryColor || primarySwatch?.value || "";
-  const primaryColorName = primarySwatch?.name || "Primary";
+  const primaryColorName = primarySwatch?.name || copy.variationCard.primaryFallbackName;
   const primaryFont = variation.primaryFont || brand.fonts[0]?.name || "";
   const hasBriefCard = !!(variation.brief || primaryColor || primaryFont);
   const parsedBrief = variation.brief ? parseBrief(variation.brief) : null;
@@ -153,7 +178,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
           {variation.screenshot ? (
             <img
               src={variation.screenshot}
-              alt={`Preview: ${variation.title}`}
+              alt={copy.variationCard.previewAlt(variation.title)}
               style={{
                 width: "100%",
                 height: "100%",
@@ -272,7 +297,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
               color: "var(--admin-gray-mid)",
               fontFamily: "var(--admin-font-body)",
             }}>
-              Base
+              {copy.variationCard.base}
             </span>
           )}
         </div>
@@ -325,7 +350,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
             {primaryColor && (
               <span style={{ width: 12, height: 12, borderRadius: 3, background: primaryColor, border: "1px solid rgba(0,0,0,0.14)" }} />
             )}
-            {variation.brief ? "Brief & palette" : "Palette & type"}
+            {variation.brief ? copy.variationCard.briefAndPalette : copy.variationCard.paletteAndType}
           </button>
         )}
 
@@ -348,9 +373,9 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
           }}>
             <span style={{ fontSize: 13, lineHeight: 1.3 }}>⚙</span>
             <span>
-              Styleguide not configured yet — run{" "}
-              <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 5px", borderRadius: 3, fontFamily: "ui-monospace, monospace", fontSize: 11.5 }}>/setup-styleguide</code>{" "}
-              for <strong style={{ fontWeight: 600 }}>{variation.version}</strong> to set its fonts &amp; colors, then mark it done on its <a href={stylesUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#663d00", textDecoration: "underline", textUnderlineOffset: 2 }}>styleguide</a>.
+              {copy.variationCard.setupNudge.lead}{" "}
+              <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 5px", borderRadius: 3, fontFamily: "ui-monospace, monospace", fontSize: 11.5 }}>{copy.variationCard.setupNudge.command}</code>{" "}
+              for <strong style={{ fontWeight: 600 }}>{variation.version}</strong> {copy.variationCard.setupNudge.tail} <a href={stylesUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#663d00", textDecoration: "underline", textUnderlineOffset: 2 }}>{copy.variationCard.setupNudge.linkText}</a>.
             </span>
           </div>
         )}
@@ -364,7 +389,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
         }}>
           <div>
             <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", color: "var(--admin-gray-mid)", textTransform: "uppercase", marginBottom: 3, fontFamily: "var(--admin-font-body)" }}>
-              Created
+              {copy.variationCard.created}
             </div>
             <div style={{ fontSize: 12, color: "var(--admin-gray-dark)", fontFamily: "var(--admin-font-body)" }}>
               {variation.createdAt}
@@ -372,7 +397,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
           </div>
           <div>
             <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", color: "var(--admin-gray-mid)", textTransform: "uppercase", marginBottom: 3, fontFamily: "var(--admin-font-body)" }}>
-              Modified
+              {copy.variationCard.modified}
             </div>
             <div style={{ fontSize: 12, color: "var(--admin-gray-dark)", fontFamily: "var(--admin-font-body)" }}>
               {variation.modifiedAt}
@@ -412,7 +437,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
               pointerEvents: "none",
               zIndex: 9999,
             }}>
-              Variation opens in a new browser tab.
+              {copy.variationCard.viewTooltip}
               <div style={{
                 position: "absolute",
                 top: "100%",
@@ -452,7 +477,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
               fontFamily: "var(--admin-font-body)",
             }}
           >
-            View Design ↗
+            {copy.variationCard.viewDesign}
           </a>
         </div>
 
@@ -480,7 +505,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
             fontFamily: "var(--admin-font-body)",
           }}
         >
-          Styleguide ↗
+          {copy.variationCard.styleguide}
         </a>
 
         {/* Remove — admin only, not on base, and only during local design (dev).
@@ -502,7 +527,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
               textUnderlineOffset: 3,
             }}
           >
-            Remove
+            {copy.variationCard.remove}
           </button>
         )}
       </div>
@@ -523,12 +548,12 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
               <div style={{ fontFamily: "var(--admin-font-heading)", fontStyle: "italic", fontSize: 18, fontWeight: 700, color: "var(--admin-ink)", lineHeight: 1.2 }}>{variation.title}</div>
               <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginTop: 3 }}>{variation.version}</div>
             </div>
-            <button onClick={() => setBriefOpen(false)} aria-label="Close" style={{ flex: "0 0 auto", width: 28, height: 28, border: "none", borderRadius: 999, background: "#f2f2f5", color: "#666", fontSize: 14, cursor: "pointer" }}>✕</button>
+            <button onClick={() => setBriefOpen(false)} aria-label={copy.variationCard.close} style={{ flex: "0 0 auto", width: 28, height: 28, border: "none", borderRadius: 999, background: "#f2f2f5", color: "#666", fontSize: 14, cursor: "pointer" }}>✕</button>
           </div>
 
           {parsedBrief && (
             <div style={{ marginBottom: 18 }}>
-              <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginBottom: 6 }}>Original brief</div>
+              <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginBottom: 6 }}>{copy.variationCard.briefHeading}</div>
               {parsedBrief.lead && (
                 <p style={{ fontFamily: "var(--admin-font-body)", fontStyle: "italic", fontSize: 14, lineHeight: 1.55, color: "var(--admin-gray-dark)", margin: 0 }}>“{parsedBrief.lead}”</p>
               )}
@@ -539,7 +564,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
                       {r.label && (
                         <div style={{ flex: "0 0 84px", fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--admin-gray-mid)" }}>{r.label}</div>
                       )}
-                      <div style={{ flex: 1, fontFamily: "var(--admin-font-body)", fontSize: 13, lineHeight: 1.45, color: "var(--admin-gray-dark)" }}>{r.value}</div>
+                      <div style={{ flex: 1, fontFamily: "var(--admin-font-body)", fontSize: 13, lineHeight: 1.45, color: "var(--admin-gray-dark)" }}>{renderBriefValue(r.value)}</div>
                     </div>
                   ))}
                 </div>
@@ -549,7 +574,7 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
 
           {primaryColor && (
             <div style={{ marginBottom: 18 }}>
-              <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginBottom: 8 }}>Palette</div>
+              <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginBottom: 8 }}>{copy.variationCard.paletteHeading}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <span style={{ width: 40, height: 40, borderRadius: 6, background: primaryColor, border: "1px solid rgba(0,0,0,0.12)", flexShrink: 0 }} />
                 <div>
@@ -569,9 +594,9 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
 
           {primaryFont && (
             <div>
-              <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginBottom: 6 }}>Type</div>
+              <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginBottom: 6 }}>{copy.variationCard.typeHeading}</div>
               <div style={{ fontSize: 24, lineHeight: 1.2, color: "var(--admin-ink)", fontFamily: variation.primaryFont ? `'${variation.primaryFont}', Georgia, serif` : "var(--admin-font-heading)" }}>{primaryFont}</div>
-              <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 12, color: "var(--admin-gray-mid)", marginTop: 2 }}>Primary typeface</div>
+              <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 12, color: "var(--admin-gray-mid)", marginTop: 2 }}>{copy.variationCard.primaryTypeface}</div>
             </div>
           )}
         </div>

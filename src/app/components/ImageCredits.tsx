@@ -1,5 +1,6 @@
 // ©2026 thinkany llc. All rights reserved.
 import { useEffect, useRef, useState } from "react";
+import { copy } from "@/copy";
 
 type Credit = { file: string; source?: string; url?: string; free?: boolean };
 
@@ -91,7 +92,7 @@ export function ImageCredits() {
           }}
         >
           <div style={{ fontWeight: 600, marginBottom: 6 }}>
-            {n} image{n > 1 ? "s" : ""} not free to reuse
+            {copy.imageCredits.count(n)}
           </div>
           <ul style={{ margin: "0 0 8px", padding: 0, listStyle: "none", maxHeight: 168, overflowY: "auto" }}>
             {flagged.map((c) => {
@@ -108,7 +109,7 @@ export function ImageCredits() {
                       style={{ color: "#aab6ff", textDecoration: "none", verticalAlign: "middle" }}
                     >
                       {" · "}
-                      {c.source || "source"} ↗
+                      {c.source || copy.imageCredits.sourceFallback} ↗
                     </a>
                   ) : c.source ? (
                     <span style={{ color: "#9a9aa2", verticalAlign: "middle" }}>{" · "}{c.source}</span>
@@ -117,14 +118,14 @@ export function ImageCredits() {
               );
             })}
           </ul>
-          <div style={{ color: "#9a9aa2" }}>Outlined in the design. License or replace them, then click the badge to turn this off.</div>
+          <div style={{ color: "#9a9aa2" }}>{copy.imageCredits.footer}</div>
         </div>
       )}
       <button
         type="button"
         aria-pressed={active}
-        title="Unlicensed Images"
-        aria-label={`Unlicensed images: ${n} not free to reuse${active ? " (highlighting on)" : ""}`}
+        title={copy.imageCredits.badgeTitle}
+        aria-label={copy.imageCredits.badgeAria(n, active)}
         onClick={() => setActive((a) => !a)}
         style={{
           display: "flex",
