@@ -50,6 +50,7 @@ const { startCaptureBridge, stopCaptureBridge } = require("./capture-bridge.cjs"
 const vercel = require("./publish.cjs");
 const { validateCards } = require("./intake/cards.cjs");
 const { createEmptyBrief, applyAnswers } = require("./intake/brief.cjs");
+const { sampleDirection, renderDirectionPrompt } = require("./intake/direction.cjs");
 const references = require("./intake/references.cjs");
 const ingestRefs = require("./intake/ingest.cjs");
 
@@ -1202,7 +1203,15 @@ function buildDesignPrompt(brief) {
     );
   }
   const body = parts.join(". ");
-  return "/design-brief " + (body || "a clean, modern marketing website");
+  let prompt = "/design-brief " + (body || "a clean, modern marketing website");
+  // Fold in the sampled Design Direction (design-variety) as its own block, so the
+  // build is conditioned onto a distinct compositional direction rather than the
+  // model's default centroid. Present once the intake sets b.direction (T5).
+  if (b.direction) {
+    const block = renderDirectionPrompt(b.direction);
+    if (block) prompt += "\n\n" + block;
+  }
+  return prompt;
 }
 ipcMain.handle("intake:designPrompt", () => {
   // Fold the on-disk reference digest into the Brief so the build consumes it.

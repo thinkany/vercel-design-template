@@ -7,10 +7,21 @@
 //
 // House style: typographic apostrophes, no em-dashes.
 
-const { AXES, MOTIFS, LENSES } = require("./lenses.cjs");
+const { AXES, AXIS_RUBRIC, MOTIFS, MOTIF_GLOSS, LENSES } = require("./lenses.cjs");
 
 const AXIS_NAMES = Object.keys(AXES);   // convention, energy, structure, era
 const MOTIF_SLOTS = Object.keys(MOTIFS); // eyebrow, hero, sectionRhythm, featureLayout, divider
+const LENS_BY_ID = Object.fromEntries(LENSES.map((l) => [l.id, l]));
+
+// The known-overused defaults the block tells the build to avoid unless the sampled
+// direction specifically calls for them (lever 6, the thin backstop).
+const NEGATIVE_DEFAULTS = [
+  "numbered section eyebrows (01 / 02 / 03) when the direction did not call for them",
+  "a centered hero with two side-by-side buttons",
+  "the identical Hero, Features, Testimonials, Pricing, FAQ, CTA section order",
+  "\"X reasons why\" or \"X ways to\" headings",
+  "generic stock-photo hero images used as filler",
+];
 
 // ── Tuning (T2 refines against real samples; kept here so tuning is a data edit) ──
 const TUNING = {
@@ -138,4 +149,56 @@ function sampleDirection(inputs = {}) {
   return { seed, axes, lens: lens.id, motifs, source };
 }
 
-module.exports = { sampleDirection };
+const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
+/**
+ * Render a Direction into the "Design direction" prompt block that buildDesignPrompt
+ * folds into the /design-brief string. Prompt-ready English (house style: no em-dashes).
+ * THE public seam alongside sampleDirection. Returns "" for a missing/unknown Direction.
+ */
+function renderDirectionPrompt(direction) {
+  if (!direction || !direction.lens) return "";
+  const lens = LENS_BY_ID[direction.lens];
+  if (!lens) return "";
+  const d = lens.directives || {};
+  const motifs = direction.motifs || {};
+  const gloss = (slot, val) => (MOTIF_GLOSS[slot] && MOTIF_GLOSS[slot][val]) || val;
+
+  const out = [];
+  out.push("## Design direction (this is what makes the design distinct, follow it)");
+  out.push("");
+  out.push(`This design takes a ${lens.label} direction. ${lens.description}`);
+  out.push("");
+  // Character is rendered from the LENS's own axis position, not the requested axes, so
+  // it never contradicts the directives below. The requested axes (direction.axes) drove
+  // WHICH lens was picked; they are kept on the Direction for reproduction + the knobs.
+  out.push("Overall character:");
+  for (const name of AXIS_NAMES) {
+    const stop = lens.axisAffinity[name];
+    const phrase = AXIS_RUBRIC[name] && AXIS_RUBRIC[name][stop];
+    if (phrase) out.push(`- ${capitalize(name)} (${stop}): ${phrase}`);
+  }
+  out.push("");
+  out.push("Apply these directives:");
+  if (d.grid) out.push(`- Grid: ${d.grid}`);
+  if (d.type) out.push(`- Type: ${d.type}`);
+  if (d.sectionRhythm) out.push(`- Section rhythm: ${d.sectionRhythm}`);
+  if (d.heroBias) out.push(`- Hero: ${d.heroBias}`);
+  if (d.motifVocabulary) out.push(`- Motif vocabulary: ${d.motifVocabulary}`);
+  if (d.density) out.push(`- Density: ${d.density}`);
+  out.push("");
+  out.push("Use these specific compositional choices, not the generic defaults:");
+  out.push(`- Section eyebrow: ${gloss("eyebrow", motifs.eyebrow)}`);
+  out.push(`- Hero: ${gloss("hero", motifs.hero)}`);
+  out.push(`- Section rhythm: ${gloss("sectionRhythm", motifs.sectionRhythm)}`);
+  out.push(`- Feature / content layout: ${gloss("featureLayout", motifs.featureLayout)}`);
+  out.push(`- Section dividers: ${gloss("divider", motifs.divider)}`);
+  if (Array.isArray(d.dos) && d.dos.length) { out.push(""); out.push("Do: " + d.dos.join("; ") + "."); }
+  if (Array.isArray(d.donts) && d.donts.length) out.push("Avoid: " + d.donts.join("; ") + ".");
+  out.push("");
+  out.push("Do not use these overused defaults unless the direction above specifically calls for them: " + NEGATIVE_DEFAULTS.join("; ") + ".");
+  out.push("Hold this direction across the WHOLE page; do not drift back to a generic marketing layout partway down.");
+  return out.join("\n");
+}
+
+module.exports = { sampleDirection, renderDirectionPrompt };

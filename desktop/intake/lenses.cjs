@@ -66,6 +66,53 @@ const MOTIFS = {
   divider:       ["none", "rule", "shape", "color-block", "overlap", "whitespace"],
 };
 
+// Human phrasing for each motif slug, so the sampled choice reads as an instruction in
+// the "Design direction" prompt block (renderDirectionPrompt). Prompt-facing content,
+// kept with the deck so all the moat text moves together if this goes to the cloud.
+const MOTIF_GLOSS = {
+  eyebrow: {
+    "none": "no small label above section headings",
+    "numbered-index": "a numbered index above section headings (01, 02, 03)",
+    "hairline-rule": "a thin hairline rule above section headings",
+    "micro-caps": "a small all-caps label above section headings",
+    "icon-led": "a small icon leading each section heading",
+    "oversized-index": "an oversized number or index used as a graphic element by the heading",
+    "kicker-line": "a short kicker phrase above the section heading",
+  },
+  hero: {
+    "split": "a split hero (headline on one side, visual on the other)",
+    "centered": "a centered hero statement",
+    "full-bleed": "a full-bleed hero (edge-to-edge image or color)",
+    "type-only": "a type-only hero (the headline fills the first screen, no hero image)",
+    "asymmetric": "an asymmetric, off-center hero composition",
+    "editorial-cover": "an editorial-cover hero (magazine-style lead: strong headline plus a lead image)",
+    "collage": "a collage hero (layered, overlapping elements)",
+  },
+  sectionRhythm: {
+    "uniform": "uniform, evenly paced sections",
+    "alternating": "alternating section layouts (left/right or light/dark)",
+    "escalating-density": "sections that escalate in density and intensity down the page",
+    "punctuated-by-fullbleed": "regular sections punctuated by full-bleed moments",
+    "editorial-flow": "an editorial flow where section width and density vary like magazine pages",
+  },
+  featureLayout: {
+    "cards": "feature cards",
+    "rows": "full-width feature rows",
+    "stagger": "staggered, offset feature blocks",
+    "editorial-list": "an editorial list (typographic, numbered or ruled)",
+    "grid-collage": "a grid collage of items",
+    "bento": "a bento grid of mixed-size tiles",
+  },
+  divider: {
+    "none": "no explicit dividers between sections",
+    "rule": "thin rules between sections",
+    "shape": "shaped dividers between sections",
+    "color-block": "color-block transitions between sections",
+    "overlap": "overlapping sections that bleed into each other",
+    "whitespace": "generous whitespace as the only divider",
+  },
+};
+
 // ── The deck. 14 lenses chosen to SPAN the axes (a Common anchor for conservative
 //    clients through to Experimental) and to be individually distinct + usable. Curate
 //    and grow over time; this is the moat. ──
@@ -408,4 +455,4 @@ const LENSES = [
   },
 ];
 
-module.exports = { AXES, AXIS_RUBRIC, MOTIFS, LENSES };
+module.exports = { AXES, AXIS_RUBRIC, MOTIFS, MOTIF_GLOSS, LENSES };
