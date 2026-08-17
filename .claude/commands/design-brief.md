@@ -97,10 +97,11 @@ step 2's font resolve. If the preview doesn't refresh, the dev server picks up t
 new variation on reload.
 
 ## 4. Design v01/Home
-**First, save the brief for reference.** Write the designer's original brief
-(`$ARGUMENTS`, verbatim, unedited) into `"brief"` in
-`src/variations/v01/variation.json`, the dashboard card shows it under "Original
-brief." Silent bookkeeping, don't narrate it.
+**First, save the brief for reference.** Write the designer's original brief into
+`"brief"` in `src/variations/v01/variation.json` (the dashboard card shows it under
+"Original brief"). Save **only the designer's brief text**, i.e. everything BEFORE any
+`## Design direction` block: that block is system-injected (see below), not the designer's
+words, so never store it as the brief. Silent bookkeeping, don't narrate it.
 
 Now follow the [`/design`](design.md) authoring contract and build
 `src/variations/v01/components/Home.tsx` with the **new** `--ta-*` / `--ta-font-*`
@@ -114,6 +115,13 @@ outline is the skeleton; the copy, imagery, and styling are the brand's own. If 
 outline is thin/missing (SPA or no reference), fall back to a conventional order
 (nav → hero → features → social proof → CTA → footer). Source images per `/design` §4b
 (one bounded `curl`, placeholder on a miss).
+
+**The `## Design direction` block (if present in the brief above) is authoritative for the
+design's composition**, apply it per [`/design`](design.md) §4a: the lens + its named motif
+choices govern the visual **treatment** (eyebrow, hero archetype, section rhythm, feature
+layout, dividers, type feel, density), while the outline/research above governs the section
+**content** and order. Hold the direction across the whole page, don't drift back to the
+generic centroid partway down.
 
 ## 5. Surface (one line, then stop)
 Close by naming **what was pulled and from where**, and invite a correction, so the

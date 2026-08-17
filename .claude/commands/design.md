@@ -290,6 +290,32 @@ file only when you're about to **change** it:
    icons, `motion` for animation, `recharts` for charts. Compose classNames with
    `cn()` from `ui/utils.ts`. Reach for these before hand-rolling.
 
+## 4a. Honor the Design direction (when the prompt carries one)
+
+Get-Designing builds inject a **`## Design direction`** block into the prompt: a sampled
+compositional direction (a lens + specific motif choices) that keeps designs from
+converging on the same generic layout. **When that block is present, it is authoritative
+for the design's composition and look**, above your defaults:
+
+- **Apply the lens character + directives** (grid, type feel, section rhythm, hero, motif
+  vocabulary, density) as the design's visual language throughout.
+- **Use the specific compositional choices it names** exactly (the eyebrow treatment, hero
+  archetype, section rhythm, feature/content layout, dividers), not your habitual ones. If
+  it says "no eyebrow labels" or "an asymmetric hero," do that, don't reflex back to a
+  numbered eyebrow or a centered two-button hero.
+- **Respect the "do not use" list.** The named overused defaults (numbered eyebrows,
+  centered hero + two buttons, the identical hero→features→testimonials→pricing order,
+  "X reasons why") are off unless the direction explicitly calls for them.
+- **Hold it across the WHOLE page.** The strongest failure mode is opening on-direction then
+  drifting back to the centroid halfway down. Re-read the block's choices as you build each
+  section.
+- **It governs TREATMENT; the brief/outline still governs CONTENT.** Which sections exist
+  and what they say comes from the brief (and any reference outline); the direction governs
+  *how* they are composed. Where a reference's canonical order would reproduce the exact
+  centroid, let the direction's rhythm reshape it.
+
+No `## Design direction` block in the prompt = design as usual.
+
 ## 4b. Images, non-browser, download to `public/`, else placeholder
 
 **Check `IMAGES=` from the session-start call.** If it's **`placeholder`**, the
