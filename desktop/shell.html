@@ -708,7 +708,8 @@
       }
       #buildoverlay[hidden] { display: none; }
       .bo-inner { max-width: 460px; }
-      .bo-emoji { font-size: 40px; line-height: 1; margin-bottom: 16px; }
+      .bo-emoji { line-height: 0; margin-bottom: 18px; color: #111; }
+      .bo-emoji svg { width: 44px; height: 44px; display: block; margin: 0 auto; }
       #bo-title { font-size: 19px; color: #1a1a1a; margin: 0 0 10px; }
       #bo-text { font-size: 14px; color: #666; margin: 0; line-height: 1.6; text-wrap: balance; }
       #buildoverlay .ph-progress { margin: 18px auto 0; }
@@ -742,7 +743,8 @@
       }
       #previewph[hidden] { display: none; }
       .ph-inner { max-width: 470px; }
-      .ph-emoji { font-size: 40px; line-height: 1; margin-bottom: 16px; }
+      .ph-emoji { line-height: 0; margin-bottom: 18px; color: #111; }
+      .ph-emoji svg { width: 44px; height: 44px; display: block; margin: 0 auto; }
       #ph-title { font-size: 19px; margin: 0 0 10px; color: #1a1a1a; }
       #ph-text { font-size: 14px; line-height: 1.6; color: #666; margin: 0; text-wrap: balance; }
       .ph-progress { width: 220px; height: 4px; background: #e4e4ea; border-radius: 4px; margin: 18px auto 0; overflow: hidden; }
@@ -870,36 +872,35 @@
          revealed (after the first answer), .hasbrief animates it open to 40% while
          the questions column makes room. The rail is pinned to the top and fixed;
          only the questions column scrolls. */
-      /* Inset the two-column group from the right edge so the references / brief
-         rail isn't flush against the pane edge (scales a little with pane width). */
-      #intakeph.flow { display: flex; overflow: hidden; padding-right: clamp(40px, 6%, 96px); }
+      #intakeph.flow { display: flex; overflow: hidden; }
       #intakeph.flow .intake-inner {
         order: 1;   /* questions on the LEFT */
         flex: 1 1 auto; min-width: 0; max-width: 640px; margin: 0 auto;
         height: 100%; overflow-y: auto; padding: 52px 40px 64px;
       }
       #intakeph.flow .intake-head { text-align: center; }
-      /* The brief rail: collapsed to zero width + nudged down + transparent, then
-         .hasbrief eases it open to 40%, up into place, and fades in. Long, soft
-         ease-out so it feels intentional; the questions column drifts right as the
-         rail claims its space. */
-      /* The rail is now a transparent flex COLUMN of its own cards, vertically
-         centered as a unit (align-self: center → height follows the cards'
-         collective height, so a short stack sits centered and a tall one scrolls). */
+      /* The references / brief rail (right): collapsed to zero width + nudged down +
+         transparent, then .hasbrief eases it open to 40% and fades in. The lone
+         questions column is centered (margin: 0 auto) in the full pane until the
+         rail claims its space, then drifts LEFT. margin-right insets the rail from
+         the pane edge, but ONLY when it's open (so the single column stays centered).
+         A transparent flex COLUMN of its own cards, pinned to the top. */
       #intakeph.flow #intake-brief {
         order: 2;   /* references / brief on the RIGHT */
         display: flex; flex-direction: column; gap: 14px;
         align-self: flex-start; margin-top: 52px; box-sizing: border-box; /* pinned to the top */
-        flex: 0 0 0%; margin-left: 0;
+        flex: 0 0 0%; margin-left: 0; margin-right: 0;
         opacity: 0; overflow: hidden;
         transform: translateY(24px); max-height: calc(100% - 76px);
         transition: flex-basis .62s cubic-bezier(.16,1,.3,1),
                     transform .62s cubic-bezier(.16,1,.3,1),
                     opacity .5s ease,
-                    margin-left .62s cubic-bezier(.16,1,.3,1);
+                    margin-left .62s cubic-bezier(.16,1,.3,1),
+                    margin-right .62s cubic-bezier(.16,1,.3,1);
       }
       #intakeph.flow.hasbrief #intake-brief {
-        flex: 0 0 40%; margin-left: 32px; opacity: 1; transform: translateY(0);
+        flex: 0 0 40%; margin-left: 32px; margin-right: clamp(40px, 6%, 96px);
+        opacity: 1; transform: translateY(0);
         overflow-y: auto;
       }
 
@@ -981,8 +982,9 @@
       .iopt-check {
         flex: 0 0 auto; width: 16px; height: 16px; margin-top: 1px; border-radius: 5px;
         border: 1.5px solid #c8c8d0; display: flex; align-items: center; justify-content: center;
-        color: #fff; font-size: 11px; line-height: 1;
+        color: #fff; line-height: 1;
       }
+      .iopt-check svg { width: 11px; height: 11px; display: block; }
       .iopt.radio .iopt-check { border-radius: 50%; }
       .iopt.selected .iopt-check { background: #fff; border-color: #fff; color: #111; }
       .iopt.selected .iopt-label { color: #fff; }
@@ -997,6 +999,10 @@
       }
       .ichip:hover { background: #f4f4f7; }
       .ichip.selected { border-color: #111; background: #111; color: #fff; }
+      /* read-only "applied" pills (e.g. global copy rules already in effect) */
+      .ichip.applied { cursor: default; border: 1px dashed #cfcfd6; color: #666; background: #f7f7f9; }
+      .ichip.applied:hover { background: #f7f7f9; }
+      .voice-applied-note { font-size: 12px; color: #888; margin: 0 0 8px; }
 
       /* color-swatch — pick one primary color */
       .iswatches { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -1211,8 +1217,8 @@
           <div id="intake-brief"></div>
           <div class="intake-inner">
             <div class="intake-head">
-              <h2 id="intake-title" data-copy="intake.gathering.headTitle"></h2>
-              <p id="intake-lead" data-copy="intake.gathering.headSubtitle"></p>
+              <h2 id="intake-title" data-copy-html="intake.gathering.headTitle"></h2>
+              <p id="intake-lead" data-copy-html="intake.gathering.headSubtitle"></p>
             </div>
             <div id="intake-stack"></div>
           </div>

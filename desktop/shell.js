@@ -81,6 +81,23 @@ const navfwd = el("navfwd");
 const navreload = el("navreload");
 const previewph = el("previewph");
 const phEmoji = previewph.querySelector(".ph-emoji");
+
+// Preview-pane glyphs as thin, 1px-stroke line icons (the brand rail palette),
+// keyed by the emoji they replace. setPhEmoji renders the icon (falls back to the
+// raw character if unmapped); the static build-overlay/placeholder glyphs are
+// converted once at load.
+const PREVIEW_ICONS = {
+  "⏳": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>',
+  "✨": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0Z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>',
+  "👋": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>',
+  "💬": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>',
+};
+function setPhEmoji(char) { phEmoji.innerHTML = PREVIEW_ICONS[char] || char; }
+document.querySelectorAll(".bo-emoji, .ph-emoji").forEach((e) => {
+  const t = (e.textContent || "").trim();
+  if (PREVIEW_ICONS[t]) e.innerHTML = PREVIEW_ICONS[t];
+});
+
 const phTitle = el("ph-title");
 const phText = el("ph-text");
 const phProgress = el("ph-progress");
@@ -549,7 +566,7 @@ function setWorkingMessage(text) {
 
 function showPlaceholder({ emoji, title, text }) {
   stopWorking();
-  phEmoji.textContent = emoji;
+  setPhEmoji(emoji);
   phTitle.textContent = title;
   phText.textContent = text;
   phProgress.hidden = true;
@@ -560,7 +577,7 @@ function showPlaceholder({ emoji, title, text }) {
 function showWorking() {
   browser.hidden = true;
   previewph.hidden = false;
-  phEmoji.textContent = "✨";
+  setPhEmoji("✨");
   phTitle.textContent = COPY.preview.gettingSetUp;
   phProgress.hidden = false;
   startWorking();
@@ -577,7 +594,7 @@ function guardPreviewForEdit(activityText) {
   if (!guarding) { guarding = true; guardSeq++; }
   browser.hidden = true;
   previewph.hidden = false;
-  phEmoji.textContent = "✨";
+  setPhEmoji("✨");
   phTitle.textContent = COPY.preview.updatingDesign;
   phProgress.hidden = false;
   stopWorking();
@@ -3220,12 +3237,13 @@ function enterIntakeMode() {
 }
 function setIntakeHead(title, lead) {
   el("intake-title").textContent = title;
-  el("intake-lead").textContent = lead;
+  el("intake-lead").innerHTML = lead; // lead is trusted COPY; allows <br> etc.
 }
 function resetIntake() {
   intakeActive = false;
   startChoicesShown = false;
   refsRevealed = false;
+  voiceStepDone = false;
   intakePhase = "idle";
   currentIntakeId = null;
   exitReview(); // clear the review's head-hidden state
@@ -3263,6 +3281,7 @@ let refsBusy = false;     // brief local state while a drop is uploading
 let refsAnalyzing = false; // main's vision pass is running (T2)
 let railBriefRows = 0;   // prior brief-row count, so the Brief card eases in once
 let refsRevealed = false; // the rail (Design References) stays hidden until the first question is answered
+let voiceStepDone = false; // the Tone/rules step is injected by the renderer as the final question
 
 function renderBriefSummary(brief) {
   lastBrief = brief;
@@ -3722,8 +3741,53 @@ function clearIntakePending() {
 // When the agent finishes gathering (its turn ends mid-intake), the pane animates
 // the head + question groups OFF (keeping the brief rail) and offers two choices:
 // start designing, or add more context first.
+// The Tone / copy-rules step, INJECTED by the renderer (not the agent) so it always
+// appears as the final question, right before the review. buildVoiceRules persists
+// tone + rules to the project voice on change (auto-handed to the agent), so there's
+// no tool call to resolve — on submit we simply advance to the review.
+function renderVoiceStep() {
+  if (intakeStack.querySelector(".voice-step")) return; // already showing
+  currentIntakeId = null;
+  const card = { id: "tone", type: "voice", label: "What is the desired tone for the copy?", skippable: true, agentDecidesLabel: COPY.intake.letYouChoose };
+  const group = document.createElement("div");
+  group.className = "intake-group voice-step";
+  const continueBtn = document.createElement("button");
+  continueBtn.className = "intake-continue";
+  continueBtn.textContent = COPY.intake.continue;
+
+  const refreshReady = () => { continueBtn.disabled = !ctl.isReady(); };
+  const requestSubmit = () => { if (!group.classList.contains("answered") && ctl.isReady()) submit(); };
+  const ctl = renderIntakeCard(card, refreshReady, requestSubmit);
+  group.append(ctl.el, continueBtn);
+  refreshReady();
+
+  function submit() {
+    if (group.classList.contains("answered")) return;
+    group.classList.add("answered");
+    const val = ctl.getValue();
+    ctl.collapse();
+    if (val) {
+      if (lastBrief) { lastBrief.tone = val; composeRail(); }   // immediate: brief rail
+      try { window.desktop.setBriefTone(val); } catch {}        // → Brief (design prompt + dashboard card)
+    }
+    const done = doneNote();
+    continueBtn.replaceWith(done);
+    autoDismissTool(done, 900);
+    voiceStepDone = true;
+    setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then the review
+  }
+  continueBtn.addEventListener("click", submit);
+
+  intakeStack.appendChild(group);
+  const scroller = intakeph.classList.contains("flow") ? intakeph.querySelector(".intake-inner") : intakeph;
+  const centerTo = scroller ? intakeCenterTarget(scroller, group) : 0;
+  fadeSlideIn(group, { dy: 44, duration: 720, delay: 60 });
+  if (scroller) { try { scroller.scrollTo({ top: centerTo, behavior: "smooth" }); } catch { scroller.scrollTop = centerTo; } }
+}
+
 function showBriefComplete() {
   if (intakePhase !== "gathering") return; // only from the gathering state
+  if (!voiceStepDone) { renderVoiceStep(); return; } // the Tone/rules step is the last question
   intakePhase = "review";
   currentIntakeId = null;
   updateBackButton();
@@ -3839,7 +3903,7 @@ function showPreparing() {
   resetIntake(); // leave the intake host; the preview placeholder takes the pane
   browser.hidden = true;
   previewph.hidden = false;
-  phEmoji.textContent = "✨";
+  setPhEmoji("✨");
   phTitle.textContent = COPY.preview.preparingElements;
   phProgress.hidden = false;
   stopWorking(); // clear any stale rotation so ours (build-flavored) takes over
@@ -3910,8 +3974,10 @@ function renderIntakeCard(card, onChange, requestSubmit) {
   return {
     el: elc,
     getValue: () => (skipped ? null : built.getValue()),
-    // Skippable → always ready. Otherwise needs a non-empty value.
-    isReady: () => skipped || skippable || built.hasValue(),
+    // A card is ready only when it has a value OR was explicitly skipped (the Skip
+    // button). Skippable no longer means ready-by-default, so Continue / Enter can
+    // never pass a question the designer hasn't answered or skipped on purpose.
+    isReady: () => skipped || built.hasValue(),
     // Post-submit: replace the inputs with a plain read-only value + drop the skip.
     collapse: () => {
       const text = skipped ? "" : built.display();
@@ -3962,6 +4028,10 @@ function buildOpenText(card, body, onChange, requestSubmit) {
   };
 }
 
+// The house checkmark: a thin, straight-line 1px-stroke tick (matches the rail /
+// drawer line icons), used for a selected choice/chip instead of a heavy glyph.
+const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+
 // single-choice / multi-choice → bordered rows with a check/radio.
 function buildChoice(card, body, multi, onChange) {
   const selected = new Set();
@@ -3987,8 +4057,8 @@ function buildChoice(card, body, multi, onChange) {
         rows.forEach((r) => r.classList.remove("selected"));
       }
       row.classList.toggle("selected", selected.has(opt));
-      if (multi) check.textContent = selected.has(opt) ? "✓" : "";
-      else rows.forEach((r) => { r.querySelector(".iopt-check").textContent = r.classList.contains("selected") ? "✓" : ""; });
+      if (multi) check.innerHTML = selected.has(opt) ? CHECK_SVG : "";
+      else rows.forEach((r) => { r.querySelector(".iopt-check").innerHTML = r.classList.contains("selected") ? CHECK_SVG : ""; });
       onChange();
     });
     rows.push(row);
@@ -4280,34 +4350,92 @@ function buildLogoUpload(card, body, onChange) {
   };
 }
 
-// voice → review the GLOBAL copy-voice rules (read-only reference) and add rules for
-// THIS design. Additions persist to the project voice as they change (so the design's
-// copy uses them; the resolved voice is auto-handed to the agent). Value = the project
-// rules; the card usually carries no `field`, so it doesn't fold into the Brief.
+// voice → the desired TONE (default tones as pills + a custom field) followed by
+// copy RULES (suggestion pills you toggle + a custom field). Any GLOBAL rules are
+// shown read-only as "applied" (only when present) — not editable here. Everything
+// persists to the project voice (tone + rules), auto-handed to the agent; tone also
+// folds into the Brief via the card field.
 function buildVoiceRules(card, body, onChange) {
   const v = lastVoice || { project: {}, global: [] };
   const globals = (v.global || []).filter(Boolean);
   const proj = v.project || {};
-  const projRules = [...((proj.rules) || [])];
+  const projRules = (proj.rules || []).filter(Boolean);
 
+  const persist = () => {
+    try { window.desktop.saveProjectVoice({ ...proj, tone: toneInput.value.trim(), rules: projRules.slice() }); } catch {}
+  };
+
+  // ── Tone: default tones as pills + a custom field (the card label asks the tone) ──
+  const toneWrap = document.createElement("div"); toneWrap.className = "ichips"; toneWrap.style.marginBottom = "8px";
+  const toneInput = document.createElement("input");
+  toneInput.className = "icard-input";
+  toneInput.placeholder = card.placeholder || COPY.voice.tonePlaceholder;
+  toneInput.value = proj.tone || "";
+  const tonePills = [];
+  const syncTone = () => {
+    const cur = toneInput.value.trim().toLowerCase();
+    tonePills.forEach(([p, ex]) => p.classList.toggle("selected", ex.toLowerCase() === cur));
+  };
+  TONE_EXAMPLES.forEach((ex) => {
+    const p = document.createElement("button"); p.type = "button"; p.className = "ichip"; p.textContent = ex;
+    p.addEventListener("click", () => {
+      toneInput.value = (toneInput.value.trim().toLowerCase() === ex.toLowerCase()) ? "" : ex; // toggle
+      persist(); syncTone(); onChange();
+    });
+    tonePills.push([p, ex]); toneWrap.appendChild(p);
+  });
+  toneInput.addEventListener("input", () => { persist(); syncTone(); onChange(); });
+  body.append(toneWrap, toneInput);
+
+  // ── Rules for this design ──
+  const rLabel = voiceHeader(COPY.voice.projectRulesLabel); rLabel.style.marginTop = "18px";
+  body.appendChild(rLabel);
+
+  // Global rules, applied (read-only) — only shown when one or more is set.
   if (globals.length) {
-    body.appendChild(voiceHeader(COPY.voice.globalRules, COPY.voice.globalRulesSub));
-    body.appendChild(ruleListEl(globals, { disabled: true })); // reference only
+    const note = document.createElement("div"); note.className = "voice-applied-note";
+    note.textContent = COPY.voice.globalsApplied;
+    const gw = document.createElement("div"); gw.className = "ichips"; gw.style.marginBottom = "12px";
+    globals.forEach((g) => { const s = document.createElement("span"); s.className = "ichip applied"; s.textContent = g; gw.appendChild(s); });
+    body.append(note, gw);
   }
-  body.appendChild(voiceHeader(COPY.voice.projectRulesLabel));
-  const persist = () => { try { window.desktop.saveProjectVoice({ ...proj, rules: projRules.filter(Boolean) }); } catch {} };
-  body.appendChild(ruleListEl(projRules, {
-    examples: RULE_EXAMPLES,
-    placeholder: COPY.voice.projectRulePlaceholder,
-    emptyText: COPY.voice.projectRulesEmpty,
-    onChange: () => { persist(); onChange(); },
-  }));
+
+  // Rule suggestion pills (toggle into this design's rules) + a custom field.
+  const rWrap = document.createElement("div"); rWrap.className = "ichips"; rWrap.style.marginBottom = "8px";
+  const has = (ex) => projRules.some((r) => r.toLowerCase() === ex.toLowerCase());
+  const renderRulePills = () => {
+    rWrap.innerHTML = "";
+    const extras = projRules.filter((r) => !RULE_EXAMPLES.some((e) => e.toLowerCase() === r.toLowerCase()));
+    [...RULE_EXAMPLES, ...extras].forEach((ex) => {
+      const p = document.createElement("button"); p.type = "button"; p.className = "ichip"; p.textContent = ex;
+      p.classList.toggle("selected", has(ex));
+      p.addEventListener("click", () => {
+        const i = projRules.findIndex((r) => r.toLowerCase() === ex.toLowerCase());
+        if (i >= 0) projRules.splice(i, 1); else projRules.push(ex);
+        persist(); renderRulePills(); onChange();
+      });
+      rWrap.appendChild(p);
+    });
+  };
+  renderRulePills();
+  const ruleInput = document.createElement("input");
+  ruleInput.className = "icard-input";
+  ruleInput.placeholder = COPY.voice.projectRulePlaceholder;
+  ruleInput.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const t = ruleInput.value.trim();
+    if (t && !has(t)) { projRules.push(t); ruleInput.value = ""; persist(); renderRulePills(); onChange(); }
+  });
+  body.append(rWrap, ruleInput);
+
+  syncTone();
 
   return {
-    getValue: () => { const r = projRules.filter(Boolean); return r.length ? r : null; },
-    hasValue: () => projRules.filter(Boolean).length > 0,
+    getValue: () => toneInput.value.trim() || null, // tone → Brief.tone (field:"tone")
+    hasValue: () => toneInput.value.trim().length > 0 || projRules.length > 0,
     setDisabled: (d) => body.querySelectorAll("input, button").forEach((e) => { e.disabled = d; }),
-    display: () => projRules.filter(Boolean).join(", "),
+    display: () => [toneInput.value.trim(), ...projRules].filter(Boolean).join(" · "),
   };
 }
 
@@ -4564,6 +4692,7 @@ async function pickDeliverable(type) {
 
   startChoicesShown = false;
   refsRevealed = false; // rail stays hidden until the first question is answered
+  voiceStepDone = false; // the renderer-injected Tone/rules step hasn't run yet
   intakeph.classList.add("flow"); // two-column mode: questions left, references rail right
   intakeph.classList.remove("start", "hasbrief");
   enterIntakeMode();
@@ -4623,7 +4752,9 @@ function getDesigningPrompt(type) {
   return [
     `The designer chose "Get Designing" and is designing a ${kind}. Gather a short design brief by calling`,
     "the `intake` tool (mcp__intake__intake) — do NOT ask questions in chat; every question goes through",
-    "`intake` so it renders in the pane. Tailor the wording to a " + kind + ". Ask ONE QUESTION AT A TIME:",
+    "`intake` so it renders in the pane. Tailor the wording to a " + kind + ". In ALL card text (labels,",
+    "help, options), use a typographic apostrophe (’) and no em-dashes, never a straight ' or a --. Ask",
+    "ONE QUESTION AT A TIME:",
     '1. First call: ONE open-text card, long:true, maxLength ~400 — { id:"what", field:"what" } — asking,',
     "   in a warm line, what they're making and the feeling they want.",
     "2. Then ask the follow-ups below ONE AT A TIME: a SEPARATE `intake` call per question, a SINGLE card",
@@ -4640,10 +4771,8 @@ function getDesigningPrompt(type) {
     "     options:[~5 tasteful hex values fitting the vibe] } to pick a primary color;",
     '   - IF they did NOT mention fonts, a font-pick card { id:"font", field:"fontSources",',
     "     options:[~4 Google-Font family names fitting the vibe] } to pick a font.",
-    '   - a voice card { id:"voice", type:"voice", label:"How should the words sound?",',
-    '     help:"Your global copy rules are shown for reference; add any just for this design.", skippable:true }.',
-    "     ALWAYS send this one (it needs no options/field): the pane shows the global copy-voice rules and lets",
-    "     them add rules for THIS design. Place it LAST, after colors/fonts.",
+    "   Do NOT ask anything about TONE or copy voice/rules — the pane adds that step on its own after your",
+    "   questions, so never send a tone or copy-rules card yourself.",
     '   Mark every follow-up skippable:true (agentDecidesLabel like "I\'ll let you choose", or "Skip" for the names).',
     "   Omit any card whose value they already gave (a named color/font, a reference to pull from, a name).",
     "   If the designer DISMISSES a question (the intake tool returns an error), stop and wait, do not retry.",

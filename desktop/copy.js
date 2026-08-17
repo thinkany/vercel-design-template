@@ -1,6 +1,6 @@
-// copy.js — the app shell's user-facing copy, in one place.
+// copy.js — the app shell’s user-facing copy, in one place.
 //
-// Same convention as the scaffold's src/copy/en.ts and the preview gate's local
+// Same convention as the scaffold’s src/copy/en.ts and the preview gate’s local
 // COPY: a keyed catalog reached as COPY.area.item, where parameterized entries
 // are functions. This is a classic <script> (no modules in the shell), so it
 // publishes a global `window.COPY` and MUST be loaded before shell.js.
@@ -8,11 +8,12 @@
 // Scope: framework/admin CHROME only. Dynamic data (project titles, tool/file
 // names in status lines, IPC channel strings) stays inline in shell.js. When you
 // add or reword a shell string, do it here, not at the call site. House style:
-// no em-dashes.
+// no em-dashes, and typographic apostrophes (’) not straight ones ('), especially
+// for anything shown in the main pane.
 window.COPY = {
   // ── Launch splash (logo + welcome, shown briefly on open) ───────────────────
   splash: {
-    welcome: "Welcome to thinkany design studio.",
+    welcome: "Welcome to thinkany design, it’s your studio.",
   },
 
   // ── Status label in the top bar for the connect / no-project stages ─────────
@@ -25,13 +26,13 @@ window.COPY = {
   preview: {
     spinningUp: {
       emoji: "⏳",
-      title: "We're spinning up your preview…",
+      title: "We’re spinning up your preview…",
       text: "Just a moment while your dev server starts up.",
     },
     settingUp: {
       emoji: "✨",
       title: "Setting up your project",
-      text: "Your live preview opens on its own once your design's ready. Pick up in the chat.",
+      text: "Your live preview opens on its own once your design’s ready. Pick up in the chat.",
     },
     pickStart: {
       emoji: "👋",
@@ -45,17 +46,17 @@ window.COPY = {
     },
     clientSetupStart: {
       emoji: "💬",
-      title: "Let's set up your project",
-      text: "I'll walk you through it in the chat, one question at a time. Answer along and your project takes shape here.",
+      title: "Let’s set up your project",
+      text: "I’ll walk you through it in the chat, one question at a time. Answer along and your project takes shape here.",
     },
     gettingSetUp: "Getting set up",
     updatingDesign: "Updating your design",
     preparingElements: "Getting your site design elements prepared",
     workingMessages: [
-      "We're getting your workspace set up…",
+      "We’re getting your workspace set up…",
       "Setting things up for you…",
       "Getting everything ready…",
-      "Your live preview will open on its own once it's ready…",
+      "Your live preview will open on its own once it’s ready…",
       "Thanks for hanging in there with us…",
     ],
     buildMessages: [
@@ -70,12 +71,20 @@ window.COPY = {
       "Laying out your sections…",
       "Bringing your colors and type together…",
       "Assembling your first draft…",
-      "Your live preview opens here on its own once it's ready…",
+      "Your live preview opens here on its own once it’s ready…",
     ],
+    // Shown after each answer while the agent takes it in. Presented IN ORDER: the
+    // 1st answer shows line 1, the 2nd shows line 2, …, wrapping back to the top after
+    // the last. So this array's order is the display order — reorder freely. Keep them
+    // all neutral (none implying the walkthrough is over; the review screen ends it).
     takingInMessages: [
-      "Got it, give me a moment while I take that in…",
-      "Perfect, let me sit with that a second…",
-      "Thanks for finishing that walkthrough…",
+      "Got it, and setting up the design brief…",
+      "Perfect, let me add that to the brief…",
+      "Noted, written and next…",
+      "Great, just a few more questions…",
+      "I Love that tone choice, moving on...",
+      "Cool, and we're almost there…",
+      "Good deal, let’s get this going…",
     ],
   },
 
@@ -85,24 +94,24 @@ window.COPY = {
     bashVerbs: [
       "Working", "Cooking", "Crunching", "Tinkering", "Wrangling", "Assembling",
       "Piecing things together", "Rustling something up", "Noodling on it", "Conjuring",
-      "Fiddling with the bits", "Making it happen",
+      "Fiddling with the bits", "Making it happen", "Checking under the hood", "Tidying the loose ends"
     ],
     // { at } is the fraction-of-context threshold that fires each nudge.
     sessionNudges: [
-      { at: 0.6, msg: "This conversation is getting long (~60% of the context window). If replies start to slow, type /clear to begin a fresh session. Your project files and design work are saved on disk and won't be lost." },
+      { at: 0.6, msg: "This conversation is getting long (~60% of the context window). If replies start to slow, type /clear to begin a fresh session. Your project files and design work are saved on disk and won’t be lost." },
       { at: 0.85, msg: "Heads up: this conversation is ~85% full. /clear starts a clean, faster session (your saved work stays intact)." },
     ],
-    startedFresh: "Started a fresh session. Your previous one is saved in the Claude panel (Sessions).",
+    startedFresh: "Started a fresh session. Your previous one is saved in the Claude panel (under Sessions).",
     resumedSession: "Resumed this session. Pick up where you left off.",
     // The "Start a new session?" confirmation (clicking the context gauge).
     newConfirmTitle: "Start a new session?",
     newConfirmOk: "New session",
     newConfirmMessage: (tokens, pct) =>
       "Starting a new session gives you a fresh, fast chat. Your current session is SAVED to the Claude " +
-      "panel's Sessions list (not lost), reopen it anytime to pick up where you left off. Project files and " +
+      "panel’s Sessions list (not lost), reopen it anytime to pick up where you left off. Project files and " +
       "design work are unaffected.\n\n" +
-      `You're currently at about ${tokens} tokens (${pct}% of the context window). ` +
-      "It's a good time to start fresh when this climbs high (the ring turns amber, then red) or you're moving to a new task.",
+      `You’re currently at about ${tokens} tokens (${pct}% of the context window). ` +
+      "It’s a good time to start fresh when this climbs high (the ring turns amber, then red) or you’re moving to a new task.",
   },
 
   // ── Global chrome: browser tabs, sidebar, shared controls ───────────────────
@@ -157,7 +166,7 @@ window.COPY = {
 
   // ── Preview "looks blank?" help strip ───────────────────────────────────────
   previewHelp: {
-    blankHtml: "Preview looks blank? First try the tab's <b>⟳</b> reload. Still blank?",
+    blankHtml: "Preview looks blank? First try the tab’s <b>⟳</b> reload. Still blank?",
     refresh: "Refresh Browser",
     dismiss: "Dismiss",
   },
@@ -187,7 +196,7 @@ window.COPY = {
     runTitle: (cmd) => `Run: ${cmd}`,
     list: [
       ["/setup-project", "Brand the template: client/company name, project type, fonts, logo, menu style."],
-      ["/setup-styleguide", "Set the client's fonts, colors, and example styleguide sections."],
+      ["/setup-styleguide", "Set the client’s fonts, colors, and example styleguide sections."],
       ["/design", "Build or edit a page (hero, sections, landing) in the design phase."],
       ["/guide", "Show the list of commands."],
       ["/clear", "Start a fresh session, clearing the chat for faster replies (saved work is kept)."],
@@ -266,10 +275,10 @@ window.COPY = {
     defaultTitle: "Default company profile",
     activeWith: (name) => `Active · ${name}`,
     defaultNote: "Applied automatically to every new project. Set your agency identity once and skip it on every future setup.",
-    saveDefault: "Save this project's identity as my default",
+    saveDefault: "Save this project’s identity as my default",
     clearDefault: "Clear default",
     exportNeedsProject: "Open a project to export its company profile to a file.",
-    exportIntro: "Export this project's agency identity as a portable file (to move between machines or share).",
+    exportIntro: "Export this project’s agency identity as a portable file (to move between machines or share).",
     exportBtn: "⬇ Export company profile to a file",
     noProfileYet: "No company-profile.json yet. Run /export-company in the chat to create one first.",
   },
@@ -294,7 +303,7 @@ window.COPY = {
     notConnected: "Not connected",
     companyNudge: {
       title: "Your Company Information",
-      desc: "The private link you share opens on a sign-in screen branded with YOUR company name and logo, that's what your client sees first. It isn't set for this project yet. Add it so the preview looks like yours (you can still publish without it).",
+      desc: "The private link you share opens on a sign-in screen branded with YOUR company name and logo, that’s what your client sees first. It isn’t set for this project yet. Add it so the preview looks like yours (you can still publish without it).",
       upload: "Upload a profile",
       setup: "Set up project",
     },
@@ -319,8 +328,8 @@ window.COPY = {
     domainDefault: "Vercel subdomain (default)",
     subdomain: "subdomain",
     ownedDomainNote: "A subdomain of a domain you own on Vercel. Applied on the next publish.",
-    noDomainsNote: "No domains on your Vercel account yet. Add one in Vercel and it'll appear here.",
-    domainsError: "Couldn't load your Vercel domains, check your connection.",
+    noDomainsNote: "No domains on your Vercel account yet. Add one in Vercel and it’ll appear here.",
+    domainsError: "Couldn’t load your Vercel domains, check your connection.",
     publishChanges: "Publish changes",
     publishDesign: "Publish this design",
     resetPassword: "Reset preview password",
@@ -357,7 +366,7 @@ window.COPY = {
 
   // ── Copy Voice drawer (per-project tone + rules) ────────────────────────────
   voice: {
-    intro: "Shape the words the AI writes into this design's copy. Nothing is set by default.",
+    intro: "Shape the words the AI writes into this design’s copy. Nothing is set by default.",
     thisProject: "This project",
     tone: "Tone",
     tonePlaceholder: "e.g. soft, professional, not pushy",
@@ -368,6 +377,7 @@ window.COPY = {
     projectRulesEmpty: "No project-specific rules.",
     globalRules: "Global rules",
     globalRulesSub: "Apply to every project.",
+    globalsApplied: "Applied from your global rules:",
     ignoreGlobal: "Ignore global rules for this project",
     globalRulePlaceholder: "Add a global rule…",
     globalRulesEmpty: "No global rules yet.",
@@ -405,14 +415,14 @@ window.COPY = {
     model: "Model",
     loadingModels: "Loading models…",
     modelDefault: "Default (Claude Code picks)",
-    couldNotLoadModels: "Couldn't load models",
+    couldNotLoadModels: "Couldn’t load models",
     modelSetTo: (label) => `✓ Model set to ${label}`,
     modelSetDefault: "✓ Model set to default",
     keyNote: "Key stored encrypted in your OS keychain.",
     imagesLabel: "Images",
     imagesDesc: "By default the design sources real images. Turn this on to skip that and hold every image spot with a marked placeholder instead, so you can drop in your own.",
     imagesToggle: "No images, placeholders only",
-    imagesOnPlaceholders: "✓ Placeholders only, I won't source images.",
+    imagesOnPlaceholders: "✓ Placeholders only, I won’t source images.",
     imagesOnSourcing: "✓ Image sourcing back on.",
     researchLabel: "Research the field",
     researchDesc: "Studies a few comparable sites to ground the layout, colors, and flow, so the first design and later changes take a little longer when this is on.",
@@ -447,7 +457,7 @@ window.COPY = {
     attached: (name) => `✓ ${name} attached`,
     referencesAdded: (n) => `✓ ${n} reference${n > 1 ? "s" : ""} added`,
     uploadReferences: "📎 Upload references…",
-    uploadReferencesDesc: "Click or drop images, PDFs, or brand guides, I'll read them and pull the palette + fonts",
+    uploadReferencesDesc: "Click or drop images, PDFs, or brand guides, I’ll read them and pull the palette + fonts",
     readingReferences: "Reading your references…",
     readingReferencesDistilling: "Reading your references… distilling the style",
     addingReferences: "Adding your references…",
@@ -467,14 +477,14 @@ window.COPY = {
     continue: "Continue",
     gotIt: "✓ Got it",
     skipped: "Skipped",
-    letYouChoose: "I'll let you choose",
+    letYouChoose: "I’ll let you choose",
     undoSkip: "Undo skip",
-    reviewQuestion: "That's a solid start. Ready to design, or want to add more context first?",
+    reviewQuestion: "That’s a solid start. Ready we ready to design, or want would you like to add more context first?",
     startDesigning: "Looks good, start designing",
     addMoreContext: "Wait, let me add more context",
     moreContextPlaceholder: "Anything else that matters: company or site name, the client, the audience, must-haves…",
     addAndContinue: "Add this and continue",
-    foldingIntoBrief: "Thanks, folding that into your brief…",
+    foldingIntoBrief: "Thanks, noted, and adding that into your brief…",
     refLinkCap: "Link",
     refUrlPlaceholder: "https://…",
     refWhyCap: "What do you like about it?",
@@ -483,16 +493,16 @@ window.COPY = {
     addAnotherSite: "+ Add another site",
     customColor: "Custom color",
     logoDropDefault: "Drop a logo, or click to choose",
-    designingMessage: (type) => `Designing ${type === "app" ? "an app" : "a website"}. I'll ask you a few quick things here in the panel, then put your brief together.`,
-    kickoffPending: "Hold tight while we get things started. I'll ask you a few quick things right here.",
+    designingMessage: (type) => `Designing ${type === "app" ? "an app" : "a website"}. I’ll ask you a few questions here and then we’ll get designing.`,
+    kickoffPending: "Hold tight while we get things started. I’ll ask you a few questions right here.",
     // The two-panel start fork (Client Setup vs Get Designing).
     start: {
-      headTitle: "Let's make something",
-      headSubtitle: "Pick how you'd like to begin.",
-      clientSetupLabel: "Client Setup",
+      headTitle: "Let’s make something",
+      headSubtitle: "Pick how you’d like to begin.",
+      clientSetupLabel: "Client Setup Please",
       clientSetupDesc: "Brand a new project step by step (logo, fonts, colors), then design.",
-      getDesigningLabel: "Get Designing",
-      getDesigningDesc: "Jump straight in: tell me about the site and I'll gather the brief.",
+      getDesigningLabel: "Let’s Get Designing",
+      getDesigningDesc: "Jump straight in: tell me a little about the site and I’ll use your answers to start designing.",
     },
     // "What are you designing for?" (Website vs App).
     deliverable: {
@@ -505,8 +515,8 @@ window.COPY = {
     },
     // The head shown once questions begin.
     gathering: {
-      headTitle: "Let's design something",
-      headSubtitle: "Tell me a little about what you're making. The more you share, the closer the first draft lands.",
+      headTitle: "Let’s design something",
+      headSubtitle: "Tell me a little about what you’re making. <br>The more you share, the closer the first draft lands.",
     },
     // The "?" overlay explaining how references work (static HTML card body).
     referencesHelpHtml: `
@@ -521,7 +531,7 @@ window.COPY = {
       <li><b>Exact colors</b>, from images and from the pages of a PDF.</li>
       <li><b>Type feel</b> and <b>layout patterns</b> (grid, spacing, density).</li>
       <li><b>Imagery style</b> and overall mood.</li>
-      <li><b>Rules from brand docs</b>: voice, do's and don'ts, named colors and fonts.</li>
+      <li><b>Rules from brand docs</b>: voice, do’s and don’ts, named colors and fonts.</li>
     </ul>
 
     <h4>What works best</h4>
@@ -554,7 +564,7 @@ window.COPY = {
     logoPlaceholder: "Drop a logo image, or click to choose",
     apply: "Apply branding",
     applying: "Applying your company branding…",
-    applyError: "Couldn't apply the branding.",
-    applyErrorPrefix: "Couldn't apply the branding: ",
+    applyError: "Couldn’t apply the branding.",
+    applyErrorPrefix: "Couldn’t apply the branding: ",
   },
 };

@@ -1152,6 +1152,16 @@ ipcMain.handle("intake:addNote", (event, { text } = {}) => {
   return { ok: true };
 });
 
+// The renderer-injected Tone/rules step feeds the picked tone straight into the
+// Brief (it has no agent card), so the design prompt (buildDesignPrompt → "Tone: …")
+// and the captured dashboard-card brief both carry it.
+ipcMain.handle("intake:setTone", (event, { tone } = {}) => {
+  if (!intakeBrief) intakeBrief = createEmptyBrief("web-pages");
+  intakeBrief.tone = String(tone || "").trim();
+  if (!event.sender.isDestroyed()) event.sender.send("agent:brief", intakeBrief);
+  return { ok: true };
+});
+
 // Phase 2: turn the accumulated Brief into a natural-language `/design-brief`
 // invocation. That command's orchestrator parses references/colors/fonts, runs the
 // extractors, applies the brand into v01 (which flips previewReady → the pane
