@@ -1233,6 +1233,13 @@ ipcMain.handle("intake:designPrompt", () => {
       projectType: intakeBrief.projectType,
     });
   }
+  // Persist the sampled Direction where the build can pick it up (T4): the /design-brief
+  // skill reads /tmp/ta-direction.json and folds it into variation.json (same convention
+  // as /tmp/ta-palette.json etc.), so each design records its DNA for reproduction, the
+  // dashboard card, and T2 tuning.
+  if (intakeBrief && intakeBrief.direction) {
+    try { fs.writeFileSync("/tmp/ta-direction.json", JSON.stringify(intakeBrief.direction, null, 2)); } catch {}
+  }
   return { prompt: buildDesignPrompt(intakeBrief) };
 });
 
