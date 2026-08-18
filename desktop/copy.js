@@ -518,6 +518,8 @@ window.COPY = {
       title: "Design direction",
       reroll: "↻ Reroll",
       axisLabels: { convention: "Convention", energy: "Energy", structure: "Structure", era: "Era" },
+      groupDirections: "Directions",
+      groupMovements: "Movements",
     },
     fontCustomPlaceholder: "Or type any font name…",
     fontCustomAdd: "Add",

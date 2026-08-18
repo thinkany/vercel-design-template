@@ -1255,7 +1255,7 @@ ipcMain.handle("intake:directionMeta", () => (varietyLicensed() ? directionMeta(
 // knobs. No seed → a fresh draw each call (this is the reroll). Stores it on the brief so
 // the build handoff uses exactly what the designer sees, and pushes the brief so the rail
 // stays in sync.
-ipcMain.handle("intake:sampleDirection", (event, { axes } = {}) => {
+ipcMain.handle("intake:sampleDirection", (event, { axes, lens } = {}) => {
   if (!varietyLicensed()) return { direction: null };
   if (!intakeBrief) intakeBrief = createEmptyBrief("web-pages");
   intakeBrief.direction = sampleDirection({
@@ -1263,6 +1263,7 @@ ipcMain.handle("intake:sampleDirection", (event, { axes } = {}) => {
     tone: intakeBrief.tone,
     projectType: intakeBrief.projectType,
     axes: axes && typeof axes === "object" ? axes : undefined,
+    lens: lens || undefined,
   });
   if (!event.sender.isDestroyed()) event.sender.send("agent:brief", intakeBrief);
   return { direction: intakeBrief.direction };
@@ -1292,10 +1293,10 @@ ipcMain.handle("variation:read", (_event, { id } = {}) => {
 
 // Pure sample for the reroll panel: takes the source design's signals explicitly (does NOT
 // touch intakeBrief). Same seam + gate as the intake sampler.
-ipcMain.handle("direction:sampleFor", (_event, { signals, axes } = {}) => {
+ipcMain.handle("direction:sampleFor", (_event, { signals, axes, lens } = {}) => {
   if (!varietyLicensed()) return { direction: null };
   const s = signals || {};
-  return { direction: sampleDirection({ what: s.what, tone: s.tone, projectType: s.projectType, axes: axes && typeof axes === "object" ? axes : undefined }) };
+  return { direction: sampleDirection({ what: s.what, tone: s.tone, projectType: s.projectType, axes: axes && typeof axes === "object" ? axes : undefined, lens: lens || undefined }) };
 });
 
 // Fork a source variation on disk (copy components/ + styles/ = inherit its brand + built

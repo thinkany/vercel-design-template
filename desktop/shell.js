@@ -3951,7 +3951,7 @@ async function getDirectionMeta() {
 // intake sampler (stores on the brief). The reroll passes a pure sampler bound to the source
 // design's signals + an onChange to capture the chosen Direction.
 async function renderDirectionPanel(host, opts = {}) {
-  const sample = opts.sample || ((axes) => window.desktop.sampleDirection(axes));
+  const sample = opts.sample || ((o) => window.desktop.sampleDirection(o));
   const onChange = opts.onChange || (() => {});
   const meta = await getDirectionMeta();
   const axisNames = Object.keys(meta.axes || {});
@@ -3963,14 +3963,49 @@ async function renderDirectionPanel(host, opts = {}) {
   const head = document.createElement("div");
   head.className = "idir-head";
   head.textContent = COPY.intake.direction.title;
-  const lensLine = document.createElement("div");
-  lensLine.className = "idir-lens";
+
+  // The lens name is a SELECTOR: click to pick a named style / movement directly.
+  const lensSel = document.createElement("button");
+  lensSel.type = "button";
+  lensSel.className = "idir-lens idir-lens-sel";
   const lensDesc = document.createElement("div");
   lensDesc.className = "idir-desc";
-  panel.append(head, lensLine, lensDesc);
+  const menu = document.createElement("div");
+  menu.className = "idir-menu";
+  menu.hidden = true;
+  panel.append(head, lensSel, lensDesc, menu);
 
-  const pinned = {};   // axes the designer has steered (once they touch one, all pin)
-  let current = opts.initialDirection || null;  // the current Direction
+  const pinned = {};      // axes the designer has steered
+  let pinnedLens = null;  // a directly-picked lens (from the selector)
+  let current = opts.initialDirection || null;
+
+  // Selector menu, grouped: general Directions, then art Movements.
+  const groups = [
+    { label: COPY.intake.direction.groupDirections, items: (meta.lenses || []).filter((l) => !l.movement) },
+    { label: COPY.intake.direction.groupMovements, items: (meta.lenses || []).filter((l) => l.movement) },
+  ];
+  for (const g of groups) {
+    if (!g.items.length) continue;
+    const gl = document.createElement("div");
+    gl.className = "idir-menu-group";
+    gl.textContent = g.label;
+    menu.appendChild(gl);
+    for (const l of g.items) {
+      const it = document.createElement("button");
+      it.type = "button";
+      it.className = "idir-menu-item";
+      it.textContent = l.label;
+      it.addEventListener("click", () => {
+        menu.hidden = true;
+        pinnedLens = l.id;
+        for (const k in pinned) delete pinned[k]; // a direct pick clears axis steering
+        resample();
+      });
+      menu.appendChild(it);
+    }
+  }
+  lensSel.addEventListener("click", (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; });
+  document.addEventListener("click", () => { menu.hidden = true; });
 
   const rows = {};
   const grid = document.createElement("div");
@@ -3990,7 +4025,8 @@ async function renderDirectionPanel(host, opts = {}) {
       b.className = "idir-stop";
       b.textContent = stop;
       b.addEventListener("click", () => {
-        if (!Object.keys(pinned).length && current) for (const n of axisNames) pinned[n] = current.axes[n]; // first touch pins all
+        pinnedLens = null; // steering by axes releases a direct pick
+        if (!Object.keys(pinned).length && current) for (const n of axisNames) pinned[n] = current.axes[n];
         pinned[name] = stop;
         resample();
       });
@@ -4007,13 +4043,13 @@ async function renderDirectionPanel(host, opts = {}) {
   reroll.type = "button";
   reroll.className = "idir-reroll";
   reroll.textContent = COPY.intake.direction.reroll;
-  reroll.addEventListener("click", () => resample()); // keeps pins (if any), fresh seed
+  reroll.addEventListener("click", () => resample()); // keeps a pinned lens or axes, fresh seed
   panel.appendChild(reroll);
 
   function paint() {
     if (!current) return;
     const lens = (meta.lenses || []).find((l) => l.id === current.lens);
-    lensLine.textContent = lens ? lens.label : current.lens;
+    lensSel.textContent = (lens ? lens.label : current.lens) + "  ▾";
     lensDesc.textContent = lens ? lens.description : "";
     for (const name of axisNames) {
       const active = name in pinned ? pinned[name] : current.axes[name];
@@ -4024,8 +4060,11 @@ async function renderDirectionPanel(host, opts = {}) {
   async function resample() {
     reroll.disabled = true;
     panel.classList.add("busy");
+    const o = {};
+    if (pinnedLens) o.lens = pinnedLens;
+    else if (Object.keys(pinned).length) o.axes = pinned;
     try {
-      const r = await sample(Object.keys(pinned).length ? pinned : undefined);
+      const r = await sample(o);
       if (r && r.direction) current = r.direction;
     } catch {}
     reroll.disabled = false;
@@ -4035,7 +4074,7 @@ async function renderDirectionPanel(host, opts = {}) {
   }
 
   host.appendChild(panel);
-  if (current) { onChange(current); paint(); } // show the provided direction; reroll/steer redraws
+  if (current) { onChange(current); paint(); } // show the provided direction; reroll/steer/pick redraws
   else { await resample(); }                    // no initial → auto-draw (the intake case)
 }
 
@@ -4146,7 +4185,7 @@ async function startReroll(sourceId) {
   const panelHost = document.createElement("div");
   card.appendChild(panelHost);
   renderDirectionPanel(panelHost, {
-    sample: (axes) => window.desktop.sampleDirectionFor(signals, axes),
+    sample: (o) => window.desktop.sampleDirectionFor(signals, o),
     onChange: (d) => { chosen = d; },
     initialDirection: meta.direction || null,
   });

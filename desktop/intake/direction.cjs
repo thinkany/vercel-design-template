@@ -357,7 +357,7 @@ function renderDirectionPrompt(direction) {
 function directionMeta() {
   return {
     axes: AXES, // { convention: [...stops], energy: [...], structure: [...], era: [...] }
-    lenses: LENSES.map((l) => ({ id: l.id, label: l.label, description: l.description })),
+    lenses: LENSES.map((l) => ({ id: l.id, label: l.label, description: l.description, movement: l.autoWeight != null })),
   };
 }
 
