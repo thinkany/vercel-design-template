@@ -1226,7 +1226,7 @@ ipcMain.handle("intake:designPrompt", () => {
   // onto a distinct compositional direction, not the model's default. Auto by default;
   // skipped if one is already set (a future reroll / knob path will set it first). The
   // signals available here are the designer's description, tone (voice step), and type.
-  if (intakeBrief && !intakeBrief.direction) {
+  if (intakeBrief && !intakeBrief.direction && varietyLicensed()) {
     intakeBrief.direction = sampleDirection({
       what: intakeBrief.what,
       tone: intakeBrief.tone,
@@ -1243,14 +1243,20 @@ ipcMain.handle("intake:designPrompt", () => {
   return { prompt: buildDesignPrompt(intakeBrief) };
 });
 
+// Design-variety is a licensed add-on (Rob 2026-08-17) sharing Research's license tier:
+// one licensed key unlocks both. Unlicensed → nothing samples, no block is injected, and
+// the knob panel stays dark (directionMeta returns empty so the renderer skips it).
+const varietyLicensed = researchLicensed;
+
 // P2 knob panel: the axis stops (for the sliders) + lens labels, through the seam.
-ipcMain.handle("intake:directionMeta", () => directionMeta());
+ipcMain.handle("intake:directionMeta", () => (varietyLicensed() ? directionMeta() : { axes: {}, lenses: [] }));
 
 // P2: (re)sample a Direction from the brief plus any axes the designer pinned with the
 // knobs. No seed → a fresh draw each call (this is the reroll). Stores it on the brief so
 // the build handoff uses exactly what the designer sees, and pushes the brief so the rail
 // stays in sync.
 ipcMain.handle("intake:sampleDirection", (event, { axes } = {}) => {
+  if (!varietyLicensed()) return { direction: null };
   if (!intakeBrief) intakeBrief = createEmptyBrief("web-pages");
   intakeBrief.direction = sampleDirection({
     what: intakeBrief.what,
