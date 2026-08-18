@@ -28,6 +28,7 @@ const TUNING = {
   axisSharpness: 2.6,  // >1 sharpens the pull toward axis-matching lenses
   fitWeight: 1.6,      // weight added per fitTag matched to the brief's tags
   lensFloor: 0.03,     // minimum lens weight, so no lens ever fully starves
+  nameBoost: 14,       // weight multiplier when a distinctive style/movement is NAMED in the brief
   toneNudge: 3.6,      // how hard a mood word in the DESCRIPTION pushes its axis stop
   toneCopyNudge: 1.3,  // the copy-voice `tone` only pulls the VISUAL axes marginally (it is
                        // about the words, not the layout: "understated editorial" copy can
@@ -82,7 +83,33 @@ const KEYWORD_TAGS = {
   blog: ["media"], journal: ["publishing"], editorial: ["editorial"], lifestyle: ["lifestyle"], culture: ["culture"], cultural: ["culture"],
   retail: ["consumer"], shop: ["consumer"], store: ["consumer"], ecommerce: ["consumer", "dtc"], commerce: ["consumer"],
   product: ["consumer"], dtc: ["dtc"], d2c: ["dtc"], entertainment: ["entertainment"], streaming: ["entertainment"], tv: ["entertainment"],
+  // Art / design movements named in the brief → the movement lens's fitTag, so naming one
+  // surfaces it (multi-word / hyphenated names lose their hyphen when tokenized, so bridge
+  // the fragments too: "mid century" → century, "art deco" → deco, etc.).
+  bauhaus: ["bauhaus"], modernist: ["bauhaus", "modernist"], midcentury: ["mid-century"], century: ["mid-century"],
+  deco: ["art-deco"], artdeco: ["art-deco"], memphis: ["memphis"], postmodern: ["memphis"],
+  constructivist: ["constructivist"], constructivism: ["constructivist"],
+  destijl: ["de-stijl"], stijl: ["de-stijl"], mondrian: ["de-stijl", "mondrian"],
+  nouveau: ["art-nouveau"], artnouveau: ["art-nouveau"], psychedelic: ["psychedelic"], psychedelia: ["psychedelic"],
+  y2k: ["y2k"], vaporwave: ["vaporwave", "y2k"], retrofuturist: ["y2k"],
 };
+
+// A DISTINCTIVE style/movement named in the brief → that exact lens gets a strong boost
+// (nameBoost), so "a Bauhaus site" or "make it brutalist" lands that lens. Keyed on the
+// tags after KEYWORD_TAGS expansion. Only unambiguous style names belong here (not generic
+// adjectives like "minimal" or "modern", which should keep auto-varying).
+const NAME_LENS = {
+  bauhaus: "bauhaus", modernist: "bauhaus", "mid-century": "mid-century-modern",
+  "art-deco": "art-deco", deco: "art-deco", "art-nouveau": "art-nouveau", nouveau: "art-nouveau",
+  memphis: "memphis", constructivist: "constructivist", "de-stijl": "de-stijl", mondrian: "de-stijl",
+  psychedelic: "psychedelic", y2k: "y2k-futurist", vaporwave: "y2k-futurist",
+  brutalist: "brutalist", swiss: "swiss", international: "swiss", maximalist: "maximalist",
+  monospace: "monospace-terminal", terminal: "monospace-terminal",
+};
+function namedLens(tags) {
+  if (tags) for (const [kw, id] of Object.entries(NAME_LENS)) if (tags.has(kw)) return id;
+  return null;
+}
 
 // Tone / mood words → an axis stop to boost when AUTO-sampling axes. Each matched word
 // multiplies that stop's weight by TUNING.toneNudge, so "calm minimal" pulls the design
@@ -214,15 +241,24 @@ function axisScore(axes, lens) {
   return Math.pow(sum / AXIS_NAMES.length, TUNING.axisSharpness);
 }
 
-function fitScore(tags, lens) {
-  if (!tags || tags.size === 0) return 1;
-  let matches = 0;
-  for (const t of lens.fitTags || []) if (tags.has(t)) matches++;
-  return 1 + matches * TUNING.fitWeight;
+function fitMatches(tags, lens) {
+  if (!tags || tags.size === 0) return 0;
+  let m = 0;
+  for (const t of lens.fitTags || []) if (tags.has(t)) m++;
+  return m;
 }
 
 function pickLens(rng, axes, tags) {
-  const weights = LENSES.map((l) => TUNING.lensFloor + axisScore(axes, l) * fitScore(tags, l));
+  const named = namedLens(tags); // a distinctive style named in the brief
+  const weights = LENSES.map((l) => {
+    const matched = fitMatches(tags, l);
+    const fit = 1 + matched * TUNING.fitWeight;
+    // Specialty lenses (art movements, autoWeight < 1) stay a LIGHT presence in random
+    // auto-variety; a fit match (the movement named in the brief) restores full weight.
+    const aw = matched > 0 ? 1 : (l.autoWeight != null ? l.autoWeight : 1);
+    const boost = named && l.id === named ? TUNING.nameBoost : 1; // named style dominates
+    return TUNING.lensFloor + axisScore(axes, l) * fit * aw * boost;
+  });
   return LENSES[weightedIndex(rng, weights)];
 }
 
@@ -248,6 +284,12 @@ function pickMotifs(seed, lens) {
  */
 function sampleDirection(inputs = {}) {
   const seed = Number.isFinite(inputs.seed) ? inputs.seed | 0 : Math.floor(Math.random() * 0xffffffff) | 0;
+  // Direct pick from the style selector: use that lens exactly (motifs from its own
+  // eligibility, axes = its affinity), bypassing the weighted lens draw. seed + lens reproduces.
+  const picked = inputs.lens ? LENSES.find((l) => l.id === inputs.lens) : null;
+  if (picked) {
+    return { seed, axes: { ...picked.axisAffinity }, lens: picked.id, motifs: pickMotifs(seed, picked), source: "picked" };
+  }
   const tags = deriveTags(inputs);
   const pinned = inputs.axes && typeof inputs.axes === "object" ? inputs.axes : null;
   const { axes, pinnedCount } = resolveAxes(streamFor(seed, "axis"), pinned, moodAxisNudges(inputs));
