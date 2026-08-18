@@ -103,6 +103,11 @@ new variation on reload.
 `## Design direction` block: that block is system-injected (see below), not the designer's
 words, so never store it as the brief. Silent bookkeeping, don't narrate it.
 
+**Also persist the design direction.** If `/tmp/ta-direction.json` exists, write its JSON
+object **verbatim** into `"direction"` in the same `variation.json`: the sampled Design
+Direction (lens, motifs, axes, seed) that the `## Design direction` block came from, so the
+design's DNA is recorded for reproduction and the dashboard. Silent bookkeeping.
+
 Now follow the [`/design`](design.md) authoring contract and build
 `src/variations/v01/components/Home.tsx` with the **new** `--ta-*` / `--ta-font-*`
 tokens. **Drive the page's section order + block choices from `/tmp/ta-research.json`
