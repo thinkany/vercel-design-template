@@ -3576,7 +3576,9 @@ function openReferenceLightbox(a) {
 
 // The "how references work" overlay: what ingest attempts + guidance on what works
 // best. Same dismiss pattern as the lightbox (backdrop / Escape / the × button).
-function openReferencesHelp() {
+// Generic help overlay (backdrop + card + Esc/close), reused by the references "?" and the
+// design-direction "?". `html` supplies the card body (must include a `.iref-help-x` close).
+function openHelpOverlay(html) {
   const overlay = document.createElement("div");
   overlay.className = "iref-help";
   const onKey = (e) => { if (e.key === "Escape") close(); };
@@ -3586,14 +3588,17 @@ function openReferencesHelp() {
   const card = document.createElement("div");
   card.className = "iref-help-card";
   card.addEventListener("click", (e) => e.stopPropagation()); // clicks inside don't dismiss
-  card.innerHTML = COPY.intake.referencesHelpHtml;
-  card.querySelector(".iref-help-x").addEventListener("click", close);
+  card.innerHTML = html;
+  const x = card.querySelector(".iref-help-x");
+  if (x) x.addEventListener("click", close);
 
   overlay.appendChild(card);
   document.body.appendChild(overlay);
   document.addEventListener("keydown", onKey);
   requestAnimationFrame(() => overlay.classList.add("show"));
 }
+function openReferencesHelp() { openHelpOverlay(COPY.intake.referencesHelpHtml); }
+function openDirectionHelp() { openHelpOverlay(COPY.intake.direction.helpHtml); }
 
 async function addReferencesViaPicker() {
   try { handleRefResult(await window.desktop.addReferences()); }
@@ -3963,6 +3968,16 @@ async function renderDirectionPanel(host, opts = {}) {
   const head = document.createElement("div");
   head.className = "idir-head";
   head.textContent = COPY.intake.direction.title;
+
+  // Thin-line "?" in the corner → opens the "how the direction picker works" overlay.
+  const info = document.createElement("button");
+  info.type = "button";
+  info.className = "idir-info";
+  info.title = COPY.intake.direction.helpTitle;
+  info.setAttribute("aria-label", COPY.intake.direction.helpTitle);
+  info.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>';
+  info.addEventListener("click", (e) => { e.stopPropagation(); openDirectionHelp(); });
+  panel.appendChild(info);
 
   // The lens name is a SELECTOR: click to pick a named style / movement directly.
   const lensSel = document.createElement("button");

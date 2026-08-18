@@ -520,6 +520,35 @@ window.COPY = {
       axisLabels: { convention: "Convention", energy: "Energy", structure: "Structure", era: "Era" },
       groupDirections: "Directions",
       groupMovements: "Movements",
+      helpTitle: "How the design direction works",
+      // The "?" overlay on the direction picker (static HTML card body).
+      helpHtml: `
+    <div class="iref-help-head">
+      <div class="iref-help-title">How the design direction works</div>
+      <button type="button" class="iref-help-x" aria-label="Close">✕</button>
+    </div>
+    <p>The design direction shapes the whole look of your page, its layout rhythm, type feel, and motifs, so your designs stay distinct instead of all landing on the same generic template. Each direction is a curated <b>style</b> (a “lens”).</p>
+
+    <h4>Pick a style</h4>
+    <p>The style name at the top is a menu. Click it to choose a named style or art movement directly, grouped into <b>Directions</b> (Swiss, Editorial, Brutalist, and more) and <b>Movements</b> (Bauhaus, Art Deco, Mid-Century Modern, Memphis, and more). Picking one sets the design to that style and moves the sliders to match.</p>
+
+    <h4>Fine-tune with the sliders</h4>
+    <ul>
+      <li><b>Convention</b>: how far from a familiar layout, common through experimental.</li>
+      <li><b>Energy</b>: how loud or quiet, calm through maximal.</li>
+      <li><b>Structure</b>: how tidy, an ordered grid through freeform.</li>
+      <li><b>Era</b>: the period feel, timeless through avant-garde.</li>
+    </ul>
+    <p>Nudging a slider steers the design toward that feel and picks the closest matching style.</p>
+
+    <h4>Reroll</h4>
+    <p>Reroll draws a fresh take. If you have picked a style or set the sliders, it keeps that direction and just varies the details; left untouched, it draws a whole new direction.</p>
+
+    <h4>You can also just say it</h4>
+    <p>Mention a style in your brief, like “a Bauhaus site” or “make it art deco”, and the design will lead with it.</p>
+
+    <div class="iref-help-note">Nothing here is required. Leave it alone and a fitting direction is chosen for you, and it differs each time, so the same brief never produces the same design.</div>
+  `,
     },
     fontCustomPlaceholder: "Or type any font name…",
     fontCustomAdd: "Add",
