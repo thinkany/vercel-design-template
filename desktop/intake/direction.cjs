@@ -28,7 +28,10 @@ const TUNING = {
   axisSharpness: 2.6,  // >1 sharpens the pull toward axis-matching lenses
   fitWeight: 1.6,      // weight added per fitTag matched to the brief's tags
   lensFloor: 0.03,     // minimum lens weight, so no lens ever fully starves
-  toneNudge: 3.6,      // how hard each matched tone word pushes its axis stop when auto-sampling
+  toneNudge: 3.6,      // how hard a mood word in the DESCRIPTION pushes its axis stop
+  toneCopyNudge: 1.3,  // the copy-voice `tone` only pulls the VISUAL axes marginally (it is
+                       // about the words, not the layout: "understated editorial" copy can
+                       // sit on a vibrant design)
   // Per-axis weights for AUTO sampling a stop (index-aligned to AXES[axis]). Near-flat so
   // the tone nudges (below) and fit actually steer; extremes stay reachable.
   autoAxisBias: {
@@ -148,26 +151,31 @@ function deriveTags(inputs) {
     });
   };
   const add = (v) => (Array.isArray(v) ? v.forEach(push) : push(v));
-  add(inputs.vertical); add(inputs.tone); add(inputs.projectType); add(inputs.what);
+  // The DESCRIPTION + vertical carry the visual intent; the copy-voice `tone` is left out
+  // of fit on purpose (it should not summon a lens by itself).
+  add(inputs.vertical); add(inputs.projectType); add(inputs.what);
   if (inputs.brand && typeof inputs.brand === "object") { add(inputs.brand.vertical); add(inputs.brand.industry); }
   return out;
 }
 
-// Tone + description words → per-axis stop boosts (via TONE_AXIS), so the mood actually
-// steers the auto-sampled axes. Returns { axis: { stop: multiplier } }.
-function toneAxisNudges(inputs) {
+// Description + tone words → per-axis stop boosts (via TONE_AXIS), steering the auto-sampled
+// axes. The DESCRIPTION (`what`) nudges at full strength (it carries the visual intent); the
+// copy-voice `tone` only nudges marginally, so it shapes copy, not the layout.
+function moodAxisNudges(inputs) {
   const nudges = {};
-  const toks = new Set();
-  const push = (v) => { if (v == null) return; String(v).toLowerCase().split(/[^a-z0-9+]+/).forEach((t) => t && toks.add(t)); };
-  push(inputs.tone); push(inputs.what);
-  for (const tok of toks) {
-    const map = TONE_AXIS[tok];
-    if (!map) continue;
-    for (const [axis, stop] of Object.entries(map)) {
-      nudges[axis] = nudges[axis] || {};
-      nudges[axis][stop] = (nudges[axis][stop] || 1) * TUNING.toneNudge;
-    }
-  }
+  const apply = (text, strength) => {
+    if (text == null) return;
+    String(text).toLowerCase().split(/[^a-z0-9+]+/).forEach((tok) => {
+      const map = TONE_AXIS[tok];
+      if (!map) return;
+      for (const [axis, stop] of Object.entries(map)) {
+        nudges[axis] = nudges[axis] || {};
+        nudges[axis][stop] = (nudges[axis][stop] || 1) * strength;
+      }
+    });
+  };
+  apply(inputs.what, TUNING.toneNudge);
+  apply(inputs.tone, TUNING.toneCopyNudge);
   return nudges;
 }
 
@@ -242,7 +250,7 @@ function sampleDirection(inputs = {}) {
   const seed = Number.isFinite(inputs.seed) ? inputs.seed | 0 : Math.floor(Math.random() * 0xffffffff) | 0;
   const tags = deriveTags(inputs);
   const pinned = inputs.axes && typeof inputs.axes === "object" ? inputs.axes : null;
-  const { axes, pinnedCount } = resolveAxes(streamFor(seed, "axis"), pinned, toneAxisNudges(inputs));
+  const { axes, pinnedCount } = resolveAxes(streamFor(seed, "axis"), pinned, moodAxisNudges(inputs));
   const lens = pickLens(streamFor(seed, "lens"), axes, tags);
   const motifs = pickMotifs(seed, lens);
   const source = pinnedCount > 0 ? "knobs" : "auto";
