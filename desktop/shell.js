@@ -417,10 +417,11 @@ function closeAllTabs() {
 }
 
 function syncNav() {
-  if (!activeTab) { urlbar.value = ""; return; }
+  if (!activeTab) { urlbar.value = ""; updateRerollBtn(null); return; }
   let u = activeTab.wv.getAttribute("src") || "";
   try { u = activeTab.wv.getURL() || u; } catch { /* not ready yet */ }
   urlbar.value = u;
+  updateRerollBtn(u);
 }
 
 navback.addEventListener("click", () => { if (activeTab && activeTab.wv.canGoBack()) activeTab.wv.goBack(); });
@@ -3939,10 +3940,15 @@ async function getDirectionMeta() {
   return _directionMeta;
 }
 
-async function renderDirectionPanel(host) {
+// opts: { sample(axes)→{direction}, onChange(direction), initialDirection }. Defaults to the
+// intake sampler (stores on the brief). The reroll passes a pure sampler bound to the source
+// design's signals + an onChange to capture the chosen Direction.
+async function renderDirectionPanel(host, opts = {}) {
+  const sample = opts.sample || ((axes) => window.desktop.sampleDirection(axes));
+  const onChange = opts.onChange || (() => {});
   const meta = await getDirectionMeta();
   const axisNames = Object.keys(meta.axes || {});
-  if (!axisNames.length) return; // sampler unavailable → no panel (auto-sample still runs at handoff)
+  if (!axisNames.length) return; // sampler unavailable / unlicensed → no panel
 
   const panel = document.createElement("div");
   panel.className = "idir";
@@ -3957,7 +3963,7 @@ async function renderDirectionPanel(host) {
   panel.append(head, lensLine, lensDesc);
 
   const pinned = {};   // axes the designer has steered (once they touch one, all pin)
-  let current = null;  // the current Direction
+  let current = opts.initialDirection || null;  // the current Direction
 
   const rows = {};
   const grid = document.createElement("div");
@@ -4012,16 +4018,18 @@ async function renderDirectionPanel(host) {
     reroll.disabled = true;
     panel.classList.add("busy");
     try {
-      const r = await window.desktop.sampleDirection(Object.keys(pinned).length ? pinned : undefined);
+      const r = await sample(Object.keys(pinned).length ? pinned : undefined);
       if (r && r.direction) current = r.direction;
     } catch {}
     reroll.disabled = false;
     panel.classList.remove("busy");
+    onChange(current);
     paint();
   }
 
   host.appendChild(panel);
-  await resample(); // initial auto draw
+  if (current) { onChange(current); paint(); } // show the provided direction; reroll/steer redraws
+  else { await resample(); }                    // no initial → auto-draw (the intake case)
 }
 
 function renderReviewActions() {
@@ -4079,6 +4087,109 @@ function renderReviewActions() {
   wrap.append(dirHost, q, primary, secondary, more);
   intakeStack.appendChild(wrap);
   fadeSlideIn(wrap, { dy: 20, duration: 620, delay: 80 });
+}
+
+// ---- Post-build reroll: fork a built design with a new direction ------------
+// A gated licensed action: open the knob panel on an existing design, steer/reroll to a
+// new Direction, then FORK a new variation and rebuild only its Home.tsx. Costs a build
+// per reroll (confirmed first). The source is never touched (separate variation folder).
+function currentPreviewVariation(url) {
+  try { return new URL(url || activeTab.wv.getURL()).searchParams.get("v"); }
+  catch { return null; }
+}
+
+function buildRerollPrompt(targetId, sourceId, brief, block) {
+  return [
+    `/design Rebuild the Home page for design variation ${targetId}, a fork of ${sourceId} that already carries the same brand and brief.`,
+    `Keep its existing brand (the --ta-* colors and fonts already in \`src/variations/${targetId}/styles/\`) and the same brief; re-compose the page to the NEW design direction below.`,
+    `Edit ONLY \`src/variations/${targetId}/components/Home.tsx\` — do not touch ${sourceId} or any other variation.`,
+    brief ? `Brief: ${brief}` : "",
+    "",
+    block,
+  ].filter(Boolean).join("\n");
+}
+
+let rerollOverlayEl = null;
+function closeReroll() { if (rerollOverlayEl) { rerollOverlayEl.remove(); rerollOverlayEl = null; } }
+
+async function startReroll(sourceId) {
+  if (!sourceId) return;
+  let meta = null;
+  try { const r = await window.desktop.readVariation(sourceId); meta = r && r.meta; } catch {}
+  if (!meta) { addMsg("error", COPY.reroll.readError); return; }
+  const signals = { what: meta.brief || "" }; // the source brief carries the fit signals
+  let chosen = meta.direction || null;
+
+  closeReroll();
+  const overlay = document.createElement("div");
+  overlay.className = "reroll-overlay";
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeReroll(); });
+  rerollOverlayEl = overlay;
+
+  const card = document.createElement("div");
+  card.className = "reroll-card";
+  const title = document.createElement("div");
+  title.className = "reroll-title";
+  title.textContent = COPY.reroll.title;
+  const sub = document.createElement("div");
+  sub.className = "reroll-sub";
+  sub.textContent = COPY.reroll.subtitle;
+  card.append(title, sub);
+
+  const panelHost = document.createElement("div");
+  card.appendChild(panelHost);
+  renderDirectionPanel(panelHost, {
+    sample: (axes) => window.desktop.sampleDirectionFor(signals, axes),
+    onChange: (d) => { chosen = d; },
+    initialDirection: meta.direction || null,
+  });
+
+  const actions = document.createElement("div");
+  actions.className = "reroll-actions";
+  const cancel = document.createElement("button");
+  cancel.className = "reroll-cancel";
+  cancel.textContent = COPY.reroll.cancel;
+  cancel.addEventListener("click", closeReroll);
+  const create = document.createElement("button");
+  create.className = "reroll-create";
+  create.textContent = COPY.reroll.create;
+  create.addEventListener("click", () => {
+    if (!chosen) { closeReroll(); return; }
+    showConfirm({
+      title: COPY.reroll.confirmTitle,
+      message: COPY.reroll.confirmMessage,
+      okLabel: COPY.reroll.confirmOk,
+      onOk: () => doReroll(sourceId, chosen),
+    });
+  });
+  actions.append(cancel, create);
+  card.appendChild(actions);
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+}
+
+async function doReroll(sourceId, direction) {
+  closeReroll();
+  let r = null;
+  try { r = await window.desktop.createRerollFork(sourceId, direction); } catch {}
+  if (!r || r.error || !r.targetId) { addMsg("error", COPY.reroll.createError); return; }
+  addMsg("system", COPY.reroll.building(r.targetId));
+  runAgent(buildRerollPrompt(r.targetId, sourceId, r.brief, r.block));
+}
+
+// The preview-toolbar reroll button shows only when licensed AND viewing a specific design.
+async function updateRerollBtn(url) {
+  const btn = el("reroll-btn");
+  if (!btn) return;
+  const meta = await getDirectionMeta();
+  const licensed = !!(meta.axes && Object.keys(meta.axes).length);
+  const v = currentPreviewVariation(url);
+  btn.hidden = !(licensed && v && v !== "v00");
+}
+{
+  const b = el("reroll-btn");
+  if (b) b.addEventListener("click", () => startReroll(currentPreviewVariation()));
 }
 
 // ---- Start designing (#3) ---------------------------------------------------

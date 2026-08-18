@@ -154,6 +154,22 @@ window.COPY = {
     toggleAria: "Point and Comment",
   },
 
+  // ── Post-build reroll (fork a design with a new direction) ──────────────────
+  reroll: {
+    toolbarBtn: "↻ Direction",
+    cardBtn: "Try another direction",
+    title: "A different direction",
+    subtitle: "Steer or reroll the design direction, then create a new variation from it.",
+    cancel: "Cancel",
+    create: "Create variation",
+    confirmTitle: "Create a new variation?",
+    confirmMessage: "This runs a full design build (it takes time and uses your plan) and adds a new variation. Your current design is kept.",
+    confirmOk: "Create it",
+    building: (id) => `Creating a new direction as ${id}…`,
+    readError: "Couldn’t read that design.",
+    createError: "Couldn’t create the variation.",
+  },
+
   // ── Preview browser: nav buttons + quick links ──────────────────────────────
   nav: {
     back: "Back",

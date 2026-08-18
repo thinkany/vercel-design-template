@@ -34,6 +34,9 @@ contextBridge.exposeInMainWorld("desktop", {
   applyIntakeAnswers: (cards, answers) => ipcRenderer.invoke("intake:applyAnswers", { cards, answers }),
   directionMeta: () => ipcRenderer.invoke("intake:directionMeta"),
   sampleDirection: (axes) => ipcRenderer.invoke("intake:sampleDirection", { axes }),
+  sampleDirectionFor: (signals, axes) => ipcRenderer.invoke("direction:sampleFor", { signals, axes }),
+  readVariation: (id) => ipcRenderer.invoke("variation:read", { id }),
+  createRerollFork: (sourceId, direction) => ipcRenderer.invoke("variation:createRerollFork", { sourceId, direction }),
   getDesignPrompt: () => ipcRenderer.invoke("intake:designPrompt"),
   onAgentBrief: (cb) => {
     const listener = (_e, brief) => cb(brief);

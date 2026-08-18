@@ -1268,6 +1268,77 @@ ipcMain.handle("intake:sampleDirection", (event, { axes } = {}) => {
   return { direction: intakeBrief.direction };
 });
 
+// ---- Post-build reroll (fork an existing design with a new direction) --------
+// The next free variation id, scanning existing folders (max + 1, so gaps/removals
+// never collide). Base v00 has no folder, so folders are v01, v02, …
+function nextVariationFolderId(projectDir) {
+  let max = 0;
+  try {
+    for (const e of fs.readdirSync(path.join(projectDir, "src", "variations"), { withFileTypes: true })) {
+      const m = e.isDirectory() && /^v(\d+)$/.exec(e.name);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+  } catch { /* no variations dir */ }
+  return "v" + String(max + 1).padStart(2, "0");
+}
+
+// Read a variation's variation.json (for the reroll: its brief + current direction seed
+// the panel and the fork). Not gated — reading is harmless; the reroll UI is gated.
+ipcMain.handle("variation:read", (_event, { id } = {}) => {
+  if (!currentProject || !id) return { meta: null };
+  try { return { meta: JSON.parse(fs.readFileSync(path.join(currentProject, "src", "variations", id, "variation.json"), "utf8")) }; }
+  catch { return { meta: null }; }
+});
+
+// Pure sample for the reroll panel: takes the source design's signals explicitly (does NOT
+// touch intakeBrief). Same seam + gate as the intake sampler.
+ipcMain.handle("direction:sampleFor", (_event, { signals, axes } = {}) => {
+  if (!varietyLicensed()) return { direction: null };
+  const s = signals || {};
+  return { direction: sampleDirection({ what: s.what, tone: s.tone, projectType: s.projectType, axes: axes && typeof axes === "object" ? axes : undefined }) };
+});
+
+// Fork a source variation on disk (copy components/ + styles/ = inherit its brand + built
+// design), write the fork's variation.json inheriting the brief + brand and stamping the
+// NEW direction, and return the rendered direction block for the redesign prompt. The
+// build (a /design redesign the caller kicks) then rebuilds ONLY the fork's Home.tsx.
+ipcMain.handle("variation:createRerollFork", (_event, { sourceId, direction } = {}) => {
+  if (!varietyLicensed()) return { error: "not-licensed" };
+  if (!currentProject || !sourceId) return { error: "no-project" };
+  const varsDir = path.join(currentProject, "src", "variations");
+  const srcDir = path.join(varsDir, sourceId);
+  let srcMeta = {};
+  try { srcMeta = JSON.parse(fs.readFileSync(path.join(srcDir, "variation.json"), "utf8")); } catch {}
+  const targetId = nextVariationFolderId(currentProject);
+  const dstDir = path.join(varsDir, targetId);
+  try {
+    fs.mkdirSync(dstDir, { recursive: true });
+    fs.cpSync(path.join(srcDir, "components"), path.join(dstDir, "components"), { recursive: true });
+    fs.cpSync(path.join(srcDir, "styles"), path.join(dstDir, "styles"), { recursive: true });
+  } catch (e) { return { error: String(e && e.message || e) }; }
+  const dir = direction || srcMeta.direction || null;
+  const today = new Date().toLocaleDateString("en-US");
+  const meta = {
+    version: "v0.1",
+    title: srcMeta.title ? `${srcMeta.title} (reroll)` : "Reroll",
+    description: srcMeta.description || "",
+    createdAt: today,
+    modifiedAt: today,
+    styleguideStatus: srcMeta.styleguideStatus || "updated",
+    brandStatus: srcMeta.brandStatus || "established",
+    previewReady: true,
+    primaryColor: srcMeta.primaryColor,
+    primaryFont: srcMeta.primaryFont,
+    brief: srcMeta.brief || "",
+    direction: dir,
+  };
+  try {
+    fs.writeFileSync(path.join(dstDir, "variation.json"), JSON.stringify(meta, null, 2));
+    if (dir) fs.writeFileSync("/tmp/ta-direction.json", JSON.stringify(dir, null, 2));
+  } catch (e) { return { error: String(e && e.message || e) }; }
+  return { targetId, brief: meta.brief, block: dir ? renderDirectionPrompt(dir) : "" };
+});
+
 // Translate a card batch's answers (keyed by card id) into Brief FIELD values,
 // normalizing per card type. Shared by the agent path (agent:intakeAnswer) and the
 // client-rendered path (intake:applyAnswers) so both fold answers identically.
