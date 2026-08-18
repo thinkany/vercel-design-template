@@ -496,6 +496,9 @@ window.COPY = {
     designingMessage: (type) => `Designing ${type === "app" ? "an app" : "a website"}. I’ll ask you a few questions here and then we’ll get designing.`,
     kickoffPending: "Hold tight while we get things started. I’ll ask you a few questions right here.",
     skip: "Skip",
+    skipReference: "Skip, I don’t have one",
+    fontCustomPlaceholder: "Or type any font name…",
+    fontCustomAdd: "Add",
     // Client-rendered intake questions, asked in the pane with NO model turn. Sections,
     // color, and font stay model-driven (one turn) so their options fit the vibe + type.
     q: {

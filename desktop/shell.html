@@ -1021,6 +1021,11 @@
       .ifont.selected { border-color: #111; background: #111; color: #fff; }
       .ifont-preview { font-size: 25px; line-height: 1; flex: 0 0 auto; }
       .ifont-name { font-size: 13.5px; font-family: system-ui, sans-serif; }
+      .ifont-custom { display: flex; gap: 8px; margin-top: 8px; }
+      .ifont-custom .icard-input { flex: 1 1 auto; }
+      .ifont-add { flex: 0 0 auto; border: 1px solid #111; border-radius: 9px; padding: 0 16px; background: #111; color: #fff; font-size: 13px; cursor: pointer; transition: opacity .12s; }
+      .ifont-add:hover { opacity: .85; }
+      .ifont-add:disabled { opacity: .4; cursor: default; }
 
       /* reference — up to 3 url + why entries */
       .iref-field { margin-bottom: 9px; }

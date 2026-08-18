@@ -3870,7 +3870,7 @@ function startClientIntake(type) {
       { id: "clientName", field: "clientName", type: "open-text", label: COPY.intake.q.clientName, skippable: true, agentDecidesLabel: COPY.intake.skip },
       { id: "projectName", field: "projectName", type: "open-text", label: COPY.intake.q.projectName, skippable: true, agentDecidesLabel: COPY.intake.skip },
     ],
-    [{ id: "reference", field: "references", type: "reference", maxLength: 200, label: COPY.intake.q.reference(kind), skippable: true }],
+    [{ id: "reference", field: "references", type: "reference", maxLength: 200, label: COPY.intake.q.reference(kind), skippable: true, agentDecidesLabel: COPY.intake.skipReference }],
   ];
   runClientScript(script, 0, type, gen);
 }
@@ -4367,13 +4367,20 @@ function buildColorSwatch(card, body, onChange) {
 // font-pick → pick one font, shown in its actual typeface (options = Google Font
 // family names). Loads the fonts for preview; falls back to the name if a load fails.
 function buildFontPick(card, body, onChange) {
-  const fonts = (card.options || []).filter(Boolean);
-  loadGoogleFonts(fonts);
   let selected = null;
-  const opts = [];
+  const options = []; // { name, btn }
   const wrap = document.createElement("div");
   wrap.className = "ifonts";
-  fonts.forEach((name) => {
+  body.appendChild(wrap);
+
+  const refreshSelected = () => options.forEach((o) => o.btn.classList.toggle("selected", o.name === selected));
+  function select(name) { selected = selected === name ? null : name; refreshSelected(); onChange(); }
+
+  // Add a font as a selectable option previewed in its own face. Deduped by name
+  // (case-insensitive). `pick` selects it (used when the designer types a custom one).
+  function addOption(name, { pick = false } = {}) {
+    const exists = options.find((o) => o.name.toLowerCase() === name.toLowerCase());
+    if (exists) { if (pick) { selected = exists.name; refreshSelected(); onChange(); } return; }
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "ifont";
@@ -4385,20 +4392,45 @@ function buildFontPick(card, body, onChange) {
     lbl.className = "ifont-name";
     lbl.textContent = name;
     btn.append(big, lbl);
-    btn.addEventListener("click", () => {
-      if (btn.disabled) return;
-      selected = selected === name ? null : name;
-      opts.forEach((b, i) => b.classList.toggle("selected", fonts[i] === name && selected === name));
-      onChange();
-    });
-    opts.push(btn);
+    btn.addEventListener("click", () => { if (!btn.disabled) select(name); });
+    options.push({ name, btn });
     wrap.appendChild(btn);
-  });
-  body.appendChild(wrap);
+    if (pick) { selected = name; refreshSelected(); onChange(); }
+  }
+
+  const initial = (card.options || []).filter(Boolean);
+  loadGoogleFonts(initial);
+  initial.forEach((name) => addOption(name));
+
+  // Custom entry: type any font family, load it from Google Fonts, add it as a picked
+  // option previewed in its own face. If the name is not a real Google font the link
+  // just no-ops and the preview falls back to system-ui (a visible "not found" signal).
+  const custom = document.createElement("div");
+  custom.className = "ifont-custom";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "icard-input";
+  input.placeholder = COPY.intake.fontCustomPlaceholder;
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "ifont-add";
+  add.textContent = COPY.intake.fontCustomAdd;
+  function tryAdd() {
+    const name = input.value.trim();
+    if (!name) { input.focus(); return; }
+    loadGoogleFonts([name]);
+    addOption(name, { pick: true });
+    input.value = "";
+  }
+  add.addEventListener("click", tryAdd);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); tryAdd(); } });
+  custom.append(input, add);
+  body.appendChild(custom);
+
   return {
     getValue: () => selected,
     hasValue: () => !!selected,
-    setDisabled: (d) => opts.forEach((b) => { b.disabled = d; }),
+    setDisabled: (d) => { options.forEach((o) => { o.btn.disabled = d; }); input.disabled = d; add.disabled = d; },
     display: () => selected || "",
   };
 }
