@@ -50,7 +50,7 @@ const { startCaptureBridge, stopCaptureBridge } = require("./capture-bridge.cjs"
 const vercel = require("./publish.cjs");
 const { validateCards } = require("./intake/cards.cjs");
 const { createEmptyBrief, applyAnswers } = require("./intake/brief.cjs");
-const { sampleDirection, renderDirectionPrompt } = require("./intake/direction.cjs");
+const { sampleDirection, renderDirectionPrompt, directionMeta } = require("./intake/direction.cjs");
 const references = require("./intake/references.cjs");
 const ingestRefs = require("./intake/ingest.cjs");
 
@@ -1241,6 +1241,25 @@ ipcMain.handle("intake:designPrompt", () => {
     try { fs.writeFileSync("/tmp/ta-direction.json", JSON.stringify(intakeBrief.direction, null, 2)); } catch {}
   }
   return { prompt: buildDesignPrompt(intakeBrief) };
+});
+
+// P2 knob panel: the axis stops (for the sliders) + lens labels, through the seam.
+ipcMain.handle("intake:directionMeta", () => directionMeta());
+
+// P2: (re)sample a Direction from the brief plus any axes the designer pinned with the
+// knobs. No seed → a fresh draw each call (this is the reroll). Stores it on the brief so
+// the build handoff uses exactly what the designer sees, and pushes the brief so the rail
+// stays in sync.
+ipcMain.handle("intake:sampleDirection", (event, { axes } = {}) => {
+  if (!intakeBrief) intakeBrief = createEmptyBrief("web-pages");
+  intakeBrief.direction = sampleDirection({
+    what: intakeBrief.what,
+    tone: intakeBrief.tone,
+    projectType: intakeBrief.projectType,
+    axes: axes && typeof axes === "object" ? axes : undefined,
+  });
+  if (!event.sender.isDestroyed()) event.sender.send("agent:brief", intakeBrief);
+  return { direction: intakeBrief.direction };
 });
 
 // Translate a card batch's answers (keyed by card id) into Brief FIELD values,

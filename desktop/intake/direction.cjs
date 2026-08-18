@@ -309,4 +309,14 @@ function renderDirectionPrompt(direction) {
   return out.join("\n");
 }
 
-module.exports = { sampleDirection, renderDirectionPrompt };
+// Metadata for the P2 knob UI: the axis stops (to build the sliders) + each lens's display
+// label and description (so the renderer can name the picked lens without importing the
+// deck). Part of the seam, moves with the sampler.
+function directionMeta() {
+  return {
+    axes: AXES, // { convention: [...stops], energy: [...], structure: [...], era: [...] }
+    lenses: LENSES.map((l) => ({ id: l.id, label: l.label, description: l.description })),
+  };
+}
+
+module.exports = { sampleDirection, renderDirectionPrompt, directionMeta };

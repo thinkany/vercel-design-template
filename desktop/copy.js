@@ -497,6 +497,12 @@ window.COPY = {
     kickoffPending: "Hold tight while we get things started. I’ll ask you a few questions right here.",
     skip: "Skip",
     skipReference: "Skip, I don’t have one",
+    // P2 design-direction knob panel (shown on the review step).
+    direction: {
+      title: "Design direction",
+      reroll: "↻ Reroll",
+      axisLabels: { convention: "Convention", energy: "Energy", structure: "Structure", era: "Era" },
+    },
     fontCustomPlaceholder: "Or type any font name…",
     fontCustomAdd: "Add",
     // Client-rendered intake questions, asked in the pane with NO model turn. Sections,

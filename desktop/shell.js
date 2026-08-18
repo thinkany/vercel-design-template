@@ -3926,9 +3926,112 @@ function exitReview() {
   if (head) head.classList.remove("intake-hidden");
 }
 
+// ---- P2: the Design direction knob panel ------------------------------------
+// Shows the sampled Direction (lens + the 4 semantic-axis sliders) with a reroll, so the
+// designer can steer or re-draw before building. All deck access is behind the seam
+// (directionMeta + sampleDirection IPCs); the renderer never imports the deck. The current
+// Direction is stored on the brief (main side) so "start designing" uses exactly this.
+let _directionMeta = null;
+async function getDirectionMeta() {
+  if (_directionMeta) return _directionMeta;
+  try { _directionMeta = await window.desktop.directionMeta(); }
+  catch { _directionMeta = { axes: {}, lenses: [] }; }
+  return _directionMeta;
+}
+
+async function renderDirectionPanel(host) {
+  const meta = await getDirectionMeta();
+  const axisNames = Object.keys(meta.axes || {});
+  if (!axisNames.length) return; // sampler unavailable → no panel (auto-sample still runs at handoff)
+
+  const panel = document.createElement("div");
+  panel.className = "idir";
+
+  const head = document.createElement("div");
+  head.className = "idir-head";
+  head.textContent = COPY.intake.direction.title;
+  const lensLine = document.createElement("div");
+  lensLine.className = "idir-lens";
+  const lensDesc = document.createElement("div");
+  lensDesc.className = "idir-desc";
+  panel.append(head, lensLine, lensDesc);
+
+  const pinned = {};   // axes the designer has steered (once they touch one, all pin)
+  let current = null;  // the current Direction
+
+  const rows = {};
+  const grid = document.createElement("div");
+  grid.className = "idir-axes";
+  for (const name of axisNames) {
+    const row = document.createElement("div");
+    row.className = "idir-axis";
+    const label = document.createElement("div");
+    label.className = "idir-axis-label";
+    label.textContent = (COPY.intake.direction.axisLabels || {})[name] || name;
+    const stopsWrap = document.createElement("div");
+    stopsWrap.className = "idir-stops";
+    const btns = [];
+    meta.axes[name].forEach((stop) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "idir-stop";
+      b.textContent = stop;
+      b.addEventListener("click", () => {
+        if (!Object.keys(pinned).length && current) for (const n of axisNames) pinned[n] = current.axes[n]; // first touch pins all
+        pinned[name] = stop;
+        resample();
+      });
+      btns.push(b);
+      stopsWrap.appendChild(b);
+    });
+    rows[name] = btns;
+    row.append(label, stopsWrap);
+    grid.appendChild(row);
+  }
+  panel.appendChild(grid);
+
+  const reroll = document.createElement("button");
+  reroll.type = "button";
+  reroll.className = "idir-reroll";
+  reroll.textContent = COPY.intake.direction.reroll;
+  reroll.addEventListener("click", () => resample()); // keeps pins (if any), fresh seed
+  panel.appendChild(reroll);
+
+  function paint() {
+    if (!current) return;
+    const lens = (meta.lenses || []).find((l) => l.id === current.lens);
+    lensLine.textContent = lens ? lens.label : current.lens;
+    lensDesc.textContent = lens ? lens.description : "";
+    for (const name of axisNames) {
+      const active = name in pinned ? pinned[name] : current.axes[name];
+      rows[name].forEach((b) => b.classList.toggle("active", b.textContent === active));
+    }
+  }
+
+  async function resample() {
+    reroll.disabled = true;
+    panel.classList.add("busy");
+    try {
+      const r = await window.desktop.sampleDirection(Object.keys(pinned).length ? pinned : undefined);
+      if (r && r.direction) current = r.direction;
+    } catch {}
+    reroll.disabled = false;
+    panel.classList.remove("busy");
+    paint();
+  }
+
+  host.appendChild(panel);
+  await resample(); // initial auto draw
+}
+
 function renderReviewActions() {
   const wrap = document.createElement("div");
   wrap.className = "intake-review";
+
+  // The design-direction knob panel fills in asynchronously at the top of the review.
+  const dirHost = document.createElement("div");
+  dirHost.className = "idir-host";
+  renderDirectionPanel(dirHost);
 
   const q = document.createElement("div");
   q.className = "intake-review-q";
@@ -3973,7 +4076,7 @@ function renderReviewActions() {
     ta.focus();
   });
 
-  wrap.append(q, primary, secondary, more);
+  wrap.append(dirHost, q, primary, secondary, more);
   intakeStack.appendChild(wrap);
   fadeSlideIn(wrap, { dy: 20, duration: 620, delay: 80 });
 }

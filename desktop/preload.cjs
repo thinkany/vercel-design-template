@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld("desktop", {
   addBriefNote: (text) => ipcRenderer.invoke("intake:addNote", { text }),
   setBriefTone: (tone) => ipcRenderer.invoke("intake:setTone", { tone }),
   applyIntakeAnswers: (cards, answers) => ipcRenderer.invoke("intake:applyAnswers", { cards, answers }),
+  directionMeta: () => ipcRenderer.invoke("intake:directionMeta"),
+  sampleDirection: (axes) => ipcRenderer.invoke("intake:sampleDirection", { axes }),
   getDesignPrompt: () => ipcRenderer.invoke("intake:designPrompt"),
   onAgentBrief: (cb) => {
     const listener = (_e, brief) => cb(brief);
