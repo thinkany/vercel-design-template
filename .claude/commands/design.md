@@ -313,6 +313,11 @@ for the design's composition and look**, above your defaults:
   and what they say comes from the brief (and any reference outline); the direction governs
   *how* they are composed. Where a reference's canonical order would reproduce the exact
   centroid, let the direction's rhythm reshape it.
+- **Never override an explicitly-named brand asset to fit the direction.** The fonts and
+  colors the designer named (in the brief / the applied `--ta-*` tokens) are their choice,
+  use them. The direction's "type feel" directive shapes *how* their font is used (weight,
+  scale, pairing, as-texture), it does NOT license swapping in a different font family, and
+  the same holds for the palette. Style their tokens to the direction; don't replace them.
 
 No `## Design direction` block in the prompt = design as usual.
 
