@@ -47,6 +47,7 @@ export const en = {
     viewTooltip: "Variation opens in a new browser tab.",
     viewDesign: "View Design ↗",
     styleguide: "Styleguide ↗",
+    tryAnotherDirection: "Try Another Direction",
     remove: "Remove",
     close: "Close",
     briefHeading: "Original brief",

@@ -87,6 +87,19 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
   const btnRef = useRef<HTMLAnchorElement>(null);
   const [briefOpen, setBriefOpen] = useState(false);
 
+  // Design-variety is a licensed add-on; the Electron shell injects `__taVarietyLicensed`
+  // (and a `ta-variety-licensed` event) so the reroll control only appears when licensed
+  // and running inside the app. Outside the app the flag is absent → the control stays hidden.
+  const [varietyOn, setVarietyOn] = useState(
+    typeof window !== "undefined" && !!(window as unknown as { __taVarietyLicensed?: boolean }).__taVarietyLicensed,
+  );
+  useEffect(() => {
+    const on = (e: Event) => setVarietyOn(!!(e as CustomEvent).detail);
+    window.addEventListener("ta-variety-licensed", on);
+    if ((window as unknown as { __taVarietyLicensed?: boolean }).__taVarietyLicensed) setVarietyOn(true);
+    return () => window.removeEventListener("ta-variety-licensed", on);
+  }, []);
+
   // The thumbnail zone stretches to the card's full height (flex align-stretch),
   // so a fixed fit-width scale on the live-capture iframe leaves empty space below
   // it. Measure the zone and scale the iframe to COVER that height (top-anchored,
@@ -507,6 +520,35 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
         >
           {copy.variationCard.styleguide}
         </a>
+
+        {/* Try another direction (design-variety reroll) — admin, non-base, dev only, and
+            only when the licensed feature is on. Posts up to the Electron shell, which forks
+            a new variation and rebuilds it with a new design direction. */}
+        {isAdmin && !variation.isBase && import.meta.env.DEV && varietyOn && (
+          <button
+            onClick={() => window.postMessage({ type: "ta-reroll", variationId: variation.id }, "*")}
+            style={{
+              display: "block",
+              width: "100%",
+              boxSizing: "border-box",
+              textAlign: "center",
+              padding: "9px 20px",
+              background: "transparent",
+              color: "var(--admin-ink)",
+              border: "1px solid var(--admin-gray-light)",
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 500,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              fontFamily: "var(--admin-font-body)",
+            }}
+          >
+            {copy.variationCard.tryAnotherDirection}
+          </button>
+        )}
 
         {/* Remove — admin only, not on base, and only during local design (dev).
             Removal is a dev-server capability; the hosted/published preview is
