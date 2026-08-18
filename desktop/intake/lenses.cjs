@@ -290,7 +290,7 @@ const LENSES = [
     label: "Neo-retro",
     description: "A past era revived with intent: chunky forms, warm nostalgic palettes, period motifs, done knowingly.",
     axisAffinity: { convention: "bold", energy: "lively", structure: "balanced", era: "classic" },
-    fitTags: ["consumer", "food", "gaming", "music", "dtc", "events", "hospitality"],
+    fitTags: ["consumer", "food", "gaming", "music", "dtc"],
     directives: {
       grid: "Period-appropriate composition (70s poster, 90s web, mid-century print) applied deliberately.",
       type: "A characterful retro or revival typeface; period-true color and texture.",

@@ -23,19 +23,85 @@ const NEGATIVE_DEFAULTS = [
   "generic stock-photo hero images used as filler",
 ];
 
-// ── Tuning (T2 refines against real samples; kept here so tuning is a data edit) ──
+// ── Tuning (T2, refined against the offline batch; kept here so tuning is a data edit) ──
 const TUNING = {
-  axisSharpness: 2.5,  // >1 sharpens the pull toward axis-matching lenses
-  fitWeight: 0.6,      // weight added per fitTag matched to the brief's tags
-  lensFloor: 0.04,     // minimum lens weight, so no lens ever fully starves
-  // Per-axis weights for AUTO sampling a stop (index-aligned to AXES[axis]). A mild
-  // center-lean, so extreme combos are less frequent but always reachable.
+  axisSharpness: 2.6,  // >1 sharpens the pull toward axis-matching lenses
+  fitWeight: 1.6,      // weight added per fitTag matched to the brief's tags
+  lensFloor: 0.03,     // minimum lens weight, so no lens ever fully starves
+  toneNudge: 3.6,      // how hard each matched tone word pushes its axis stop when auto-sampling
+  // Per-axis weights for AUTO sampling a stop (index-aligned to AXES[axis]). Near-flat so
+  // the tone nudges (below) and fit actually steer; extremes stay reachable.
   autoAxisBias: {
-    convention: [1.0, 1.3, 1.3, 1.0],
-    energy:     [1.1, 1.3, 1.2, 0.9],
-    structure:  [1.2, 1.3, 1.1, 0.9],
-    era:        [1.2, 1.1, 1.4, 0.7],
+    convention: [1.0, 1.15, 1.15, 1.0],
+    energy:     [1.05, 1.15, 1.1, 0.95],
+    structure:  [1.1, 1.15, 1.05, 0.95],
+    era:        [1.1, 1.05, 1.2, 0.9],
   },
+};
+
+// Natural-language → canonical fitTag vocabulary. The words designers actually type
+// ("law", "corporate", "skincare") rarely equal a lens fitTag ("legal", "b2b", "beauty"),
+// so bridge them. Applied in deriveTags to every token of the description + tone.
+const KEYWORD_TAGS = {
+  law: ["legal"], lawyer: ["legal"], attorney: ["legal"], legal: ["legal"], firm: ["b2b"],
+  corporate: ["b2b", "enterprise"], company: ["b2b"], business: ["b2b"], enterprise: ["enterprise"],
+  b2b: ["b2b"], consulting: ["consulting"], consultancy: ["consulting"], advisory: ["consulting"],
+  startup: ["tech"], saas: ["tech", "b2b"], software: ["tech"], platform: ["tech"], tool: ["tech"],
+  developer: ["dev-tools", "technical"], dev: ["dev-tools"], api: ["api", "dev-tools"], sdk: ["dev-tools"],
+  code: ["dev-tools", "technical"], coding: ["dev-tools"], engineering: ["technical"], engineer: ["technical"],
+  infrastructure: ["infra", "dev-tools"], infra: ["infra"], devops: ["infra"], cloud: ["infra"], database: ["infra"],
+  security: ["security"], cybersecurity: ["security"], crypto: ["crypto"], blockchain: ["crypto"], web3: ["crypto"], nft: ["crypto"],
+  ai: ["ai"], ml: ["ai"], intelligence: ["ai"], llm: ["ai"], model: ["ai"], robotics: ["hardware"], hardware: ["hardware"], device: ["hardware"],
+  space: ["space"], aerospace: ["space"], satellite: ["space"],
+  bank: ["finance"], banking: ["finance"], finance: ["finance"], financial: ["finance"], invest: ["finance"], investment: ["finance"],
+  fintech: ["finance"], budgeting: ["finance"], payments: ["finance"], money: ["finance"], insurance: ["insurance"],
+  health: ["healthcare"], healthcare: ["healthcare"], medical: ["healthcare"], clinic: ["healthcare"], doctor: ["healthcare"],
+  dental: ["healthcare"], therapy: ["wellness", "healthcare"], wellness: ["wellness"], fitness: ["wellness"], gym: ["wellness"],
+  yoga: ["wellness"], pilates: ["wellness"], meditation: ["wellness"], spa: ["wellness", "beauty"],
+  beauty: ["beauty"], skincare: ["beauty"], cosmetic: ["beauty"], cosmetics: ["beauty"], makeup: ["beauty"],
+  luxury: ["luxury"], premium: ["luxury"], exclusive: ["luxury"], jewelry: ["jewelry"], jewellery: ["jewelry"], watches: ["jewelry"],
+  fashion: ["fashion"], clothing: ["fashion"], apparel: ["fashion"], streetwear: ["fashion"], wear: ["fashion"], outfit: ["fashion"],
+  hotel: ["hospitality"], resort: ["hospitality"], hospitality: ["hospitality"], restaurant: ["hospitality", "food"],
+  cafe: ["hospitality", "food"], coffee: ["food"], bar: ["hospitality"], dining: ["hospitality", "food"],
+  food: ["food"], bakery: ["food"], bake: ["food"], kitchen: ["food"], chef: ["food"], culinary: ["food"], grocery: ["food"], cuisine: ["food"],
+  photography: ["photography"], photographer: ["photography"], photo: ["photography"], film: ["photography"], cinema: ["photography"],
+  art: ["art"], gallery: ["art"], museum: ["art"], artist: ["art"], painting: ["art"], sculpture: ["art"], portfolio: ["portfolio"],
+  architecture: ["architecture"], architect: ["architecture"], interior: ["architecture"], building: ["architecture"], construction: ["architecture"],
+  design: ["design-studio"], studio: ["design-studio"], creative: ["agency"], agency: ["agency"], branding: ["agency", "design-studio"],
+  music: ["music"], band: ["music"], album: ["music"], record: ["music"], dj: ["music"], festival: ["events", "music"],
+  event: ["events"], events: ["events"], conference: ["events"], wedding: ["events"], party: ["events"],
+  game: ["gaming"], gaming: ["gaming"], games: ["gaming"], arcade: ["gaming"],
+  kids: ["kids"], children: ["kids"], child: ["kids"], toddler: ["kids"], baby: ["kids"], toy: ["kids"], toys: ["kids"], family: ["kids"],
+  education: ["education", "edtech"], school: ["education"], learn: ["education", "edtech"], learning: ["education", "edtech"],
+  course: ["education"], teach: ["education"], university: ["education"], academy: ["education"], tutor: ["education"], edtech: ["edtech"],
+  nonprofit: ["nonprofit"], charity: ["nonprofit"], foundation: ["nonprofit"], ngo: ["nonprofit"], volunteer: ["nonprofit", "community"], community: ["community"],
+  media: ["media"], news: ["media"], magazine: ["media", "editorial"], publisher: ["publishing"], publishing: ["publishing"],
+  blog: ["media"], journal: ["publishing"], editorial: ["editorial"], lifestyle: ["lifestyle"], culture: ["culture"], cultural: ["culture"],
+  retail: ["consumer"], shop: ["consumer"], store: ["consumer"], ecommerce: ["consumer", "dtc"], commerce: ["consumer"],
+  product: ["consumer"], dtc: ["dtc"], d2c: ["dtc"], entertainment: ["entertainment"], streaming: ["entertainment"], tv: ["entertainment"],
+};
+
+// Tone / mood words → an axis stop to boost when AUTO-sampling axes. Each matched word
+// multiplies that stop's weight by TUNING.toneNudge, so "calm minimal" pulls the design
+// toward calm energy + ordered structure (and thus lenses that live there).
+const TONE_AXIS = {
+  calm: { energy: "calm" }, quiet: { energy: "calm" }, serene: { energy: "calm" }, spacious: { energy: "calm" }, soft: { energy: "calm" },
+  minimal: { energy: "calm", structure: "ordered" }, clean: { structure: "ordered", energy: "measured" }, simple: { structure: "ordered" },
+  professional: { convention: "common", structure: "ordered" }, trustworthy: { convention: "common" }, credible: { convention: "common" },
+  serious: { convention: "common" }, traditional: { era: "timeless", convention: "common" }, heritage: { era: "timeless" }, timeless: { era: "timeless" }, classic: { era: "classic" },
+  elegant: { energy: "calm", structure: "balanced" }, refined: { energy: "calm" }, sophisticated: { structure: "balanced" }, luxurious: { energy: "calm" }, upscale: { energy: "calm" }, premium: { energy: "calm" },
+  bold: { convention: "bold", energy: "lively" }, striking: { energy: "lively" }, confident: { convention: "bold" }, strong: { energy: "lively" },
+  loud: { energy: "maximal" }, energetic: { energy: "lively" }, vibrant: { energy: "lively" }, dynamic: { energy: "lively" }, lively: { energy: "lively" },
+  maximal: { energy: "maximal" }, expressive: { energy: "maximal" }, ornate: { energy: "maximal" }, rich: { energy: "maximal" },
+  playful: { energy: "lively", structure: "loose", convention: "bold" }, fun: { energy: "lively", structure: "loose" }, friendly: { structure: "loose" }, cheerful: { energy: "lively" }, whimsical: { structure: "loose" },
+  rebellious: { convention: "experimental", structure: "loose" }, raw: { convention: "experimental" }, edgy: { convention: "experimental" }, gritty: { structure: "loose" }, punk: { convention: "experimental" },
+  experimental: { convention: "experimental" }, unconventional: { convention: "experimental" }, unexpected: { convention: "bold" }, weird: { convention: "experimental" },
+  warm: { structure: "loose", energy: "measured" }, cozy: { structure: "loose" }, inviting: { structure: "loose" }, gentle: { energy: "calm" },
+  handmade: { structure: "organic" }, organic: { structure: "organic" }, natural: { structure: "organic" }, earthy: { structure: "organic" }, crafted: { structure: "organic" }, artisan: { structure: "organic" }, rustic: { structure: "organic" },
+  futuristic: { era: "avant-garde", energy: "lively" }, sleek: { era: "current" }, cutting: { era: "avant-garde" }, advanced: { era: "avant-garde" }, innovative: { era: "current" },
+  modern: { era: "current" }, contemporary: { era: "current" }, current: { era: "current" }, retro: { era: "classic" }, vintage: { era: "classic" }, nostalgic: { era: "classic" }, throwback: { era: "classic" },
+  technical: { structure: "ordered" }, precise: { structure: "ordered" }, systematic: { structure: "ordered" }, engineered: { structure: "ordered" },
+  editorial: { structure: "balanced" }, romantic: { energy: "calm", structure: "balanced" }, dreamy: { energy: "calm" }, delicate: { energy: "calm" },
 };
 
 // ── Seeded PRNG (mulberry32). A SEPARATE stream per decision domain, sub-seeded from
@@ -67,29 +133,63 @@ function weightedIndex(rng, weights) {
   return weights.length - 1;
 }
 
-// Normalize the caller's signals (vertical, tone, projectType, brand) into a lowercase
-// tag set matched against each lens's `fitTags`. Rough in T1; T2 enriches the mapping.
+// Normalize the caller's signals (vertical, tone, projectType, brand, description) into a
+// lowercase tag set matched against each lens's `fitTags`. Each token also expands through
+// KEYWORD_TAGS so natural language reaches the canonical tag vocabulary.
 function deriveTags(inputs) {
   const out = new Set();
-  const push = (v) => { if (v == null) return; String(v).toLowerCase().split(/[^a-z0-9+]+/).forEach((t) => t && out.add(t)); };
+  const push = (v) => {
+    if (v == null) return;
+    String(v).toLowerCase().split(/[^a-z0-9+]+/).forEach((t) => {
+      if (!t) return;
+      out.add(t);
+      const syn = KEYWORD_TAGS[t];
+      if (syn) syn.forEach((s) => out.add(s));
+    });
+  };
   const add = (v) => (Array.isArray(v) ? v.forEach(push) : push(v));
   add(inputs.vertical); add(inputs.tone); add(inputs.projectType); add(inputs.what);
   if (inputs.brand && typeof inputs.brand === "object") { add(inputs.brand.vertical); add(inputs.brand.industry); }
   return out;
 }
 
+// Tone + description words → per-axis stop boosts (via TONE_AXIS), so the mood actually
+// steers the auto-sampled axes. Returns { axis: { stop: multiplier } }.
+function toneAxisNudges(inputs) {
+  const nudges = {};
+  const toks = new Set();
+  const push = (v) => { if (v == null) return; String(v).toLowerCase().split(/[^a-z0-9+]+/).forEach((t) => t && toks.add(t)); };
+  push(inputs.tone); push(inputs.what);
+  for (const tok of toks) {
+    const map = TONE_AXIS[tok];
+    if (!map) continue;
+    for (const [axis, stop] of Object.entries(map)) {
+      nudges[axis] = nudges[axis] || {};
+      nudges[axis][stop] = (nudges[axis][stop] || 1) * TUNING.toneNudge;
+    }
+  }
+  return nudges;
+}
+
 const stopIndex = (name, stop) => Math.max(0, AXES[name].indexOf(stop));
 
-// Resolve the four axes: keep any the caller pinned (knobs), auto-sample the rest off
-// the axis stream. Returns the full axes plus how many were validly pinned.
-function resolveAxes(rng, pinned) {
+// Resolve the four axes: keep any the caller pinned (knobs), auto-sample the rest off the
+// axis stream, with tone `nudges` boosting the mood-appropriate stops. Returns the full
+// axes plus how many were validly pinned.
+function resolveAxes(rng, pinned, nudges) {
   const axes = {};
   let pinnedCount = 0;
   for (const name of AXIS_NAMES) {
     const stops = AXES[name];
     const given = pinned && typeof pinned[name] === "string" && stops.includes(pinned[name]) ? pinned[name] : null;
     if (given) { axes[name] = given; pinnedCount++; continue; }
-    const bias = TUNING.autoAxisBias[name] || stops.map(() => 1);
+    const base = TUNING.autoAxisBias[name] || stops.map(() => 1);
+    const bias = base.slice();
+    const nudge = nudges && nudges[name];
+    if (nudge) for (const [stop, mult] of Object.entries(nudge)) {
+      const i = stops.indexOf(stop);
+      if (i >= 0) bias[i] *= mult;
+    }
     axes[name] = stops[weightedIndex(rng, bias)];
   }
   return { axes, pinnedCount };
@@ -142,7 +242,7 @@ function sampleDirection(inputs = {}) {
   const seed = Number.isFinite(inputs.seed) ? inputs.seed | 0 : Math.floor(Math.random() * 0xffffffff) | 0;
   const tags = deriveTags(inputs);
   const pinned = inputs.axes && typeof inputs.axes === "object" ? inputs.axes : null;
-  const { axes, pinnedCount } = resolveAxes(streamFor(seed, "axis"), pinned);
+  const { axes, pinnedCount } = resolveAxes(streamFor(seed, "axis"), pinned, toneAxisNudges(inputs));
   const lens = pickLens(streamFor(seed, "lens"), axes, tags);
   const motifs = pickMotifs(seed, lens);
   const source = pinnedCount > 0 ? "knobs" : "auto";
