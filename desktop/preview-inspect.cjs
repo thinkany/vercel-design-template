@@ -187,4 +187,16 @@ const { ipcRenderer } = require("electron");
   window.addEventListener("keydown", (e) => {
     if (active && e.key === "Escape") { e.preventDefault(); setActive(false); }
   }, true);
+
+  // Design-variety reroll bridge: the shell tells the page whether variety is licensed
+  // (so the dashboard can show a "Try another direction" button), and the page's button
+  // posts a reroll request back up to the shell.
+  ipcRenderer.on("variety:licensed", (_e, on) => {
+    window.__taVarietyLicensed = !!on;
+    window.dispatchEvent(new CustomEvent("ta-variety-licensed", { detail: !!on }));
+  });
+  window.addEventListener("message", (e) => {
+    const d = e && e.data;
+    if (d && d.type === "ta-reroll" && d.variationId) ipcRenderer.sendToHost("reroll:request", d.variationId);
+  });
 })();

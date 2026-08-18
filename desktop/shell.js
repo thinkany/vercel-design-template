@@ -353,6 +353,13 @@ function buildPreviewWebview(tab) {
   wv.addEventListener("ipc-message", (e) => {
     if (e.channel === "feedback:submit") handleFeedbackSubmit(e.args[0]);
     else if (e.channel === "feedback:state") setFeedbackButton(!!e.args[0]);
+    else if (e.channel === "reroll:request") startReroll(e.args[0]); // dashboard-card entry
+  });
+  // Tell the page (dashboard) whether design-variety is licensed, so a variation card can
+  // show its "Try another direction" button.
+  wv.addEventListener("dom-ready", async () => {
+    try { const m = await getDirectionMeta(); wv.send("variety:licensed", !!(m.axes && Object.keys(m.axes).length)); }
+    catch { /* webview gone */ }
   });
   wv.addEventListener("page-title-updated", (e) => {
     if (!tab.fixedTitle) { tab.title = e.title; renderTabs(); }
