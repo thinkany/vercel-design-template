@@ -12,12 +12,10 @@
       <style>
         html, body { height: 100%; margin: 0; }
         #root { height: 100%; }
-        /* Lock the horizontal axis: no design should ever scroll or rubber-band the page
-           sideways. overflow-x:hidden on <html> clips any accidental horizontal overflow
-           while <html> stays the document scroll container, so the sticky Header still
-           works. overscroll-behavior-x kills the elastic X bounce. Wide content (tables,
-           code, carousels) must scroll inside its OWN overflow-x container, never the page. */
-        html { overflow-x: hidden; }
+        /* Kill the elastic horizontal overscroll bounce. NOTE: we deliberately do NOT
+           force overflow-x:hidden here — a design that scrolls sideways is a bug to fix
+           (a decoration escaping its section, see /design rule 1: clip oversized
+           decoration), not something to mask. Fail loud. */
         html, body { overscroll-behavior-x: none; }
       </style>
       

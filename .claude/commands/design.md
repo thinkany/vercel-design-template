@@ -262,6 +262,11 @@ file only when you're about to **change** it:
    use **`min-h-full`:** it keys off the frame, not the window, and **never
    `vh`/`min-h-screen`/`100dvh`**, which read the browser window, so the section
    resizes as the browser resizes and diverges from the frame + the export.
+   **Clip oversized decoration:** a decorative element sized larger than its container
+   (a full-bleed sunburst/blob/oversized shape in `cqi`/`vw`, or anything centered with
+   `-translate-x-1/2` at `>100%` width) **MUST sit in a section with `overflow-hidden`**
+   (`cqi` is a % of the whole surface, not the parent, so it leaks past the page edge
+   otherwise). The page must **never scroll horizontally.**
 2. **Tokens only, via utilities.** `bg-ta-*` / `text-ta-*` / `border-ta-*` for
    colors, `font-ta-display|serif|sans|mono` for type. Never raw hex/font stacks.
    Fall back to inline `style={{}}` only as a last resort. **Image scrims count:**
