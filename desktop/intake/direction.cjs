@@ -361,4 +361,11 @@ function directionMeta() {
   };
 }
 
-module.exports = { sampleDirection, renderDirectionPrompt, directionMeta };
+// A lens's human label from its id (for persisting into variation.json, so the dashboard
+// card can show the style name without importing the deck). Part of the seam.
+function lensLabel(id) {
+  const l = LENS_BY_ID[id];
+  return l ? l.label : id || "";
+}
+
+module.exports = { sampleDirection, renderDirectionPrompt, directionMeta, lensLabel };

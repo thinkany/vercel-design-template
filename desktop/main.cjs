@@ -50,7 +50,7 @@ const { startCaptureBridge, stopCaptureBridge } = require("./capture-bridge.cjs"
 const vercel = require("./publish.cjs");
 const { validateCards } = require("./intake/cards.cjs");
 const { createEmptyBrief, applyAnswers } = require("./intake/brief.cjs");
-const { sampleDirection, renderDirectionPrompt, directionMeta } = require("./intake/direction.cjs");
+const { sampleDirection, renderDirectionPrompt, directionMeta, lensLabel } = require("./intake/direction.cjs");
 const references = require("./intake/references.cjs");
 const ingestRefs = require("./intake/ingest.cjs");
 
@@ -1238,7 +1238,9 @@ ipcMain.handle("intake:designPrompt", () => {
   // as /tmp/ta-palette.json etc.), so each design records its DNA for reproduction, the
   // dashboard card, and T2 tuning.
   if (intakeBrief && intakeBrief.direction) {
-    try { fs.writeFileSync("/tmp/ta-direction.json", JSON.stringify(intakeBrief.direction, null, 2)); } catch {}
+    // Stamp the human lens label so the dashboard card can show the style name.
+    const dir = { ...intakeBrief.direction, lensLabel: lensLabel(intakeBrief.direction.lens) };
+    try { fs.writeFileSync("/tmp/ta-direction.json", JSON.stringify(dir, null, 2)); } catch {}
   }
   return { prompt: buildDesignPrompt(intakeBrief) };
 });
@@ -1283,6 +1285,13 @@ function nextVariationFolderId(projectDir) {
   return "v" + String(max + 1).padStart(2, "0");
 }
 
+// Bump the design's version label for a reroll fork (v0.1 → v0.2, chains upward).
+function bumpVersion(v) {
+  const m = /^v(\d+)\.(\d+)$/.exec(String(v || ""));
+  if (!m) return "v0.2";
+  return `v${m[1]}.${parseInt(m[2], 10) + 1}`;
+}
+
 // Read a variation's variation.json (for the reroll: its brief + current direction seed
 // the panel and the fork). Not gated — reading is harmless; the reroll UI is gated.
 ipcMain.handle("variation:read", (_event, { id } = {}) => {
@@ -1317,10 +1326,11 @@ ipcMain.handle("variation:createRerollFork", (_event, { sourceId, direction } = 
     fs.cpSync(path.join(srcDir, "components"), path.join(dstDir, "components"), { recursive: true });
     fs.cpSync(path.join(srcDir, "styles"), path.join(dstDir, "styles"), { recursive: true });
   } catch (e) { return { error: String(e && e.message || e) }; }
-  const dir = direction || srcMeta.direction || null;
+  let dir = direction || srcMeta.direction || null;
+  if (dir) dir = { ...dir, lensLabel: lensLabel(dir.lens) }; // stamp the style name for the card
   const today = new Date().toLocaleDateString("en-US");
   const meta = {
-    version: "v0.1",
+    version: bumpVersion(srcMeta.version), // reroll of v0.1 → v0.2
     title: srcMeta.title ? `${srcMeta.title} (reroll)` : "Reroll",
     description: srcMeta.description || "",
     createdAt: today,
