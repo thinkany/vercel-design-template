@@ -634,6 +634,7 @@ async function revealPreviewAfterEdit() {
   previewph.hidden = true;
   browser.hidden = false;
   showPreviewHelp(); // updated preview shown → offer the blank-recovery help
+  updateRerollBtn(); // edit turn settled → re-evaluate the reroll button
 }
 
 // ---- Progressive build reveal (styleguide live, home still designing) --------
@@ -693,6 +694,7 @@ function finishBuildReveal() {
   // The build session is now heavy (full build history + any diagnose screenshots).
   // The next turn is an edit → start it fresh + lean instead of resuming all that.
   leanEditPending = true;
+  updateRerollBtn(); // initial build done → the reroll button may now appear
 }
 
 // A large fresh design can PAINT a beat before Vite finishes compiling it, so the
@@ -2880,6 +2882,7 @@ window.desktop.onAgentEvent((evt) => {
       } else {
         refreshPreview();
       }
+      updateRerollBtn(); // turn settled → re-evaluate the reroll button
       break;
     case "error":
       finalizeAssistant();
@@ -4246,7 +4249,11 @@ async function updateRerollBtn(url) {
   const meta = await getDirectionMeta();
   const licensed = !!(meta.axes && Object.keys(meta.axes).length);
   const v = currentPreviewVariation(url);
-  btn.hidden = !(licensed && v && v !== "v00");
+  // Only once the design is BUILT and idle — never during the intake, the initial build
+  // (homeBuilding, when the Style guide tab is live), or any agent turn — so a designer
+  // can't fork the design out from under an in-progress build.
+  const ready = !homeBuilding && !agentBusy && !intakeActive;
+  btn.hidden = !(licensed && ready && v && v !== "v00");
 }
 {
   const b = el("reroll-btn");
@@ -5223,6 +5230,7 @@ async function runAgent(toSend, echoText) {
   input.placeholder = DEFAULT_PLACEHOLDER;
   assistantEl = null;
   agentBusy = true;
+  updateRerollBtn(); // a turn is running → hide reroll until it settles
   conversationStarted = true;
   updateThinking(); // dots up immediately, until the first text/tool arrives
   refreshPreview(); // show the working placeholder while the browser is closed (no-op during intake)
