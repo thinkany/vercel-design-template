@@ -2661,6 +2661,8 @@ function updateSessionGauge(usage, modelUsage) {
   gauge.dataset.level = frac >= 0.85 ? "high" : frac >= 0.6 ? "mid" : "low";
   gaugeProg.style.strokeDashoffset = String(GAUGE_CIRCUMFERENCE * (1 - frac));
   gaugePct.textContent = pct + "%";
+  gauge.dataset.tip = COPY.rail.sessionUsageTip(pct); // hover tooltip shows the live %
+  gauge.setAttribute("aria-label", COPY.rail.sessionUsageAriaLive(pct));
 
   for (const n of SESSION_NUDGES) {
     if (frac >= n.at && !nudgesFired.has(n.at)) {

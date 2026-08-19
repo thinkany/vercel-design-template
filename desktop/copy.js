@@ -134,6 +134,8 @@ window.COPY = {
     claude: "Claude Settings",
     sessionUsage: "Claude Session Usage",
     sessionUsageAria: "Claude Session Usage, click to clear the session",
+    sessionUsageTip: (pct) => `Claude Session Usage · ${pct}%`,
+    sessionUsageAriaLive: (pct) => `Claude Session Usage, ${pct}% of the context used. Click to clear the session.`,
   },
 
   // ── Composer (chat input row) ───────────────────────────────────────────────
