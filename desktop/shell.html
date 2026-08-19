@@ -150,7 +150,7 @@
 
       /* ---- Centered confirm dialog (Clear session) ---- */
       #confirm {
-        position: fixed; inset: 0; z-index: 200;   /* above rail (110) + drawer (100) */
+        position: fixed; inset: 0; z-index: 8000;   /* top-most: above the reroll overlay (6000) + help (7000) so "Create variation"'s confirm shows */
         display: flex; align-items: center; justify-content: center;
         background: rgba(0,0,0,.4);
       }
