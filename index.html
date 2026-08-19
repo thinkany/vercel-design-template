@@ -9,7 +9,17 @@
       <title>Design Preview</title>
       <meta name="description" content="Design Preview" />
       <meta name="robots" content="noindex, nofollow" />
-      <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
+      <style>
+        html, body { height: 100%; margin: 0; }
+        #root { height: 100%; }
+        /* Lock the horizontal axis: no design should ever scroll or rubber-band the page
+           sideways. overflow-x:hidden on <html> clips any accidental horizontal overflow
+           while <html> stays the document scroll container, so the sticky Header still
+           works. overscroll-behavior-x kills the elastic X bounce. Wide content (tables,
+           code, carousels) must scroll inside its OWN overflow-x container, never the page. */
+        html { overflow-x: hidden; }
+        html, body { overscroll-behavior-x: none; }
+      </style>
       
     </head>
 
