@@ -25,6 +25,17 @@ export interface Variation {
   // family, only a CSS-var ref, so the font is captured here to display it accurately).
   primaryColor?: string; // the variation's --ta-primary hex (e.g. "#1e4b96")
   primaryFont?: string;  // the variation's primary/display font family (e.g. "Playfair Display")
+  // The sampled design direction (design-variety, a licensed add-on): the lens + its human
+  // label, axes, motifs, and seed. Written by /design-brief (initial) or the reroll fork.
+  // Shown in the brief modal; absent when the feature did not produce this design.
+  direction?: {
+    seed?: number;
+    axes?: Record<string, string>;
+    lens?: string;
+    lensLabel?: string;
+    motifs?: Record<string, string>;
+    source?: string;
+  };
   screenshot?: string; // static thumbnail image URL
   removed?: boolean;   // hidden from the gallery (files kept); set by the remove action
   // Per-variation styleguide state. "needs-review" shows the setup banner on this

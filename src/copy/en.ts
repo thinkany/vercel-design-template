@@ -51,6 +51,7 @@ export const en = {
     remove: "Remove",
     close: "Close",
     briefHeading: "Original brief",
+    directionHeading: "Design Direction",
     paletteHeading: "Palette",
     typeHeading: "Type",
     primaryTypeface: "Primary typeface",

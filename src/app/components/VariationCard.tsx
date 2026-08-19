@@ -130,7 +130,9 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
   const primaryColor = variation.primaryColor || primarySwatch?.value || "";
   const primaryColorName = primarySwatch?.name || copy.variationCard.primaryFallbackName;
   const primaryFont = variation.primaryFont || brand.fonts[0]?.name || "";
-  const hasBriefCard = !!(variation.brief || primaryColor || primaryFont);
+  // Design-variety: the lens/style this design took (label captured into variation.json).
+  const lens = variation.direction?.lensLabel || variation.direction?.lens || "";
+  const hasBriefCard = !!(variation.brief || primaryColor || primaryFont || lens);
   const parsedBrief = variation.brief ? parseBrief(variation.brief) : null;
 
   useEffect(() => {
@@ -611,6 +613,13 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {lens && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginBottom: 6 }}>{copy.variationCard.directionHeading}</div>
+              <div style={{ fontFamily: "var(--admin-font-heading)", fontSize: 16, fontWeight: 600, color: "var(--admin-ink)", lineHeight: 1.25 }}>{lens}</div>
             </div>
           )}
 
