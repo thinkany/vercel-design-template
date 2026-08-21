@@ -13,6 +13,10 @@ const PLACEHOLDER_PROJECT = "Project Name";
 const rawCompany = (import.meta.env.VITE_COMPANY_NAME ?? "").trim();
 const rawClient = (import.meta.env.VITE_CLIENT_NAME ?? "").trim();
 const rawProject = (import.meta.env.VITE_PROJECT_NAME ?? "").trim();
+// A brand logo image the designer uploaded in the "Get Designing" brief. A public/
+// path (e.g. "/images/logo.svg", served at the site root) or blank. When set, the
+// header/footer render it in place of the text wordmark.
+const rawLogo = (import.meta.env.VITE_BRAND_LOGO ?? "").trim();
 
 // The template is considered "branded" once a client name has been provided.
 const isBranded = rawClient.length > 0;
@@ -46,6 +50,11 @@ export const siteConfig = {
    * fully unbranded; once branded, an intentionally-empty project name stays empty.
    */
   projectName: isBranded ? rawProject : PLACEHOLDER_PROJECT,
+  /**
+   * Brand logo image path (public/ URL) from the design brief, or "" when none was
+   * uploaded. The header/footer show this image instead of the text name when set.
+   */
+  logo: rawLogo,
 };
 
 /**

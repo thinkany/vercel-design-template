@@ -128,12 +128,22 @@ export function Header({ onNavigate }: { onNavigate: (page: string) => void }) {
       className="sticky top-0 z-[60] w-full border-b border-black/10 bg-ta-surface"
     >
       <div className="flex items-center justify-between px-6 py-4 @lg:px-10">
-        {/* Logo lockup */}
+        {/* Logo lockup — an uploaded brand logo (from the brief) when present,
+            otherwise the client name as a text wordmark. */}
         <button
           onClick={() => onNavigate("home")}
-          className="font-ta-display text-lg text-ta-ink leading-none cursor-pointer"
+          aria-label={siteConfig.clientName}
+          className="flex items-center leading-none cursor-pointer font-ta-display text-lg text-ta-ink"
         >
-          {siteConfig.clientName}
+          {siteConfig.logo ? (
+            <img
+              src={siteConfig.logo}
+              alt={siteConfig.clientName}
+              className="h-8 w-auto max-w-[200px] object-contain"
+            />
+          ) : (
+            siteConfig.clientName
+          )}
         </button>
 
         {/* Desktop / tablet nav — each item reveals its menu.ts menu on hover. */}

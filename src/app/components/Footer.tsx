@@ -15,8 +15,18 @@ export function Footer({ onNavigate }: { onNavigate: (page: string) => void }) {
   return (
     <footer data-block="footer" data-block-name="Footer" className="w-full border-t border-black/10 bg-ta-surface px-6 py-8 @lg:px-10">
       <div className="flex flex-col gap-4 @lg:flex-row @lg:items-center @lg:justify-between">
-        <div className="font-ta-sans text-[11px] tracking-[0.08em] uppercase text-ta-muted">
-          © {year} {siteConfig.clientName}
+        <div className="flex flex-col gap-3">
+          {/* Brand logo from the brief, when one was uploaded. */}
+          {siteConfig.logo && (
+            <img
+              src={siteConfig.logo}
+              alt={siteConfig.clientName}
+              className="h-7 w-auto max-w-[160px] object-contain"
+            />
+          )}
+          <div className="font-ta-sans text-[11px] tracking-[0.08em] uppercase text-ta-muted">
+            © {year} {siteConfig.clientName}
+          </div>
         </div>
         <nav className="flex flex-wrap gap-x-6 gap-y-2">
           {pages.map((p) => (
