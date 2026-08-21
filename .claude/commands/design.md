@@ -130,8 +130,13 @@ change per project/variation. So you already know the utilities, don't re-Read
 `primary` (links, buttons, active states) · `accent` (highlights, badges) ·
 `surface` (page/section/card backgrounds) · `ink` (headings, strong text) ·
 `body` (paragraphs) · `muted` (captions, metadata) · `border` (dividers,
-hairlines). A design needing an extra named color can add another `--ta-*` token,
-but fill these seven first.
+hairlines). **The `bg-ta-*`/`text-ta-*` utilities exist ONLY for these seven roles**
+(they're what `theme.css` registers in `@theme`). Fill them first. **Need an extra
+named color** (a poster / extended palette, e.g. `sand`, `walnut`)? Define `--ta-<name>`
+in the variation's `tokens.css` and use it as **`bg-[var(--ta-<name>)]`** /
+`text-[var(--ta-<name>)]` — a bare **`bg-ta-<name>` is a PHANTOM class** Tailwind never
+generates (a per-variation `@theme` can't register utilities at runtime), so it silently
+renders nothing and the element falls through to its parent background.
 
 **Font roles**, each a `font-ta-*` utility: `display` (headings) · `serif` ·
 `sans` (body) · `mono`.
