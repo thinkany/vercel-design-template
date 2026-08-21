@@ -267,6 +267,15 @@ file only when you're about to **change** it:
    `-translate-x-1/2` at `>100%` width) **MUST sit in a section with `overflow-hidden`**
    (`cqi` is a % of the whole surface, not the parent, so it leaks past the page edge
    otherwise). The page must **never scroll horizontally.**
+   **Font-relative measures go on the element that carries the font.** `ch`/`em`
+   resolve against the *declaring* element's own computed font, not its descendants'.
+   So `max-w-[20ch]` on a plain wrapper around a big `font-ta-display` heading sizes to
+   ~20 characters of *body* text (≈170px), not of the heading (≈800px), and the heading
+   breaks a word or two per line (the "heading stacking vertically" bug). **Put
+   `max-w-[Nch]` on the heading / `<p>` itself, never a font-less wrapper;** wrappers get
+   `%`, `px`, a `max-w-*` scale value, or a flex basis. (`rem` is root-relative, so it's
+   safe anywhere; and `Nch` on an UPPERCASE display line still under-measures, caps run
+   wider than the `0` glyph `ch` samples, so treat it as a rough target, not a character count.)
 2. **Tokens only, via utilities.** `bg-ta-*` / `text-ta-*` / `border-ta-*` for
    colors, `font-ta-display|serif|sans|mono` for type. Never raw hex/font stacks.
    Fall back to inline `style={{}}` only as a last resort. **Image scrims count:**
@@ -378,6 +387,12 @@ hand-rolls site nav. What you touch:
   Both map [`pages.ts`](../../src/app/pages.ts), so **adding a page auto-adds its nav
   link**, don't wire nav by hand. Edit these once; the change cascades everywhere
   (single-source, rule 4).
+- **Brand logo:** when the brief supplied a logo, `VITE_BRAND_LOGO` is set and
+  `siteConfig.logo` is a `public/` path. The base Header/Footer already render it (an
+  `<img>` in place of the `siteConfig.clientName` wordmark). **If you author a divergent
+  `Header.tsx`/`Footer.tsx`, keep that logo-vs-wordmark branch** (`siteConfig.logo ?
+  <img …/> : siteConfig.clientName`) so the logo isn't lost, capped to a sensible height
+  with aspect preserved.
 - **Mobile menu ships by default** ([MobileMenu.tsx](../../src/app/components/MobileMenu.tsx)),
   a slide-in drawer, the designer never has to ask for one. It's an **in-frame overlay**
   (not a portal), the Header hamburger toggles it via shared state, and it slides from
