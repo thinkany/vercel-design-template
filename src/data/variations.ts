@@ -119,13 +119,24 @@ export async function fetchVariation(id: string): Promise<Variation | undefined>
   return (await fetchVariations()).find((v) => v.id === id);
 }
 
-/** Create a variation on disk: copy source files + write its variation.json. Dev only. */
-export async function createVariation(sourceId: string, targetId: string, meta: VariationMeta): Promise<void> {
-  await fetch("/api/variation/create", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sourceId, targetId, meta }),
-  });
+/**
+ * Create a variation on disk: copy source files + write its variation.json. Dev only.
+ * The SERVER assigns the authoritative id (scanning disk, so it's collision-proof even
+ * after a soft-delete); `targetId` here is only the caller's optimistic preview. Returns
+ * the id the server actually created, which callers must use for navigation.
+ */
+export async function createVariation(sourceId: string, targetId: string, meta: VariationMeta): Promise<string> {
+  try {
+    const r = await fetch("/api/variation/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sourceId, targetId, meta }),
+    });
+    const j = await r.json();
+    return (j && j.targetId) || targetId;
+  } catch {
+    return targetId;
+  }
 }
 
 /** Patch fields in a variation's variation.json (status, removed, title…). Dev only. */
@@ -162,12 +173,21 @@ export function formatNowDateTime(): string {
   return `${mm}/${dd}/${d.getFullYear()} ${hh}:${min} ${tz}`;
 }
 
-/** Next free id given the current list (e.g. [v00] → "v01"). */
+/**
+ * Optimistic next id for the CREATE UI's preview (e.g. [v00, v01] → "v02"). Max existing
+ * number + 1, not a count, so a gap from a soft-delete doesn't reuse a live number. The
+ * server ([/api/variation/create]) is the authority at creation time — this is only the
+ * label shown before the request returns.
+ */
 export function nextVariationId(variations: Variation[]): string {
-  return `v${String(variations.length).padStart(2, "0")}`;
+  const max = variations.reduce((m, v) => {
+    const n = parseInt(v.id.replace(/\D/g, ""), 10);
+    return Number.isFinite(n) ? Math.max(m, n) : m;
+  }, 0);
+  return `v${String(max + 1).padStart(2, "0")}`;
 }
 
+/** Version tag for the next variation, derived from its id so badge == number, always. */
 export function nextVersionTag(variations: Variation[]): string {
-  const n = variations.length;
-  return `v${Math.floor(n / 10)}.${n % 10}`;
+  return versionTagForId(nextVariationId(variations));
 }

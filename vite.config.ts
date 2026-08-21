@@ -165,8 +165,8 @@ function variationApiPlugin() {
         req.on('data', (chunk: Buffer) => chunks.push(chunk))
         req.on('end', async () => {
           try {
-            const { sourceId, targetId, meta } = JSON.parse(Buffer.concat(chunks).toString())
-            const { cp, mkdir, writeFile } = await import('fs/promises')
+            const { sourceId, meta } = JSON.parse(Buffer.concat(chunks).toString())
+            const { cp, mkdir, writeFile, readdir } = await import('fs/promises')
             const root = path.resolve(__dirname, 'src')
 
             const srcComponents = sourceId === 'v00'
@@ -176,14 +176,30 @@ function variationApiPlugin() {
               ? path.resolve(root, 'styles')
               : path.resolve(root, `variations/${sourceId}/styles`)
 
+            // The server owns the numbering: the next id is (max existing v## folder) + 1,
+            // scanning ALL folders on disk — including soft-removed ones (remove keeps the
+            // folder), so a delete never frees a number for reuse. The client's proposed
+            // targetId is only an optimistic preview and is ignored here, which is what makes
+            // the modal / "Start designing" path collision-proof after any delete.
+            let max = 0
+            try {
+              for (const e of await readdir(path.resolve(root, 'variations'), { withFileTypes: true })) {
+                const m = e.isDirectory() && /^v(\d+)$/.exec(e.name)
+                if (m) max = Math.max(max, parseInt(m[1], 10))
+              }
+            } catch { /* no variations dir yet */ }
+            const targetId = 'v' + String(max + 1).padStart(2, '0')
+
             const targetDir = path.resolve(root, `variations/${targetId}`)
             await mkdir(path.resolve(targetDir, 'components'), { recursive: true })
             await mkdir(path.resolve(targetDir, 'styles'), { recursive: true })
             await cp(srcComponents, path.resolve(targetDir, 'components'), { recursive: true })
             await cp(srcStyles, path.resolve(targetDir, 'styles'), { recursive: true })
 
-            // Write the variation's metadata as its single source of truth.
-            const finalMeta = { ...metaDefaults(targetId), ...(meta || {}) }
+            // Write the variation's metadata as its single source of truth. Client meta can
+            // set title/description/status, but the VERSION is forced from the assigned id so
+            // the badge is always unique and matches the number (never a duplicate "v0.2").
+            const finalMeta = { ...metaDefaults(targetId), ...(meta || {}), version: metaDefaults(targetId).version }
             await writeFile(path.resolve(targetDir, 'variation.json'), JSON.stringify(finalMeta, null, 2) + '\n')
 
             res.setHeader('Content-Type', 'application/json')

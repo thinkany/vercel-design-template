@@ -74,12 +74,13 @@ export function Dashboard() {
     setIsStarting(true);
     const newId = nextVariationId(variations);
     try {
-      await createVariation("v00", newId, {
+      // The server assigns the authoritative id — navigate to THAT, not our preview guess.
+      const createdId = await createVariation("v00", newId, {
         ...defaultVariationMeta(newId),
         styleguideStatus: "needs-review",
         brandStatus: "needs-review",
       });
-      window.location.href = `/?v=${newId}`;
+      window.location.href = `/?v=${createdId}`;
     } finally {
       setIsStarting(false);
     }
