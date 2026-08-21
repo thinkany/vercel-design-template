@@ -523,6 +523,35 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
           {copy.variationCard.styleguide}
         </a>
 
+        {/* Confer with the Art Director — admin, non-base, dev only, and only once the
+            design is built. Posts up to the Electron shell, which runs a READ-ONLY design
+            review (rules + palette) and reports the findings in chat. Advisory, never edits. */}
+        {isAdmin && !variation.isBase && import.meta.env.DEV && variation.previewReady && (
+          <button
+            onClick={() => window.postMessage({ type: "ta-artdirector", variationId: variation.id }, "*")}
+            style={{
+              display: "block",
+              width: "100%",
+              boxSizing: "border-box",
+              textAlign: "center",
+              padding: "9px 20px",
+              background: "transparent",
+              color: "var(--admin-ink)",
+              border: "1px solid var(--admin-gray-light)",
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 500,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              fontFamily: "var(--admin-font-body)",
+            }}
+          >
+            {copy.variationCard.conferArtDirector}
+          </button>
+        )}
+
         {/* Try another direction (design-variety reroll) — admin, non-base, dev only, and
             only when the licensed feature is on. Posts up to the Electron shell, which forks
             a new variation and rebuilds it with a new design direction. */}
