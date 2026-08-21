@@ -27,6 +27,9 @@
  * @property {string[]|null} deviceTargets   e.g. ["desktop","mobile"].
  * @property {string|null} clientName        The company / brand the site is for.
  * @property {string|null} projectName       A name for this project / site.
+ * @property {{src:string,filename:string}|null} logo  Uploaded brand logo (saved to
+ *                                            public/, referenced by src); set by main,
+ *                                            not a raw card value (never carries base64).
  * @property {string[]|null} notes           Free-form extra context the designer added.
  * @property {object[]|null} referenceAssets  Uploaded design references (mirrors the ingest manifest).
  * @property {string|null} referenceDigest    The distilled reference direction (digest.md text).
@@ -35,7 +38,7 @@
 const BRIEF_FIELDS = [
   "deliverableType", "projectType", "what", "audience", "references", "colorSources", "fontSources",
   "sections", "variationAxes", "existingCode", "tone", "deviceTargets",
-  "clientName", "projectName", "notes",
+  "clientName", "projectName", "logo", "notes",
   // Reference-ingest (set from the ingest, not from a card — see references.cjs / ingest.cjs):
   "referenceAssets", "referenceDigest",
   // Design-variety: the sampled Direction (design-variety-spec.md), set at build handoff,
@@ -67,7 +70,7 @@ function applyAnswers(brief, answers) {
 /** The fields still null — i.e. the ones the agent will decide on its own. The
  * reference fields are set by the ingest (not designer choices), so they never
  * count as "unspecified"; deliverableType is the flow's own routing key. */
-const NON_DESIGNER_FIELDS = new Set(["deliverableType", "referenceAssets", "referenceDigest", "direction"]);
+const NON_DESIGNER_FIELDS = new Set(["deliverableType", "referenceAssets", "referenceDigest", "direction", "logo"]);
 function unspecifiedFields(brief) {
   return BRIEF_FIELDS.filter((f) => brief[f] == null && !NON_DESIGNER_FIELDS.has(f));
 }

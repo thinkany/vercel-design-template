@@ -285,7 +285,10 @@
       .rulelist.disabled .rule-t { text-decoration: line-through; }
       .voice-toggle { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; margin: 4px 0 10px; cursor: pointer; }
       .setrow { margin-bottom: 16px; }
-      .setrow .k { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #2a2a2a; margin-bottom: 4px; }
+      /* Section / field labels across every drawer (Deploy to, Preview domain, Model, …) —
+         bold so each section header stands out. */
+      .k { font-weight: 600; }
+      .setrow .k { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #2a2a2a; margin-bottom: 10px; }
       .setrow .v { word-break: break-all; }
       .toggle-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; font-size: 13px; cursor: pointer; }
       /* Dim a control that's disabled because Research is off (the dependency). */
@@ -304,7 +307,9 @@
       }
       /* Session history (Claude drawer) — called out at the bottom under a rule */
       .sess-sep, .drawer-sep { border-top: 1px solid #2a2a2a; margin: 20px 0 10px; }
-      .sess-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #2a2a2a; }
+      /* Section headings in the Claude / Projects drawers — same treatment as .setrow .k
+         (bold + a 10px gap beneath) so every drawer's section labels are consistent. */
+      .sess-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #2a2a2a; font-weight: 600; margin-bottom: 10px; }
       .sess-desc { font-size: 11.5px; color: #999; line-height: 1.45; margin: 4px 0 8px; }
       .sess-actions { display: flex; align-items: center; justify-content: space-between; margin: 8px 0; }
       .sess-new { display: inline-block; border: 1px solid #d8d8de; background: #fafafb; color: #333; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: border-color .25s linear, background .25s linear; }
@@ -330,7 +335,7 @@
       .sess-date { font-size: 11px; color: #999; margin-top: 2px; }
       .panelbtn {
         border: 1px solid #ccc; background: #fafafb; border-radius: 8px; padding: 8px 12px;
-        font-size: 13px; cursor: pointer; margin: 4px 8px 0 0;
+        font-size: 13px; cursor: pointer; margin: 8px 8px 0 0;   /* 8px vertical gap between stacked buttons, matching the .projbtns row gap */
         transition: background .25s linear, border-color .25s linear;
       }
       .panelbtn:hover { border-color: #111; background: #f4f4f7; }

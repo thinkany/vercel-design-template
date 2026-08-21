@@ -354,6 +354,7 @@ function buildPreviewWebview(tab) {
     if (e.channel === "feedback:submit") handleFeedbackSubmit(e.args[0]);
     else if (e.channel === "feedback:state") setFeedbackButton(!!e.args[0]);
     else if (e.channel === "reroll:request") startReroll(e.args[0]); // dashboard-card entry
+    else if (e.channel === "artdirector:request") reviewDesign(e.args[0]); // "Confer with Art Director"
   });
   // Tell the page (dashboard) whether design-variety is licensed, so a variation card can
   // show its "Try another direction" button.
@@ -1912,21 +1913,29 @@ async function renderPublish(body) {
     note.textContent = COPY.publish.needsProject;
     body.appendChild(note);
   } else {
-    // Existing live URL (if already published).
+    // The live URL + preview password (once published) render together in a bordered
+    // "credentials" box, appended just above the Publish button (see below) so the
+    // shareable details sit next to the primary action. Built here, placed later.
+    let credBox = null;
     if (pub.url) {
+      credBox = document.createElement("div");
+      // Right margin (8px) matches .panelbtn so the box lines up with the buttons' width;
+      // no bottom margin so the button below sets the even 8px gap for the whole stack.
+      credBox.style.cssText = "border:1px solid #e2e2e8;border-radius:10px;padding:10px 12px 6px;margin:4px 8px 0 0;background:#fafafb;";
+
       const liveRow = document.createElement("div");
-      liveRow.style.cssText = "display:flex;gap:8px;align-items:center;min-height:38px;margin-bottom:4px;";
+      liveRow.style.cssText = "display:flex;gap:8px;align-items:center;min-height:34px;margin-bottom:2px;";
       const live = document.createElement("a");
       live.href = pub.url;
       live.textContent = pub.url.replace(/^https?:\/\//, "");
       live.style.cssText = "flex:1;color:#1a1a1a;text-decoration:underline;font-size:13px;word-break:break-all;";
       live.addEventListener("click", (e) => { e.preventDefault(); window.desktop.openExternal(pub.url); });
       liveRow.append(live, copyBtn(() => pub.url));
-      body.appendChild(liveRow);
+      credBox.appendChild(liveRow);
 
       if (pub.gatePassword) {
         const pwRow = document.createElement("div");
-        pwRow.style.cssText = "display:flex;gap:8px;align-items:center;min-height:38px;margin-bottom:4px;";
+        pwRow.style.cssText = "display:flex;gap:8px;align-items:center;min-height:34px;";
         const lab = document.createElement("span");
         lab.className = "muted"; lab.style.cssText = "font-size:12px;flex:0 0 auto;";
         lab.textContent = COPY.publish.passwordLabel;
@@ -1934,7 +1943,7 @@ async function renderPublish(body) {
         pw.textContent = pub.gatePassword;
         pw.style.cssText = "flex:1;font-size:13px;letter-spacing:.5px;word-break:break-all;";
         pwRow.append(lab, pw, copyBtn(() => pub.gatePassword));
-        body.appendChild(pwRow);
+        credBox.appendChild(pwRow);
       }
     } else {
       const lead = document.createElement("p");
@@ -1951,6 +1960,7 @@ async function renderPublish(body) {
     domSec.style.cssText = "margin: 2px 0 4px;";
     const domLabel = document.createElement("div");
     domLabel.className = "k";
+    domLabel.style.marginBottom = "10px"; // match the label→control gap of other sections
     domLabel.textContent = COPY.publish.domainLabel;
     const domBody = document.createElement("div"); // filled once Vercel responds
     domSec.append(domLabel, domBody);
@@ -2031,7 +2041,6 @@ async function renderPublish(body) {
     publishBtn.textContent = pub.url ? COPY.publish.publishChanges : COPY.publish.publishDesign;
     publishBtn.disabled = !pub.canPublish;
     publishBtn.addEventListener("click", () => runPublishFlow(publishBtn, host, { resetPassword: false }));
-    body.appendChild(publishBtn);
 
     let resetBtn = null;
     if (pub.url) {
@@ -2040,9 +2049,25 @@ async function renderPublish(body) {
       resetBtn.textContent = COPY.publish.resetPassword;
       resetBtn.title = COPY.publish.resetPasswordTitle;
       resetBtn.addEventListener("click", () => runPublishFlow(resetBtn, host, { resetPassword: true }));
-      body.appendChild(resetBtn);
     }
 
+    // Bottom stack, top → bottom: a "Manage Deployment" section header (only once the
+    // site is live), the bordered URL + password box, then Reset, then the primary
+    // Publish button (the shareable credentials sit above both actions).
+    if (credBox) {
+      const manageSec = document.createElement("div");
+      manageSec.style.cssText = "margin:18px 0 10px;";
+      const manageRule = document.createElement("div");
+      manageRule.style.cssText = "height:1px;background:#ececf1;margin-bottom:10px;";
+      const manageTitle = document.createElement("div");
+      manageTitle.style.cssText = "font-size:13px;font-weight:600;color:#1a1a1a;";
+      manageTitle.textContent = COPY.publish.manageTitle;
+      manageSec.append(manageRule, manageTitle);
+      body.appendChild(manageSec);
+      body.appendChild(credBox);
+    }
+    if (resetBtn) body.appendChild(resetBtn);
+    body.appendChild(publishBtn);
     body.appendChild(host);
 
     // A publish is already running (drawer was closed mid-run and reopened) → show
@@ -3355,6 +3380,7 @@ function composeRail() {
     add("Making", brief.what);
     add("Company", brief.clientName);
     add("Project", brief.projectName);
+    if (brief.logo && brief.logo.filename) add("Logo", brief.logo.filename);
     if (Array.isArray(brief.colorSources) && brief.colorSources.length) {
       add("Colors", brief.colorSources.map((c) => c && c.value).filter(Boolean).join(", "));
     }
@@ -3887,6 +3913,7 @@ function startClientIntake(type) {
     [
       { id: "clientName", field: "clientName", type: "open-text", label: COPY.intake.q.clientName, skippable: true, agentDecidesLabel: COPY.intake.skip },
       { id: "projectName", field: "projectName", type: "open-text", label: COPY.intake.q.projectName, skippable: true, agentDecidesLabel: COPY.intake.skip },
+      { id: "logo", field: "logo", type: "logo", label: COPY.intake.q.logo, placeholder: COPY.intake.q.logoPlaceholder, skippable: true, agentDecidesLabel: COPY.intake.skip },
     ],
     [{ id: "reference", field: "references", type: "reference", maxLength: 200, label: COPY.intake.q.reference(kind), skippable: true, agentDecidesLabel: COPY.intake.skipReference }],
   ];
@@ -4260,6 +4287,65 @@ async function updateRerollBtn(url) {
 {
   const b = el("reroll-btn");
   if (b) b.addEventListener("click", () => startReroll(currentPreviewVariation()));
+}
+
+// ---- Art Director (confer) --------------------------------------------------
+// A READ-ONLY design review the designer confers with from the variation card. v1 is
+// deterministic (zero model tokens): main lints the design's files + palette against the
+// /design rules and returns findings; we render them as an advisory chat report. Nothing
+// is edited — acting on a finding is always the designer's own next move.
+async function reviewDesign(id) {
+  if (!id) return;
+  addMsg("system", COPY.artDirector.reviewing(id));
+  let res;
+  try { res = await window.desktop.reviewDesign(id); }
+  catch (e) { addMsg("error", COPY.artDirector.failed(String((e && e.message) || e))); return; }
+  if (!res || res.error) { addMsg("error", COPY.artDirector.failed(res && res.error ? res.error : "unknown")); return; }
+  // 1) The instant, deterministic rule + palette report (zero tokens).
+  addMsg("assistant", formatArtDirectorReport(res));
+  // 2) The Art Director's read — a read-only model turn (its own persona, isolated fresh
+  //    session), grounded in the lint findings above. This is the one part that spends a turn.
+  runAgent(buildArtDirectorCritiquePrompt(id, res), null, { reviewMode: true });
+}
+
+// The critique prompt: point the Art Director at the design's files, hand it the lint
+// findings as established fact, and ask for the judgment a lint can't make. Read-only.
+function buildArtDirectorCritiquePrompt(id, res) {
+  const findings = (res.findings || [])
+    .map((f) => `- [${f.severity}/${f.rule}] ${f.line ? `${f.file}:${f.line}` : f.file} — ${f.message}`)
+    .join("\n") || "(nothing flagged)";
+  return [
+    `Give your Art Director read of design variation ${id}. It is already built — you are reviewing, not building.`,
+    `Read only what you need: \`src/variations/${id}/components/Home.tsx\` (and any other component in that folder), its palette in \`src/variations/${id}/styles/tokens.css\`, and its brief + design direction in \`src/variations/${id}/variation.json\`.`,
+    ``,
+    `An automated rule + palette pass already ran. Treat these as established fact — build on them, don't re-derive or merely repeat them:`,
+    findings,
+    ``,
+    `Now give the judgment the lint can't: visual hierarchy, spacing rhythm and balance, type pairing and scale, palette harmony and how the palette carries the mood, imagery, and whether it reads as its intended design direction. Lead with what's working, then the few highest-leverage changes, specific and grounded in the actual page. Keep it tight. Do NOT edit anything — this is advisory.`,
+  ].join("\n");
+}
+
+// Plain-text report (addMsg is textContent-only), in an Art-Director voice: ranked
+// findings, framed as advisory, with a pointer to the (later) deeper model critique.
+const AD_SEV_LABEL = { high: "Fix", review: "Review", note: "Note" };
+function formatArtDirectorReport(res) {
+  const findings = res.findings || [];
+  const head = COPY.artDirector.heading(res.variationId);
+  if (!findings.length) return `${head}\n\n${COPY.artDirector.clean}`;
+  const counts = res.counts || {};
+  const summary = ["high", "review", "note"]
+    .filter((s) => counts[s])
+    .map((s) => `${counts[s]} ${AD_SEV_LABEL[s].toLowerCase()}`)
+    .join(", ");
+  const lines = [head, "", COPY.artDirector.summary(findings.length, summary), ""];
+  let lastSev = null;
+  for (const f of findings) {
+    if (f.severity !== lastSev) { lines.push(`${AD_SEV_LABEL[f.severity] || f.severity}:`); lastSev = f.severity; }
+    const loc = f.line ? `${f.file}:${f.line}` : f.file;
+    lines.push(`  • [${f.rule}] ${loc} — ${f.message}`);
+  }
+  lines.push("", COPY.artDirector.footer);
+  return lines.join("\n");
 }
 
 // ---- Start designing (#3) ---------------------------------------------------
@@ -4737,7 +4823,7 @@ function buildLogoUpload(card, body, onChange) {
   hint.textContent = card.placeholder || COPY.intake.logoDropDefault;
   const input = document.createElement("input");
   input.type = "file";
-  input.accept = "image/png,image/jpeg,image/webp,image/svg+xml";
+  input.accept = "image/png,image/jpeg,image/webp,image/avif,image/svg+xml";
   input.style.display = "none";
   zone.append(preview, hint, input);
   body.appendChild(zone);
@@ -5213,7 +5299,11 @@ function leanEditPreamble() {
   );
 }
 
-async function runAgent(toSend, echoText) {
+async function runAgent(toSend, echoText, opts) {
+  // A review turn (Art Director) is READ-ONLY and ISOLATED: it runs in a fresh session
+  // with its own persona, must not touch the chat session, must not run the lean-edit
+  // reset, and must leave the live design on screen (it isn't building anything).
+  const review = !!(opts && opts.reviewMode);
   // Never overlap turns: wait for any in-flight turn's result to be handled first.
   try { await turnGate; } catch { /* prior turn already reported its error */ }
   beginTurnGate();
@@ -5221,7 +5311,7 @@ async function runAgent(toSend, echoText) {
   // One-time lean reset at the build→edit boundary: archive the heavy build session and
   // start this edit fresh with a disk-pointer preamble, so it (and the edits after it)
   // run on a slim base instead of re-caching the whole build every turn.
-  if (leanEditPending) {
+  if (!review && leanEditPending) {
     leanEditPending = false;
     if (sessionId) { try { await window.desktop.archiveSession(sessionId); } catch {} }
     sessionId = null;
@@ -5235,11 +5325,11 @@ async function runAgent(toSend, echoText) {
   updateRerollBtn(); // a turn is running → hide reroll until it settles
   conversationStarted = true;
   updateThinking(); // dots up immediately, until the first text/tool arrives
-  refreshPreview(); // show the working placeholder while the browser is closed (no-op during intake)
+  if (!review) refreshPreview(); // show the working placeholder (a review keeps the design visible)
   send.disabled = true;
   try {
-    const res = await window.desktop.sendPrompt(toSend, sessionId);
-    if (res && res.sessionId) sessionId = res.sessionId;
+    const res = await window.desktop.sendPrompt(toSend, review ? null : sessionId, { reviewMode: review });
+    if (!review && res && res.sessionId) sessionId = res.sessionId; // never let a review hijack the chat session
   } catch (e) {
     agentBusy = false;
     updateThinking();

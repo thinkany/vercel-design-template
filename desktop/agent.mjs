@@ -72,6 +72,35 @@ function toolTarget(input) {
   );
 }
 
+// The chat assistant's persona — how it communicates with the designer in the chat
+// pane. Always appended to the system prompt (distinct from the per-project copy
+// voice below, which governs the WORDS written into the design, not the assistant's
+// own voice). Kept deliberately light: a communication style, not task behavior —
+// the project's CLAUDE.md and the skills still own what it actually does.
+const CHAT_PERSONA =
+  "\n\n# Your persona\n" +
+  "You are a seasoned professional designer and communicate with confident curiosity. " +
+  "You're more inquisitive than judgemental, offering advice only when asked.\n";
+
+// The Art Director persona — a SEPARATE role from the builder above, used only for the
+// read-only design-review turn (reviewMode). A critic who confers, never the designer who
+// commits: it looks at a colleague's finished design and gives an honest, prioritized read,
+// but never touches the work. This is why review is its own turn, not the builder grading
+// itself. See docs/art-director-spec.md.
+const ART_DIRECTOR_PERSONA =
+  "\n\n# Your role: Art Director (read-only design review)\n" +
+  "You are a seasoned art director reviewing a design a colleague built. You are NOT the " +
+  "designer and you do not touch the work — never edit a file, never run a build. If you " +
+  "want to 'fix' something, describe the change and let the designer decide; the person who " +
+  "asked owns the call.\n\n" +
+  "Judge what a lint cannot: visual hierarchy (does the eye land where it should), spacing " +
+  "rhythm and balance, type pairing and scale, colour/palette harmony and how the palette " +
+  "carries the mood, use of imagery, and whether the page reads as its intended design " +
+  "direction. Ground every point in something concrete on the page. Lead with what's working, " +
+  "then the few changes that would raise it most — specific and prioritized, not a long flat " +
+  "list. Confident and direct but collegial, never harsh. Treat any lint findings you're given " +
+  "as established fact you can build on, not something to re-derive. Advisory only.\n";
+
 // Turn the resolved copy voice into a system-prompt addendum. Empty when nothing
 // is set — so a project with no voice keeps the exact default system prompt.
 // Scoped to user-facing DESIGN copy so it shapes what lands in pages, not code.
@@ -139,7 +168,7 @@ function buildIntakeServer(sdk, askIntake) {
   return sdk.createSdkMcpServer({ name: "intake", version: "1.0.0", tools: [intakeTool] });
 }
 
-export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, askIntake, model, copyVoice, onQuery }) {
+export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, askIntake, model, copyVoice, onQuery, reviewMode }) {
   let resolvedSession = sessionId;
 
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -167,9 +196,28 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
 
   try {
     const claudeExe = resolveClaudeExecutable();
-    const voiceAppend = buildVoiceAppend(copyVoice);
-    // The in-process intake tool, only when a bridge is provided (agent:prompt path).
-    const intakeServer = askIntake ? buildIntakeServer(await getSdk(), askIntake) : null;
+    // System-prompt append: the Art Director persona for a review turn, otherwise the
+    // always-on chat (builder) persona + (when set) the project's design copy voice. A
+    // review turn writes prose, not design copy, so it carries no copy voice.
+    const systemAppend = reviewMode ? ART_DIRECTOR_PERSONA : (CHAT_PERSONA + buildVoiceAppend(copyVoice));
+    // Review mode is READ-ONLY: no Write/Edit/Bash and none of the MCP tools, so the Art
+    // Director can look at the design (Read/Grep/Glob) but physically cannot change it.
+    const REVIEW_TOOLS = ["Read", "Grep", "Glob", "WebFetch", "WebSearch"];
+    const BUILD_TOOLS = [
+      "Read", "Write", "Edit", "Glob", "Grep", "Bash", "WebFetch", "WebSearch",
+      // Pre-approve the Figma MCP tools (used by the export-to-Figma flow) so they clear
+      // the allow-rules stage and never hit an interactive permission handshake this
+      // non-interactive session can't answer. Wildcard MUST be mcp__<server>__* (a bare
+      // "mcp__figma" is ignored). Absent from REVIEW_TOOLS — a review never exports. If
+      // the Figma OAuth token isn't available the server reports needs-auth and its tools
+      // are simply skipped — a clean degrade, not an abort.
+      "mcp__figma__*",
+      // The in-process intake tool (the "intake" SDK MCP server when an askIntake bridge
+      // is present), pre-approved so it clears the allow-rules stage.
+      "mcp__intake__*",
+    ];
+    // The in-process intake tool, only on a build turn with a bridge (never in review).
+    const intakeServer = (askIntake && !reviewMode) ? buildIntakeServer(await getSdk(), askIntake) : null;
     const iterator = query({
       prompt,
       options: {
@@ -179,31 +227,10 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
         ...(claudeExe ? { pathToClaudeCodeExecutable: claudeExe } : {}),
         ...(model ? { model } : {}),
         ...(intakeServer ? { mcpServers: { intake: intakeServer } } : {}),
-        // Copy voice → append to Claude Code's default system prompt (only when a
-        // voice is set, so the no-voice path is byte-for-byte the current default).
-        ...(voiceAppend ? { systemPrompt: { type: "preset", preset: "claude_code", append: voiceAppend } } : {}),
-        // Spike: auto-allow the core toolset so we can drive /setup-project
-        // end-to-end. The canUseTool approval UI is a deliberate later step.
-        allowedTools: [
-          "Read", "Write", "Edit", "Glob", "Grep", "Bash", "WebFetch", "WebSearch",
-          // Pre-approve the Figma MCP tools (used by the export-to-Figma flow) so
-          // they clear at the allow-rules stage and never hit an interactive
-          // permission handshake this non-interactive session can't answer — that
-          // was surfacing as "Tool permission request failed: AbortError: Stream
-          // closed". Wildcard MUST be mcp__<server>__* (a bare "mcp__figma" is
-          // ignored with a warning). This keeps canUseTool intact for
-          // AskUserQuestion (unlike permissionMode:"bypassPermissions", which
-          // would skip it and break the clickable prompts). If the Figma OAuth
-          // token isn't available to the bundled CLI, the server reports
-          // needs-auth and its tools are simply skipped — a clean degrade, not an
-          // abort — which also tells us OAuth is the remaining piece.
-          "mcp__figma__*",
-          // The in-process intake tool (registered as the "intake" SDK MCP server
-          // when an askIntake bridge is present). Pre-approved so it clears the
-          // allow-rules stage and never hits an interactive permission handshake
-          // this non-interactive session can't answer.
-          "mcp__intake__*",
-        ],
+        // Art Director persona on a review turn, else the builder persona + copy voice.
+        systemPrompt: { type: "preset", preset: "claude_code", append: systemAppend },
+        // Read-only in review mode so the Art Director can look but never touch.
+        allowedTools: reviewMode ? REVIEW_TOOLS : BUILD_TOOLS,
         ...(sessionId ? { resume: sessionId } : {}),
 
         // AskUserQuestion surfaces through canUseTool with the full structured

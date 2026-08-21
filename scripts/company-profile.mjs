@@ -43,6 +43,7 @@ const MATCHER_LOOKAHEAD = "(?!_vercel|version.json|template-latest.zip)";
 const IMAGE_MIME = {
   ".png": "image/png",
   ".webp": "image/webp",
+  ".avif": "image/avif",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".gif": "image/gif",

@@ -374,6 +374,43 @@ function readProjectEnv(dir) {
   } catch { /* no .env */ }
   return out;
 }
+// Upsert a single KEY="value" into a project's .env, preserving everything else
+// (comments, order, other keys). Appends the key if it isn't present yet.
+function upsertProjectEnv(dir, key, value) {
+  const envPath = path.join(dir, ".env");
+  let env = "";
+  try { env = fs.readFileSync(envPath, "utf8"); } catch { /* fresh — start empty */ }
+  const line = `${key}="${String(value).replace(/"/g, "")}"`;
+  const re = new RegExp(`^${key}=.*$`, "m");
+  env = re.test(env) ? env.replace(re, line) : (env.replace(/\s*$/, "") + `\n${line}\n`);
+  fs.writeFileSync(envPath, env);
+}
+
+// Save an uploaded brand logo ({ filename, mime, b64 }) into the open project's
+// public/images and wire it into .env (VITE_BRAND_LOGO) so the scaffold's header/
+// footer render it automatically. Returns a light { src, filename } descriptor for
+// the Brief (never the base64), or null if there's no project / bad payload.
+const LOGO_EXT_BY_MIME = {
+  "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/avif": ".avif", "image/svg+xml": ".svg",
+};
+function saveDesignLogo(raw) {
+  if (!currentProject || !raw || !raw.b64) return null;
+  try {
+    const ext = LOGO_EXT_BY_MIME[raw.mime] || path.extname(raw.filename || "").toLowerCase() || ".png";
+    const dir = path.join(currentProject, "public", "images");
+    fs.mkdirSync(dir, { recursive: true });
+    // Drop any prior logo.* so a re-upload in a different format leaves no orphan.
+    for (const e of Object.values(LOGO_EXT_BY_MIME)) {
+      try { fs.unlinkSync(path.join(dir, "logo" + e)); } catch { /* not there */ }
+    }
+    const fname = "logo" + ext;
+    fs.writeFileSync(path.join(dir, fname), Buffer.from(raw.b64, "base64"));
+    const src = "/images/" + fname;
+    upsertProjectEnv(currentProject, "VITE_BRAND_LOGO", src);
+    return { src, filename: raw.filename || fname };
+  } catch { return null; }
+}
+
 // A DNS-safe Vercel project name from the client/project/folder name.
 // Accents are FOLDED to their plain letters first (ō→o, é→e, ñ→n) via NFKD +
 // stripping combining marks, so "mōr" becomes "mor" and not "m-r".
@@ -1005,7 +1042,7 @@ let intakeBrief = null;
 // it (onQuery(null)) when the turn ends.
 let activeQuery = null;
 
-ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
+ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode }) => {
   if (!currentProject) {
     event.sender.send("agent:event", { type: "error", message: "No project is open." });
     return { sessionId };
@@ -1042,8 +1079,10 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId }) => {
   // Image mode: "placeholder" = don't source images, hold each spot with an FPO
   // block; else "on" (the normal gather-into-public/ flow). Same env channel.
   process.env.TA_DESIGN_IMAGES = loadImagesPlaceholder() ? "placeholder" : "on";
-  const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, askIntake, model: currentModel, copyVoice: effectiveVoice(currentProject), onQuery: (q) => { activeQuery = q; } });
-  if (result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it
+  const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, askIntake, model: currentModel, copyVoice: effectiveVoice(currentProject), onQuery: (q) => { activeQuery = q; }, reviewMode });
+  // A review turn is an isolated, fresh session (its own Art Director persona); it must
+  // not become the tracked chat session, or the next chat turn would resume the critique.
+  if (!reviewMode && result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it
   return result;
 });
 
@@ -1176,6 +1215,15 @@ function buildDesignPrompt(brief) {
   if (b.projectType) parts.push(`Project type: ${b.projectType}`);
   if (b.clientName) parts.push(`Client / company: ${b.clientName}`);
   if (b.projectName) parts.push(`Project name: ${b.projectName}`);
+  if (b.logo && b.logo.src) {
+    parts.push(
+      `A brand logo image is saved at \`public${b.logo.src}\` (served at \`${b.logo.src}\`) and ` +
+      `VITE_BRAND_LOGO is already set, so the scaffold header/footer render it automatically. ` +
+      `Use the logo in the site header (top-nav brand lockup) in place of the text name, and ` +
+      `optionally in the footer; if you author a divergent Header/Footer for this variation, keep ` +
+      `the logo image (an <img> capped to a sensible height, aspect preserved) instead of the wordmark`
+    );
+  }
   const refs = list(b.references)
     .map((r) => (r && r.url ? (r.reason ? `${r.url} (drawn to: ${r.reason})` : r.url) : ""))
     .filter(Boolean);
@@ -1285,12 +1333,24 @@ function nextVariationFolderId(projectDir) {
   return "v" + String(max + 1).padStart(2, "0");
 }
 
-// Bump the design's version label for a reroll fork (v0.1 → v0.2, chains upward).
-function bumpVersion(v) {
-  const m = /^v(\d+)\.(\d+)$/.exec(String(v || ""));
-  if (!m) return "v0.2";
-  return `v${m[1]}.${parseInt(m[2], 10) + 1}`;
+// Version tag derived from a variation id ("v03" → "v0.3"), matching the scaffold's
+// versionTagForId (src/data/variations.ts). Deriving the badge from the id — which is
+// itself unique (nextVariationFolderId = max+1) — is what keeps the version from ever
+// duplicating across rerolls (rerolling one design twice used to yield two "v0.2"s).
+function versionTagForId(id) {
+  const n = parseInt(String(id).replace(/\D/g, ""), 10) || 0;
+  return `v${Math.floor(n / 10)}.${n % 10}`;
 }
+
+// Art Director — a READ-ONLY design review the designer confers with. Deterministic
+// (zero model tokens): lints a variation's files + palette against the /design rules.
+// Never edits; returns findings the designer decides on. See docs/art-director-spec.md.
+ipcMain.handle("artdirector:review", (_event, { id } = {}) => {
+  if (!currentProject) return { error: "no-project" };
+  if (!id) return { error: "no-variation" };
+  try { return require("./artdirector.cjs").reviewVariation(currentProject, id); }
+  catch (e) { return { error: String((e && e.message) || e) }; }
+});
 
 // Read a variation's variation.json (for the reroll: its brief + current direction seed
 // the panel and the fork). Not gated — reading is harmless; the reroll UI is gated.
@@ -1330,7 +1390,7 @@ ipcMain.handle("variation:createRerollFork", (_event, { sourceId, direction } = 
   if (dir) dir = { ...dir, lensLabel: lensLabel(dir.lens) }; // stamp the style name for the card
   const today = new Date().toLocaleDateString("en-US");
   const meta = {
-    version: bumpVersion(srcMeta.version), // reroll of v0.1 → v0.2
+    version: versionTagForId(targetId), // unique per id → no duplicate "v0.2" badges
     title: srcMeta.title ? `${srcMeta.title} (reroll)` : "Reroll",
     description: srcMeta.description || "",
     createdAt: today,
@@ -1393,7 +1453,13 @@ ipcMain.handle("agent:intakeAnswer", (event, { id, answers }) => {
 // can map + normalize; `answers` is keyed by card id.
 ipcMain.handle("intake:applyAnswers", (event, { cards, answers } = {}) => {
   if (!intakeBrief) intakeBrief = createEmptyBrief("web-pages");
-  intakeBrief = applyAnswers(intakeBrief, foldCardAnswers(cards, answers));
+  // A logo card carries a { filename, mime, b64 } payload. Persist the image to the
+  // project (public/images + .env) here, and hand foldCardAnswers a light { src }
+  // descriptor so the Brief never carries base64.
+  const patched = { ...(answers || {}) };
+  const logoCard = (cards || []).find((c) => c && c.type === "logo");
+  if (logoCard) patched[logoCard.id] = saveDesignLogo(patched[logoCard.id]);
+  intakeBrief = applyAnswers(intakeBrief, foldCardAnswers(cards, patched));
   if (!event.sender.isDestroyed()) event.sender.send("agent:brief", intakeBrief);
   return { ok: true, brief: intakeBrief };
 });

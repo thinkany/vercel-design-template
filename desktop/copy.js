@@ -172,6 +172,17 @@ window.COPY = {
     createError: "Couldn’t create the variation.",
   },
 
+  // ── Art Director: the read-only confer report rendered in chat ──────────────
+  artDirector: {
+    cardBtn: "Confer with Art Director",
+    reviewing: (id) => `Art Director is reviewing ${id}…`,
+    failed: (why) => `Art Director couldn’t review this design (${why}).`,
+    heading: (id) => `Art Director — ${id}`,
+    clean: "Nothing flagged on the rules. Tokens, units, and palette contrast all hold up. That's the automated pass — my read on hierarchy, balance, and how the palette carries the design follows.",
+    summary: (n, breakdown) => `${n} note${n > 1 ? "s" : ""} (${breakdown}). Advisory — yours to act on or leave.`,
+    footer: "That's the rule + palette pass. My read on hierarchy, balance, type, and how the palette carries the design follows…",
+  },
+
   // ── Preview browser: nav buttons + quick links ──────────────────────────────
   nav: {
     back: "Back",
@@ -348,6 +359,7 @@ window.COPY = {
     ownedDomainNote: "A subdomain of a domain you own on Vercel. Applied on the next publish.",
     noDomainsNote: "No domains on your Vercel account yet. Add one in Vercel and it’ll appear here.",
     domainsError: "Couldn’t load your Vercel domains, check your connection.",
+    manageTitle: "Manage Deployment",
     publishChanges: "Publish changes",
     publishDesign: "Publish this design",
     resetPassword: "Reset preview password",
@@ -561,6 +573,8 @@ window.COPY = {
       whatPlaceholder: "A few sentences: what it’s for, who it’s for, the mood you’re after…",
       clientName: "Company or brand name",
       projectName: "A name for this project",
+      logo: "Logo (optional)",
+      logoPlaceholder: "Drop or choose a logo image (PNG, SVG, JPG)",
       reference: (kind) => `Is there a ${kind} you love? Share it and what draws you to it.`,
     },
     // The two-panel start fork (Client Setup vs Get Designing).

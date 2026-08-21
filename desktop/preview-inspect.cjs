@@ -198,5 +198,6 @@ const { ipcRenderer } = require("electron");
   window.addEventListener("message", (e) => {
     const d = e && e.data;
     if (d && d.type === "ta-reroll" && d.variationId) ipcRenderer.sendToHost("reroll:request", d.variationId);
+    if (d && d.type === "ta-artdirector" && d.variationId) ipcRenderer.sendToHost("artdirector:request", d.variationId);
   });
 })();

@@ -4,8 +4,8 @@ const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("desktop", {
   // ---- Agent ----
-  sendPrompt: (prompt, sessionId) =>
-    ipcRenderer.invoke("agent:prompt", { prompt, sessionId }),
+  sendPrompt: (prompt, sessionId, opts) =>
+    ipcRenderer.invoke("agent:prompt", { prompt, sessionId, reviewMode: !!(opts && opts.reviewMode) }),
   interruptAgent: () => ipcRenderer.invoke("agent:interrupt"),
   onAgentEvent: (cb) => {
     const listener = (_e, evt) => cb(evt);
@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld("desktop", {
   },
   answerIntake: (id, answers) => ipcRenderer.invoke("agent:intakeAnswer", { id, answers }),
   cancelIntake: (id) => ipcRenderer.invoke("agent:cancelIntake", { id }),
+  reviewDesign: (id) => ipcRenderer.invoke("artdirector:review", { id }),
   beginIntake: (deliverableType, projectType) => ipcRenderer.invoke("intake:begin", { deliverableType, projectType }),
   addBriefNote: (text) => ipcRenderer.invoke("intake:addNote", { text }),
   setBriefTone: (tone) => ipcRenderer.invoke("intake:setTone", { tone }),
