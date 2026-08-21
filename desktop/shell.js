@@ -4294,17 +4294,22 @@ async function updateRerollBtn(url) {
 // deterministic (zero model tokens): main lints the design's files + palette against the
 // /design rules and returns findings; we render them as an advisory chat report. Nothing
 // is edited — acting on a finding is always the designer's own next move.
+// The variation the last confer reviewed — so a suggestion's [Apply] can scope its edit
+// to the right variation (only one review runs at a time).
+let lastReviewedVariation = null;
 async function reviewDesign(id) {
   if (!id) return;
+  lastReviewedVariation = id;
   addMsg("system", COPY.artDirector.reviewing(id));
   let res;
   try { res = await window.desktop.reviewDesign(id); }
   catch (e) { addMsg("error", COPY.artDirector.failed(String((e && e.message) || e))); return; }
   if (!res || res.error) { addMsg("error", COPY.artDirector.failed(res && res.error ? res.error : "unknown")); return; }
-  // 1) The instant, deterministic rule + palette report (zero tokens).
-  addMsg("assistant", formatArtDirectorReport(res));
-  // 2) The Art Director's read — a read-only model turn (its own persona, isolated fresh
-  //    session), grounded in the lint findings above. This is the one part that spends a turn.
+  // The deterministic lint (res.findings) is INVISIBLE plumbing — it grounds the critique
+  // but is never dumped raw at the designer (file:line rule names mean nothing to them).
+  // The Art Director's read streams next: a readable critique (its own persona, isolated
+  // fresh session), then structured suggestion cards via the `suggest` tool (Phase 3). The
+  // important lint findings surface there, in plain language and as Apply-able cards.
   runAgent(buildArtDirectorCritiquePrompt(id, res), null, { reviewMode: true });
 }
 
@@ -4322,30 +4327,112 @@ function buildArtDirectorCritiquePrompt(id, res) {
     findings,
     ``,
     `Now give the judgment the lint can't: visual hierarchy, spacing rhythm and balance, type pairing and scale, palette harmony and how the palette carries the mood, imagery, and whether it reads as its intended design direction. Lead with what's working, then the few highest-leverage changes, specific and grounded in the actual page. Keep it tight. Do NOT edit anything — this is advisory.`,
+    ``,
+    `Then, ONCE, call the \`suggest\` tool (mcp__artdirector__suggest) with your actionable items as structured cards, most impactful first. For each: a short imperative title, a one-line why, targets (file:line), and a kind — "code" (the builder can edit it: give a precise \`apply\` instruction it can run verbatim on \`src/variations/${id}/\`), "asset" (needs a new/replacement file you can't source, e.g. a photo — no apply), or "decision" (a client/human call — no apply). Fold in the code-actionable lint findings above too.`,
   ].join("\n");
 }
 
-// Plain-text report (addMsg is textContent-only), in an Art-Director voice: ranked
-// findings, framed as advisory, with a pointer to the (later) deeper model critique.
-const AD_SEV_LABEL = { high: "Fix", review: "Review", note: "Note" };
-function formatArtDirectorReport(res) {
-  const findings = res.findings || [];
-  const head = COPY.artDirector.heading(res.variationId);
-  if (!findings.length) return `${head}\n\n${COPY.artDirector.clean}`;
-  const counts = res.counts || {};
-  const summary = ["high", "review", "note"]
-    .filter((s) => counts[s])
-    .map((s) => `${counts[s]} ${AD_SEV_LABEL[s].toLowerCase()}`)
-    .join(", ");
-  const lines = [head, "", COPY.artDirector.summary(findings.length, summary), ""];
-  let lastSev = null;
-  for (const f of findings) {
-    if (f.severity !== lastSev) { lines.push(`${AD_SEV_LABEL[f.severity] || f.severity}:`); lastSev = f.severity; }
-    const loc = f.line ? `${f.file}:${f.line}` : f.file;
-    lines.push(`  • [${f.rule}] ${loc} — ${f.message}`);
+// (The raw lint findings are no longer rendered to the designer — they ground the critique
+//  and surface as plain-language suggestion cards below. See reviewDesign.)
+
+// ---- Art Director suggestions (Phase 3) -------------------------------------
+// The review turn's `suggest` tool forwards its structured suggestions here. Each renders
+// as a card: `code` items get an [Apply] button (a scoped BUILDER edit turn — the Art
+// Director never edits); `asset`/`decision` items get a labeled tag. Advisory throughout.
+const AD_KIND = {
+  code:     { label: "Code",     tag: false },
+  asset:    { label: "Needs an asset", tag: true },
+  decision: { label: "Your call",      tag: true },
+};
+window.desktop.onAgentSuggestions(({ suggestions }) => renderSuggestions(suggestions || []));
+
+function renderSuggestions(suggestions) {
+  if (!Array.isArray(suggestions) || !suggestions.length) return;
+  const id = lastReviewedVariation;
+  const wrap = document.createElement("div");
+  wrap.className = "adsug-wrap";
+
+  const head = document.createElement("div");
+  head.className = "adsug-head";
+  head.textContent = COPY.artDirector.suggestionsHead(suggestions.length);
+  wrap.appendChild(head);
+
+  const codeItems = suggestions.filter((s) => s && s.kind === "code" && s.apply);
+
+  for (const s of suggestions) {
+    const card = document.createElement("div");
+    card.className = "adsug" + (s.kind && s.kind !== "code" ? " adsug-passive" : "");
+
+    const title = document.createElement("div");
+    title.className = "adsug-title";
+    title.textContent = s.title || s.id || "Suggestion";
+    card.appendChild(title);
+
+    if (s.why) { const w = document.createElement("div"); w.className = "adsug-why"; w.textContent = s.why; card.appendChild(w); }
+    if (Array.isArray(s.targets) && s.targets.length) {
+      const t = document.createElement("div"); t.className = "adsug-targets"; t.textContent = s.targets.join("  ·  "); card.appendChild(t);
+    }
+
+    const foot = document.createElement("div");
+    foot.className = "adsug-foot";
+    const kind = AD_KIND[s.kind] || AD_KIND.code;
+    if (s.kind === "code" && s.apply) {
+      const btn = document.createElement("button");
+      btn.className = "adsug-apply";
+      btn.textContent = COPY.artDirector.apply;
+      btn.addEventListener("click", () => { applySuggestions([s], id); disableSuggestionCard(card, COPY.artDirector.applying); });
+      foot.appendChild(btn);
+    } else {
+      const tag = document.createElement("span");
+      tag.className = "adsug-tag";
+      tag.textContent = kind.label;
+      foot.appendChild(tag);
+    }
+    card.appendChild(foot);
+    wrap.appendChild(card);
   }
-  lines.push("", COPY.artDirector.footer);
-  return lines.join("\n");
+
+  // Bulk actions: apply every code item, or re-confer to verify after acting.
+  const actions = document.createElement("div");
+  actions.className = "adsug-actions";
+  if (codeItems.length > 1) {
+    const all = document.createElement("button");
+    all.className = "adsug-apply adsug-applyall";
+    all.textContent = COPY.artDirector.applyAll(codeItems.length);
+    all.addEventListener("click", () => { applySuggestions(codeItems, id); wrap.querySelectorAll(".adsug-apply").forEach((b) => (b.disabled = true)); });
+    actions.appendChild(all);
+  }
+  const reconfer = document.createElement("button");
+  reconfer.className = "adsug-reconfer";
+  reconfer.textContent = COPY.artDirector.reconfer;
+  reconfer.addEventListener("click", () => { if (id) reviewDesign(id); });
+  actions.appendChild(reconfer);
+  wrap.appendChild(actions);
+
+  log.appendChild(wrap);
+  log.scrollTop = log.scrollHeight;
+}
+
+function disableSuggestionCard(card, label) {
+  const btn = card.querySelector(".adsug-apply");
+  if (btn) { btn.disabled = true; btn.textContent = label; }
+}
+
+// Apply one or more CODE suggestions as a single scoped BUILDER edit turn (NOT reviewMode —
+// full tools, builder persona). The Art Director stays read-only; the builder does the work.
+function applySuggestions(items, id) {
+  const list = (items || []).filter((s) => s && s.kind === "code" && s.apply);
+  if (!list.length || !id) return;
+  const body = list.map((s, i) => `${i + 1}. ${s.title}\n   ${s.apply}`).join("\n\n");
+  const prompt =
+    `[Apply Art Director suggestion${list.length > 1 ? "s" : ""} to design variation ${id}.] ` +
+    `Make ONLY the change${list.length > 1 ? "s" : ""} below, editing only files under \`src/variations/${id}/\`. ` +
+    `Do not rebuild the page or touch anything not listed. Keep to the design rules (tokens/utilities, container queries).\n\n` +
+    body;
+  const echo = list.length > 1
+    ? COPY.artDirector.applyingAllEcho(list.length)
+    : COPY.artDirector.applyingEcho(list[0].title);
+  runAgent(prompt, echo, {});
 }
 
 // ---- Start designing (#3) ---------------------------------------------------

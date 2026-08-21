@@ -589,6 +589,25 @@
         padding: 8px 16px; font-size: 13px; cursor: pointer;
       }
       .qsubmit:disabled { opacity: 0.4; cursor: default; }
+
+      /* Art Director suggestion cards (Phase 3) — rendered in the chat log. code items get
+         an [Apply] button (a builder edit turn); asset/decision items get a passive tag. */
+      .adsug-wrap { margin: 4px 0 12px; }
+      .adsug-head { font-size: 12px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+      .adsug { border: 1px solid #e0e0e6; border-radius: 10px; padding: 11px 12px; margin-bottom: 8px; background: #fff; }
+      .adsug-passive { background: #fafafb; border-style: dashed; }
+      .adsug-title { font-size: 13px; font-weight: 600; color: #1a1a1a; line-height: 1.35; }
+      .adsug-why { font-size: 12.5px; color: #555; line-height: 1.45; margin-top: 3px; }
+      .adsug-targets { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #999; margin-top: 5px; }
+      .adsug-foot { display: flex; align-items: center; margin-top: 9px; }
+      .adsug-apply { border: none; background: #111; color: #fff; border-radius: 7px; padding: 6px 14px; font: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; transition: opacity .12s; }
+      .adsug-apply:hover { opacity: .88; }
+      .adsug-apply:disabled { opacity: .45; cursor: default; }
+      .adsug-tag { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: #8a8a92; border: 1px solid #e0e0e6; border-radius: 999px; padding: 3px 10px; }
+      .adsug-actions { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+      .adsug-applyall { background: #111; }
+      .adsug-reconfer { border: 1px solid #d8d8de; background: none; color: #333; border-radius: 7px; padding: 6px 14px; font: inherit; font-size: 12.5px; cursor: pointer; transition: border-color .12s, color .12s; }
+      .adsug-reconfer:hover { border-color: #111; color: #111; }
       .qopt.qupload { border-color: #111; background: #f4f4f7; }
       /* Once a file is attached, match every other chosen option: black fill, white
          text (the .qupload base background would otherwise keep it light and hide

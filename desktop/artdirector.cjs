@@ -48,27 +48,74 @@ function readPalette(projectDir, variationId) {
   return { ...parseTokens(base), ...parseTokens(vt) };
 }
 
-// ---- source files (the variation's own components; base only for v00) --------
+// The ta-* COLOR utilities Tailwind actually generates = the color roles registered in the
+// theme's @theme block (--color-ta-<role>). A `bg-ta-<role>` for a role NOT registered here
+// is a PHANTOM utility: Tailwind emits no CSS for it, so it renders NOTHING and the element
+// falls through to its parent background. This is how an "extended palette" the design
+// invented (sand, walnut, seaglass…) silently fails. Reads base theme.css (the @theme is
+// global/compile-time, not per-variation). Empty set = couldn't read it → skip the check.
+function registeredColorRoles(projectDir) {
+  const css = readFileSafe(path.join(projectDir, "src", "styles", "theme.css"));
+  const roles = new Set();
+  const re = /--color-ta-([a-z0-9-]+)\s*:/g;
+  let m;
+  while ((m = re.exec(css))) roles.add(m[1]);
+  return roles;
+}
+
+// The DESIGN surface only: the designer's pages (from pages.ts) + the global design chrome
+// (Header/Footer/MobileMenu). Everything else in components/ — Dashboard, StyleGuide, the
+// device frames, VariationCard, ImageCredits, UpdateCheck, … — is framework/admin tooling
+// that a variation carries a COPY of but the designer never authors, and which legitimately
+// uses raw hex / inline styles. Reviewing those would drown the real design in noise, so we
+// scope to the design files only. Robust to new framework files (they're never in pages.ts).
+function designComponentNames(projectDir) {
+  const names = new Set(["Header", "Footer", "MobileMenu", "Home"]);
+  const pagesTs = readFileSafe(path.join(projectDir, "src", "app", "pages.ts"));
+  const re = /component:\s*["']([A-Za-z0-9_]+)["']/g;
+  let m;
+  while ((m = re.exec(pagesTs))) names.add(m[1]);
+  return names;
+}
+
+// ---- source files (the variation's own DESIGN components; base only for v00) --
 function componentFiles(projectDir, variationId) {
   const dir = variationId && variationId !== "v00"
     ? path.join(projectDir, "src", "variations", variationId, "components")
     : path.join(projectDir, "src", "app", "components");
+  const design = designComponentNames(projectDir);
   let names = [];
-  try { names = fs.readdirSync(dir).filter((n) => n.endsWith(".tsx")); } catch { /* none diverged */ }
+  try {
+    names = fs.readdirSync(dir).filter((n) => n.endsWith(".tsx") && design.has(n.replace(/\.tsx$/, "")));
+  } catch { /* none diverged */ }
   return names.map((n) => ({ name: n, text: readFileSafe(path.join(dir, n)) }));
 }
 
 // ---- per-file rule checks ----------------------------------------------------
 // Arbitrary-value color utilities that should be --ta-* tokens instead.
 const COLOR_UTIL = /\b(?:text|bg|border|from|via|to|fill|stroke|ring|shadow|decoration|outline|caret|accent|ring-offset)-\[#[0-9a-fA-F]{3,8}\]/;
+// A ta-* COLOR utility (prefix + role, optional /opacity). Used to catch phantom roles.
+const TA_COLOR_UTIL = /(?:^|[\s"'`([{])(bg|text|border|from|via|to|ring|fill|stroke|decoration|outline|caret|divide|placeholder|accent)-ta-([a-z][a-z0-9-]*)/g;
 
-function lintSource(file) {
+function lintSource(file, colorRoles) {
   const findings = [];
   const lines = file.text.split("\n");
   lines.forEach((raw, i) => {
     const ln = raw;
     const n = i + 1;
     const add = (severity, rule, message) => findings.push({ severity, rule, file: file.name, line: n, message });
+
+    // PHANTOM TOKEN — a bg/text/border-ta-<role> whose role isn't registered in @theme, so
+    // Tailwind emits no CSS and it renders nothing. Only when we actually read the roles.
+    if (colorRoles && colorRoles.size) {
+      let tm;
+      TA_COLOR_UTIL.lastIndex = 0;
+      while ((tm = TA_COLOR_UTIL.exec(ln))) {
+        const role = tm[2];
+        if (!colorRoles.has(role))
+          add("high", "phantom-token", `\`${tm[1]}-ta-${role}\` is not a registered color role — Tailwind emits no CSS for it, so it renders NOTHING and the element shows its parent background. For an extended palette color, define --ta-${role} in the variation's tokens.css and use \`${tm[1]}-[var(--ta-${role})]\`; otherwise use a registered role (${[...colorRoles].join(", ")}).`);
+      }
+    }
 
     // rule 2 — tokens only, via utilities
     if (COLOR_UTIL.test(ln))
@@ -127,8 +174,9 @@ const SEV_ORDER = { high: 0, review: 1, note: 2 };
 function reviewVariation(projectDir, variationId) {
   const files = componentFiles(projectDir, variationId);
   const palette = readPalette(projectDir, variationId);
+  const colorRoles = registeredColorRoles(projectDir);
   let findings = [];
-  for (const f of files) findings = findings.concat(lintSource(f));
+  for (const f of files) findings = findings.concat(lintSource(f, colorRoles));
   findings = findings.concat(lintPalette(palette));
   findings.sort((a, b) =>
     (SEV_ORDER[a.severity] - SEV_ORDER[b.severity]) || a.file.localeCompare(b.file) || a.line - b.line);

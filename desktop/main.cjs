@@ -1072,6 +1072,11 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode }) 
       pendingIntakes.set(id, { resolve, reject, cards });
       event.sender.send("agent:intake", { id, cards });
     });
+  // Bridge (Phase 3): the Art Director's read-only `suggest` tool forwards its structured
+  // suggestions to the renderer, which renders them as Apply-able cards. Non-blocking.
+  const onSuggest = (suggestions) => {
+    if (!event.sender.isDestroyed()) event.sender.send("agent:suggestions", { suggestions: suggestions || [] });
+  };
   // Tell the /design-brief flow whether the licensed research layer is active, via
   // an env var the agent's Bash inherits (same channel as TA_CAPTURE_* etc.).
   process.env.TA_DESIGN_RESEARCH = researchActive(currentProject) ? "on" : "off";
@@ -1079,7 +1084,7 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode }) 
   // Image mode: "placeholder" = don't source images, hold each spot with an FPO
   // block; else "on" (the normal gather-into-public/ flow). Same env channel.
   process.env.TA_DESIGN_IMAGES = loadImagesPlaceholder() ? "placeholder" : "on";
-  const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, askIntake, model: currentModel, copyVoice: effectiveVoice(currentProject), onQuery: (q) => { activeQuery = q; }, reviewMode });
+  const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, askIntake, onSuggest, model: currentModel, copyVoice: effectiveVoice(currentProject), onQuery: (q) => { activeQuery = q; }, reviewMode });
   // A review turn is an isolated, fresh session (its own Art Director persona); it must
   // not become the tracked chat session, or the next chat turn would resume the critique.
   if (!reviewMode && result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it

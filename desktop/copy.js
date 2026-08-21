@@ -174,13 +174,16 @@ window.COPY = {
 
   // ── Art Director: the read-only confer report rendered in chat ──────────────
   artDirector: {
-    cardBtn: "Confer with Art Director",
     reviewing: (id) => `Art Director is reviewing ${id}…`,
     failed: (why) => `Art Director couldn’t review this design (${why}).`,
-    heading: (id) => `Art Director — ${id}`,
-    clean: "Nothing flagged on the rules. Tokens, units, and palette contrast all hold up. That's the automated pass — my read on hierarchy, balance, and how the palette carries the design follows.",
-    summary: (n, breakdown) => `${n} note${n > 1 ? "s" : ""} (${breakdown}). Advisory — yours to act on or leave.`,
-    footer: "That's the rule + palette pass. My read on hierarchy, balance, type, and how the palette carries the design follows…",
+    // Phase 3 — actionable suggestion cards
+    suggestionsHead: (n) => `${n} suggestion${n > 1 ? "s" : ""} — apply the ones you want`,
+    apply: "Apply",
+    applying: "Applying…",
+    applyAll: (n) => `Apply all ${n} code fixes`,
+    reconfer: "Re-confer",
+    applyingEcho: (title) => `Apply: ${title}`,
+    applyingAllEcho: (n) => `Apply ${n} Art Director code fixes`,
   },
 
   // ── Preview browser: nav buttons + quick links ──────────────────────────────

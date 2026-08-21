@@ -79,11 +79,12 @@ is the palette carrying the mood, is the composition balanced — is the model c
 lint grounds the critique (handed in as fact) so the model spends its turn on judgment, not
 on re-deriving what a regex already knows.
 
-## Phase 3 — acting on the review (SPEC ONLY, not built)
+## Phase 3 — acting on the review (BUILT)
 
-Deferred until after the initial-development close-out. Goal: make it **easy to act** on the
-review (per-suggestion and all-at-once) without breaking the Art Director's read-only,
-advisory nature.
+Goal: make it **easy to act** on the review (per-suggestion and all-at-once) without breaking
+the Art Director's read-only, advisory nature. Implemented as below; the review turn's
+read-only `suggest` MCP tool emits structured suggestions, rendered as chat cards where a
+`code` item's [Apply] runs a scoped BUILDER edit turn.
 
 ### Non-negotiable principle
 

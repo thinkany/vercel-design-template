@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld("desktop", {
   answerIntake: (id, answers) => ipcRenderer.invoke("agent:intakeAnswer", { id, answers }),
   cancelIntake: (id) => ipcRenderer.invoke("agent:cancelIntake", { id }),
   reviewDesign: (id) => ipcRenderer.invoke("artdirector:review", { id }),
+  onAgentSuggestions: (cb) => {
+    const listener = (_e, data) => cb(data);
+    ipcRenderer.on("agent:suggestions", listener);
+    return () => ipcRenderer.removeListener("agent:suggestions", listener);
+  },
   beginIntake: (deliverableType, projectType) => ipcRenderer.invoke("intake:begin", { deliverableType, projectType }),
   addBriefNote: (text) => ipcRenderer.invoke("intake:addNote", { text }),
   setBriefTone: (tone) => ipcRenderer.invoke("intake:setTone", { tone }),

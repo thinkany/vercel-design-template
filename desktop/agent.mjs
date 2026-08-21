@@ -168,7 +168,39 @@ function buildIntakeServer(sdk, askIntake) {
   return sdk.createSdkMcpServer({ name: "intake", version: "1.0.0", tools: [intakeTool] });
 }
 
-export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, askIntake, model, copyVoice, onQuery, reviewMode }) {
+// A single Art Director suggestion (Phase 3). Emitted by the read-only review turn via the
+// `suggest` tool so the renderer can render actionable cards. `apply` (a precise edit
+// instruction) is present only for kind "code" — the one kind the builder can execute.
+const SUGGESTION_SHAPE = z.object({
+  id: z.string().describe("stable id within this review, e.g. 'tonal-arc'"),
+  title: z.string().describe("short imperative title, e.g. 'Band the Making section in bg-ta-primary'"),
+  why: z.string().describe("one-line rationale, grounded in the design"),
+  kind: z.enum(["code", "asset", "decision"]).describe("code = the builder can edit it now; asset = needs a new/replacement file the builder can't source; decision = a human/client call"),
+  targets: z.array(z.string()).optional().describe("file:line references, e.g. ['Home.tsx:250']"),
+  apply: z.string().optional().describe("REQUIRED for kind 'code': a precise, self-contained edit instruction the builder can execute verbatim without re-analyzing"),
+  effort: z.enum(["small", "medium"]).optional().describe("rough effort"),
+});
+
+// The read-only `suggest` MCP server for the review turn: the Art Director calls it ONCE with
+// its actionable suggestions; the handler forwards them to the renderer (non-blocking) so they
+// render as Apply-able cards in chat. It NEVER edits — applying is a separate builder turn the
+// designer triggers, which is what keeps the reviewer read-only and advisory.
+function buildSuggestServer(sdk, onSuggest) {
+  const suggestTool = sdk.tool(
+    "suggest",
+    "Emit the actionable items from your review as structured suggestion cards the designer can act on. " +
+      "Call this ONCE, after your prose read. Order most-impactful first. For every kind 'code' item include a " +
+      "precise `apply` instruction the builder can execute verbatim; 'asset' and 'decision' items carry no apply.",
+    { suggestions: z.array(SUGGESTION_SHAPE).describe("the actionable suggestions, most impactful first") },
+    async (args) => {
+      try { onSuggest(args.suggestions || []); } catch { /* non-fatal */ }
+      return { content: [{ type: "text", text: `Recorded ${(args.suggestions || []).length} suggestion(s) for the designer.` }] };
+    },
+  );
+  return sdk.createSdkMcpServer({ name: "artdirector", version: "1.0.0", tools: [suggestTool] });
+}
+
+export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, askIntake, onSuggest, model, copyVoice, onQuery, reviewMode }) {
   let resolvedSession = sessionId;
 
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -216,8 +248,20 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
       // is present), pre-approved so it clears the allow-rules stage.
       "mcp__intake__*",
     ];
-    // The in-process intake tool, only on a build turn with a bridge (never in review).
-    const intakeServer = (askIntake && !reviewMode) ? buildIntakeServer(await getSdk(), askIntake) : null;
+    // Read-only review still gets the "suggest" MCP tool — it only emits data, never edits.
+    const REVIEW_TOOLS_ALL = [...REVIEW_TOOLS, "mcp__artdirector__*"];
+    // The intake tool only on a build turn with a bridge; the suggest tool only on a review
+    // turn with a bridge (Phase 3). Both are in-process SDK MCP servers — load the SDK only
+    // when one is actually needed (unchanged behaviour for a plain chat/build turn).
+    const wantIntake = askIntake && !reviewMode;
+    const wantSuggest = onSuggest && reviewMode;
+    const sdk = (wantIntake || wantSuggest) ? await getSdk() : null;
+    const intakeServer = wantIntake ? buildIntakeServer(sdk, askIntake) : null;
+    const suggestServer = wantSuggest ? buildSuggestServer(sdk, onSuggest) : null;
+    const mcpServers = {
+      ...(intakeServer ? { intake: intakeServer } : {}),
+      ...(suggestServer ? { artdirector: suggestServer } : {}),
+    };
     const iterator = query({
       prompt,
       options: {
@@ -226,11 +270,11 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
         permissionMode: "default",
         ...(claudeExe ? { pathToClaudeCodeExecutable: claudeExe } : {}),
         ...(model ? { model } : {}),
-        ...(intakeServer ? { mcpServers: { intake: intakeServer } } : {}),
+        ...(Object.keys(mcpServers).length ? { mcpServers } : {}),
         // Art Director persona on a review turn, else the builder persona + copy voice.
         systemPrompt: { type: "preset", preset: "claude_code", append: systemAppend },
-        // Read-only in review mode so the Art Director can look but never touch.
-        allowedTools: reviewMode ? REVIEW_TOOLS : BUILD_TOOLS,
+        // Read-only in review mode (+ the suggest tool); full build toolset otherwise.
+        allowedTools: reviewMode ? REVIEW_TOOLS_ALL : BUILD_TOOLS,
         ...(sessionId ? { resume: sessionId } : {}),
 
         // AskUserQuestion surfaces through canUseTool with the full structured
