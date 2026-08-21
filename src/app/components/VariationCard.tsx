@@ -525,7 +525,11 @@ export function VariationCard({ variation, isAdmin, onRemove }: Props) {
 
         {/* Confer with the Art Director — admin, non-base, dev only, and only once the
             design is built. Posts up to the Electron shell, which runs a READ-ONLY design
-            review (rules + palette) and reports the findings in chat. Advisory, never edits. */}
+            review (rules + palette) and reports the findings in chat. Advisory, never edits.
+            `import.meta.env.DEV` keeps this LOCAL-ONLY: Vercel serves a production `vite build`
+            where DEV is statically false, so this whole block is dead-code-eliminated out of
+            the deployed bundle — the client's published preview never sees it (same guard as
+            the reroll + remove controls). */}
         {isAdmin && !variation.isBase && import.meta.env.DEV && variation.previewReady && (
           <button
             onClick={() => window.postMessage({ type: "ta-artdirector", variationId: variation.id }, "*")}
