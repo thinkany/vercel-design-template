@@ -116,6 +116,8 @@
       "package.json",
       "!desktop/.env.local",
       "!desktop/**/*.map",
+      "!desktop/intake/direction.cjs",
+      "!desktop/intake/lenses.cjs",
       "!**/@anthropic-ai/claude-agent-sdk-darwin-arm64/**",
       "!**/@anthropic-ai/claude-agent-sdk-darwin-x64/**"
     ],

@@ -50,7 +50,11 @@ const { startCaptureBridge, stopCaptureBridge } = require("./capture-bridge.cjs"
 const vercel = require("./publish.cjs");
 const { validateCards } = require("./intake/cards.cjs");
 const { createEmptyBrief, applyAnswers } = require("./intake/brief.cjs");
-const { sampleDirection, renderDirectionPrompt, directionMeta, lensLabel } = require("./intake/direction.cjs");
+// Design-variety: the curated lens deck + sampler run SERVER-side (derive.thinkany.design/
+// api/direction). This client POSTs signals and gets back { direction (lensLabel stamped),
+// block (server-rendered) } or the knob-panel meta — async, degrades safely. See
+// docs/design-variety-cloud-spec.md.
+const { sampleDirection, directionMeta } = require("./direction-client.cjs");
 const references = require("./intake/references.cjs");
 const ingestRefs = require("./intake/ingest.cjs");
 
@@ -960,12 +964,14 @@ function effectiveVoice(dir) {
 // synthesizes a conventions report to ground the layout. Gated on BOTH a license
 // AND an on/off toggle (global default + per-project override). Dark by default.
 //
-// License = STUB for now: the presence of RESEARCH_LICENSE_KEY in the env (the same
-// shape as the Figma export's DERIVE_* env). Unset today → the feature stays dark;
-// "when the time comes" the cloud server provisions the key and it activates. No
-// validation service yet (that's the later half, mirroring the derive flow).
+// The ONE license for the Design/Research/Director bundle (Rob 2026-08-23): design-variety
+// (lens/reroll), field Research, and the Art Director all gate on DESIGN_LICENSE_KEY — a
+// SEPARATE Vercel env key from the Figma export's DERIVE_LICENSE_KEY. It's also the key the
+// app sends to derive.thinkany.design/api/direction (see direction-client.cjs), so the app
+// gate and the cloud auth are now the same key. Presence check here; the cloud does the real
+// validation. Unset → the whole bundle stays dark.
 function researchLicensed() {
-  return !!(process.env.RESEARCH_LICENSE_KEY && process.env.RESEARCH_LICENSE_KEY.trim());
+  return !!(process.env.DESIGN_LICENSE_KEY && process.env.DESIGN_LICENSE_KEY.trim());
 }
 // Global settings: userData/design-research.json = { enabled, broad }.
 // `broad` = the "look beyond competitors" (multi-axis: function/aesthetic/region) mode.
@@ -1260,13 +1266,10 @@ function buildDesignPrompt(brief) {
   // Fold in the sampled Design Direction (design-variety) as its own block, so the
   // build is conditioned onto a distinct compositional direction rather than the
   // model's default centroid. Present once the intake sets b.direction (T5).
-  if (b.direction) {
-    const block = renderDirectionPrompt(b.direction);
-    if (block) prompt += "\n\n" + block;
-  }
+  if (b.directionBlock) prompt += "\n\n" + b.directionBlock; // server-rendered at sample time
   return prompt;
 }
-ipcMain.handle("intake:designPrompt", () => {
+ipcMain.handle("intake:designPrompt", async () => {
   // Fold the on-disk reference digest into the Brief so the build consumes it.
   if (intakeBrief && currentProject) {
     const dg = ingestRefs.readDigest(currentProject);
@@ -1275,25 +1278,23 @@ ipcMain.handle("intake:designPrompt", () => {
       intakeBrief.referenceAssets = dg.assets;
     }
   }
-  // Design-variety (T5): sample a Direction at build handoff so the build is conditioned
-  // onto a distinct compositional direction, not the model's default. Auto by default;
-  // skipped if one is already set (a future reroll / knob path will set it first). The
-  // signals available here are the designer's description, tone (voice step), and type.
+  // Design-variety (T5): sample a Direction at build handoff so the build is conditioned onto
+  // a distinct compositional direction, not the model's default. Auto by default; skipped if
+  // one is already set (a reroll/knob path set it first). Cloud call — degrades to no direction
+  // (build proceeds at the default centroid) if the endpoint is unreachable.
   if (intakeBrief && !intakeBrief.direction && varietyLicensed()) {
-    intakeBrief.direction = sampleDirection({
+    const { direction, block } = await sampleDirection({
       what: intakeBrief.what,
       tone: intakeBrief.tone,
       projectType: intakeBrief.projectType,
     });
+    if (direction) { intakeBrief.direction = direction; intakeBrief.directionBlock = block; }
   }
-  // Persist the sampled Direction where the build can pick it up (T4): the /design-brief
-  // skill reads /tmp/ta-direction.json and folds it into variation.json (same convention
-  // as /tmp/ta-palette.json etc.), so each design records its DNA for reproduction, the
-  // dashboard card, and T2 tuning.
+  // Persist the sampled Direction where the build can pick it up (T4): the /design-brief skill
+  // reads /tmp/ta-direction.json and folds it into variation.json (its reproducible DNA + the
+  // dashboard card). The direction already carries its server-stamped lensLabel.
   if (intakeBrief && intakeBrief.direction) {
-    // Stamp the human lens label so the dashboard card can show the style name.
-    const dir = { ...intakeBrief.direction, lensLabel: lensLabel(intakeBrief.direction.lens) };
-    try { fs.writeFileSync("/tmp/ta-direction.json", JSON.stringify(dir, null, 2)); } catch {}
+    try { fs.writeFileSync("/tmp/ta-direction.json", JSON.stringify(intakeBrief.direction, null, 2)); } catch {}
   }
   return { prompt: buildDesignPrompt(intakeBrief) };
 });
@@ -1303,25 +1304,27 @@ ipcMain.handle("intake:designPrompt", () => {
 // the knob panel stays dark (directionMeta returns empty so the renderer skips it).
 const varietyLicensed = researchLicensed;
 
-// P2 knob panel: the axis stops (for the sliders) + lens labels, through the seam.
-ipcMain.handle("intake:directionMeta", () => (varietyLicensed() ? directionMeta() : { axes: {}, lenses: [] }));
+// P2 knob panel: the axis stops (for the sliders) + lens labels, from the cloud (cached).
+ipcMain.handle("intake:directionMeta", async () => (varietyLicensed() ? await directionMeta() : { axes: {}, lenses: [] }));
 
 // P2: (re)sample a Direction from the brief plus any axes the designer pinned with the
 // knobs. No seed → a fresh draw each call (this is the reroll). Stores it on the brief so
 // the build handoff uses exactly what the designer sees, and pushes the brief so the rail
 // stays in sync.
-ipcMain.handle("intake:sampleDirection", (event, { axes, lens } = {}) => {
+ipcMain.handle("intake:sampleDirection", async (event, { axes, lens } = {}) => {
   if (!varietyLicensed()) return { direction: null };
   if (!intakeBrief) intakeBrief = createEmptyBrief("web-pages");
-  intakeBrief.direction = sampleDirection({
+  const { direction, block } = await sampleDirection({
     what: intakeBrief.what,
     tone: intakeBrief.tone,
     projectType: intakeBrief.projectType,
     axes: axes && typeof axes === "object" ? axes : undefined,
     lens: lens || undefined,
   });
+  intakeBrief.direction = direction;
+  intakeBrief.directionBlock = block;
   if (!event.sender.isDestroyed()) event.sender.send("agent:brief", intakeBrief);
-  return { direction: intakeBrief.direction };
+  return { direction };
 });
 
 // ---- Post-build reroll (fork an existing design with a new direction) --------
@@ -1390,17 +1393,18 @@ ipcMain.handle("variation:read", (_event, { id } = {}) => {
 
 // Pure sample for the reroll panel: takes the source design's signals explicitly (does NOT
 // touch intakeBrief). Same seam + gate as the intake sampler.
-ipcMain.handle("direction:sampleFor", (_event, { signals, axes, lens } = {}) => {
+ipcMain.handle("direction:sampleFor", async (_event, { signals, axes, lens } = {}) => {
   if (!varietyLicensed()) return { direction: null };
   const s = signals || {};
-  return { direction: sampleDirection({ what: s.what, tone: s.tone, projectType: s.projectType, axes: axes && typeof axes === "object" ? axes : undefined, lens: lens || undefined }) };
+  const { direction, block } = await sampleDirection({ what: s.what, tone: s.tone, projectType: s.projectType, axes: axes && typeof axes === "object" ? axes : undefined, lens: lens || undefined });
+  return { direction, block };
 });
 
 // Fork a source variation on disk (copy components/ + styles/ = inherit its brand + built
 // design), write the fork's variation.json inheriting the brief + brand and stamping the
 // NEW direction, and return the rendered direction block for the redesign prompt. The
 // build (a /design redesign the caller kicks) then rebuilds ONLY the fork's Home.tsx.
-ipcMain.handle("variation:createRerollFork", (_event, { sourceId, direction } = {}) => {
+ipcMain.handle("variation:createRerollFork", async (_event, { sourceId, direction } = {}) => {
   if (!varietyLicensed()) return { error: "not-licensed" };
   if (!currentProject || !sourceId) return { error: "no-project" };
   const varsDir = path.join(currentProject, "src", "variations");
@@ -1414,8 +1418,11 @@ ipcMain.handle("variation:createRerollFork", (_event, { sourceId, direction } = 
     fs.cpSync(path.join(srcDir, "components"), path.join(dstDir, "components"), { recursive: true });
     fs.cpSync(path.join(srcDir, "styles"), path.join(dstDir, "styles"), { recursive: true });
   } catch (e) { return { error: String(e && e.message || e) }; }
-  let dir = direction || srcMeta.direction || null;
-  if (dir) dir = { ...dir, lensLabel: lensLabel(dir.lens) }; // stamp the style name for the card
+  const dir = direction || srcMeta.direction || null; // already carries its server-stamped lensLabel
+  // Re-derive the prompt block from the cloud — reproduces dir via its seed/lens/axes (empty
+  // block if the endpoint is unreachable: the reroll still forks, just without the direction block).
+  let block = "";
+  if (dir) { const r = await sampleDirection({ seed: dir.seed, lens: dir.lens, axes: dir.axes }); block = r.block || ""; }
   const today = new Date().toLocaleDateString("en-US");
   const meta = {
     version: versionTagForId(targetId), // unique per id → no duplicate "v0.2" badges
@@ -1435,7 +1442,7 @@ ipcMain.handle("variation:createRerollFork", (_event, { sourceId, direction } = 
     fs.writeFileSync(path.join(dstDir, "variation.json"), JSON.stringify(meta, null, 2));
     if (dir) fs.writeFileSync("/tmp/ta-direction.json", JSON.stringify(dir, null, 2));
   } catch (e) { return { error: String(e && e.message || e) }; }
-  return { targetId, brief: meta.brief, block: dir ? renderDirectionPrompt(dir) : "" };
+  return { targetId, brief: meta.brief, block };
 });
 
 // Translate a card batch's answers (keyed by card id) into Brief FIELD values,
