@@ -48,7 +48,6 @@ export const en = {
     viewDesign: "View Design ↗",
     styleguide: "Styleguide ↗",
     tryAnotherDirection: "Try Another Direction",
-    conferArtDirector: "Confer with Art Director",
     remove: "Remove",
     close: "Close",
     briefHeading: "Original brief",
