@@ -2,8 +2,6 @@
 # desktop app's project scaffold, which runs `git archive main`). The template
 # ZIP plugin (vite.config.ts templateZipPlugin) filters the same paths out of
 # its `git ls-files` list, so these ship through no distribution path.
-cloud-export export-ignore
-cloud-export/** export-ignore
 
 # Internal planning / design docs — never ship to a scaffolded project.
 docs export-ignore
