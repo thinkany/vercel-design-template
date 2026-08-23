@@ -1351,6 +1351,7 @@ function versionTagForId(id) {
 // (zero model tokens): lints a variation's files + palette against the /design rules.
 // Never edits; returns findings the designer decides on. See docs/art-director-spec.md.
 ipcMain.handle("artdirector:review", (_event, { id } = {}) => {
+  if (!varietyLicensed()) return { error: "not-licensed" }; // shares the Research/design-variety tier
   if (!currentProject) return { error: "no-project" };
   if (!id) return { error: "no-variation" };
   try { return require("./artdirector.cjs").reviewVariation(currentProject, id); }

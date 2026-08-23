@@ -4522,11 +4522,15 @@ function applyRec(rec) {
 
 // Rail Art Director icon: exposed only while a built design is previewed and idle. Mirrors
 // updateRerollBtn's readiness; hidden otherwise (and its drawer closed if it was open).
-function updateArtDirectorRailBtn(url) {
+async function updateArtDirectorRailBtn(url) {
   if (!railDirector) return;
+  // Gated on the same Research/design-variety license as the lens picker / reroll (the
+  // Direction axes are present only when licensed). Ungated projects never see the clapperboard.
+  const meta = await getDirectionMeta();
+  const licensed = !!(meta.axes && Object.keys(meta.axes).length);
   const v = currentPreviewVariation(url);
   const ready = !homeBuilding && !agentBusy && !intakeActive;
-  const avail = !!(ready && v && v !== "v00");
+  const avail = !!(licensed && ready && v && v !== "v00");
   railDirector.hidden = !avail;
   if (!avail) { railDirector.classList.remove("has-code", "has-passive"); if (isModalOpen("director")) closeModal(); return; }
   updateDirectorIndicator(v); // reflect the previewed design's queue state
