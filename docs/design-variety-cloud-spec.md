@@ -32,15 +32,14 @@ and prompt-shaped; see art-director-spec.md / the cloud discussion).
 ## Endpoints — `derive.thinkany.design/api/direction/*`
 
 **The host already exists.** `derive.thinkany.design` is a live Vercel project (repo
-`github.com/thinkany/vercel-derive`, source mirrored from `electron/cloud-export/`) serving one
-route, `api/derive.mjs` (the Figma export), gated by `x-license-key` / `DERIVE_LICENSE_KEY` — a
-serverless API that "never ships to clients." This move is **adding a route + moving the deck into
-its `lib/`, reusing that auth** — not standing up a new server. (There's also a divergent variant
-`github.com/thinkanyco/design-export-api`; confirm which is canonical before adding the route —
-see Open decisions.)
+the standalone `github.com/thinkany/vercel-derive` repo (checked out locally at `root/derive`),
+serving one route, `api/derive.mjs` (the Figma export), gated by `x-license-key` /
+`DERIVE_LICENSE_KEY` — a serverless API that "never ships to clients." This move is **adding a
+route to that repo, reusing that auth** — not standing up a new server. (BUILT: `api/direction.mjs`
++ `direction/{direction,lenses}.cjs` now live in the `vercel-derive` repo, commit `fa52b33`.)
 
-Mirror the existing derive handler (POST JSON, `x-license-key` header). Move `direction.cjs` +
-`lenses.cjs` into the project's `lib/` (traced + bundled by Vercel, same as `lib/derive.mjs`).
+Mirror the existing derive handler (POST JSON, `x-license-key` header): `direction.cjs` +
+`lenses.cjs` sit in the repo's `direction/` (traced + bundled by Vercel, same as `derive.mjs`).
 
 - **POST `/direction/meta`** → `{ axes, lenses }` — knob-panel metadata (no inputs). Cacheable.
 - **POST `/direction/sample`** — body `{ what, tone, projectType, axes?, lens?, seed? }` →
@@ -105,8 +104,8 @@ the returned `direction` exactly as today. No schema change.
 ## Open decisions
 
 - **Which repo is canonical** — `thinkany/vercel-derive` (confirmed live at derive.thinkany.design,
-  identical to `electron/cloud-export/`) vs the divergent `thinkanyco/design-export-api`. Add the
-  `/api/direction` route to the live one; reconcile the two if the divergence is unintended.
+  live at derive.thinkany.design) vs the divergent `thinkanyco/design-export-api`. RESOLVED: the
+  route was added to `thinkany/vercel-derive`; the stale `cloud-export/` copy in this repo was removed.
 - **License validation now vs. at launch** — do real server validation as part of this move, or
   keep the presence stub and add validation with the broader licensing work? (Recommend: real
   validation here — it's the whole point of the endpoint being auth'd.)
