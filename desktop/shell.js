@@ -29,6 +29,7 @@ const railCompany = el("rail-company");
 const railFigma = el("rail-figma");
 const railVoice = el("rail-voice");
 const railClaude = el("rail-claude");
+const railDirector = el("rail-artdirector");
 const modal = el("modal");
 const modalTitle = el("modal-title");
 const modalBody = el("modal-body");
@@ -354,7 +355,6 @@ function buildPreviewWebview(tab) {
     if (e.channel === "feedback:submit") handleFeedbackSubmit(e.args[0]);
     else if (e.channel === "feedback:state") setFeedbackButton(!!e.args[0]);
     else if (e.channel === "reroll:request") startReroll(e.args[0]); // dashboard-card entry
-    else if (e.channel === "artdirector:request") reviewDesign(e.args[0]); // "Confer with Art Director"
   });
   // Tell the page (dashboard) whether design-variety is licensed, so a variation card can
   // show its "Try another direction" button.
@@ -1006,7 +1006,7 @@ createproject.addEventListener("click", () => chooseProject("create"));
 openproject.addEventListener("click", () => chooseProject("open"));
 
 // ---- Sidebar panels ----------------------------------------------------------
-const RAILS = { help: railHelp, projects: railProjects, publish: railPublish, company: railCompany, figma: railFigma, voice: railVoice, claude: railClaude };
+const RAILS = { help: railHelp, projects: railProjects, publish: railPublish, company: railCompany, figma: railFigma, voice: railVoice, claude: railClaude, director: railDirector };
 const PANELS = {
   help: { title: COPY.panels.help, render: renderHelp },
   projects: { title: COPY.panels.projects, render: renderProjects },
@@ -1015,6 +1015,7 @@ const PANELS = {
   figma: { title: COPY.panels.figma, render: renderFigma },
   voice: { title: COPY.panels.voice, render: renderVoice },
   claude: { title: COPY.panels.claude, render: renderClaude },
+  director: { title: COPY.panels.director, render: renderDirector },
 };
 
 function closeModal() {
@@ -1053,6 +1054,7 @@ railCompany.addEventListener("click", () => toggleModal("company"));
 railFigma.addEventListener("click", () => toggleModal("figma"));
 railVoice.addEventListener("click", () => toggleModal("voice"));
 railClaude.addEventListener("click", () => toggleModal("claude"));
+railDirector.addEventListener("click", () => toggleModal("director"));
 
 // Sidebar collapse pull-tab (the gear). Preference persists in localStorage — the
 // shell is one app-wide renderer, so it's global across projects and sessions.
@@ -4273,6 +4275,7 @@ async function doReroll(sourceId, direction) {
 
 // The preview-toolbar reroll button shows only when licensed AND viewing a specific design.
 async function updateRerollBtn(url) {
+  updateArtDirectorRailBtn(url); // same readiness signal drives the rail Art Director icon
   const btn = el("reroll-btn");
   if (!btn) return;
   const meta = await getDirectionMeta();
@@ -4335,104 +4338,198 @@ function buildArtDirectorCritiquePrompt(id, res) {
 // (The raw lint findings are no longer rendered to the designer — they ground the critique
 //  and surface as plain-language suggestion cards below. See reviewDesign.)
 
-// ---- Art Director suggestions (Phase 3) -------------------------------------
-// The review turn's `suggest` tool forwards its structured suggestions here. Each renders
-// as a card: `code` items get an [Apply] button (a scoped BUILDER edit turn — the Art
-// Director never edits); `asset`/`decision` items get a labeled tag. Advisory throughout.
-const AD_KIND = {
-  code:     { label: "Code",     tag: false },
-  asset:    { label: "Needs an asset", tag: true },
-  decision: { label: "Your call",      tag: true },
-};
-window.desktop.onAgentSuggestions(({ suggestions }) => renderSuggestions(suggestions || []));
+// ---- Art Director drawer: recommendations + Archive (Phase 3) ---------------
+// The review turn's `suggest` tool forwards structured suggestions here. Rather than chat
+// cards, each becomes a persisted RECOMMENDATION for its design, managed in the Director
+// drawer (rail-opened): active recs show as titles → a modal (full description + Apply /
+// Dismiss); dismissed ones drop into the drawer's Archive. State persists per variation
+// (main store) so the Archive survives restarts. The prose critique still streams in chat.
+const AD_KIND = { code: { label: "Actionable" }, asset: { label: "Needs an asset" }, decision: { label: "Your call" } };
 
-function renderSuggestions(suggestions) {
-  if (!Array.isArray(suggestions) || !suggestions.length) return;
+let directorState = { id: null, active: [], dismissed: [] };
+
+function isModalOpen(kind) {
+  return !modal.hidden && modal.classList.contains("open") && RAILS[kind] && RAILS[kind].classList.contains("active");
+}
+function refreshDirector() {
+  if (!isModalOpen("director")) return;
+  modalBody.innerHTML = "";
+  renderDirector(modalBody);
+}
+
+// A fresh review's suggestions → the active recs for the reviewed design. Keep the existing
+// Archive (dismissed) so re-reviewing never wipes it. Persist + (if open) refresh the drawer.
+window.desktop.onAgentSuggestions(async ({ suggestions }) => {
   const id = lastReviewedVariation;
-  const wrap = document.createElement("div");
-  wrap.className = "adsug-wrap";
+  if (!id || !Array.isArray(suggestions)) return;
+  let prev = { active: [], dismissed: [] };
+  try { prev = await window.desktop.loadRecs(id); } catch {}
+  const dismissed = (prev && prev.dismissed) || [];
+  const dismissedIds = new Set(dismissed.map((r) => r.id));
+  const active = suggestions.filter((s) => s && s.id && !dismissedIds.has(s.id));
+  try { await window.desktop.saveRecs(id, active, dismissed); } catch {}
+  updateDirectorIndicator();
+  refreshDirector();
+});
 
-  const head = document.createElement("div");
-  head.className = "adsug-head";
-  head.textContent = COPY.artDirector.suggestionsHead(suggestions.length);
-  wrap.appendChild(head);
-
-  const codeItems = suggestions.filter((s) => s && s.kind === "code" && s.apply);
-
-  for (const s of suggestions) {
-    const card = document.createElement("div");
-    card.className = "adsug" + (s.kind && s.kind !== "code" ? " adsug-passive" : "");
-
-    const title = document.createElement("div");
-    title.className = "adsug-title";
-    title.textContent = s.title || s.id || "Suggestion";
-    card.appendChild(title);
-
-    if (s.why) { const w = document.createElement("div"); w.className = "adsug-why"; w.textContent = s.why; card.appendChild(w); }
-    if (Array.isArray(s.targets) && s.targets.length) {
-      const t = document.createElement("div"); t.className = "adsug-targets"; t.textContent = s.targets.join("  ·  "); card.appendChild(t);
-    }
-
-    const foot = document.createElement("div");
-    foot.className = "adsug-foot";
-    const kind = AD_KIND[s.kind] || AD_KIND.code;
-    if (s.kind === "code" && s.apply) {
-      const btn = document.createElement("button");
-      btn.className = "adsug-apply";
-      btn.textContent = COPY.artDirector.apply;
-      btn.addEventListener("click", () => { applySuggestions([s], id); disableSuggestionCard(card, COPY.artDirector.applying); });
-      foot.appendChild(btn);
-    } else {
-      const tag = document.createElement("span");
-      tag.className = "adsug-tag";
-      tag.textContent = kind.label;
-      foot.appendChild(tag);
-    }
-    card.appendChild(foot);
-    wrap.appendChild(card);
-  }
-
-  // Bulk actions: apply every code item, or re-confer to verify after acting.
-  const actions = document.createElement("div");
-  actions.className = "adsug-actions";
-  if (codeItems.length > 1) {
-    const all = document.createElement("button");
-    all.className = "adsug-apply adsug-applyall";
-    all.textContent = COPY.artDirector.applyAll(codeItems.length);
-    all.addEventListener("click", () => { applySuggestions(codeItems, id); wrap.querySelectorAll(".adsug-apply").forEach((b) => (b.disabled = true)); });
-    actions.appendChild(all);
-  }
-  const reconfer = document.createElement("button");
-  reconfer.className = "adsug-reconfer";
-  reconfer.textContent = COPY.artDirector.reconfer;
-  reconfer.addEventListener("click", () => { if (id) reviewDesign(id); });
-  actions.appendChild(reconfer);
-  wrap.appendChild(actions);
-
-  log.appendChild(wrap);
-  log.scrollTop = log.scrollHeight;
+// The rail clapperboard's dot reflects the CURRENT design's active queue: red if any item is
+// actionable (code), white if only "needs an asset" / "your call" remain, none if empty. It
+// persists (not cleared on open) — it's a queue-state cue, not an unread badge.
+async function updateDirectorIndicator(id) {
+  if (!railDirector) return;
+  const v = id || currentPreviewVariation();
+  railDirector.classList.remove("has-code", "has-passive");
+  if (!v || v === "v00") return;
+  let store = { active: [] };
+  try { store = await window.desktop.loadRecs(v); } catch {}
+  const active = (store && store.active) || [];
+  if (active.some((r) => r && r.kind === "code")) railDirector.classList.add("has-code");
+  else if (active.length) railDirector.classList.add("has-passive");
 }
 
-function disableSuggestionCard(card, label) {
-  const btn = card.querySelector(".adsug-apply");
-  if (btn) { btn.disabled = true; btn.textContent = label; }
+async function renderDirector(body) {
+  const id = currentPreviewVariation();
+  if (!id || id === "v00") { const n = document.createElement("div"); n.className = "muted"; n.textContent = COPY.director.needDesign; body.appendChild(n); return; }
+
+  let store = { active: [], dismissed: [] };
+  try { store = await window.desktop.loadRecs(id); } catch {}
+  directorState = { id, active: (store && store.active) || [], dismissed: (store && store.dismissed) || [] };
+
+  const lead = document.createElement("div");
+  lead.className = "muted"; lead.style.cssText = "font-size:12.5px;margin-bottom:12px;";
+  lead.textContent = COPY.director.lead(id);
+  body.appendChild(lead);
+
+  const reviewBtn = document.createElement("button");
+  reviewBtn.className = "panelbtn primary";
+  reviewBtn.textContent = (directorState.active.length || directorState.dismissed.length) ? COPY.director.reReview : COPY.director.review;
+  reviewBtn.disabled = agentBusy;
+  reviewBtn.addEventListener("click", () => { reviewDesign(id); closeModal(); });
+  body.appendChild(reviewBtn);
+
+  if (!directorState.active.length) {
+    const empty = document.createElement("div");
+    empty.className = "muted"; empty.style.cssText = "font-size:12.5px;margin-top:14px;";
+    empty.textContent = directorState.dismissed.length ? COPY.director.allHandled : COPY.director.none;
+    body.appendChild(empty);
+  } else {
+    const list = document.createElement("div"); list.className = "adrec-list";
+    for (const rec of directorState.active) list.appendChild(buildRecRow(rec));
+    body.appendChild(list);
+  }
+
+  if (directorState.dismissed.length) body.appendChild(buildArchive(directorState.dismissed));
 }
 
-// Apply one or more CODE suggestions as a single scoped BUILDER edit turn (NOT reviewMode —
-// full tools, builder persona). The Art Director stays read-only; the builder does the work.
-function applySuggestions(items, id) {
-  const list = (items || []).filter((s) => s && s.kind === "code" && s.apply);
-  if (!list.length || !id) return;
-  const body = list.map((s, i) => `${i + 1}. ${s.title}\n   ${s.apply}`).join("\n\n");
+function buildRecRow(rec) {
+  const row = document.createElement("button");
+  row.className = "adrec";
+  const title = document.createElement("span"); title.className = "adrec-title"; title.textContent = rec.title || rec.id;
+  const kind = document.createElement("span"); kind.className = "adrec-kind adrec-kind-" + (rec.kind || "code");
+  kind.textContent = (AD_KIND[rec.kind] || AD_KIND.code).label;
+  row.append(title, kind);
+  row.addEventListener("click", () => openRecModal(rec, false));
+  return row;
+}
+
+function buildArchive(dismissed) {
+  const wrap = document.createElement("details"); wrap.className = "adrec-archive";
+  const sum = document.createElement("summary"); sum.textContent = COPY.director.archive(dismissed.length); wrap.appendChild(sum);
+  const list = document.createElement("div"); list.className = "adrec-list";
+  for (const rec of dismissed) {
+    const row = document.createElement("div"); row.className = "adrec adrec-dismissed";
+    const title = document.createElement("span"); title.className = "adrec-title"; title.textContent = rec.title || rec.id;
+    const restore = document.createElement("button"); restore.className = "adrec-restore"; restore.textContent = COPY.director.restore;
+    restore.addEventListener("click", (e) => { e.stopPropagation(); restoreRec(rec); });
+    row.append(title, restore);
+    row.addEventListener("click", () => openRecModal(rec, true));
+    list.appendChild(row);
+  }
+  wrap.appendChild(list);
+  return wrap;
+}
+
+// The recommendation modal: full description + Apply (code only) + Dismiss.
+function closeRecModal() { const o = el("adrec-overlay"); if (o) o.remove(); }
+function openRecModal(rec, archived) {
+  closeRecModal();
+  const overlay = document.createElement("div"); overlay.className = "adrec-overlay"; overlay.id = "adrec-overlay";
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeRecModal(); });
+  const card = document.createElement("div"); card.className = "adrec-modal";
+
+  const title = document.createElement("div"); title.className = "adrec-modal-title"; title.textContent = rec.title || rec.id; card.appendChild(title);
+  const kind = document.createElement("div"); kind.className = "adrec-modal-kind adrec-kind-" + (rec.kind || "code");
+  kind.textContent = (AD_KIND[rec.kind] || AD_KIND.code).label; card.appendChild(kind);
+  // Just the review — the why. The apply instruction + file targets are intentionally not
+  // shown (they drive the builder on Apply, but the designer only needs the read).
+  if (rec.why) { const w = document.createElement("div"); w.className = "adrec-modal-why"; w.textContent = rec.why; card.appendChild(w); }
+
+  const actions = document.createElement("div"); actions.className = "adrec-modal-actions";
+  // Hold — close the modal, change nothing (the suggestion stays where it is).
+  const hold = document.createElement("button"); hold.className = "adrec-hold-btn";
+  hold.textContent = COPY.director.hold; hold.title = COPY.director.holdTip;
+  hold.addEventListener("click", () => closeRecModal());
+  actions.appendChild(hold);
+  if (!archived) {
+    const dismiss = document.createElement("button"); dismiss.className = "adrec-dismiss-btn";
+    dismiss.textContent = COPY.director.dismiss; dismiss.title = COPY.director.dismissTip;
+    dismiss.addEventListener("click", () => { dismissRec(rec); closeRecModal(); });
+    actions.appendChild(dismiss);
+  }
+  if (rec.kind === "code" && rec.apply) {
+    const apply = document.createElement("button"); apply.className = "adrec-apply-btn"; apply.textContent = COPY.director.applyThis;
+    apply.addEventListener("click", () => { closeRecModal(); applyRec(rec); });
+    actions.appendChild(apply);
+  } else {
+    const note = document.createElement("span"); note.className = "adrec-modal-tagnote";
+    note.textContent = rec.kind === "asset" ? COPY.director.assetNote : COPY.director.decisionNote;
+    actions.appendChild(note);
+  }
+  card.appendChild(actions);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+}
+
+async function persistDirector() {
+  if (!directorState.id) return;
+  try { await window.desktop.saveRecs(directorState.id, directorState.active, directorState.dismissed); } catch {}
+  updateDirectorIndicator(directorState.id);
+  refreshDirector();
+}
+function dismissRec(rec) {
+  directorState.active = directorState.active.filter((r) => r.id !== rec.id);
+  if (!directorState.dismissed.some((r) => r.id === rec.id)) directorState.dismissed.push(rec);
+  persistDirector();
+}
+function restoreRec(rec) {
+  directorState.dismissed = directorState.dismissed.filter((r) => r.id !== rec.id);
+  if (!directorState.active.some((r) => r.id === rec.id)) directorState.active.push(rec);
+  persistDirector();
+}
+// Apply = a scoped BUILDER edit turn (never reviewMode). The rec leaves active on apply.
+function applyRec(rec) {
+  const id = directorState.id;
+  if (!rec || !id || rec.kind !== "code" || !rec.apply) return;
+  directorState.active = directorState.active.filter((r) => r.id !== rec.id);
+  persistDirector();
+  closeModal(); // surface the chat where the edit streams
   const prompt =
-    `[Apply Art Director suggestion${list.length > 1 ? "s" : ""} to design variation ${id}.] ` +
-    `Make ONLY the change${list.length > 1 ? "s" : ""} below, editing only files under \`src/variations/${id}/\`. ` +
-    `Do not rebuild the page or touch anything not listed. Keep to the design rules (tokens/utilities, container queries).\n\n` +
-    body;
-  const echo = list.length > 1
-    ? COPY.artDirector.applyingAllEcho(list.length)
-    : COPY.artDirector.applyingEcho(list[0].title);
-  runAgent(prompt, echo, {});
+    `[Apply an Art Director recommendation to design variation ${id}.] Make ONLY this change, ` +
+    `editing only files under \`src/variations/${id}/\`. Do not rebuild the page or touch anything else. ` +
+    `Keep to the design rules (tokens/utilities, container queries).\n\n${rec.title}\n${rec.apply}`;
+  runAgent(prompt, COPY.director.applyingEcho(rec.title), {});
+}
+
+// Rail Art Director icon: exposed only while a built design is previewed and idle. Mirrors
+// updateRerollBtn's readiness; hidden otherwise (and its drawer closed if it was open).
+function updateArtDirectorRailBtn(url) {
+  if (!railDirector) return;
+  const v = currentPreviewVariation(url);
+  const ready = !homeBuilding && !agentBusy && !intakeActive;
+  const avail = !!(ready && v && v !== "v00");
+  railDirector.hidden = !avail;
+  if (!avail) { railDirector.classList.remove("has-code", "has-passive"); if (isModalOpen("director")) closeModal(); return; }
+  updateDirectorIndicator(v); // reflect the previewed design's queue state
 }
 
 // ---- Start designing (#3) ---------------------------------------------------

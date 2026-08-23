@@ -132,6 +132,7 @@ window.COPY = {
     voice: "Copy Voice",
     figma: "Figma Export",
     claude: "Claude Settings",
+    artdirector: "Art Director Review",
     sessionUsage: "Claude Session Usage",
     sessionUsageAria: "Claude Session Usage, click to clear the session",
     sessionUsageTip: (pct) => `Claude Session Usage · ${pct}%`,
@@ -176,14 +177,25 @@ window.COPY = {
   artDirector: {
     reviewing: (id) => `Art Director is reviewing ${id}…`,
     failed: (why) => `Art Director couldn’t review this design (${why}).`,
-    // Phase 3 — actionable suggestion cards
-    suggestionsHead: (n) => `${n} suggestion${n > 1 ? "s" : ""} — apply the ones you want`,
-    apply: "Apply",
-    applying: "Applying…",
-    applyAll: (n) => `Apply all ${n} code fixes`,
-    reconfer: "Re-confer",
+  },
+  // The Director drawer (Phase 3): recommendations, the modal, and the Archive.
+  director: {
+    needDesign: "Open a built design to review it — the Art Director reviews the design you’re previewing.",
+    lead: (id) => `Reviewing ${id}. Open a recommendation to read it in full, then apply or dismiss it.`,
+    review: "Review this design",
+    reReview: "Review again",
+    none: "No recommendations yet. Run a review to get the Art Director’s read.",
+    allHandled: "All caught up — nothing active. Re-review to check the latest, or reopen the Archive below.",
+    archive: (n) => `Archive (${n})`,
+    restore: "Restore",
+    hold: "Hold",
+    holdTip: "Keep suggestion open for now",
+    dismiss: "Dismiss",
+    dismissTip: "Places suggestion in the archive",
+    applyThis: "Apply suggestion",
     applyingEcho: (title) => `Apply: ${title}`,
-    applyingAllEcho: (n) => `Apply ${n} Art Director code fixes`,
+    assetNote: "Needs a new asset — your call to supply it.",
+    decisionNote: "A call for you (or the client) to make.",
   },
 
   // ── Preview browser: nav buttons + quick links ──────────────────────────────
@@ -248,6 +260,7 @@ window.COPY = {
     figma: "Figma Export",
     voice: "Copy Voice",
     claude: "Claude Settings",
+    director: "Art Director",
   },
 
   // ── Key gate (Connect Claude) — big-pane onboarding screen ──────────────────

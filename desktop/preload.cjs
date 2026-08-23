@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld("desktop", {
   answerIntake: (id, answers) => ipcRenderer.invoke("agent:intakeAnswer", { id, answers }),
   cancelIntake: (id) => ipcRenderer.invoke("agent:cancelIntake", { id }),
   reviewDesign: (id) => ipcRenderer.invoke("artdirector:review", { id }),
+  loadRecs: (id) => ipcRenderer.invoke("artdirector:loadRecs", { id }),
+  saveRecs: (id, active, dismissed) => ipcRenderer.invoke("artdirector:saveRecs", { id, active, dismissed }),
   onAgentSuggestions: (cb) => {
     const listener = (_e, data) => cb(data);
     ipcRenderer.on("agent:suggestions", listener);

@@ -1357,6 +1357,28 @@ ipcMain.handle("artdirector:review", (_event, { id } = {}) => {
   catch (e) { return { error: String((e && e.message) || e) }; }
 });
 
+// ---- Art Director review store (Phase 3): recommendations per variation, persisted so
+// the Director drawer + its Archive survive restarts. { [variationId]: { active, dismissed } }.
+function artDirectorStorePath(dir) { return path.join(dir, ".thinkany", "artdirector.json"); }
+function loadArtDirectorStore(dir) {
+  try { return JSON.parse(fs.readFileSync(artDirectorStorePath(dir), "utf8")); } catch { return {}; }
+}
+ipcMain.handle("artdirector:loadRecs", (_event, { id } = {}) => {
+  if (!currentProject || !id) return { active: [], dismissed: [] };
+  const rec = loadArtDirectorStore(currentProject)[id];
+  return { active: (rec && rec.active) || [], dismissed: (rec && rec.dismissed) || [] };
+});
+ipcMain.handle("artdirector:saveRecs", (_event, { id, active, dismissed } = {}) => {
+  if (!currentProject || !id) return { ok: false };
+  const store = loadArtDirectorStore(currentProject);
+  store[id] = { active: active || [], dismissed: dismissed || [], updatedAt: new Date().toISOString() };
+  try {
+    fs.mkdirSync(path.join(currentProject, ".thinkany"), { recursive: true });
+    fs.writeFileSync(artDirectorStorePath(currentProject), JSON.stringify(store, null, 2));
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+  return { ok: true };
+});
+
 // Read a variation's variation.json (for the reroll: its brief + current direction seed
 // the panel and the fork). Not gated — reading is harmless; the reroll UI is gated.
 ipcMain.handle("variation:read", (_event, { id } = {}) => {

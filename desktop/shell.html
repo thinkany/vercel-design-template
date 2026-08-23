@@ -76,7 +76,11 @@
       #rail-publish  { order: 4; --i: 3; }
       #rail-company  { order: 5; --i: 4; }
       #rail-voice    { order: 6; --i: 5; }
-      #rail-help     { order: 7; --i: 6; }
+      #rail-artdirector { order: 7; --i: 6; }
+      #rail-help     { order: 8; --i: 7; }
+      /* Art Director confer lives on the rail, exposed only once a built design is being
+         previewed (updateArtDirectorRailBtn). Hidden = not reviewable yet. */
+      #rail-artdirector[hidden] { display: none; }
       /* Staggered rail-icon entrance/exit — a little directional drift for "gravity".
          Transition-based (not @keyframes) so each icon settles at its OWN resting
          opacity (muted 0.75, or full for an activated icon) with no overshoot.
@@ -590,24 +594,46 @@
       }
       .qsubmit:disabled { opacity: 0.4; cursor: default; }
 
-      /* Art Director suggestion cards (Phase 3) — rendered in the chat log. code items get
-         an [Apply] button (a builder edit turn); asset/decision items get a passive tag. */
-      .adsug-wrap { margin: 4px 0 12px; }
-      .adsug-head { font-size: 12px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
-      .adsug { border: 1px solid #e0e0e6; border-radius: 10px; padding: 11px 12px; margin-bottom: 8px; background: #fff; }
-      .adsug-passive { background: #fafafb; border-style: dashed; }
-      .adsug-title { font-size: 13px; font-weight: 600; color: #1a1a1a; line-height: 1.35; }
-      .adsug-why { font-size: 12.5px; color: #555; line-height: 1.45; margin-top: 3px; }
-      .adsug-targets { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #999; margin-top: 5px; }
-      .adsug-foot { display: flex; align-items: center; margin-top: 9px; }
-      .adsug-apply { border: none; background: #111; color: #fff; border-radius: 7px; padding: 6px 14px; font: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; transition: opacity .12s; }
-      .adsug-apply:hover { opacity: .88; }
-      .adsug-apply:disabled { opacity: .45; cursor: default; }
-      .adsug-tag { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: #8a8a92; border: 1px solid #e0e0e6; border-radius: 999px; padding: 3px 10px; }
-      .adsug-actions { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
-      .adsug-applyall { background: #111; }
-      .adsug-reconfer { border: 1px solid #d8d8de; background: none; color: #333; border-radius: 7px; padding: 6px 14px; font: inherit; font-size: 12.5px; cursor: pointer; transition: border-color .12s, color .12s; }
-      .adsug-reconfer:hover { border-color: #111; color: #111; }
+      /* Art Director drawer (Phase 3): recommendation title rows → a modal; an Archive of
+         dismissed ones. Rows are buttons; kind tags color-code actionable/asset/decision. */
+      .adrec-list { display: flex; flex-direction: column; gap: 7px; margin-top: 14px; }
+      .adrec { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+        border: 1px solid #e2e2e8; border-radius: 9px; padding: 10px 12px; background: #fff;
+        font: inherit; cursor: pointer; transition: border-color .12s, background .12s; }
+      .adrec:hover { border-color: #bcbcc6; background: #fafafb; }
+      .adrec-title { flex: 1; min-width: 0; font-size: 13px; color: #1a1a1a; line-height: 1.35; }
+      .adrec-kind { flex: 0 0 auto; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; border-radius: 999px; padding: 2px 8px; }
+      .adrec-kind-code { color: #1a6b3a; background: #e7f4ec; }
+      .adrec-kind-asset { color: #8a5a12; background: #f6eede; }
+      .adrec-kind-decision { color: #555; background: #eee; }
+      .adrec-dismissed { background: #fafafb; cursor: pointer; }
+      .adrec-dismissed .adrec-title { color: #888; }
+      .adrec-restore { flex: 0 0 auto; border: 1px solid #d8d8de; background: none; color: #555; border-radius: 6px; padding: 3px 9px; font: inherit; font-size: 11px; cursor: pointer; }
+      .adrec-restore:hover { border-color: #111; color: #111; }
+      .adrec-archive { margin-top: 16px; border-top: 1px solid #ececf1; padding-top: 10px; }
+      .adrec-archive > summary { cursor: pointer; font-size: 12px; font-weight: 600; color: #777; text-transform: uppercase; letter-spacing: .04em; list-style: none; }
+      .adrec-archive > summary::-webkit-details-marker { display: none; }
+      .adrec-archive[open] > summary { margin-bottom: 8px; }
+      /* Recommendation modal */
+      .adrec-overlay { position: fixed; inset: 0; z-index: 1200; background: rgba(20,20,24,.4); display: flex; align-items: center; justify-content: center; padding: 24px; }
+      .adrec-modal { background: #fff; border-radius: 12px; max-width: 460px; width: 100%; max-height: 82vh; overflow-y: auto; padding: 20px 22px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+      .adrec-modal-title { font-size: 16px; font-weight: 600; color: #111; line-height: 1.3; }
+      .adrec-modal-kind { display: inline-block; margin-top: 8px; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; border-radius: 999px; padding: 2px 9px; }
+      .adrec-modal-why { font-size: 13.5px; color: #333; line-height: 1.5; margin-top: 12px; }
+      .adrec-modal-actions { display: flex; align-items: center; gap: 8px; margin-top: 18px; }
+      .adrec-apply-btn { margin-left: auto; border: none; background: #111; color: #fff; border-radius: 8px; padding: 9px 18px; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity .12s; }
+      .adrec-apply-btn:hover { opacity: .88; }
+      .adrec-hold-btn { border: none; background: none; color: #666; border-radius: 8px; padding: 9px 12px; font: inherit; font-size: 13px; cursor: pointer; transition: color .12s; }
+      .adrec-hold-btn:hover { color: #111; }
+      .adrec-dismiss-btn { border: 1px solid #d8d8de; background: none; color: #444; border-radius: 8px; padding: 9px 16px; font: inherit; font-size: 13px; cursor: pointer; transition: border-color .12s, color .12s; }
+      .adrec-dismiss-btn:hover { border-color: #111; color: #111; }
+      .adrec-modal-tagnote { margin-left: auto; font-size: 12px; color: #8a8a92; }
+      /* Rail cue: a dot whenever the current design has active recommendations queued. Red
+         when any are actionable (code); white when only "needs an asset" / "your call" remain. */
+      #rail-artdirector.has-code::before,
+      #rail-artdirector.has-passive::before { content: ""; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; }
+      #rail-artdirector.has-code::before { background: #c0261e; }
+      #rail-artdirector.has-passive::before { background: #fff; }
       .qopt.qupload { border-color: #111; background: #f4f4f7; }
       /* Once a file is attached, match every other chosen option: black fill, white
          text (the .qupload base background would otherwise keep it light and hide
@@ -1184,6 +1210,9 @@
         </button>
         <button class="railbtn" id="rail-claude" data-copy-aria="rail.claude" data-copy-tip="rail.claude">
           <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z" fill="#D97757" fill-rule="nonzero"></path></svg>
+        </button>
+        <button class="railbtn" id="rail-artdirector" hidden data-copy-aria="rail.artdirector" data-copy-tip="rail.artdirector">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
         </button>
         <div id="gauge" hidden role="button" tabindex="0" data-copy-tip="rail.sessionUsage" data-copy-aria="rail.sessionUsageAria">
           <svg viewBox="0 0 28 28" aria-hidden="true"><circle class="track" cx="14" cy="14" r="13"></circle><circle class="prog" cx="14" cy="14" r="13"></circle></svg>
