@@ -846,7 +846,35 @@ function stopVite() {
     killTree(viteProc);
     viteProc = null;
   }
+  clearVitePidFile(); // we killed it ourselves → no orphan to reap next boot
   viteUrl = null;
+}
+
+// A normal quit runs stopVite(), but a FORCE-QUIT (or crash) skips it, orphaning the
+// Vite process group — it keeps holding its port + the project's .vite dep-optimize
+// cache, so the NEXT launch's fresh Vite contends with it and can stall before it ever
+// prints its ready URL. We record the spawned group's pid to disk; on boot we reap that
+// stale group (if it's still alive and still looks like our Vite) before starting anew.
+function vitePidFilePath() { return path.join(app.getPath("userData"), "vite.pid"); }
+function recordVitePid(pid) { try { fs.writeFileSync(vitePidFilePath(), String(pid)); } catch { /* best-effort */ } }
+function clearVitePidFile() { try { fs.unlinkSync(vitePidFilePath()); } catch { /* already gone */ } }
+function reapStaleVite() {
+  let pid;
+  try { pid = parseInt(fs.readFileSync(vitePidFilePath(), "utf8").trim(), 10); } catch { return; }
+  clearVitePidFile();
+  if (!pid || Number.isNaN(pid)) return;
+  if (process.platform === "win32") {
+    try { spawn("taskkill", ["/pid", String(pid), "/T", "/F"]); } catch { /* best-effort */ }
+    return;
+  }
+  try { process.kill(pid, 0); } catch { return; } // not alive → nothing to reap
+  // Guard against a recycled pid: only signal if it's actually a node/vite process.
+  let cmd = "";
+  try { cmd = execFileSync("ps", ["-o", "command=", "-p", String(pid)]).toString(); } catch { return; }
+  if (!/vite|node|electron/i.test(cmd)) return;
+  console.log(`[main] reaping stale Vite (pid ${pid}) orphaned by a previous session`);
+  try { process.kill(-pid, "SIGTERM"); } catch { try { process.kill(pid, "SIGTERM"); } catch { /* gone */ } }
+  setTimeout(() => { try { process.kill(-pid, "SIGKILL"); } catch { /* gone */ } }, 1500);
 }
 
 let viteHealing = false;
@@ -885,6 +913,7 @@ function startViteFor(projectDir) {
       // together. Windows uses taskkill /T instead, so detached isn't needed there.
       detached: process.platform !== "win32",
     });
+    recordVitePid(viteProc.pid); // so a force-quit orphan can be reaped next boot
     let settled = false;
     // Tailwind v4's IN-PROCESS config reload can fail in this spawned Vite on an
     // .env change ("failed to load config … createResolver"), leaving the server
@@ -2205,24 +2234,26 @@ app.whenReady().then(async () => {
   const storedDesignLicense = loadStoredDesignLicense(); // in-app design license wins over .env.local
   if (storedDesignLicense) process.env.DESIGN_LICENSE_KEY = storedDesignLicense;
   vercelAuth = loadVercelAuth(); // in-app Publish: pasted token or Sign in with Vercel
-  // Native capture bridge: a hidden BrowserWindow the app-owned export scripts
-  // drive over loopback (see capture-bridge.cjs). Injecting these into the env
-  // makes `ta-export reconstruct` capture with the app's own Chromium instead of
-  // puppeteer — the fix for block export in a packaged .dmg. Set before the agent
-  // can spawn Bash so its tool subprocesses inherit them.
-  try {
-    const bridge = await startCaptureBridge();
-    process.env.TA_CAPTURE_ENDPOINT = `http://127.0.0.1:${bridge.port}`;
-    process.env.TA_CAPTURE_TOKEN = bridge.token;
-  } catch (e) {
-    console.error("[main] capture bridge failed to start:", e.message);
-  }
   currentProject = loadProjectPath();
   currentModel = loadUiState().model || null;
-  createWindow();
+  createWindow(); // show the UI first — nothing below may block it becoming responsive
+  reapStaleVite(); // kill a Vite orphaned by a previous force-quit before starting fresh
   if (currentProject) {
     startViteFor(currentProject).catch((e) => console.error("[main] Vite failed:", e.message));
   }
+  // Native capture bridge: a hidden BrowserWindow the app-owned export scripts drive
+  // over loopback (see capture-bridge.cjs). Its env makes `ta-export reconstruct`
+  // capture with the app's own Chromium instead of puppeteer (block export in a packaged
+  // .dmg). Started in the BACKGROUND — a slow/hung bridge must never block the window or
+  // Vite from coming up (that showed as "not responding" on launch). Its env is set as
+  // soon as it's ready, well before the user can trigger an agent turn; capture falls
+  // back if a turn somehow beats it.
+  startCaptureBridge()
+    .then((bridge) => {
+      process.env.TA_CAPTURE_ENDPOINT = `http://127.0.0.1:${bridge.port}`;
+      process.env.TA_CAPTURE_TOKEN = bridge.token;
+    })
+    .catch((e) => console.error("[main] capture bridge failed to start:", e.message));
 });
 
 app.on("before-quit", () => {
