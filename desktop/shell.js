@@ -793,6 +793,10 @@ function toggleGate(gateEl, on) {
 // (the drag handle can widen it afterward). Only fires when we were actually
 // collapsed (never on a normal launch, where the saved width is kept).
 let chatWasCollapsed = false;
+// No Claude key → read-only mode: you can open + browse established projects, but the chat
+// pane is hidden and every agent-driven action (create project, chat, reroll, Art Director
+// review/apply, Figma export) is blocked. Adding a key in Keys & Licenses re-enables them.
+let appHasKey = false;
 function settleChatWidthToMin() {
   const chatPanel = el("chat");
   if (!chatPanel) return;
@@ -846,16 +850,20 @@ function applyStaticCopy() {
 function showStage(stage) {
   applyStaticCopy();
   const app = el("app");
+  // Read-only workspace: a project is open but there's no key → no chat, no agent actions.
+  const noKeyWorkspace = stage === "workspace" && !appHasKey;
   app.classList.toggle("onboarding-key", stage === "key"); // rail muting during the key screen
-  setChatCollapsed(stage === "key"); // collapsed at the key screen; the start flow closes/opens it after
+  app.classList.toggle("no-key", noKeyWorkspace); // CSS hook to disable agent-driven affordances
+  // Collapse the chat column (preview goes full-width) at the key screen and in read-only mode.
+  setChatCollapsed(stage === "key" || noKeyWorkspace);
   // The rail is inert until the key is connected (no focus/keyboard either).
   const sidebar = el("sidebar");
   if (sidebar) sidebar.inert = stage === "key";
   toggleGate(keygate, stage === "key");
   toggleGate(projectgate, stage === "project");
-  // Chat content is ready from the project stage on (empty & waiting); only the
-  // key stage hides it, and there the whole pane is collapsed anyway.
-  chatmain.hidden = stage === "key";
+  // Chat content is ready from the project stage on (empty & waiting); the key stage and
+  // read-only (no-key) workspace hide it, and there the whole pane is collapsed anyway.
+  chatmain.hidden = stage === "key" || noKeyWorkspace;
   // Workspace label left BLANK on purpose — the #status slot is reserved for a
   // future app-level message/alert (update, license, activity). The connect /
   // no-project states keep their labels since those screens rely on them.
@@ -908,24 +916,29 @@ const OPEN_LOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 async function boot() {
   refreshRailActivation(); // color the Claude/Figma icons per key + license state
   const { hasKey } = await window.desktop.getKeyStatus();
-  if (!hasKey) {
+  appHasKey = hasKey;
+  const proj = await window.desktop.getProjectStatus();
+  // No key AND no project → nothing to browse and can't create one → the connect screen.
+  if (!hasKey && !proj.hasProject) {
     noProjectPlaceholder();
     showStage("key");
     return;
   }
-  const proj = await window.desktop.getProjectStatus();
+  // Has a key but no project → pick/create one.
   if (!proj.hasProject) {
     noProjectPlaceholder();
     showStage("project");
     return;
   }
+  // A project exists → open it. Without a key this is READ-ONLY (showStage hides the chat
+  // pane; agent actions are disabled), but the designer can still view + switch projects.
   setProjTitle(proj);
   viteUrl = proj.viteUrl || null;
   design = proj.design || { active: false, variationId: null, previewReady: false };
   showStage("workspace");
   refreshPreview();
-  // Optionally resume the last session; otherwise offer the two starting paths.
-  if (!(await maybeAutoRestoreSession())) renderStartChoices();
+  // The chat-driven start (resume session / two starting paths) needs the agent → key only.
+  if (hasKey && !(await maybeAutoRestoreSession())) renderStartChoices();
 }
 
 // Vite may become ready after the project is chosen — or re-ready after a
@@ -1347,7 +1360,9 @@ async function renderProjects(body) {
   const createBtn = document.createElement("button");
   createBtn.className = "panelbtn primary";
   createBtn.textContent = COPY.project.createNew;
-  createBtn.addEventListener("click", createNewProject);
+  // Creating a project runs the agent → needs a Claude key. Disabled in read-only mode.
+  if (!appHasKey) { createBtn.disabled = true; createBtn.title = COPY.project.needKeyToCreate; }
+  else createBtn.addEventListener("click", createNewProject);
   const switchBtn = document.createElement("button");
   switchBtn.className = "panelbtn";
   switchBtn.textContent = COPY.project.switchExisting;
@@ -1370,7 +1385,8 @@ async function enterProjectFromResult(res) {
   design = await window.desktop.getDesignState();
   showStage("workspace");
   refreshPreview();
-  if (!(await maybeAutoRestoreSession())) renderStartChoices();
+  // Chat-driven start needs the agent → only with a key (read-only mode just shows the design).
+  if (appHasKey && !(await maybeAutoRestoreSession())) renderStartChoices();
   return true;
 }
 async function openRecentProject(dir) {
@@ -1378,6 +1394,7 @@ async function openRecentProject(dir) {
   await enterProjectFromResult(await window.desktop.openProjectPath(dir));
 }
 async function createNewProject() {
+  if (!appHasKey) return; // read-only mode: creating a project needs a key
   closeModal();
   await enterProjectFromResult(await window.desktop.createProject());
 }
@@ -1582,7 +1599,8 @@ async function claudeKeySection(body) {
 
   const status = await window.desktop.getKeyStatus();
   body.appendChild(connStatusRow(COPY.licenses.claudeStatus, status.hasKey, status.hasKey ? COPY.common.active : COPY.common.notSet, COPY.licenses.removeKey,
-    async () => { await window.desktop.clearKey(); refreshRailActivation(); openModal("licenses"); }));
+    // Removing the key drops the workspace into read-only → re-gate (hides chat, disables actions).
+    async () => { await window.desktop.clearKey(); refreshRailActivation(); boot(); openModal("licenses"); }));
 
   if (status.hasKey) {
     body.appendChild(setRow(COPY.licenses.keyLabel, `sk-ant-…${status.keyHint || "????"}`));
@@ -1604,6 +1622,7 @@ async function claudeKeySection(body) {
     const res = await window.desktop.saveKey(key);
     if (res.ok) {
       refreshRailActivation();
+      boot(); // key added → re-gate (reveals chat + enables agent actions)
       openModal("licenses"); // refresh → shows Active
     } else {
       msg.textContent = res.error || COPY.common.couldNotSave;
@@ -4444,7 +4463,8 @@ async function updateRerollBtn(url) {
   // (homeBuilding, when the Style guide tab is live), or any agent turn — so a designer
   // can't fork the design out from under an in-progress build.
   const ready = !homeBuilding && !agentBusy && !intakeActive;
-  btn.hidden = !(licensed && ready && v && v !== "v00");
+  // Reroll forks + rebuilds via the agent → needs a key. Hidden in read-only mode.
+  btn.hidden = !(appHasKey && licensed && ready && v && v !== "v00");
 }
 {
   const b = el("reroll-btn");
@@ -4460,7 +4480,7 @@ async function updateRerollBtn(url) {
 // to the right variation (only one review runs at a time).
 let lastReviewedVariation = null;
 async function reviewDesign(id) {
-  if (!id) return;
+  if (!id || !appHasKey) return; // the critique is an agent turn → needs a key
   lastReviewedVariation = id;
   addMsg("system", COPY.artDirector.reviewing(id));
   let res;
@@ -4564,7 +4584,9 @@ async function renderDirector(body) {
   const reviewBtn = document.createElement("button");
   reviewBtn.className = "panelbtn primary";
   reviewBtn.textContent = (directorState.active.length || directorState.dismissed.length) ? COPY.director.reReview : COPY.director.review;
-  reviewBtn.disabled = agentBusy;
+  // The critique is an agent turn → needs a key. Past recs (Completed/Archive) stay viewable.
+  reviewBtn.disabled = agentBusy || !appHasKey;
+  if (!appHasKey) reviewBtn.title = COPY.director.needKey;
   reviewBtn.addEventListener("click", () => { reviewDesign(id); closeModal(); });
   body.appendChild(reviewBtn);
 
@@ -4668,7 +4690,9 @@ function openRecModal(rec, mode) {
     }
     if (rec.kind === "code" && rec.apply) {
       const apply = document.createElement("button"); apply.className = "adrec-apply-btn"; apply.textContent = COPY.director.applyThis;
-      apply.addEventListener("click", () => { closeRecModal(); applyRec(rec); });
+      // Apply runs a builder turn → needs a key. Disabled (not hidden) in read-only mode.
+      if (!appHasKey) { apply.disabled = true; apply.title = COPY.director.needKey; }
+      else apply.addEventListener("click", () => { closeRecModal(); applyRec(rec); });
       actions.appendChild(apply);
     } else {
       const note = document.createElement("span"); note.className = "adrec-modal-tagnote";
@@ -4701,7 +4725,7 @@ function restoreRec(rec) {
 // Completed (kept for later reference as an action that was addressed).
 function applyRec(rec) {
   const id = directorState.id;
-  if (!rec || !id || rec.kind !== "code" || !rec.apply) return;
+  if (!rec || !id || rec.kind !== "code" || !rec.apply || !appHasKey) return;
   directorState.active = directorState.active.filter((r) => r.id !== rec.id);
   if (!directorState.completed.some((r) => r.id === rec.id)) directorState.completed.push(rec);
   persistDirector();
@@ -5681,6 +5705,9 @@ function leanEditPreamble() {
 }
 
 async function runAgent(toSend, echoText, opts) {
+  // Backstop: no key → no agent turns at all (covers reroll, Art Director, Figma export,
+  // and any path that reaches here). The UI already hides/disables these, this is the guard.
+  if (!appHasKey) { addMsg("error", COPY.errors.needKey); return; }
   // A review turn (Art Director) is READ-ONLY and ISOLATED: it runs in a fresh session
   // with its own persona, must not touch the chat session, must not run the lean-edit
   // reset, and must leave the live design on screen (it isn't building anything).

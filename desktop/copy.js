@@ -22,6 +22,11 @@ window.COPY = {
     noProject: "no project",
   },
 
+  // ── Access gating (no Claude key → read-only) ───────────────────────────────
+  errors: {
+    needKey: "Connect a Claude API key in Keys & Licenses to do this.",
+  },
+
   // ── Preview pane: placeholder states + the rotating "working" messages ──────
   preview: {
     spinningUp: {
@@ -192,6 +197,7 @@ window.COPY = {
     completed: (n) => `Completed (${n})`,
     doneTag: "Applied",
     close: "Close",
+    needKey: "Connect a Claude API key in Keys & Licenses to do this.",
     hold: "Hold",
     holdTip: "Keep suggestion open for now",
     dismiss: "Dismiss",
@@ -301,6 +307,7 @@ window.COPY = {
     createSwitch: "Create or switch project",
     createNew: "Create new",
     switchExisting: "Switch project…",
+    needKeyToCreate: "Connect a Claude API key in Keys & Licenses to create a project.",
   },
 
   // ── About footer (version + site link) ──────────────────────────────────────
