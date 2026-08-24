@@ -64,4 +64,8 @@ async function sampleDirection(inputs = {}) {
   catch { return { direction: null, block: "" }; }
 }
 
-module.exports = { directionMeta, sampleDirection };
+// Drop the cached meta so the next directionMeta() re-fetches — call this the moment
+// the design license changes, so the licensed/unlicensed state can't read stale.
+function resetMetaCache() { _metaCache = null; }
+
+module.exports = { directionMeta, sampleDirection, resetMetaCache };

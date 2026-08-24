@@ -30,6 +30,7 @@ const railFigma = el("rail-figma");
 const railVoice = el("rail-voice");
 const railClaude = el("rail-claude");
 const railDirector = el("rail-artdirector");
+const railLicenses = el("rail-licenses");
 const modal = el("modal");
 const modalTitle = el("modal-title");
 const modalBody = el("modal-body");
@@ -884,16 +885,25 @@ function noProjectPlaceholder() {
 // rail. Toggled via the .activated class.
 async function refreshRailActivation() {
   try {
-    const [k, l, vc] = await Promise.all([
+    const [k, l, dl, vc] = await Promise.all([
       window.desktop.getKeyStatus(),
       window.desktop.getLicenseStatus(),
+      window.desktop.getDesignLicenseStatus(),
       window.desktop.getVercelStatus(),
     ]);
     railClaude.classList.toggle("activated", !!(k && k.hasKey));
     railFigma.classList.toggle("activated", !!(l && l.hasLicense));
     railPublish.classList.toggle("activated", !!(vc && vc.connected));
+    // All three credentials present → the app is unlocked: open the padlock.
+    const unlocked = !!(k && k.hasKey) && !!(l && l.hasLicense) && !!(dl && dl.hasLicense);
+    if (railLicenses) {
+      railLicenses.innerHTML = unlocked ? OPEN_LOCK_SVG : CLOSED_LOCK_SVG;
+      railLicenses.classList.toggle("activated", unlocked);
+    }
   } catch {}
 }
+const CLOSED_LOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>';
+const OPEN_LOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 7.9-1.2"/></svg>';
 
 async function boot() {
   refreshRailActivation(); // color the Claude/Figma icons per key + license state
@@ -1006,7 +1016,7 @@ createproject.addEventListener("click", () => chooseProject("create"));
 openproject.addEventListener("click", () => chooseProject("open"));
 
 // ---- Sidebar panels ----------------------------------------------------------
-const RAILS = { help: railHelp, projects: railProjects, publish: railPublish, company: railCompany, figma: railFigma, voice: railVoice, claude: railClaude, director: railDirector };
+const RAILS = { help: railHelp, projects: railProjects, publish: railPublish, company: railCompany, figma: railFigma, voice: railVoice, claude: railClaude, director: railDirector, licenses: railLicenses };
 const PANELS = {
   help: { title: COPY.panels.help, render: renderHelp },
   projects: { title: COPY.panels.projects, render: renderProjects },
@@ -1016,6 +1026,7 @@ const PANELS = {
   voice: { title: COPY.panels.voice, render: renderVoice },
   claude: { title: COPY.panels.claude, render: renderClaude },
   director: { title: COPY.panels.director, render: renderDirector },
+  licenses: { title: COPY.panels.licenses, render: renderLicenses },
 };
 
 function closeModal() {
@@ -1055,6 +1066,7 @@ railFigma.addEventListener("click", () => toggleModal("figma"));
 railVoice.addEventListener("click", () => toggleModal("voice"));
 railClaude.addEventListener("click", () => toggleModal("claude"));
 railDirector.addEventListener("click", () => toggleModal("director"));
+railLicenses.addEventListener("click", () => toggleModal("licenses"));
 
 // Sidebar collapse pull-tab (the gear). Preference persists in localStorage — the
 // shell is one app-wide renderer, so it's global across projects and sessions.
@@ -1460,51 +1472,203 @@ async function renderCompany(body) {
   }
 }
 
-// --- Figma export: license (cloud derive) — its own panel, separate from Claude ---
+// --- Figma export panel: status + note; the license input now lives in Licenses ---
 async function renderFigma(body) {
   const lic = await window.desktop.getLicenseStatus();
   railFigma.classList.toggle("activated", !!lic.hasLicense); // color the icon on save/clear
 
-  body.appendChild(connStatusRow(COPY.figma.licenseLabel, lic.hasLicense, lic.hasLicense ? COPY.common.active : COPY.common.notSet, COPY.figma.removeLicense,
-    async () => { await window.desktop.clearLicense(); openModal("figma"); }));
-
-  if (lic.hasLicense) {
-    body.appendChild(setRow("Key", `…${lic.hint || "????"}`));
-  } else {
-    const input = document.createElement("input");
-    input.className = "field";
-    input.type = "password";
-    input.placeholder = COPY.figma.pasteKey;
-    const saveBtn = document.createElement("button");
-    saveBtn.className = "panelbtn primary";
-    saveBtn.textContent = COPY.figma.saveLicense;
-    const msg = document.createElement("div");
-    msg.className = "muted";
-    const doSave = async () => {
-      const key = input.value.trim();
-      if (!key) return;
-      saveBtn.disabled = true;
-      saveBtn.textContent = COPY.figma.validating;
-      msg.textContent = "";
-      const res = await window.desktop.saveLicense(key);
-      if (res.ok) {
-        openModal("figma"); // refresh → shows Active
-      } else {
-        msg.textContent = res.error || COPY.figma.couldNotSave;
-        msg.style.color = "#e5484d";
-        saveBtn.disabled = false;
-        saveBtn.textContent = COPY.figma.saveLicense;
-      }
-    };
-    saveBtn.addEventListener("click", doSave);
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter") doSave(); });
-    body.append(input, saveBtn, msg);
-  }
+  body.appendChild(connStatusRow(COPY.figma.licenseLabel, lic.hasLicense, lic.hasLicense ? COPY.common.active : COPY.common.notSet, null, null));
 
   const note = document.createElement("div");
   note.className = "muted";
   note.textContent = COPY.figma.note;
   body.appendChild(note);
+
+  const manage = document.createElement("div");
+  manage.className = "muted";
+  manage.style.marginTop = "10px";
+  manage.textContent = COPY.figma.manageInLicenses;
+  body.appendChild(manage);
+}
+
+const EYE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.2A10.9 10.9 0 0 1 12 4c6.5 0 10 7 10 7a15.7 15.7 0 0 1-2.9 3.8"/><path d="M6.1 6.1A15.6 15.6 0 0 0 2 11s3.5 7 10 7a10.8 10.8 0 0 0 4-.7"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="m2 2 20 20"/></svg>';
+
+// A password input with a show/hide (eye) toggle so the entered value isn't
+// always obscured. Returns { wrap (append it), input (read .value) }.
+function revealField(placeholder) {
+  const wrap = document.createElement("div");
+  wrap.className = "field-reveal";
+  const input = document.createElement("input");
+  input.className = "field";
+  input.type = "password";
+  input.placeholder = placeholder;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "reveal-btn";
+  btn.innerHTML = EYE_SVG;
+  btn.setAttribute("aria-label", COPY.licenses.showKey);
+  btn.title = COPY.licenses.showKey;
+  btn.addEventListener("click", () => {
+    const reveal = input.type === "password";
+    input.type = reveal ? "text" : "password";
+    btn.innerHTML = reveal ? EYE_OFF_SVG : EYE_SVG;
+    const label = reveal ? COPY.licenses.hideKey : COPY.licenses.showKey;
+    btn.setAttribute("aria-label", label);
+    btn.title = label;
+    input.focus();
+  });
+  wrap.append(input, btn);
+  return { wrap, input };
+}
+
+// --- Keys & Licenses panel: your API key + both app licenses, one place ---
+function licensesGroupHead(body, text) {
+  const h = document.createElement("div");
+  h.className = "drawer-sep";
+  body.appendChild(h);
+  const l = document.createElement("div");
+  l.className = "sess-label";
+  l.textContent = text;
+  body.appendChild(l);
+}
+function licensesDivider(body) {
+  const sep = document.createElement("div");
+  sep.style.cssText = "height:1px;background:#2a2a2a;margin:20px 0;";
+  body.appendChild(sep);
+}
+async function renderLicenses(body) {
+  // Your keys — the Anthropic API key the studio runs on.
+  licensesGroupHead(body, COPY.licenses.keysGroup);
+  await claudeKeySection(body);
+
+  // Licenses — the feature unlocks, in order: Figma, then Design.
+  licensesGroupHead(body, COPY.licenses.licensesGroup);
+  await licenseSection(body, {
+    label: COPY.licenses.figmaLabel,
+    desc: COPY.licenses.figmaDesc,
+    getStatus: () => window.desktop.getLicenseStatus(),
+    save: (k) => window.desktop.saveLicense(k),
+    clear: () => window.desktop.clearLicense(),
+  });
+
+  licensesDivider(body);
+
+  await licenseSection(body, {
+    label: COPY.licenses.designLabel,
+    desc: COPY.licenses.designDesc,
+    getStatus: () => window.desktop.getDesignLicenseStatus(),
+    save: (k) => window.desktop.saveDesignLicense(k),
+    clear: () => window.desktop.clearDesignLicense(),
+    // The design license gates the Art Director rail (+ lens picker). On change,
+    // drop the cached meta and re-evaluate so the rail appears/disappears at once.
+    onChange: () => { _directionMeta = null; updateRerollBtn(); },
+  });
+}
+
+// The Claude API key row — status + remove when connected, or a validated input
+// when not. Same encrypted-keychain storage as before; just entered here now.
+async function claudeKeySection(body) {
+  const head = document.createElement("div");
+  head.className = "sess-label";
+  head.textContent = COPY.licenses.claudeLabel;
+  body.appendChild(head);
+
+  const desc = document.createElement("div");
+  desc.className = "muted";
+  desc.style.cssText = "font-size:12px;margin:2px 0 10px;";
+  desc.textContent = COPY.licenses.claudeDesc;
+  body.appendChild(desc);
+
+  const status = await window.desktop.getKeyStatus();
+  body.appendChild(connStatusRow(COPY.licenses.claudeStatus, status.hasKey, status.hasKey ? COPY.common.active : COPY.common.notSet, COPY.licenses.removeKey,
+    async () => { await window.desktop.clearKey(); refreshRailActivation(); openModal("licenses"); }));
+
+  if (status.hasKey) {
+    body.appendChild(setRow(COPY.licenses.keyLabel, `sk-ant-…${status.keyHint || "????"}`));
+    return;
+  }
+
+  const { wrap, input } = revealField(COPY.licenses.pasteClaudeKey);
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "panelbtn primary";
+  saveBtn.textContent = COPY.licenses.saveKey;
+  const msg = document.createElement("div");
+  msg.className = "muted";
+  const doSave = async () => {
+    const key = input.value.trim();
+    if (!key) return;
+    saveBtn.disabled = true;
+    saveBtn.textContent = COPY.licenses.validating;
+    msg.textContent = "";
+    const res = await window.desktop.saveKey(key);
+    if (res.ok) {
+      refreshRailActivation();
+      openModal("licenses"); // refresh → shows Active
+    } else {
+      msg.textContent = res.error || COPY.common.couldNotSave;
+      msg.style.color = "#e5484d";
+      saveBtn.disabled = false;
+      saveBtn.textContent = COPY.licenses.saveKey;
+    }
+  };
+  saveBtn.addEventListener("click", doSave);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") doSave(); });
+  body.append(wrap, saveBtn, msg);
+}
+
+// One license row: status + remove when active, or a validated key input when not.
+// Both sections re-open the panel on change so the rail icons + status refresh.
+async function licenseSection(body, opts) {
+  const head = document.createElement("div");
+  head.className = "sess-label";
+  head.textContent = opts.label;
+  body.appendChild(head);
+
+  if (opts.desc) {
+    const d = document.createElement("div");
+    d.className = "muted";
+    d.style.cssText = "font-size:12px;margin:2px 0 10px;";
+    d.textContent = opts.desc;
+    body.appendChild(d);
+  }
+
+  const lic = await opts.getStatus();
+  body.appendChild(connStatusRow(COPY.licenses.status, lic.hasLicense, lic.hasLicense ? COPY.common.active : COPY.common.notSet, COPY.licenses.remove,
+    async () => { await opts.clear(); if (opts.onChange) opts.onChange(); refreshRailActivation(); openModal("licenses"); }));
+
+  if (lic.hasLicense) {
+    body.appendChild(setRow(COPY.licenses.keyLabel, `…${lic.hint || "????"}`));
+    return;
+  }
+
+  const { wrap, input } = revealField(COPY.licenses.pasteKey);
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "panelbtn primary";
+  saveBtn.textContent = COPY.licenses.save;
+  const msg = document.createElement("div");
+  msg.className = "muted";
+  const doSave = async () => {
+    const key = input.value.trim();
+    if (!key) return;
+    saveBtn.disabled = true;
+    saveBtn.textContent = COPY.licenses.validating;
+    msg.textContent = "";
+    const res = await opts.save(key);
+    if (res.ok) {
+      if (opts.onChange) opts.onChange();
+      refreshRailActivation();
+      openModal("licenses"); // refresh → shows Active
+    } else {
+      msg.textContent = res.error || COPY.licenses.couldNotSave;
+      msg.style.color = "#e5484d";
+      saveBtn.disabled = false;
+      saveBtn.textContent = COPY.licenses.save;
+    }
+  };
+  saveBtn.addEventListener("click", doSave);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") doSave(); });
+  body.append(wrap, saveBtn, msg);
 }
 
 // --- Publish: direct-to-Vercel (connect + one-click publish) ---
@@ -2253,7 +2417,7 @@ function relTime(iso) {
 
 async function renderClaude(body) {
   const status = await window.desktop.getKeyStatus();
-  body.appendChild(connStatusRow(COPY.claude.keyLabel, status.hasKey, status.hasKey ? COPY.claude.connected : COPY.claude.notConnected, COPY.claude.disconnect, disconnectKey));
+  body.appendChild(connStatusRow(COPY.claude.keyLabel, status.hasKey, status.hasKey ? COPY.claude.connected : COPY.claude.notConnected, null, null));
 
   if (!status.hasKey) {
     const note = document.createElement("div");
@@ -2308,10 +2472,10 @@ async function renderClaude(body) {
     addMsg("system", select.value ? COPY.claude.modelSetTo(label) : COPY.claude.modelSetDefault);
   });
 
-  // Disconnect lives in the status header (top-right unplug), matching Vercel/Figma.
+  // Key management (add/remove) now lives in the Keys & Licenses drawer.
   const keyNote = document.createElement("div");
   keyNote.className = "muted";
-  keyNote.textContent = COPY.claude.keyNote;
+  keyNote.textContent = COPY.claude.manageKeyInLicenses;
   body.appendChild(keyNote);
 
   // ── Images ──────────────────────────────────────────────────────────────────
@@ -2509,11 +2673,6 @@ async function renderClaude(body) {
   body.appendChild(modelNote);
 }
 
-async function disconnectKey() {
-  closeModal();
-  await window.desktop.clearKey();
-  await boot();
-}
 async function exportCompany(btn) {
   try {
     btn.disabled = true;
@@ -4346,7 +4505,7 @@ function buildArtDirectorCritiquePrompt(id, res) {
 // (main store) so the Archive survives restarts. The prose critique still streams in chat.
 const AD_KIND = { code: { label: "Actionable" }, asset: { label: "Needs an asset" }, decision: { label: "Your call" } };
 
-let directorState = { id: null, active: [], dismissed: [] };
+let directorState = { id: null, active: [], dismissed: [], completed: [] };
 
 function isModalOpen(kind) {
   return !modal.hidden && modal.classList.contains("open") && RAILS[kind] && RAILS[kind].classList.contains("active");
@@ -4362,12 +4521,14 @@ function refreshDirector() {
 window.desktop.onAgentSuggestions(async ({ suggestions }) => {
   const id = lastReviewedVariation;
   if (!id || !Array.isArray(suggestions)) return;
-  let prev = { active: [], dismissed: [] };
+  let prev = { active: [], dismissed: [], completed: [] };
   try { prev = await window.desktop.loadRecs(id); } catch {}
   const dismissed = (prev && prev.dismissed) || [];
-  const dismissedIds = new Set(dismissed.map((r) => r.id));
-  const active = suggestions.filter((s) => s && s.id && !dismissedIds.has(s.id));
-  try { await window.desktop.saveRecs(id, active, dismissed); } catch {}
+  const completed = (prev && prev.completed) || [];
+  // Don't resurface a rec the designer already dismissed OR completed.
+  const seen = new Set([...dismissed, ...completed].map((r) => r.id));
+  const active = suggestions.filter((s) => s && s.id && !seen.has(s.id));
+  try { await window.desktop.saveRecs(id, active, dismissed, completed); } catch {}
   updateDirectorIndicator();
   refreshDirector();
 });
@@ -4391,9 +4552,9 @@ async function renderDirector(body) {
   const id = currentPreviewVariation();
   if (!id || id === "v00") { const n = document.createElement("div"); n.className = "muted"; n.textContent = COPY.director.needDesign; body.appendChild(n); return; }
 
-  let store = { active: [], dismissed: [] };
+  let store = { active: [], dismissed: [], completed: [] };
   try { store = await window.desktop.loadRecs(id); } catch {}
-  directorState = { id, active: (store && store.active) || [], dismissed: (store && store.dismissed) || [] };
+  directorState = { id, active: (store && store.active) || [], dismissed: (store && store.dismissed) || [], completed: (store && store.completed) || [] };
 
   const lead = document.createElement("div");
   lead.className = "muted"; lead.style.cssText = "font-size:12.5px;margin-bottom:12px;";
@@ -4410,7 +4571,7 @@ async function renderDirector(body) {
   if (!directorState.active.length) {
     const empty = document.createElement("div");
     empty.className = "muted"; empty.style.cssText = "font-size:12.5px;margin-top:14px;";
-    empty.textContent = directorState.dismissed.length ? COPY.director.allHandled : COPY.director.none;
+    empty.textContent = (directorState.dismissed.length || directorState.completed.length) ? COPY.director.allHandled : COPY.director.none;
     body.appendChild(empty);
   } else {
     const list = document.createElement("div"); list.className = "adrec-list";
@@ -4418,6 +4579,7 @@ async function renderDirector(body) {
     body.appendChild(list);
   }
 
+  if (directorState.completed.length) body.appendChild(buildCompleted(directorState.completed));
   if (directorState.dismissed.length) body.appendChild(buildArchive(directorState.dismissed));
 }
 
@@ -4428,7 +4590,7 @@ function buildRecRow(rec) {
   const kind = document.createElement("span"); kind.className = "adrec-kind adrec-kind-" + (rec.kind || "code");
   kind.textContent = (AD_KIND[rec.kind] || AD_KIND.code).label;
   row.append(title, kind);
-  row.addEventListener("click", () => openRecModal(rec, false));
+  row.addEventListener("click", () => openRecModal(rec, "active"));
   return row;
 }
 
@@ -4442,16 +4604,37 @@ function buildArchive(dismissed) {
     const restore = document.createElement("button"); restore.className = "adrec-restore"; restore.textContent = COPY.director.restore;
     restore.addEventListener("click", (e) => { e.stopPropagation(); restoreRec(rec); });
     row.append(title, restore);
-    row.addEventListener("click", () => openRecModal(rec, true));
+    row.addEventListener("click", () => openRecModal(rec, "archived"));
     list.appendChild(row);
   }
   wrap.appendChild(list);
   return wrap;
 }
 
-// The recommendation modal: full description + Apply (code only) + Dismiss.
+// Recommendations that have been applied (acted on). Collapsible, kept for reference —
+// clicking a row reopens the modal read-only (Close only), no restore/apply.
+function buildCompleted(completed) {
+  const wrap = document.createElement("details"); wrap.className = "adrec-archive adrec-completed";
+  const sum = document.createElement("summary"); sum.textContent = COPY.director.completed(completed.length); wrap.appendChild(sum);
+  const list = document.createElement("div"); list.className = "adrec-list";
+  for (const rec of completed) {
+    const row = document.createElement("button"); row.className = "adrec adrec-done";
+    const title = document.createElement("span"); title.className = "adrec-title"; title.textContent = rec.title || rec.id;
+    const tag = document.createElement("span"); tag.className = "adrec-donetag"; tag.textContent = COPY.director.doneTag;
+    row.append(title, tag);
+    row.addEventListener("click", () => openRecModal(rec, "completed"));
+    list.appendChild(row);
+  }
+  wrap.appendChild(list);
+  return wrap;
+}
+
+// The recommendation modal: full description + actions by mode. "active" → Hold/Dismiss/Apply;
+// "archived" → Hold/Apply (no dismiss); "completed" → Close only (read-only reference).
 function closeRecModal() { const o = el("adrec-overlay"); if (o) o.remove(); }
-function openRecModal(rec, archived) {
+function openRecModal(rec, mode) {
+  mode = mode || "active";
+  const archived = mode === "archived";
   closeRecModal();
   const overlay = document.createElement("div"); overlay.className = "adrec-overlay"; overlay.id = "adrec-overlay";
   overlay.addEventListener("click", (e) => { if (e.target === overlay) closeRecModal(); });
@@ -4465,25 +4648,33 @@ function openRecModal(rec, archived) {
   if (rec.why) { const w = document.createElement("div"); w.className = "adrec-modal-why"; w.textContent = rec.why; card.appendChild(w); }
 
   const actions = document.createElement("div"); actions.className = "adrec-modal-actions";
-  // Hold — close the modal, change nothing (the suggestion stays where it is).
-  const hold = document.createElement("button"); hold.className = "adrec-hold-btn";
-  hold.textContent = COPY.director.hold; hold.title = COPY.director.holdTip;
-  hold.addEventListener("click", () => closeRecModal());
-  actions.appendChild(hold);
-  if (!archived) {
-    const dismiss = document.createElement("button"); dismiss.className = "adrec-dismiss-btn";
-    dismiss.textContent = COPY.director.dismiss; dismiss.title = COPY.director.dismissTip;
-    dismiss.addEventListener("click", () => { dismissRec(rec); closeRecModal(); });
-    actions.appendChild(dismiss);
-  }
-  if (rec.kind === "code" && rec.apply) {
-    const apply = document.createElement("button"); apply.className = "adrec-apply-btn"; apply.textContent = COPY.director.applyThis;
-    apply.addEventListener("click", () => { closeRecModal(); applyRec(rec); });
-    actions.appendChild(apply);
+  if (mode === "completed") {
+    // Read-only reference — the action was already taken. Close only.
+    const close = document.createElement("button"); close.className = "adrec-hold-btn";
+    close.textContent = COPY.director.close;
+    close.addEventListener("click", () => closeRecModal());
+    actions.appendChild(close);
   } else {
-    const note = document.createElement("span"); note.className = "adrec-modal-tagnote";
-    note.textContent = rec.kind === "asset" ? COPY.director.assetNote : COPY.director.decisionNote;
-    actions.appendChild(note);
+    // Hold — close the modal, change nothing (the suggestion stays where it is).
+    const hold = document.createElement("button"); hold.className = "adrec-hold-btn";
+    hold.textContent = COPY.director.hold; hold.title = COPY.director.holdTip;
+    hold.addEventListener("click", () => closeRecModal());
+    actions.appendChild(hold);
+    if (!archived) {
+      const dismiss = document.createElement("button"); dismiss.className = "adrec-dismiss-btn";
+      dismiss.textContent = COPY.director.dismiss; dismiss.title = COPY.director.dismissTip;
+      dismiss.addEventListener("click", () => { dismissRec(rec); closeRecModal(); });
+      actions.appendChild(dismiss);
+    }
+    if (rec.kind === "code" && rec.apply) {
+      const apply = document.createElement("button"); apply.className = "adrec-apply-btn"; apply.textContent = COPY.director.applyThis;
+      apply.addEventListener("click", () => { closeRecModal(); applyRec(rec); });
+      actions.appendChild(apply);
+    } else {
+      const note = document.createElement("span"); note.className = "adrec-modal-tagnote";
+      note.textContent = rec.kind === "asset" ? COPY.director.assetNote : COPY.director.decisionNote;
+      actions.appendChild(note);
+    }
   }
   card.appendChild(actions);
   overlay.appendChild(card);
@@ -4492,7 +4683,7 @@ function openRecModal(rec, archived) {
 
 async function persistDirector() {
   if (!directorState.id) return;
-  try { await window.desktop.saveRecs(directorState.id, directorState.active, directorState.dismissed); } catch {}
+  try { await window.desktop.saveRecs(directorState.id, directorState.active, directorState.dismissed, directorState.completed); } catch {}
   updateDirectorIndicator(directorState.id);
   refreshDirector();
 }
@@ -4506,11 +4697,13 @@ function restoreRec(rec) {
   if (!directorState.active.some((r) => r.id === rec.id)) directorState.active.push(rec);
   persistDirector();
 }
-// Apply = a scoped BUILDER edit turn (never reviewMode). The rec leaves active on apply.
+// Apply = a scoped BUILDER edit turn (never reviewMode). The rec moves from active into
+// Completed (kept for later reference as an action that was addressed).
 function applyRec(rec) {
   const id = directorState.id;
   if (!rec || !id || rec.kind !== "code" || !rec.apply) return;
   directorState.active = directorState.active.filter((r) => r.id !== rec.id);
+  if (!directorState.completed.some((r) => r.id === rec.id)) directorState.completed.push(rec);
   persistDirector();
   closeModal(); // surface the chat where the edit streams
   const prompt =

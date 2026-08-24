@@ -133,6 +133,7 @@ window.COPY = {
     figma: "Figma Export",
     claude: "Claude Settings",
     artdirector: "Art Director Review",
+    licenses: "Keys & Licenses",
     sessionUsage: "Claude Session Usage",
     sessionUsageAria: "Claude Session Usage, click to clear the session",
     sessionUsageTip: (pct) => `Claude Session Usage · ${pct}%`,
@@ -188,6 +189,9 @@ window.COPY = {
     allHandled: "All caught up — nothing active. Re-review to check the latest, or reopen the Archive below.",
     archive: (n) => `Archive (${n})`,
     restore: "Restore",
+    completed: (n) => `Completed (${n})`,
+    doneTag: "Applied",
+    close: "Close",
     hold: "Hold",
     holdTip: "Keep suggestion open for now",
     dismiss: "Dismiss",
@@ -261,6 +265,7 @@ window.COPY = {
     voice: "Copy Voice",
     claude: "Claude Settings",
     director: "Art Director",
+    licenses: "Keys & Licenses",
   },
 
   // ── Key gate (Connect Claude) — big-pane onboarding screen ──────────────────
@@ -328,15 +333,36 @@ window.COPY = {
     noProfileYet: "No company-profile.json yet. Run /export-company in the chat to create one first.",
   },
 
-  // ── Figma Export license drawer ─────────────────────────────────────────────
+  // ── Figma Export drawer (status; the key input lives in Licenses) ────────────
   figma: {
     licenseLabel: "Figma export license",
-    removeLicense: "Remove license",
+    note: "Unlocks Figma export. Validated with the derive service; stored encrypted in your OS keychain.",
+    manageInLicenses: "Add or remove this license in the Licenses drawer.",
+  },
+
+  // ── Keys & Licenses drawer (your keys + app licenses, one place) ────────────
+  licenses: {
+    keysGroup: "Your keys",
+    licensesGroup: "Licenses",
+    claudeLabel: "Claude API key",
+    claudeDesc: "Your Anthropic key. The studio runs on it.",
+    claudeStatus: "Key",
+    pasteClaudeKey: "sk-ant-…",
+    saveKey: "Save key",
+    removeKey: "Remove key",
+    designLabel: "Design, Research & Art Director",
+    designDesc: "Unlocks design directions, competitor research, and the Art Director review.",
+    figmaLabel: "Figma Export",
+    figmaDesc: "Unlocks exporting your designs to Figma.",
+    status: "License",
+    keyLabel: "Key",
+    remove: "Remove license",
     pasteKey: "Paste your license key",
-    saveLicense: "Save license",
+    save: "Save license",
     validating: "Validating…",
     couldNotSave: "Could not save the license.",
-    note: "Unlocks Figma export. Validated with the derive service; stored encrypted in your OS keychain.",
+    showKey: "Show",
+    hideKey: "Hide",
   },
 
   // ── Publish drawer (Vercel connect + one-click publish) ─────────────────────
@@ -457,7 +483,8 @@ window.COPY = {
     connected: "Connected",
     notConnected: "Not connected",
     disconnect: "Disconnect",
-    pasteKeyNote: "Close this and paste your key on the connect screen.",
+    pasteKeyNote: "Add your key in the Keys & Licenses drawer to connect.",
+    manageKeyInLicenses: "Add or remove your API key in the Keys & Licenses drawer.",
     model: "Model",
     loadingModels: "Loading models…",
     modelDefault: "Default (Claude Code picks)",

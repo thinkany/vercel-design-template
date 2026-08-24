@@ -30,7 +30,7 @@ contextBridge.exposeInMainWorld("desktop", {
   cancelIntake: (id) => ipcRenderer.invoke("agent:cancelIntake", { id }),
   reviewDesign: (id) => ipcRenderer.invoke("artdirector:review", { id }),
   loadRecs: (id) => ipcRenderer.invoke("artdirector:loadRecs", { id }),
-  saveRecs: (id, active, dismissed) => ipcRenderer.invoke("artdirector:saveRecs", { id, active, dismissed }),
+  saveRecs: (id, active, dismissed, completed) => ipcRenderer.invoke("artdirector:saveRecs", { id, active, dismissed, completed }),
   onAgentSuggestions: (cb) => {
     const listener = (_e, data) => cb(data);
     ipcRenderer.on("agent:suggestions", listener);
@@ -77,6 +77,9 @@ contextBridge.exposeInMainWorld("desktop", {
   getLicenseStatus: () => ipcRenderer.invoke("license:status"),
   saveLicense: (key) => ipcRenderer.invoke("license:save", { key }),
   clearLicense: () => ipcRenderer.invoke("license:clear"),
+  getDesignLicenseStatus: () => ipcRenderer.invoke("license:designStatus"),
+  saveDesignLicense: (key) => ipcRenderer.invoke("license:designSave", { key }),
+  clearDesignLicense: () => ipcRenderer.invoke("license:designClear"),
 
   // ---- Publish (direct-to-Vercel) ----
   getVercelStatus: () => ipcRenderer.invoke("vercel:status"),

@@ -54,7 +54,7 @@ const { createEmptyBrief, applyAnswers } = require("./intake/brief.cjs");
 // api/direction). This client POSTs signals and gets back { direction (lensLabel stamped),
 // block (server-rendered) } or the knob-panel meta — async, degrades safely. See
 // docs/design-variety-cloud-spec.md.
-const { sampleDirection, directionMeta } = require("./direction-client.cjs");
+const { sampleDirection, directionMeta, resetMetaCache } = require("./direction-client.cjs");
 const references = require("./intake/references.cjs");
 const ingestRefs = require("./intake/ingest.cjs");
 
@@ -204,6 +204,42 @@ async function validateLicense(key) {
   } catch (e) {
     return { ok: false, error: `Couldn't reach the license service: ${e.message}` };
   }
+}
+
+// ---- Design license (Design / Research / Director bundle) -------------------
+// Its OWN key (DESIGN_LICENSE_KEY), a SEPARATE Vercel env from the Figma export's
+// DERIVE_LICENSE_KEY. Same encrypted-keychain shape; validated against /api/direction;
+// injected into env on boot so researchLicensed()/varietyLicensed() and
+// direction-client.cjs all see it.
+function designLicenseFilePath() { return path.join(app.getPath("userData"), "design-license.enc"); }
+function loadStoredDesignLicense() {
+  try {
+    const p = designLicenseFilePath();
+    if (!fs.existsSync(p)) return null;
+    const buf = fs.readFileSync(p);
+    if (safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(buf);
+    return buf.toString("utf8");
+  } catch { return null; }
+}
+function storeDesignLicense(key) {
+  const data = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(key) : Buffer.from(key, "utf8");
+  fs.writeFileSync(designLicenseFilePath(), data);
+}
+function removeStoredDesignLicense() { try { fs.unlinkSync(designLicenseFilePath()); } catch { /* already gone */ } }
+// /api/direction lives beside /api/derive on the same host.
+function directionEndpoint() {
+  if (process.env.DIRECTION_ENDPOINT) return process.env.DIRECTION_ENDPOINT;
+  return (process.env.DERIVE_ENDPOINT || "https://derive.thinkany.design/api/derive").replace(/\/api\/derive\/?$/, "/api/direction");
+}
+// Validate by POSTing the cheapest op (meta): 200 valid, 401 rejected, 503 unconfigured.
+async function validateDesignLicense(key) {
+  try {
+    const res = await fetch(directionEndpoint(), { method: "POST", headers: { "content-type": "application/json", "x-license-key": key }, body: JSON.stringify({ op: "meta" }) });
+    if (res.ok) return { ok: true };
+    if (res.status === 401) return { ok: false, error: "That license key was rejected." };
+    if (res.status === 503) return { ok: false, error: "The license service isn't configured yet." };
+    return { ok: false, error: `Unexpected response from the license service (${res.status}).` };
+  } catch (e) { return { ok: false, error: `Couldn't reach the license service: ${e.message}` }; }
 }
 
 // ---- Vercel token + scope (in-app Publish) ----------------------------------
@@ -1368,14 +1404,14 @@ function loadArtDirectorStore(dir) {
   try { return JSON.parse(fs.readFileSync(artDirectorStorePath(dir), "utf8")); } catch { return {}; }
 }
 ipcMain.handle("artdirector:loadRecs", (_event, { id } = {}) => {
-  if (!currentProject || !id) return { active: [], dismissed: [] };
+  if (!currentProject || !id) return { active: [], dismissed: [], completed: [] };
   const rec = loadArtDirectorStore(currentProject)[id];
-  return { active: (rec && rec.active) || [], dismissed: (rec && rec.dismissed) || [] };
+  return { active: (rec && rec.active) || [], dismissed: (rec && rec.dismissed) || [], completed: (rec && rec.completed) || [] };
 });
-ipcMain.handle("artdirector:saveRecs", (_event, { id, active, dismissed } = {}) => {
+ipcMain.handle("artdirector:saveRecs", (_event, { id, active, dismissed, completed } = {}) => {
   if (!currentProject || !id) return { ok: false };
   const store = loadArtDirectorStore(currentProject);
-  store[id] = { active: active || [], dismissed: dismissed || [], updatedAt: new Date().toISOString() };
+  store[id] = { active: active || [], dismissed: dismissed || [], completed: completed || [], updatedAt: new Date().toISOString() };
   try {
     fs.mkdirSync(path.join(currentProject, ".thinkany"), { recursive: true });
     fs.writeFileSync(artDirectorStorePath(currentProject), JSON.stringify(store, null, 2));
@@ -1562,6 +1598,27 @@ ipcMain.handle("license:save", async (_event, { key }) => {
 ipcMain.handle("license:clear", () => {
   removeStoredLicense();
   delete process.env.DERIVE_LICENSE_KEY;
+  return { ok: true };
+});
+// Design/Research/Director bundle license (DESIGN_LICENSE_KEY) — same shape, its own key.
+ipcMain.handle("license:designStatus", () => {
+  const key = (process.env.DESIGN_LICENSE_KEY || "").trim();
+  return { hasLicense: !!key, hint: key ? key.slice(-4) : null };
+});
+ipcMain.handle("license:designSave", async (_event, { key }) => {
+  const k = (key || "").trim();
+  if (!k) return { ok: false, error: "Enter your license key first." };
+  const v = await validateDesignLicense(k);
+  if (!v.ok) return v;
+  try { storeDesignLicense(k); } catch (e) { return { ok: false, error: `Could not save the license: ${e.message}` }; }
+  process.env.DESIGN_LICENSE_KEY = k;
+  resetMetaCache(); // license changed → next directionMeta() must re-fetch, not read stale
+  return { ok: true };
+});
+ipcMain.handle("license:designClear", () => {
+  removeStoredDesignLicense();
+  delete process.env.DESIGN_LICENSE_KEY;
+  resetMetaCache();
   return { ok: true };
 });
 
@@ -2145,6 +2202,8 @@ app.whenReady().then(async () => {
   if (stored) process.env.ANTHROPIC_API_KEY = stored;
   const storedLicense = loadStoredLicense(); // in-app license wins over .env.local
   if (storedLicense) process.env.DERIVE_LICENSE_KEY = storedLicense;
+  const storedDesignLicense = loadStoredDesignLicense(); // in-app design license wins over .env.local
+  if (storedDesignLicense) process.env.DESIGN_LICENSE_KEY = storedDesignLicense;
   vercelAuth = loadVercelAuth(); // in-app Publish: pasted token or Sign in with Vercel
   // Native capture bridge: a hidden BrowserWindow the app-owned export scripts
   // drive over loopback (see capture-bridge.cjs). Injecting these into the env
