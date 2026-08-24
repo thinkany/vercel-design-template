@@ -55,15 +55,15 @@ const AXIS_RUBRIC = {
 //    repetition breaks — it stays authentic where a lens genuinely calls for it. ──
 const MOTIFS = {
   // The little label above a section heading.
-  eyebrow:       ["none", "numbered-index", "hairline-rule", "micro-caps", "icon-led", "oversized-index", "kicker-line"],
+  eyebrow:       ["none", "numbered-index", "hairline-rule", "micro-caps", "icon-led", "oversized-index", "kicker-line", "tab-chip", "vertical-label"],
   // The hero / first-viewport archetype.
-  hero:          ["split", "centered", "full-bleed", "type-only", "asymmetric", "editorial-cover", "collage"],
+  hero:          ["split", "centered", "full-bleed", "type-only", "asymmetric", "editorial-cover", "collage", "boxed-frame", "split-diagonal"],
   // How sections pace down the page.
-  sectionRhythm: ["uniform", "alternating", "escalating-density", "punctuated-by-fullbleed", "editorial-flow"],
+  sectionRhythm: ["uniform", "alternating", "escalating-density", "punctuated-by-fullbleed", "editorial-flow", "ribbon-bands", "sparse"],
   // How a set of features / items is laid out.
-  featureLayout: ["cards", "rows", "stagger", "editorial-list", "grid-collage", "bento"],
+  featureLayout: ["cards", "rows", "stagger", "editorial-list", "grid-collage", "bento", "table", "carousel"],
   // What separates sections.
-  divider:       ["none", "rule", "shape", "color-block", "overlap", "whitespace"],
+  divider:       ["none", "rule", "shape", "color-block", "overlap", "whitespace", "gradient-fade", "angled-cut"],
 };
 
 // Human phrasing for each motif slug, so the sampled choice reads as an instruction in
@@ -78,6 +78,8 @@ const MOTIF_GLOSS = {
     "icon-led": "a small icon leading each section heading",
     "oversized-index": "an oversized number or index used as a graphic element by the heading",
     "kicker-line": "a short kicker phrase above the section heading",
+    "tab-chip": "a small pill or tab-style chip label above the section heading",
+    "vertical-label": "a rotated label running vertically alongside the section heading",
   },
   hero: {
     "split": "a split hero (headline on one side, visual on the other)",
@@ -87,6 +89,8 @@ const MOTIF_GLOSS = {
     "asymmetric": "an asymmetric, off-center hero composition",
     "editorial-cover": "an editorial-cover hero (magazine-style lead: strong headline plus a lead image)",
     "collage": "a collage hero (layered, overlapping elements)",
+    "boxed-frame": "a hero framed inside a bordered panel or window",
+    "split-diagonal": "a hero split along a diagonal, angled division between headline and visual",
   },
   sectionRhythm: {
     "uniform": "uniform, evenly paced sections",
@@ -94,6 +98,8 @@ const MOTIF_GLOSS = {
     "escalating-density": "sections that escalate in density and intensity down the page",
     "punctuated-by-fullbleed": "regular sections punctuated by full-bleed moments",
     "editorial-flow": "an editorial flow where section width and density vary like magazine pages",
+    "ribbon-bands": "full-width color bands that alternate down the page",
+    "sparse": "very sparse pacing with large empty stretches between a few sections",
   },
   featureLayout: {
     "cards": "feature cards",
@@ -102,6 +108,8 @@ const MOTIF_GLOSS = {
     "editorial-list": "an editorial list (typographic, numbered or ruled)",
     "grid-collage": "a grid collage of items",
     "bento": "a bento grid of mixed-size tiles",
+    "table": "a structured comparison or spec table",
+    "carousel": "a horizontal carousel or slider of items",
   },
   divider: {
     "none": "no explicit dividers between sections",
@@ -110,6 +118,67 @@ const MOTIF_GLOSS = {
     "color-block": "color-block transitions between sections",
     "overlap": "overlapping sections that bleed into each other",
     "whitespace": "generous whitespace as the only divider",
+    "gradient-fade": "a soft gradient fade between sections",
+    "angled-cut": "an angled or diagonal cut between sections",
+  },
+};
+
+// ── Motif axis affinity (lever 2 weighting). A PARTIAL lean per option: only the axis
+//    stops it actually expresses (unlisted axes don't affect its weight). The sampler
+//    scores each of a lens's eligible options against the resolved axes and weights the
+//    draw, so within one lens an ordered/calm design and a loose/maximal design get
+//    DIFFERENT (coherent) motifs instead of a uniform coin-flip. Floors keep variety. ──
+const MOTIF_AFFINITY = {
+  eyebrow: {
+    "none":            { energy: "calm", convention: "common" },
+    "numbered-index":  { structure: "ordered", energy: "measured" },
+    "hairline-rule":   { structure: "ordered", energy: "calm" },
+    "micro-caps":      { convention: "familiar", energy: "measured" },
+    "icon-led":        { energy: "lively", convention: "familiar" },
+    "oversized-index": { energy: "maximal", convention: "bold" },
+    "kicker-line":     { structure: "balanced", energy: "measured" },
+    "tab-chip":        { era: "current", energy: "lively" },
+    "vertical-label":  { convention: "bold", structure: "loose" },
+  },
+  hero: {
+    "split":           { structure: "balanced", energy: "measured" },
+    "centered":        { convention: "common", energy: "calm" },
+    "full-bleed":      { energy: "lively" },
+    "type-only":       { convention: "bold", structure: "loose" },
+    "asymmetric":      { structure: "loose", convention: "bold" },
+    "editorial-cover": { era: "classic", structure: "balanced" },
+    "collage":         { structure: "organic", energy: "maximal" },
+    "boxed-frame":     { structure: "ordered", era: "classic" },
+    "split-diagonal":  { structure: "loose", convention: "bold" },
+  },
+  sectionRhythm: {
+    "uniform":                 { structure: "ordered", energy: "measured" },
+    "alternating":             { structure: "balanced", energy: "measured" },
+    "escalating-density":      { energy: "maximal" },
+    "punctuated-by-fullbleed": { energy: "lively" },
+    "editorial-flow":          { structure: "loose", energy: "measured" },
+    "ribbon-bands":            { energy: "lively", structure: "balanced" },
+    "sparse":                  { energy: "calm", structure: "ordered" },
+  },
+  featureLayout: {
+    "cards":          { convention: "common", structure: "ordered" },
+    "rows":           { structure: "ordered", energy: "measured" },
+    "stagger":        { structure: "loose", energy: "lively" },
+    "editorial-list": { structure: "balanced", energy: "measured" },
+    "grid-collage":   { energy: "maximal", structure: "organic" },
+    "bento":          { era: "current", energy: "lively" },
+    "table":          { convention: "common", structure: "ordered" },
+    "carousel":       { era: "current", energy: "lively" },
+  },
+  divider: {
+    "none":          { energy: "calm" },
+    "rule":          { structure: "ordered", energy: "measured" },
+    "shape":         { structure: "organic", energy: "lively" },
+    "color-block":   { energy: "maximal", convention: "bold" },
+    "overlap":       { structure: "organic", energy: "maximal" },
+    "whitespace":    { energy: "calm", structure: "balanced" },
+    "gradient-fade": { era: "current", energy: "lively" },
+    "angled-cut":    { convention: "bold", structure: "loose" },
   },
 };
 
@@ -136,10 +205,10 @@ const LENSES = [
       donts: ["No trend-chasing", "Avoid the exact six-section clone; vary at least the rhythm and eyebrow"],
     },
     motifEligibility: {
-      eyebrow: ["micro-caps", "hairline-rule", "none", "kicker-line"],
+      eyebrow: ["micro-caps", "hairline-rule", "none", "kicker-line", "tab-chip"],
       hero: ["split", "centered", "full-bleed"],
-      sectionRhythm: ["uniform", "alternating"],
-      featureLayout: ["cards", "rows", "bento"],
+      sectionRhythm: ["uniform", "alternating", "sparse"],
+      featureLayout: ["cards", "rows", "bento", "table"],
       divider: ["whitespace", "rule", "color-block"],
     },
   },
@@ -160,10 +229,10 @@ const LENSES = [
       donts: ["No decorative flourishes", "No drop shadows or gradients", "Don't center everything"],
     },
     motifEligibility: {
-      eyebrow: ["numbered-index", "hairline-rule", "micro-caps", "none"],
+      eyebrow: ["numbered-index", "hairline-rule", "micro-caps", "none", "vertical-label"],
       hero: ["type-only", "asymmetric", "split"],
-      sectionRhythm: ["uniform", "alternating"],
-      featureLayout: ["rows", "editorial-list", "grid-collage"],
+      sectionRhythm: ["uniform", "alternating", "sparse"],
+      featureLayout: ["rows", "editorial-list", "grid-collage", "table"],
       divider: ["rule", "whitespace", "none"],
     },
   },
@@ -184,7 +253,7 @@ const LENSES = [
       donts: ["No uniform card grids", "Don't center every heading"],
     },
     motifEligibility: {
-      eyebrow: ["kicker-line", "oversized-index", "micro-caps", "hairline-rule"],
+      eyebrow: ["kicker-line", "oversized-index", "micro-caps", "hairline-rule", "vertical-label"],
       hero: ["editorial-cover", "asymmetric", "split"],
       sectionRhythm: ["editorial-flow", "alternating", "punctuated-by-fullbleed"],
       featureLayout: ["editorial-list", "stagger", "grid-collage"],
@@ -209,8 +278,8 @@ const LENSES = [
     },
     motifEligibility: {
       eyebrow: ["micro-caps", "none", "hairline-rule"],
-      hero: ["full-bleed", "type-only", "asymmetric"],
-      sectionRhythm: ["uniform", "punctuated-by-fullbleed"],
+      hero: ["full-bleed", "type-only", "asymmetric", "boxed-frame"],
+      sectionRhythm: ["uniform", "punctuated-by-fullbleed", "sparse"],
       featureLayout: ["rows", "editorial-list", "stagger"],
       divider: ["whitespace", "none", "rule"],
     },
@@ -232,10 +301,10 @@ const LENSES = [
       donts: ["Nothing austere or corporate-cold", "Avoid harsh contrast"],
     },
     motifEligibility: {
-      eyebrow: ["icon-led", "micro-caps", "kicker-line", "none"],
+      eyebrow: ["icon-led", "micro-caps", "kicker-line", "none", "tab-chip"],
       hero: ["split", "centered", "collage"],
-      sectionRhythm: ["uniform", "alternating"],
-      featureLayout: ["cards", "rows", "stagger"],
+      sectionRhythm: ["uniform", "alternating", "ribbon-bands"],
+      featureLayout: ["cards", "rows", "stagger", "carousel"],
       divider: ["shape", "whitespace", "color-block"],
     },
   },
@@ -257,8 +326,8 @@ const LENSES = [
     },
     motifEligibility: {
       eyebrow: ["numbered-index", "micro-caps", "none", "hairline-rule"],
-      hero: ["full-bleed", "collage", "asymmetric"],
-      sectionRhythm: ["punctuated-by-fullbleed", "editorial-flow", "uniform"],
+      hero: ["full-bleed", "collage", "asymmetric", "boxed-frame"],
+      sectionRhythm: ["punctuated-by-fullbleed", "editorial-flow", "uniform", "sparse"],
       featureLayout: ["grid-collage", "stagger", "editorial-list"],
       divider: ["whitespace", "none", "overlap"],
     },
@@ -280,7 +349,7 @@ const LENSES = [
       donts: ["Don't fall back on a stock image hero", "No timid type sizes"],
     },
     motifEligibility: {
-      eyebrow: ["oversized-index", "kicker-line", "none", "micro-caps"],
+      eyebrow: ["oversized-index", "kicker-line", "none", "micro-caps", "vertical-label"],
       hero: ["type-only", "asymmetric", "split"],
       sectionRhythm: ["editorial-flow", "alternating", "escalating-density"],
       featureLayout: ["editorial-list", "rows", "stagger"],
@@ -306,8 +375,8 @@ const LENSES = [
     motifEligibility: {
       eyebrow: ["oversized-index", "icon-led", "kicker-line", "numbered-index"],
       hero: ["full-bleed", "collage", "centered"],
-      sectionRhythm: ["alternating", "punctuated-by-fullbleed", "escalating-density"],
-      featureLayout: ["grid-collage", "cards", "stagger"],
+      sectionRhythm: ["alternating", "punctuated-by-fullbleed", "escalating-density", "ribbon-bands"],
+      featureLayout: ["grid-collage", "cards", "stagger", "carousel"],
       divider: ["shape", "color-block", "overlap"],
     },
   },
@@ -328,10 +397,10 @@ const LENSES = [
       donts: ["No soft rounded friendliness", "No stock marketing photography"],
     },
     motifEligibility: {
-      eyebrow: ["numbered-index", "hairline-rule", "micro-caps", "none"],
+      eyebrow: ["numbered-index", "hairline-rule", "micro-caps", "none", "tab-chip"],
       hero: ["type-only", "split", "asymmetric"],
       sectionRhythm: ["uniform", "escalating-density"],
-      featureLayout: ["rows", "bento", "grid-collage"],
+      featureLayout: ["rows", "bento", "grid-collage", "table"],
       divider: ["rule", "none", "whitespace"],
     },
   },
@@ -352,11 +421,11 @@ const LENSES = [
       donts: ["No soft shadows or gradients", "Nothing that reads as 'safe corporate'"],
     },
     motifEligibility: {
-      eyebrow: ["oversized-index", "numbered-index", "none", "hairline-rule"],
-      hero: ["type-only", "asymmetric", "full-bleed"],
+      eyebrow: ["oversized-index", "numbered-index", "none", "hairline-rule", "vertical-label"],
+      hero: ["type-only", "asymmetric", "full-bleed", "split-diagonal"],
       sectionRhythm: ["escalating-density", "punctuated-by-fullbleed", "alternating"],
       featureLayout: ["rows", "grid-collage", "editorial-list"],
-      divider: ["rule", "color-block", "overlap"],
+      divider: ["rule", "color-block", "overlap", "angled-cut"],
     },
   },
   {
@@ -402,9 +471,9 @@ const LENSES = [
     motifEligibility: {
       eyebrow: ["icon-led", "kicker-line", "oversized-index", "none"],
       hero: ["centered", "collage", "split"],
-      sectionRhythm: ["alternating", "escalating-density", "punctuated-by-fullbleed"],
-      featureLayout: ["cards", "bento", "stagger"],
-      divider: ["shape", "color-block", "overlap"],
+      sectionRhythm: ["alternating", "escalating-density", "punctuated-by-fullbleed", "ribbon-bands"],
+      featureLayout: ["cards", "bento", "stagger", "carousel"],
+      divider: ["shape", "color-block", "overlap", "gradient-fade"],
     },
   },
   {
@@ -449,10 +518,10 @@ const LENSES = [
     },
     motifEligibility: {
       eyebrow: ["hairline-rule", "numbered-index", "micro-caps", "kicker-line"],
-      hero: ["full-bleed", "split", "asymmetric"],
+      hero: ["full-bleed", "split", "asymmetric", "split-diagonal"],
       sectionRhythm: ["escalating-density", "punctuated-by-fullbleed", "uniform"],
-      featureLayout: ["bento", "grid-collage", "cards"],
-      divider: ["color-block", "rule", "overlap"],
+      featureLayout: ["bento", "grid-collage", "cards", "table"],
+      divider: ["color-block", "rule", "overlap", "gradient-fade", "angled-cut"],
     },
   },
 
@@ -504,7 +573,7 @@ const LENSES = [
     },
     motifEligibility: {
       eyebrow: ["micro-caps", "kicker-line", "none"],
-      hero: ["split", "full-bleed", "centered"],
+      hero: ["split", "full-bleed", "centered", "boxed-frame"],
       sectionRhythm: ["uniform", "alternating"],
       featureLayout: ["cards", "rows", "stagger"],
       divider: ["shape", "whitespace", "color-block"],
@@ -529,7 +598,7 @@ const LENSES = [
     },
     motifEligibility: {
       eyebrow: ["oversized-index", "micro-caps", "hairline-rule"],
-      hero: ["centered", "editorial-cover", "full-bleed"],
+      hero: ["centered", "editorial-cover", "full-bleed", "boxed-frame"],
       sectionRhythm: ["uniform", "punctuated-by-fullbleed"],
       featureLayout: ["grid-collage", "cards", "rows"],
       divider: ["rule", "color-block", "shape"],
@@ -555,9 +624,9 @@ const LENSES = [
     motifEligibility: {
       eyebrow: ["oversized-index", "icon-led", "kicker-line"],
       hero: ["collage", "asymmetric", "centered"],
-      sectionRhythm: ["escalating-density", "punctuated-by-fullbleed"],
+      sectionRhythm: ["escalating-density", "punctuated-by-fullbleed", "ribbon-bands"],
       featureLayout: ["grid-collage", "bento", "stagger"],
-      divider: ["shape", "color-block", "overlap"],
+      divider: ["shape", "color-block", "overlap", "angled-cut"],
     },
   },
   {
@@ -579,10 +648,10 @@ const LENSES = [
     },
     motifEligibility: {
       eyebrow: ["oversized-index", "numbered-index", "none"],
-      hero: ["asymmetric", "collage", "type-only"],
+      hero: ["asymmetric", "collage", "type-only", "split-diagonal"],
       sectionRhythm: ["escalating-density", "alternating"],
       featureLayout: ["grid-collage", "rows", "editorial-list"],
-      divider: ["rule", "color-block", "overlap"],
+      divider: ["rule", "color-block", "overlap", "angled-cut"],
     },
   },
   {
@@ -679,12 +748,12 @@ const LENSES = [
     },
     motifEligibility: {
       eyebrow: ["icon-led", "oversized-index", "none"],
-      hero: ["full-bleed", "collage", "asymmetric"],
+      hero: ["full-bleed", "collage", "asymmetric", "split-diagonal"],
       sectionRhythm: ["escalating-density", "punctuated-by-fullbleed"],
-      featureLayout: ["bento", "grid-collage", "cards"],
-      divider: ["color-block", "overlap", "shape"],
+      featureLayout: ["bento", "grid-collage", "cards", "carousel"],
+      divider: ["color-block", "overlap", "shape", "gradient-fade"],
     },
   },
 ];
 
-module.exports = { AXES, AXIS_RUBRIC, MOTIFS, MOTIF_GLOSS, LENSES };
+module.exports = { AXES, AXIS_RUBRIC, MOTIFS, MOTIF_GLOSS, MOTIF_AFFINITY, LENSES };

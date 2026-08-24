@@ -7,7 +7,7 @@
 //
 // House style: typographic apostrophes, no em-dashes.
 
-const { AXES, AXIS_RUBRIC, MOTIFS, MOTIF_GLOSS, LENSES } = require("./lenses.cjs");
+const { AXES, AXIS_RUBRIC, MOTIFS, MOTIF_GLOSS, MOTIF_AFFINITY, LENSES } = require("./lenses.cjs");
 
 const AXIS_NAMES = Object.keys(AXES);   // convention, energy, structure, era
 const MOTIF_SLOTS = Object.keys(MOTIFS); // eyebrow, hero, sectionRhythm, featureLayout, divider
@@ -28,6 +28,8 @@ const TUNING = {
   axisSharpness: 2.6,  // >1 sharpens the pull toward axis-matching lenses
   fitWeight: 1.6,      // weight added per fitTag matched to the brief's tags
   lensFloor: 0.03,     // minimum lens weight, so no lens ever fully starves
+  motifSharpness: 1.8, // >1 sharpens the pull toward axis-matching motifs within a lens's eligible set
+  motifFloor: 0.18,    // minimum motif weight, so a less-matching but eligible+coherent motif still appears
   nameBoost: 14,       // weight multiplier when a distinctive style/movement is NAMED in the brief
   toneNudge: 3.6,      // how hard a mood word in the DESCRIPTION pushes its axis stop
   toneCopyNudge: 1.3,  // the copy-voice `tone` only pulls the VISUAL axes marginally (it is
@@ -262,14 +264,35 @@ function pickLens(rng, axes, tags) {
   return LENSES[weightedIndex(rng, weights)];
 }
 
-function pickMotifs(seed, lens) {
+// Weight of a motif option under the resolved axes: average closeness on the axes the
+// option's affinity expresses (partial — unlisted axes don't count), sharpened, with a
+// floor so an eligible-but-less-matching motif still appears sometimes (variety within
+// coherence). No affinity for the option → neutral weight.
+function motifWeight(axes, slot, option) {
+  const aff = MOTIF_AFFINITY[slot] && MOTIF_AFFINITY[slot][option];
+  if (!aff) return 1;
+  let sum = 0, n = 0;
+  for (const axis in aff) {
+    const stops = AXES[axis];
+    if (!stops) continue;
+    const d = Math.abs(stopIndex(axis, axes[axis]) - stopIndex(axis, aff[axis]));
+    sum += 1 - d / (stops.length - 1);
+    n++;
+  }
+  if (!n) return 1;
+  return TUNING.motifFloor + Math.pow(sum / n, TUNING.motifSharpness);
+}
+
+// Lever 2: draw each motif slot from the lens's eligible set, WEIGHTED by the resolved axes
+// (was uniform), so the motif coheres with the design's character rather than a coin-flip.
+// Deterministic in `seed`; same seed + axes reproduces. `axes` drives the weighting.
+function pickMotifs(seed, lens, axes) {
   const motifs = {};
   MOTIF_SLOTS.forEach((slot, i) => {
     const eligible = (lens.motifEligibility && lens.motifEligibility[slot]) || MOTIFS[slot];
     const rng = streamFor(seed, "motif", i + 1);
-    // Uniform within the lens's eligible set (T2 may add per-slot axis weighting). This
-    // alone demotes an overused motif to 1-in-N wherever a lens makes it eligible.
-    motifs[slot] = eligible[Math.floor(rng() * eligible.length)];
+    const weights = eligible.map((opt) => motifWeight(axes, slot, opt));
+    motifs[slot] = eligible[weightedIndex(rng, weights)];
   });
   return motifs;
 }
@@ -288,13 +311,20 @@ function sampleDirection(inputs = {}) {
   // eligibility, axes = its affinity), bypassing the weighted lens draw. seed + lens reproduces.
   const picked = inputs.lens ? LENSES.find((l) => l.id === inputs.lens) : null;
   if (picked) {
-    return { seed, axes: { ...picked.axisAffinity }, lens: picked.id, motifs: pickMotifs(seed, picked), source: "picked" };
+    // Motifs now weight by axes, so honor any axes carried on the input (the reroll re-derives
+    // with the stored seed + lens + axes) and fall back to the lens's own affinity otherwise,
+    // so a picked direction reproduces the same motifs it originally sampled.
+    const axes = { ...picked.axisAffinity };
+    if (inputs.axes && typeof inputs.axes === "object") {
+      for (const name of AXIS_NAMES) if (AXES[name].includes(inputs.axes[name])) axes[name] = inputs.axes[name];
+    }
+    return { seed, axes, lens: picked.id, motifs: pickMotifs(seed, picked, axes), source: "picked" };
   }
   const tags = deriveTags(inputs);
   const pinned = inputs.axes && typeof inputs.axes === "object" ? inputs.axes : null;
   const { axes, pinnedCount } = resolveAxes(streamFor(seed, "axis"), pinned, moodAxisNudges(inputs));
   const lens = pickLens(streamFor(seed, "lens"), axes, tags);
-  const motifs = pickMotifs(seed, lens);
+  const motifs = pickMotifs(seed, lens, axes);
   const source = pinnedCount > 0 ? "knobs" : "auto";
   return { seed, axes, lens: lens.id, motifs, source };
 }

@@ -112,6 +112,22 @@ treatment appears ~1-in-6 instead of always.
 Coherence rule: motifs are only ever drawn from the lens's eligible set, so a sample is never a
 Frankenstein of incompatible tropes.
 
+**BUILT 2026-08-24 (server-side deck, license-gated).** The slots, per-lens `motifEligibility`,
+and prompt rendering shipped with the deck; this pass added the two remaining pieces:
+- **Axis-weighted sampling.** `pickMotifs` no longer draws uniformly. Each option carries a
+  partial `MOTIF_AFFINITY` (only the axis stops it expresses); the sampler weights the lens's
+  eligible options by closeness to the resolved axes (`TUNING.motifSharpness`/`motifFloor`), so
+  within one lens an ordered/calm design and a loose/maximal design get different, coherent
+  motifs. Still deterministic in `seed`; `seed + axes` reproduces (the reroll's picked branch now
+  honors the stored axes). Verified: opposite axis extremes shift the motif distribution as
+  intended, 200/200 seeds reproduce.
+- **Expanded decks.** +2 curated options per slot (eyebrow: tab-chip, vertical-label; hero:
+  boxed-frame, split-diagonal; sectionRhythm: ribbon-bands, sparse; featureLayout: table,
+  carousel; divider: gradient-fade, angled-cut), each with gloss + affinity and wired into 3–4
+  coherent lenses.
+
+Anti-repetition memory weighting (lever 3, §9) multiplies into these same motif weights when built.
+
 ## 6. Negative constraints (lever 6, thin backstop)
 
 A small always-on anti-cliché note in the prompt: the known-overused tropes (numbered eyebrows,
