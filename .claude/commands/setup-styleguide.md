@@ -128,7 +128,13 @@ line before the parenthetical — a real `\n\n` in the string):
 > (You will have the opportunity to create multiple palettes, this is for the
 > initial design variation)
 
-Three options, **in this order** (first = default):
+**If `.thinkany/references/figma.json` exists with `hasVariables: true`** (the designer
+imported a Figma frame via `/figma-ingest`), add a **fourth option FIRST and make it the
+default** — it is the highest-fidelity path (exact values, not guesses):
+- **From your imported Figma file (recommended)** — reuse the exact colors + type your
+  Figma variables carry. See **Method D**.
+
+Then the standard options, **in this order** (first = default when there is no Figma import):
 - **From a website** — paste a URL; you'll read its palette (and fonts) straight
   from the site's CSS, no browser needed.
 - **Enter all colors manually** — you'll prompt for each color one at a time.
@@ -195,7 +201,32 @@ swatch preview** (see *Swatch preview* below) so the designer sees the actual
 colors, then present the derived palette (name + hex + role) via `AskUserQuestion`
 to confirm/tweak before writing.
 
-**Swatch preview (Artifact) — proposed palettes (Methods B & C only).**
+**Method D — From an imported Figma file (pre-fill, highest fidelity).**
+Available only when `.thinkany/references/figma.json` exists (written by `/figma-ingest`, the
+"Start from Figma" path). It carries the frame's EXACT variables, so you pre-fill rather than guess:
+
+1. **Read** `.thinkany/references/figma.json`. Use `tokens.colors` (hex values, often named like
+   "Primary/500", "Neutral/900", "Surface"), `tokens.type` + `fonts`, and `tokens.spacing` /
+   `tokens.radii`. If `hasVariables` is false, this method is unavailable — fall back to B or C.
+2. **Map colors → the seven roles.** Figma names are hints, not slugs: a "Primary"/brand color →
+   `--ta-primary`; a bright secondary → `--ta-accent`; the lightest background → `--ta-surface`; the
+   darkest text/neutral → `--ta-ink`; a mid neutral for paragraphs → `--ta-body`; a lighter grey →
+   `--ta-muted`; a hairline grey → `--ta-border`. Keep the designer's Figma name in the swatch `name`.
+   If Figma carries more colors than the seven roles, add the extras as a separate group.
+3. **AA-safe the pairing (the important part).** Before proposing, check contrast of the text roles
+   against the surface: `--ta-body` and `--ta-ink` on `--ta-surface` must meet WCAG AA (>= 4.5:1 for
+   body text, >= 3:1 for large headings), and `--ta-primary` used as a button/link on the surface
+   too. Compute the ratio from relative luminance. If a pair fails, nudge the failing role (darken the
+   ink/body, or pick the nearest darker Figma neutral) until it passes, and **note what you adjusted**.
+   A ground-truth palette that fails AA is still wrong to ship.
+4. **Seed type + scales.** Point `--ta-font-*` at the Figma `fonts` (Fonts step 1b), and if
+   `tokens.spacing` / `tokens.radii` / a type scale are present, set the matching `spacing` / `radii`
+   / `typeScale` arrays in `brand.ts`. Skip any the file does not carry (keep the template default).
+5. **Preview + confirm.** Publish the swatch preview (below) with the mapped palette, tell the
+   designer it came straight from their Figma variables (and flag any AA adjustment), and confirm /
+   tweak via `AskUserQuestion` before writing. **Never write without confirmation.**
+
+**Swatch preview (Artifact) — proposed palettes (Methods B, C & D).**
 `AskUserQuestion` options are text-only (no color chips), so for a *proposed*
 palette, show the real colors as an **Artifact** first — it renders inline in
 Claude Desktop, before anything is written to disk. (Method A / manual entry skips
@@ -249,6 +280,9 @@ nothing to click. (If you ever need to re-flag/clear it by hand, edit that field
 `src/variations/{id}/variation.json`.)
 
 ### 1b. Fonts
+
+**If `.thinkany/references/figma.json` carries `fonts`** (Method D), use those exact families for the
+`--ta-font-*` roles — the designer already chose them in Figma. Confirm/tweak, then wire them as below.
 
 In the scope's `styles/` folder: declare/import the families in `fonts.css`, then
 point the `--ta-font-*` tokens in `tokens.css` at them. The type specimens render
