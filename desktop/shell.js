@@ -5482,12 +5482,24 @@ function renderStartChoices() {
   // nothing has been said. Self-guards so callers can fire it freely.
   if (conversationStarted || (design && design.active)) return;
 
-  // A fresh project starts with the fork in the big pane and the chat slid shut;
-  // Client Setup / Get-Designing decide when it opens again.
+  // A fresh project starts with the chat slid shut.
   setChatCollapsed(true);
 
-  // The start fork lives in the BIG PANE now (feedback #1), as two side-by-side
-  // choice cards — not a chat card. The chat rail stays for the conversation.
+  // Figma-licensed → the two-card fork (Start from Figma + Get Designing). Unlicensed →
+  // SKIP the fork entirely and drop straight into Get Designing (least friction, one path).
+  // See electron/docs/onboarding-figma-reframe-spec.md.
+  Promise.resolve(window.desktop.getLicenseStatus())
+    .then((fig) => {
+      if (conversationStarted || (design && design.active)) return; // re-check after the await
+      if (fig && fig.hasLicense) renderStartFork();
+      else enterDesignBriefMode();
+    })
+    .catch(() => enterDesignBriefMode());
+}
+
+// The licensed two-card fork in the big pane: Start from Figma (left, where the setup card
+// used to sit) + Get Designing (right). The chat rail stays for the conversation.
+function renderStartFork() {
   enterIntakeMode();
   intakePhase = "idle";
   updateBackButton();
@@ -5497,25 +5509,20 @@ function renderStartChoices() {
   el("intake-brief").innerHTML = "";
   intakeStack.innerHTML = "";
 
-  // Icons are static, trusted SVG (Lucide): a numbered list for step-by-step
-  // setup, a pencil-drawing-a-line for the free-form "just design it" path.
-  const ICON_LIST_ORDERED =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><line x1="10" x2="21" y1="6" y2="6"/><line x1="10" x2="21" y1="12" y2="12"/><line x1="10" x2="21" y1="18" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>';
+  // The Figma brand mark (same SVG as the sidebar rail), and a pencil-drawing-a-line
+  // (Lucide) for the free-form "just design it" path.
+  const ICON_FIGMA =
+    '<svg viewBox="0 0 38 57" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" fill="#1abcfe"/><path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z" fill="#0acf83"/><path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z" fill="#ff7262"/><path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z" fill="#f24e1e"/><path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z" fill="#a259ff"/></svg>';
   const ICON_PENCIL_LINE =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 
   const opts = [
     {
-      label: COPY.intake.start.clientSetupLabel,
-      desc: COPY.intake.start.clientSetupDesc,
-      icon: ICON_LIST_ORDERED,
-      // Chat-driven: slide the chat open, point the big pane at it, then kick off.
-      onClick: () => {
-        resetIntake();                              // leave the fork
-        setChatCollapsed(false);                    // slide the chat pane open
-        showPlaceholder(COPY.preview.clientSetupStart); // big-pane "get started in the chat" message
-        sendText("/setup-project");
-      },
+      label: COPY.intake.start.figmaStartLabel,
+      desc: COPY.intake.start.figmaStartDesc,
+      icon: ICON_FIGMA,
+      iconClass: "istart-icon-figma",
+      onClick: enterFigmaStartMode,
     },
     {
       label: COPY.intake.start.getDesigningLabel,
@@ -5531,7 +5538,7 @@ function renderStartChoices() {
     btn.type = "button";
     btn.className = "istart-card";
     const icon = document.createElement("span");
-    icon.className = "istart-icon";
+    icon.className = "istart-icon" + (o.iconClass ? " " + o.iconClass : "");
     icon.innerHTML = o.icon;
     const lbl = document.createElement("div");
     lbl.className = "istart-label";
@@ -5551,6 +5558,70 @@ function renderStartChoices() {
   fadeSlideIn(intakeph.querySelector(".intake-head"), { dy: 50, duration: 780, delay: 60 });
   fadeSlideIn(row.children[0], { dx: -64, duration: 720, delay: 340 });
   fadeSlideIn(row.children[1], { dx: 64, duration: 720, delay: 470 });
+}
+
+// "Start from Figma" step 1: the frame-link screen. One input (the Figma frame URL), an
+// Import, and a skip. On Import we call the figma:importFrame seam; the real ingest is
+// figma-ingest (not built), so today it degrades to Get Designing rather than dead-ending.
+function isFigmaFrameUrl(u) {
+  return typeof u === "string" && /figma\.com\/(design|file|proto|board)\//i.test(u);
+}
+let pendingFigmaUrl = null; // kept across the handoff so figma-ingest can pick it up later
+
+function enterFigmaStartMode() {
+  dismissWelcome();
+  intakePhase = "figma";
+  currentIntakeId = null;
+  enterIntakeMode();
+  intakeph.classList.add("start");
+  intakeph.classList.remove("flow", "hasbrief");
+  setIntakeHead(COPY.intake.figma.headTitle, COPY.intake.figma.headSubtitle);
+  el("intake-brief").innerHTML = "";
+  intakeStack.innerHTML = "";
+  renderBriefSummary(null);
+
+  const wrap = document.createElement("div");
+  wrap.className = "ifigma-wrap";
+  const input = document.createElement("input");
+  input.type = "url";
+  input.className = "ifigma-url";
+  input.placeholder = COPY.intake.figma.urlPlaceholder;
+  input.spellcheck = false;
+  const err = document.createElement("div");
+  err.className = "ifigma-err";
+  err.hidden = true;
+  const importBtn = document.createElement("button");
+  importBtn.type = "button";
+  importBtn.className = "ifigma-import";
+  importBtn.textContent = COPY.intake.figma.importLabel;
+  const skip = document.createElement("button");
+  skip.type = "button";
+  skip.className = "ifigma-skip";
+  skip.textContent = COPY.intake.figma.skip;
+
+  const submit = async () => {
+    const url = input.value.trim();
+    if (!isFigmaFrameUrl(url)) { err.textContent = COPY.intake.figma.invalidUrl; err.hidden = false; input.focus(); return; }
+    err.hidden = true;
+    importBtn.disabled = true;
+    let res = null;
+    try { res = await window.desktop.figmaImportFrame({ url }); } catch { res = null; }
+    // Seam: figma-ingest fills res.ok with { tokens, digest, structure } → seed brand, route
+    // by structure. Until then, keep the URL and continue so the flow never dead-ends.
+    pendingFigmaUrl = url;
+    if (!res || !res.ok) addMsg("system", COPY.intake.figma.pending);
+    enterDesignBriefMode();
+  };
+  importBtn.addEventListener("click", submit);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+  skip.addEventListener("click", enterDesignBriefMode);
+
+  wrap.append(input, err, importBtn, skip);
+  intakeStack.appendChild(wrap);
+  updateBackButton();
+  setTimeout(() => input.focus(), 0);
+  fadeSlideIn(intakeph.querySelector(".intake-head"), { dy: 40, duration: 700, delay: 40 });
+  fadeSlideIn(wrap, { dy: 30, duration: 640, delay: 260 });
 }
 
 // "Get Designing" — drive the intake in the PANE (T5), not a chat brief. Clicking
@@ -5666,13 +5737,13 @@ function goBack() {
     if (currentIntakeId != null) { try { window.desktop.cancelIntake(currentIntakeId); } catch {} currentIntakeId = null; }
     clearIntakePending();
     renderDeliverableChoice();
-  } else if (intakePhase === "deliverable") {
+  } else if (intakePhase === "deliverable" || intakePhase === "figma") {
     resetIntake();
     renderStartChoices();
   }
 }
 function updateBackButton() {
-  intakeBack.hidden = !(intakePhase === "deliverable" || intakePhase === "gathering");
+  intakeBack.hidden = !(intakePhase === "deliverable" || intakePhase === "gathering" || intakePhase === "figma");
 }
 intakeBack.addEventListener("click", goBack);
 

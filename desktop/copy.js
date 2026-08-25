@@ -656,7 +656,9 @@ window.COPY = {
       logoPlaceholder: "Drop or choose a logo image (PNG, SVG, JPG)",
       reference: (kind) => `Is there a ${kind} you love? Share it and what draws you to it.`,
     },
-    // The two-panel start fork (Client Setup vs Get Designing).
+    // The start fork. Shown only when Figma is licensed (Start from Figma + Get Designing);
+    // unlicensed users skip it and go straight to Get Designing. (clientSetup* kept for now:
+    // the "Client Setup" card is retired pending reconsideration, see onboarding-figma-reframe-spec.)
     start: {
       headTitle: "Let’s make something",
       headSubtitle: "Pick how you’d like to begin.",
@@ -664,6 +666,18 @@ window.COPY = {
       clientSetupDesc: "Brand a new project step by step (logo, fonts, colors), then design.",
       getDesigningLabel: "Let’s Get Designing",
       getDesigningDesc: "Jump straight in: tell me a little about the site and I’ll use your answers to start designing.",
+      figmaStartLabel: "Start from Figma",
+      figmaStartDesc: "Import a Figma frame to seed the brand, and design from it if it’s a page.",
+    },
+    // The "Start from Figma" frame-link screen (shown when that card is picked).
+    figma: {
+      headTitle: "Start from Figma",
+      headSubtitle: "Paste a link to the Figma frame you want to build from.",
+      urlPlaceholder: "https://figma.com/design/…?node-id=…",
+      importLabel: "Import",
+      skip: "Skip, just start designing",
+      invalidUrl: "That doesn’t look like a Figma frame link.",
+      pending: "Figma import is coming next, continuing to design for now.",
     },
     // "What are you designing for?" (Website vs App).
     deliverable: {

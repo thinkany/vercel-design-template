@@ -75,6 +75,9 @@ contextBridge.exposeInMainWorld("desktop", {
 
   // ---- Derive license (Figma export) ----
   getLicenseStatus: () => ipcRenderer.invoke("license:status"),
+  // Onboarding "Start from Figma": import a frame → { ok, tokens?, digest?, structure? }.
+  // The real ingest is figma-ingest (not built yet); this is the seam. Returns ok:false today.
+  figmaImportFrame: (args) => ipcRenderer.invoke("figma:importFrame", args),
   saveLicense: (key) => ipcRenderer.invoke("license:save", { key }),
   clearLicense: () => ipcRenderer.invoke("license:clear"),
   getDesignLicenseStatus: () => ipcRenderer.invoke("license:designStatus"),

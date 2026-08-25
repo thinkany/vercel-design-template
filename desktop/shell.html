@@ -1029,6 +1029,30 @@
       .istart-card.istart-center { text-align: center; }
       .istart-center .istart-icon { display: flex; align-items: flex-end; justify-content: center; width: auto; height: 26px; margin: 0 0 12px; }
       .istart-center .istart-icon svg { width: auto; height: 26px; }
+      /* The Figma brand mark is taller than wide — keep its aspect, don't square it. */
+      .istart-icon-figma { width: auto; }
+      .istart-icon-figma svg { width: auto; height: 24px; }
+
+      /* "Start from Figma" frame-link screen (enterFigmaStartMode). */
+      .ifigma-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; width: min(520px, 92%); margin: 0 auto; }
+      .ifigma-url {
+        width: 100%; padding: 13px 15px; border-radius: 12px; border: 1px solid #d9d9e0;
+        background: #fff; color: #1a1a1a; font-size: 14px; outline: none;
+        transition: border-color .12s, box-shadow .12s;
+      }
+      .ifigma-url::placeholder { color: #aaa; }
+      .ifigma-url:focus { border-color: #111; box-shadow: 0 0 0 3px rgba(17,17,17,.06); }
+      .ifigma-err { align-self: flex-start; color: #d8564f; font-size: 12.5px; }
+      .ifigma-import {
+        padding: 11px 30px; border-radius: 999px; border: none; cursor: pointer;
+        background: #111; color: #fff; font-size: 14px; font-weight: 600;
+        transition: opacity .12s, transform .06s;
+      }
+      .ifigma-import:hover { opacity: .9; }
+      .ifigma-import:active { transform: translateY(1px); }
+      .ifigma-import:disabled { opacity: .55; cursor: default; }
+      .ifigma-skip { margin-top: 2px; background: none; border: none; color: #999; font-size: 12.5px; cursor: pointer; }
+      .ifigma-skip:hover { color: #555; text-decoration: underline; }
 
       /* Read-only answer, shown once a card is submitted (feedback #2). */
       .icard-answer { font-size: 13.5px; line-height: 1.55; color: #1a1a1a; white-space: pre-wrap; }
