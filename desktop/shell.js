@@ -5594,29 +5594,38 @@ function enterFigmaStartMode() {
   importBtn.type = "button";
   importBtn.className = "ifigma-import";
   importBtn.textContent = COPY.intake.figma.importLabel;
+  const useSelection = document.createElement("button");
+  useSelection.type = "button";
+  useSelection.className = "ifigma-selection";
+  useSelection.textContent = COPY.intake.figma.useSelection;
   const skip = document.createElement("button");
   skip.type = "button";
   skip.className = "ifigma-skip";
   skip.textContent = COPY.intake.figma.skip;
 
+  // Agent-driven, like the old Client Setup kicked /setup-project: hand off to the /figma-ingest
+  // command, which pulls the target via the Figma MCP and writes the standard reference digest
+  // (+ figma.json tokens), then continues into the design brief. `arg` is a frame URL or the word
+  // "selection" (P3: import whatever is currently selected in Figma). Open the chat so its progress
+  // + the "design the imported frame" handoff play out there.
+  const kick = (arg) => {
+    resetIntake();
+    setChatCollapsed(false);
+    showPlaceholder(COPY.preview.figmaIngestStart);
+    sendText("/figma-ingest " + arg);
+  };
   const submit = () => {
     const url = input.value.trim();
     if (!isFigmaFrameUrl(url)) { err.textContent = COPY.intake.figma.invalidUrl; err.hidden = false; input.focus(); return; }
     err.hidden = true;
-    // Agent-driven, like the old Client Setup kicked /setup-project: hand off to the
-    // /figma-ingest command, which pulls the frame via the Figma MCP and writes the standard
-    // reference digest (+ figma.json tokens), then continues into the design brief. Open the
-    // chat so its progress + the "design the imported frame" handoff play out there.
-    resetIntake();
-    setChatCollapsed(false);
-    showPlaceholder(COPY.preview.figmaIngestStart);
-    sendText("/figma-ingest " + url);
+    kick(url);
   };
   importBtn.addEventListener("click", submit);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+  useSelection.addEventListener("click", () => kick("selection"));
   skip.addEventListener("click", enterDesignBriefMode);
 
-  wrap.append(input, err, importBtn, skip);
+  wrap.append(input, err, importBtn, useSelection, skip);
   intakeStack.appendChild(wrap);
   updateBackButton();
   setTimeout(() => input.focus(), 0);

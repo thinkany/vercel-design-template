@@ -680,6 +680,7 @@ window.COPY = {
       headSubtitle: "Paste a link to the Figma frame you want to build from.",
       urlPlaceholder: "https://figma.com/design/…?node-id=…",
       importLabel: "Import",
+      useSelection: "Or import my current Figma selection",
       skip: "Skip, just start designing",
       invalidUrl: "That doesn’t look like a Figma frame link.",
     },
