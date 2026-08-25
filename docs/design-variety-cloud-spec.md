@@ -109,9 +109,13 @@ the returned `direction` exactly as today. No schema change.
 - **License validation now vs. at launch** — do real server validation as part of this move, or
   keep the presence stub and add validation with the broader licensing work? (Recommend: real
   validation here — it's the whole point of the endpoint being auth'd.)
-- **Anti-repetition memory** (per-designer, cross-session, cross-project) — a spec'd-but-unbuilt
-  design-variety piece; it's naturally **server-side global state** once the deck is there, so fold
-  its storage into this endpoint's design rather than building it client-side first.
+- **Anti-repetition memory** (per-designer, cross-session, cross-project) — **BUILT** as server-side
+  global state on this endpoint: `direction/memory.cjs` (Vercel KV / Upstash over REST, per-instance
+  fallback) stores each committed design's lens+motifs per `designer` id; `direction.cjs`
+  `memoryPenalties` decays + down-weights them into the lens/motif draw (never bans); a new
+  `{op:"record"}` writes and `{op:"sample"}` reads. Identity is a client-supplied per-install
+  `designer` id (`designerId()` under the app's pinned userData), NOT the shared license — the
+  license can't tell designers apart. Degrades to "no memory" on any KV outage. See DEPLOY.md §2b.
 - **Dev fallback** — ship the `DIRECTION_LOCAL` local-deck path (recommended, keeps offline dev
   working) or force the cloud always.
 

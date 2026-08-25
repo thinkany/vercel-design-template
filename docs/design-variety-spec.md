@@ -209,8 +209,13 @@ timestamp.
   auto-set + shown before the panel exists.
 - **Phase 2 — the knobs.** The client-rendered semantic-slider panel + reroll, in intake and
   post-build. Delivers Rob's "turn the knobs" ask.
-- **Phase 3 — the memory.** Global per-designer store under `userData` + decay weighting, so variety
-  compounds across projects.
+- **Phase 3 — the memory. BUILT 2026-08-25 (server-side, per the cloud move).** Global per-designer
+  store, but on the cloud endpoint (`direction/memory.cjs`, Vercel KV / Upstash + per-instance
+  fallback), not under `userData` — the deck already lives server-side, so its natural home is there.
+  Each committed design's lens+motifs are `record`ed per `designer` id (a per-install id under the
+  app's pinned userData, sent by the client); `memoryPenalties` in `direction.cjs` decays them
+  (21-day half-life) and down-weights the lens/motif draw, never banning. Degrades to no-memory on
+  any KV outage. See design-variety-cloud-spec.md + derive/DEPLOY.md §2b.
 - **Phase 4 — divergence (gated future, lever 4).** Generate N Directions, designer picks (or a
   distinctiveness judge picks the least generic). Real variety, but N× tokens, so opt-in/premium only.
 - **Cross-cutting.** References precedence (§7) folds into Phase 1/2; the measurement harness

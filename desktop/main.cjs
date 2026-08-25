@@ -54,7 +54,7 @@ const { createEmptyBrief, applyAnswers } = require("./intake/brief.cjs");
 // api/direction). This client POSTs signals and gets back { direction (lensLabel stamped),
 // block (server-rendered) } or the knob-panel meta — async, degrades safely. See
 // docs/design-variety-cloud-spec.md.
-const { sampleDirection, directionMeta, resetMetaCache } = require("./direction-client.cjs");
+const { sampleDirection, directionMeta, recordDirection, resetMetaCache } = require("./direction-client.cjs");
 const references = require("./intake/references.cjs");
 const ingestRefs = require("./intake/ingest.cjs");
 
@@ -1038,6 +1038,22 @@ function effectiveVoice(dir) {
 function researchLicensed() {
   return !!(process.env.DESIGN_LICENSE_KEY && process.env.DESIGN_LICENSE_KEY.trim());
 }
+// A stable, anonymous per-install id — the "designer" identity the cloud design-variety
+// endpoint keys anti-repetition memory on (lever 3, §9), so variety compounds across ALL of
+// this designer's projects. Persisted under the PINNED userData (survives app rename/upgrade,
+// per the userData-pinning gotcha) so the memory isn't stranded. Not a secret, not PII — a
+// random id. (Forward-compatible with the licensing-activation installation id.)
+let _designerId = null;
+function designerId() {
+  if (_designerId) return _designerId;
+  const file = path.join(app.getPath("userData"), "installation-id.json");
+  try { _designerId = JSON.parse(fs.readFileSync(file, "utf8")).id; } catch {}
+  if (!_designerId) {
+    _designerId = crypto.randomUUID();
+    try { fs.writeFileSync(file, JSON.stringify({ id: _designerId, createdAt: new Date().toISOString() }, null, 2)); } catch {}
+  }
+  return _designerId;
+}
 // Global settings: userData/design-research.json = { enabled, broad }.
 // `broad` = the "look beyond competitors" (multi-axis: function/aesthetic/region) mode.
 function researchGlobalFile() { return path.join(app.getPath("userData"), "design-research.json"); }
@@ -1352,8 +1368,14 @@ ipcMain.handle("intake:designPrompt", async () => {
       what: intakeBrief.what,
       tone: intakeBrief.tone,
       projectType: intakeBrief.projectType,
+      designer: designerId(), // reads this designer's anti-repetition memory (lever 3)
     });
     if (direction) { intakeBrief.direction = direction; intakeBrief.directionBlock = block; }
+  }
+  // Commit point: this Direction is now going into a real build, so record it onto the
+  // designer's anti-repetition memory (fire-and-forget; a failed write never blocks the build).
+  if (intakeBrief && intakeBrief.direction && varietyLicensed()) {
+    recordDirection({ designer: designerId(), direction: intakeBrief.direction });
   }
   // Persist the sampled Direction where the build can pick it up (T4): the /design-brief skill
   // reads /tmp/ta-direction.json and folds it into variation.json (its reproducible DNA + the
@@ -1385,6 +1407,7 @@ ipcMain.handle("intake:sampleDirection", async (event, { axes, lens } = {}) => {
     projectType: intakeBrief.projectType,
     axes: axes && typeof axes === "object" ? axes : undefined,
     lens: lens || undefined,
+    designer: designerId(), // a reroll also avoids the designer's recent lenses/motifs
   });
   intakeBrief.direction = direction;
   intakeBrief.directionBlock = block;
@@ -1461,7 +1484,7 @@ ipcMain.handle("variation:read", (_event, { id } = {}) => {
 ipcMain.handle("direction:sampleFor", async (_event, { signals, axes, lens } = {}) => {
   if (!varietyLicensed()) return { direction: null };
   const s = signals || {};
-  const { direction, block } = await sampleDirection({ what: s.what, tone: s.tone, projectType: s.projectType, axes: axes && typeof axes === "object" ? axes : undefined, lens: lens || undefined });
+  const { direction, block } = await sampleDirection({ what: s.what, tone: s.tone, projectType: s.projectType, axes: axes && typeof axes === "object" ? axes : undefined, lens: lens || undefined, designer: designerId() });
   return { direction, block };
 });
 
@@ -1507,6 +1530,9 @@ ipcMain.handle("variation:createRerollFork", async (_event, { sourceId, directio
     fs.writeFileSync(path.join(dstDir, "variation.json"), JSON.stringify(meta, null, 2));
     if (dir) fs.writeFileSync("/tmp/ta-direction.json", JSON.stringify(dir, null, 2));
   } catch (e) { return { error: String(e && e.message || e) }; }
+  // Commit point: the reroll fork is a real design too — record its Direction so it also
+  // counts toward the designer's anti-repetition memory (fire-and-forget).
+  if (dir) recordDirection({ designer: designerId(), direction: dir });
   return { targetId, brief: meta.brief, block };
 });
 

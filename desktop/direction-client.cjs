@@ -64,8 +64,19 @@ async function sampleDirection(inputs = {}) {
   catch { return { direction: null, block: "" }; }
 }
 
+// Record a COMMITTED design onto the designer's anti-repetition memory (lever 3, §9), so future
+// samples down-weight this lens + these motifs. `entry` = { designer, direction }. Fire-and-
+// forget: a failed record only weakens future variety slightly, so it NEVER blocks a build (and
+// the DIRECTION_LOCAL dev deck has no server memory, so it's a no-op there).
+async function recordDirection(entry = {}) {
+  if (process.env.DIRECTION_LOCAL) return { ok: false };
+  if (!entry.designer || !entry.direction || !entry.direction.lens) return { ok: false };
+  try { return await post({ op: "record", designer: entry.designer, direction: entry.direction }); }
+  catch { return { ok: false }; }
+}
+
 // Drop the cached meta so the next directionMeta() re-fetches — call this the moment
 // the design license changes, so the licensed/unlicensed state can't read stale.
 function resetMetaCache() { _metaCache = null; }
 
-module.exports = { directionMeta, sampleDirection, resetMetaCache };
+module.exports = { directionMeta, sampleDirection, recordDirection, resetMetaCache };
