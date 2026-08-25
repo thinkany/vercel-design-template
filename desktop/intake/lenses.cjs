@@ -534,7 +534,7 @@ const LENSES = [
     label: "Bauhaus",
     description: "Form follows function. Primary geometry, the modular grid, no ornament for its own sake.",
     axisAffinity: { convention: "bold", energy: "measured", structure: "ordered", era: "timeless" },
-    fitTags: ["bauhaus", "modernist", "art", "design-studio", "architecture", "editorial", "b2b"],
+    fitTags: ["bauhaus", "modernist", "art", "design-studio", "architecture"],
     autoWeight: 0.24,
     directives: {
       grid: "Strict modular grid; primary geometric forms (circle, triangle, square) used as structural, not decorative, elements.",
@@ -659,7 +659,7 @@ const LENSES = [
     label: "De Stijl",
     description: "Pure abstraction. Primary-colored rectangles divided by heavy black lines, Mondrian's grid.",
     axisAffinity: { convention: "experimental", energy: "measured", structure: "ordered", era: "timeless" },
-    fitTags: ["de-stijl", "mondrian", "art", "design-studio", "architecture", "editorial", "b2b"],
+    fitTags: ["de-stijl", "mondrian", "art", "design-studio", "architecture"],
     autoWeight: 0.2,
     directives: {
       grid: "Rectangular blocks divided by heavy black lines; the grid IS the composition.",

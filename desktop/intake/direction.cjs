@@ -28,6 +28,11 @@ const TUNING = {
   axisSharpness: 2.6,  // >1 sharpens the pull toward axis-matching lenses
   fitWeight: 1.6,      // weight added per fitTag matched to the brief's tags
   lensFloor: 0.03,     // minimum lens weight, so no lens ever fully starves
+  fitRestore: 2.5,     // a generic fitTag match only PARTIALLY restores a specialty lens's autoWeight
+                       // (naming it, or picking it, is the full-strength path) — so a movement doesn't
+                       // dominate a brief just because it shares a broad tag like "b2b"
+  pinnedFitDamp: 0.25, // when the DESIGNER pins axes, brief-fit recedes toward this (their steer wins):
+                       // 0 pins → full fit; 4 pins → fit at 25%, so an explicit direction overrides "fit"
   motifSharpness: 1.8, // >1 sharpens the pull toward axis-matching motifs within a lens's eligible set
   motifFloor: 0.18,    // minimum motif weight, so a less-matching but eligible+coherent motif still appears
   nameBoost: 14,       // weight multiplier when a distinctive style/movement is NAMED in the brief
@@ -250,15 +255,21 @@ function fitMatches(tags, lens) {
   return m;
 }
 
-function pickLens(rng, axes, tags) {
+// fitScale (0..1) attenuates the brief-fit pull: 1 in pure auto, lower as the designer
+// pins axes, so their explicit steer overrides "what this vertical usually looks like".
+function pickLens(rng, axes, tags, fitScale = 1) {
   const named = namedLens(tags); // a distinctive style named in the brief
   const weights = LENSES.map((l) => {
     const matched = fitMatches(tags, l);
-    const fit = 1 + matched * TUNING.fitWeight;
+    const fit = 1 + matched * TUNING.fitWeight * fitScale;
+    const baseAw = l.autoWeight != null ? l.autoWeight : 1;
+    const isNamed = named && l.id === named;
     // Specialty lenses (art movements, autoWeight < 1) stay a LIGHT presence in random
-    // auto-variety; a fit match (the movement named in the brief) restores full weight.
-    const aw = matched > 0 ? 1 : (l.autoWeight != null ? l.autoWeight : 1);
-    const boost = named && l.id === named ? TUNING.nameBoost : 1; // named style dominates
+    // auto-variety. NAMING one (or picking it) restores full weight; a generic vertical
+    // fitTag match only PARTIALLY restores it, so a movement doesn't take over a brief
+    // just for sharing a broad tag.
+    const aw = matched > 0 ? (isNamed ? 1 : Math.min(1, baseAw * TUNING.fitRestore)) : baseAw;
+    const boost = isNamed ? TUNING.nameBoost : 1; // named style dominates
     return TUNING.lensFloor + axisScore(axes, l) * fit * aw * boost;
   });
   return LENSES[weightedIndex(rng, weights)];
@@ -323,7 +334,9 @@ function sampleDirection(inputs = {}) {
   const tags = deriveTags(inputs);
   const pinned = inputs.axes && typeof inputs.axes === "object" ? inputs.axes : null;
   const { axes, pinnedCount } = resolveAxes(streamFor(seed, "axis"), pinned, moodAxisNudges(inputs));
-  const lens = pickLens(streamFor(seed, "lens"), axes, tags);
+  // The designer steering knobs is intent: the more axes they pin, the more fit yields to it.
+  const fitScale = 1 - (pinnedCount / AXIS_NAMES.length) * (1 - TUNING.pinnedFitDamp);
+  const lens = pickLens(streamFor(seed, "lens"), axes, tags, fitScale);
   const motifs = pickMotifs(seed, lens, axes);
   const source = pinnedCount > 0 ? "knobs" : "auto";
   return { seed, axes, lens: lens.id, motifs, source };
