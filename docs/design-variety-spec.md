@@ -117,9 +117,22 @@ treatment appears ~1-in-6 instead of always.
 | **sectionRhythm** | uniform · alternating · escalating-density · punctuated-by-fullbleed |
 | **featureLayout** | cards · rows · stagger · editorial-list · grid-collage |
 | **divider / transition** | none · rule · shape · color-block · overlap |
+| **surface** (texture / ornament) | none · grain · dot-grid · halftone · line-grid · noise · gradient-mesh · blobs · sunburst-rays · waves · terrazzo · confetti · geometric-shapes · paper-texture · … |
 
 Coherence rule: motifs are only ever drawn from the lens's eligible set, so a sample is never a
 Frankenstein of incompatible tropes.
+
+**Surface slot BUILT 2026-08-25 (the finest layer, step 1 of decorative-repetition control).** The
+`surface` slot models background texture + decorative ornament (dotted backgrounds, sunbursts, grain,
+blobs, terrazzo, …), 16 options with gloss + axis affinity and a coherent per-lens eligibility set on
+all 29 lenses. Because it is a motif slot, it rides the existing machinery for free: axis-weighted
+sampling (lever 2) and, crucially, the anti-repetition memory (lever 3) — so a recently-used texture
+is down-weighted the next design, per designer, across projects (this is what stops the same dotted
+background / sunburst recurring). The prompt now renders a `- Surface / background treatment: …` line;
+the lens's fixed ornament string was reframed as a `Palette and materials to draw from (not a
+checklist)`, and the anti-cliché backstop now names default dotted/sunburst decoration. **Step 2 (not
+built): the measurement loop** — `extract-layout.mjs` fingerprints the decoration that actually
+shipped and feeds the memory from real output, to catch textures the model invents that are in no deck.
 
 **BUILT 2026-08-24 (server-side deck, license-gated).** The slots, per-lens `motifEligibility`,
 and prompt rendering shipped with the deck; this pass added the two remaining pieces:

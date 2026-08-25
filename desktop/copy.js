@@ -631,7 +631,7 @@ window.COPY = {
       <p>To keep your work from drifting back into a rut, each finished design quietly remembers the <b>style</b> and <b>layout motifs</b> it used, across every project. The next design then makes those recent choices <b>less likely</b>, so your designs keep feeling fresh instead of repeating.</p>
 
       <h4>What it nudges</h4>
-      <p>It works one layer below the mood. The four sliders are always yours, they are never overridden. What rotates underneath is the <b>style</b> and the <b>compositional details</b> (the eyebrow treatment, hero shape, section rhythm, dividers).</p>
+      <p>It works one layer below the mood. The sliders are always yours, they are never overridden. What rotates underneath is the <b>style</b> and the <b>compositional details</b> (the eyebrow treatment, hero shape, section rhythm, dividers, and the background texture or ornament).</p>
 
       <h4>Example: avant-garde, several in a row</h4>
       <p>Leave the <b>Era</b> on avant-garde and build four designs. They all stay avant-garde, that is your steer. But the style and layout shift each time, one leans brutalist, the next more futurist, another maximal, so they read as a series, not four copies.</p>
