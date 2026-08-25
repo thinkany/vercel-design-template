@@ -638,6 +638,8 @@
       .adrec-modal-actions { display: flex; align-items: center; gap: 8px; margin-top: 18px; }
       .adrec-apply-btn { margin-left: auto; border: none; background: #111; color: #fff; border-radius: 8px; padding: 9px 18px; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity .12s; }
       .adrec-apply-btn:hover { opacity: .88; }
+      .adrec-apply-btn:disabled { background: #c9c9d0; color: #fff; cursor: not-allowed; }
+      .adrec-apply-btn:disabled:hover { opacity: 1; }
       .adrec-hold-btn { border: none; background: none; color: #666; border-radius: 8px; padding: 9px 12px; font: inherit; font-size: 13px; cursor: pointer; transition: color .12s; }
       .adrec-hold-btn:hover { color: #111; }
       .adrec-dismiss-btn { border: 1px solid #d8d8de; background: none; color: #444; border-radius: 8px; padding: 9px 16px; font: inherit; font-size: 13px; cursor: pointer; transition: border-color .12s, color .12s; }
@@ -759,6 +761,12 @@
       #preview-refresh:hover { background: #fdf3d0; }
       #preview-help-x { margin-left: auto; border: none; background: none; color: #a9962f; cursor: pointer; font-size: 13px; line-height: 1; padding: 2px 4px; }
       #preview-help-x:hover { color: #6b5a1e; }
+      /* No-Claude-key reminder: shown in the preview browser in read-only mode. */
+      #nokey-banner { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: #eef4ff; border-bottom: 1px solid #cddcff; font-size: 12px; line-height: 1.4; color: #274690; }
+      #nokey-banner[hidden] { display: none; }
+      #nokey-banner b { font-weight: 600; }
+      #nokey-banner-btn { margin-left: auto; border: 1px solid #3b5bdb; background: #3b5bdb; color: #fff; border-radius: 6px; padding: 4px 12px; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+      #nokey-banner-btn:hover { background: #2f4bc0; }
       #quicklinks { display: flex; gap: 4px; }
       .qlink { border: 1px solid #d8d8de; background: #fafafb; border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; color: #333; white-space: nowrap; }
       .qlink:hover { border-color: #111; color: #111; }
@@ -1291,6 +1299,10 @@
             <span data-copy-html="previewHelp.blankHtml"></span>
             <button id="preview-refresh" data-copy="previewHelp.refresh"></button>
             <button id="preview-help-x" data-copy-title="previewHelp.dismiss">✕</button>
+          </div>
+          <div id="nokey-banner" hidden>
+            <span data-copy-html="nokeyBanner.text"></span>
+            <button id="nokey-banner-btn" data-copy="nokeyBanner.button"></button>
           </div>
           <div id="views">
             <!-- Progress cover for the Home tab while it's still being designed

@@ -155,6 +155,12 @@ window.COPY = {
     send: "Send",
   },
 
+  // ── No-Claude-key reminder banner (read-only mode) ──────────────────────────
+  nokeyBanner: {
+    text: "<b>No Claude API key connected.</b> You can browse and deploy your projects; designing, chat, and Figma export need a key.",
+    button: "Add Claude key",
+  },
+
   // ── Point & Comment feedback toggle ─────────────────────────────────────────
   feedback: {
     label: "Point & Comment",

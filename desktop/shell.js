@@ -444,6 +444,10 @@ navreload.addEventListener("click", () => { if (activeTab) navigate(activeTab, a
 const previewHelp = el("preview-help");
 const previewRefreshBtn = el("preview-refresh");
 const previewHelpX = el("preview-help-x");
+// No-Claude-key reminder banner (read-only mode) — its button opens Keys & Licenses.
+const nokeyBanner = el("nokey-banner");
+const nokeyBannerBtn = el("nokey-banner-btn");
+if (nokeyBannerBtn) nokeyBannerBtn.addEventListener("click", () => toggleModal("licenses"));
 let previewHelpTimer = null;
 function showPreviewHelp() {
   if (!previewHelp || browser.hidden) return; // only while a preview is actually shown
@@ -847,11 +851,15 @@ function applyStaticCopy() {
   set("[data-copy-ph]", "copyPh", (e, v) => e.setAttribute("placeholder", v));
 }
 
+let currentStage = null;
 function showStage(stage) {
   applyStaticCopy();
+  currentStage = stage;
   const app = el("app");
   // Read-only workspace: a project is open but there's no key → no chat, no agent actions.
   const noKeyWorkspace = stage === "workspace" && !appHasKey;
+  // The no-key reminder banner rides the preview browser whenever we're read-only.
+  if (nokeyBanner) nokeyBanner.hidden = !noKeyWorkspace;
   app.classList.toggle("onboarding-key", stage === "key"); // rail muting during the key screen
   app.classList.toggle("no-key", noKeyWorkspace); // CSS hook to disable agent-driven affordances
   // Collapse the chat column (preview goes full-width) at the key screen and in read-only mode.
@@ -947,7 +955,10 @@ async function boot() {
 window.desktop.onViteReady((url) => {
   const prev = viteUrl;
   viteUrl = url;
-  if (chatmain.hidden) return;
+  // Only touch the preview once we're in the workspace (a project is open). This is true
+  // in read-only mode too (no key) — the preview must still open so projects are viewable;
+  // it's chatmain.hidden that used to (wrongly) block that. Skip on the key/project gates.
+  if (currentStage !== "workspace") return;
   if (tabs.length && prev) {
     tabs.forEach((t) => {
       const fresh = /https?:\/\/localhost:\d+/.test(t.url || "")
