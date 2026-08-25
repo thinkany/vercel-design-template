@@ -5602,20 +5602,16 @@ function enterFigmaStartMode() {
   importBtn.type = "button";
   importBtn.className = "ifigma-import";
   importBtn.textContent = COPY.intake.figma.importLabel;
-  const useSelection = document.createElement("button");
-  useSelection.type = "button";
-  useSelection.className = "ifigma-selection";
-  useSelection.textContent = COPY.intake.figma.useSelection;
   const skip = document.createElement("button");
   skip.type = "button";
   skip.className = "ifigma-skip";
   skip.textContent = COPY.intake.figma.skip;
 
   // Agent-driven, like the old Client Setup kicked /setup-project: hand off to the /figma-ingest
-  // command, which pulls the target via the Figma MCP and writes the standard reference digest
-  // (+ figma.json tokens), then continues into the design brief. `arg` is a frame URL or the word
-  // "selection" (P3: import whatever is currently selected in Figma). Open the chat so its progress
-  // + the "design the imported frame" handoff play out there.
+  // command, which pulls the frame via the Figma MCP and writes the standard reference digest
+  // (+ figma.json tokens), then continues into the design brief. A frame URL is required — the
+  // connected (file-key-scoped) MCP has no ambient "current selection" to resolve without one.
+  // Open the chat so its progress + the "design the imported frame" handoff play out there.
   const kick = (arg) => {
     resetIntake();
     setChatCollapsed(false);
@@ -5636,10 +5632,9 @@ function enterFigmaStartMode() {
     const clean = extractFigmaUrl(pasted);
     if (clean) { e.preventDefault(); input.value = clean; err.hidden = true; }
   });
-  useSelection.addEventListener("click", () => kick("selection"));
   skip.addEventListener("click", enterDesignBriefMode);
 
-  wrap.append(input, err, importBtn, useSelection, skip);
+  wrap.append(input, err, importBtn, skip);
   intakeStack.appendChild(wrap);
   updateBackButton();
   setTimeout(() => input.focus(), 0);

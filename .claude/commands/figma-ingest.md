@@ -3,37 +3,39 @@ description: Import an existing Figma frame (via the Figma MCP) into a compact d
 ---
 
 Use this when the designer starts a project **from a Figma frame** (the "Start from Figma"
-card) or asks to **import / bring in / pull a Figma design**. `$ARGUMENTS` is **either** a Figma
-**frame URL** (`figma.com/design/:key/...?node-id=X`) **or** the word **`selection`** (use whatever
-is currently selected in the open Figma file). You READ the target frame(s) through the Figma MCP and
+card) or asks to **import / bring in / pull a Figma design**. `$ARGUMENTS` is a Figma **frame URL**
+(`figma.com/design/:key/...?node-id=X`). You READ the target frame(s) through the Figma MCP and
 distill into the project's reference digest (so `/design-brief` + `/design` consume it exactly like an
 uploaded reference) plus a `figma.json` token seed. This is the *import* direction of the same
-offline, license-gated Figma plumbing `export-figma` uses — never runs on Vercel.
+license-gated Figma plumbing `export-figma` uses — never runs on Vercel.
 
 **This is brief-grade, not a pixel-perfect rebuild.** You produce a digest + ground-truth tokens,
 not a reconstructed page. House style: typographic apostrophes, **no em-dashes**.
 
 ## Prereqs (degrade, never hard-fail)
 
-- **Figma MCP connected** (Dev Mode MCP / the desktop app open on the file), same as export. If the
-  target is unreachable, tell the designer to open the file in Figma (or check the Figma connection),
-  then stop cleanly. Do NOT invent data.
+- **Figma MCP connected**, same as export. The connected server is **file-key-scoped**: every read
+  tool (`get_metadata`, `get_variable_defs`, `get_screenshot`) needs a **fileKey**, so you always work
+  from a **URL** — there is no ambient "current selection" to resolve without a file. If a URL is
+  missing, ask for one (see below). If a target is unreachable, tell the designer to check the Figma
+  connection, then stop cleanly. Do NOT invent data.
 
 ## Resolve the target (do this first)
 
-Turn `$ARGUMENTS` into the specific frame node(s) to ingest — always **node-scoped**, never a whole
-file. If `$ARGUMENTS` carries surrounding text (e.g. "Implement this from Figma. @https://..."),
-first extract the `figma.com` URL from it (ignore a leading `@` and any prose):
+A Figma **URL is required** (it carries the fileKey). If `$ARGUMENTS` has none, or carries surrounding
+text (e.g. "Implement this from Figma. @https://..."), first **extract the `figma.com` URL** from it
+(ignore a leading `@` and any prose). If there is still no URL, ask the designer to paste one — with a
+node id (`figma.com/design/:key/:name?node-id=123-456`, via right-click frame → Copy link to
+selection) to go straight to that frame, or just the file URL to pick from its frames — then stop.
 
-- **`selection`** (or empty) → operate on the **currently-selected node** in the open Figma file. The
-  Dev Mode MCP targets the current selection when you call the read tools without an explicit node, so
-  you can pull directly. If nothing is selected, say so and ask the designer to select a frame (or
-  paste a URL), then stop.
+From the URL, always stay **node-scoped**, never a whole file:
+
 - **A URL with a `node-id`** → that exact frame. Parse the `node-id` and scope to it.
-- **A URL with NO `node-id`** (a whole file / page), OR a node that turns out to be a page holding
-  several top-level frames → **frame picker**: call `get_metadata` once to enumerate the top-level
-  frames (names + sizes), then `AskUserQuestion` ("Which frame(s) should I import?") listing them.
-  Let the designer pick **one or several** (multi-frame).
+- **A URL with NO `node-id`** (a file / page URL), OR a node that turns out to be a page holding
+  several top-level frames → **frame picker**: call `get_metadata` on the fileKey to enumerate the
+  top-level frames (names + sizes), then `AskUserQuestion` ("Which frame(s) should I import?") listing
+  them. Let the designer pick **one or several** (multi-frame). If the response surfaces a current
+  selection, highlight it as the likely target.
 - **Multi-frame** → ingest each picked frame through the pull + distill below; the digest gets one
   asset per frame and a **combined** section outline (label each section with its frame), and
   `figma.json.frames` lists them. Keep it to the few they pick, not the whole file.
@@ -126,7 +128,7 @@ signal). Do not fold this into the digest:
 
 ```json
 {
-  "frameUrl": "<the URL, or 'selection'>",
+  "frameUrl": "<the URL>",
   "fileName": "<the Figma file name>",
   "frames": [{ "nodeId": "<node-id>", "name": "<frame name>" }],
   "generatedAt": "<ISO now>",
