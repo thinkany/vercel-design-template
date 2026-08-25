@@ -3814,6 +3814,15 @@ function openHelpOverlay(html) {
   const x = card.querySelector(".iref-help-x");
   if (x) x.addEventListener("click", close);
 
+  // Optional tabs: a card with .iref-help-tab buttons + .iref-help-panel sections switches
+  // panels on click (no-op for the untabbed cards). data-tab on the button = data-panel on
+  // the section it reveals.
+  const tabBtns = card.querySelectorAll(".iref-help-tab");
+  if (tabBtns.length) tabBtns.forEach((btn) => btn.addEventListener("click", () => {
+    tabBtns.forEach((b) => b.classList.toggle("active", b === btn));
+    card.querySelectorAll(".iref-help-panel").forEach((p) => p.classList.toggle("active", p.dataset.panel === btn.dataset.tab));
+  }));
+
   overlay.appendChild(card);
   document.body.appendChild(overlay);
   document.addEventListener("keydown", onKey);

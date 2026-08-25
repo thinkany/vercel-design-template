@@ -179,6 +179,12 @@ timestamp.
   same extraction can *measure* motif frequency and prove the system reduced repetition, and can feed
   the memory from real output rather than the intended sample.
 
+**Future (not built): reset / manage history.** A designer control to clear their anti-repetition
+memory (a clean slate, or for testing), and maybe to view/pardon a specific recently-used style.
+Server side is a small `{op:"reset", designer}` (DEL the KV key) + a `{op:"list", designer}` read;
+client side a button in the direction "?" panel or settings. Deferred: the auto-decay already makes
+stale choices fair again, so a manual reset is a nicety, not a requirement.
+
 ## 10. Where it plugs into the pipeline
 
 - **`desktop/intake/direction.cjs`** (new, zero-dep): owns the lens deck, motif slots, axis rubrics,

@@ -938,6 +938,17 @@
       .iref-help-card li { font-size: 13px; line-height: 1.55; color: #333; margin-bottom: 5px; }
       .iref-help-card b { color: #111; font-weight: 600; }
       .iref-help-note { font-size: 12px; line-height: 1.55; color: #8a8a93; margin-top: 14px; padding-top: 12px; border-top: 1px solid #eee; }
+      /* Tabbed help cards (used by the design-direction "?"): a tab bar + panels, one visible. */
+      .iref-help-tabs { display: flex; gap: 4px; margin: 4px 0 14px; border-bottom: 1px solid #eee; }
+      .iref-help-tab {
+        appearance: none; border: none; background: none; cursor: pointer; padding: 7px 10px 9px;
+        font-size: 12.5px; font-weight: 600; color: #8a8a93; border-bottom: 2px solid transparent; margin-bottom: -1px;
+        transition: color .12s, border-color .12s;
+      }
+      .iref-help-tab:hover { color: #444; }
+      .iref-help-tab.active { color: #111; border-bottom-color: #111; }
+      .iref-help-panel { display: none; }
+      .iref-help-panel.active { display: block; }
 
       /* ---- Two-column flow: questions (left 60%) + references/brief rail (right 40%) ----
          The design intake runs in .flow (a flex row); `order` puts the questions
