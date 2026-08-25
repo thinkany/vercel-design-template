@@ -587,7 +587,7 @@ window.COPY = {
     direction: {
       title: "Design direction",
       reroll: "↻ Reroll",
-      axisLabels: { convention: "Convention", energy: "Energy", structure: "Structure", era: "Era" },
+      axisLabels: { convention: "Convention", energy: "Energy", structure: "Structure", era: "Era", motion: "Motion" },
       groupDirections: "Directions",
       groupMovements: "Movements",
       helpTitle: "How the design direction works",
@@ -614,6 +614,7 @@ window.COPY = {
         <li><b>Energy</b>: how loud or quiet, calm through maximal.</li>
         <li><b>Structure</b>: how tidy, an ordered grid through freeform.</li>
         <li><b>Era</b>: the period feel, timeless through avant-garde.</li>
+        <li><b>Motion</b>: how animated, static through kinetic.</li>
       </ul>
       <p>Nudging a slider steers the design toward that feel and picks the closest matching style.</p>
 

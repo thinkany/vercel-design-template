@@ -52,16 +52,25 @@ is one Direction object, injected as prompt text and persisted.
 
 ## 3. The knobs (decision: labeled semantic sliders)
 
-Four axes, each a **discrete labeled scale** (not a raw float, which the model reads as noise). The
-slider is just how the designer selects which **stop word + rubric phrase** gets injected. The axes
-are chosen to be as orthogonal as possible, so the knobs feel independent.
+Five axes (four compositional + Motion), each a **discrete labeled scale** (not a raw float, which
+the model reads as noise). The slider is just how the designer selects which **stop word + rubric
+phrase** gets injected. The axes are chosen to be as orthogonal as possible, so the knobs feel
+independent.
 
 | Axis | Stops (left → right) | What it controls |
 |---|---|---|
 | **Convention** | Common · Familiar · Bold · Experimental | Departure from the marketing-site centroid. The master "how far out" dial. |
-| **Energy** | Calm · Measured · Lively · Maximal | Visual intensity: density, contrast, scale jumps, motion, ornament. |
+| **Energy** | Calm · Measured · Lively · Maximal | Visual intensity: density, contrast, scale jumps, ornament. |
 | **Structure** | Ordered · Balanced · Loose · Organic | Composition geometry: strict grid ↔ freeform / asymmetric / hand-built. |
 | **Era** | Timeless · Classic · Current · Avant-garde | Stylistic period reference the design leans on. |
+| **Motion** | Static · Subtle · Dynamic · Kinetic | How animated the design is. **BUILT 2026-08-25 as an orthogonal 5th knob.** |
+
+**Motion is deliberately orthogonal (rubric-only).** Any lens can be still or animated, so Motion
+does NOT steer the lens/motif draw (see `SCORE_AXES` in `direction.cjs`, which scores lens fit over
+the four compositional axes only). It auto-samples (leaning subtle/dynamic, kinetic rare), honors
+its knob + motion mood-words ("animated", "kinetic", "static"), and renders its own directive line
+into the prompt block. That is what keeps it an independent dimension rather than a proxy for Energy
+or Era. A directly-picked lens (which has no motion affinity) gets a seed-deterministic motion default.
 
 Each stop maps to a **rubric phrase** that is the actual load-bearing prompt text. Example
 (Convention):
