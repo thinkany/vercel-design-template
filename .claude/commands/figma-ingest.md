@@ -22,7 +22,8 @@ not a reconstructed page. House style: typographic apostrophes, **no em-dashes**
 ## Resolve the target (do this first)
 
 Turn `$ARGUMENTS` into the specific frame node(s) to ingest — always **node-scoped**, never a whole
-file:
+file. If `$ARGUMENTS` carries surrounding text (e.g. "Implement this from Figma. @https://..."),
+first extract the `figma.com` URL from it (ignore a leading `@` and any prose):
 
 - **`selection`** (or empty) → operate on the **currently-selected node** in the open Figma file. The
   Dev Mode MCP targets the current selection when you call the read tools without an explicit node, so

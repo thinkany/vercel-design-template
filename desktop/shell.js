@@ -5567,6 +5567,14 @@ function renderStartFork() {
 function isFigmaFrameUrl(u) {
   return typeof u === "string" && /figma\.com\/(design|file|proto|board)\//i.test(u);
 }
+// Pull the first Figma URL out of arbitrary pasted text — a designer often pastes something like
+// "Implement this design from Figma.\n@https://figma.com/design/…?node-id=…". The match starts at
+// `https`, so a leading `@` drops off for free; we also trim trailing punctuation. Returns "" if none.
+function extractFigmaUrl(text) {
+  if (typeof text !== "string") return "";
+  const m = text.match(/https?:\/\/(?:www\.)?figma\.com\/[^\s<>"')]+/i);
+  return m ? m[0].replace(/[.,;]+$/, "") : "";
+}
 
 function enterFigmaStartMode() {
   dismissWelcome();
@@ -5615,13 +5623,19 @@ function enterFigmaStartMode() {
     sendText("/figma-ingest " + arg);
   };
   const submit = () => {
-    const url = input.value.trim();
+    const url = extractFigmaUrl(input.value) || input.value.trim();
     if (!isFigmaFrameUrl(url)) { err.textContent = COPY.intake.figma.invalidUrl; err.hidden = false; input.focus(); return; }
     err.hidden = true;
     kick(url);
   };
   importBtn.addEventListener("click", submit);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+  // Paste "Implement this from Figma. @https://figma.com/…" → the field keeps just the clean URL.
+  input.addEventListener("paste", (e) => {
+    const pasted = (e.clipboardData && e.clipboardData.getData("text")) || "";
+    const clean = extractFigmaUrl(pasted);
+    if (clean) { e.preventDefault(); input.value = clean; err.hidden = true; }
+  });
   useSelection.addEventListener("click", () => kick("selection"));
   skip.addEventListener("click", enterDesignBriefMode);
 
