@@ -5561,12 +5561,12 @@ function renderStartFork() {
 }
 
 // "Start from Figma" step 1: the frame-link screen. One input (the Figma frame URL), an
-// Import, and a skip. On Import we call the figma:importFrame seam; the real ingest is
-// figma-ingest (not built), so today it degrades to Get Designing rather than dead-ending.
+// Import, and a skip. On Import we hand off to the /figma-ingest agent command (which pulls the
+// frame via the Figma MCP and writes the standard reference digest), like the old Client Setup
+// card kicked /setup-project.
 function isFigmaFrameUrl(u) {
   return typeof u === "string" && /figma\.com\/(design|file|proto|board)\//i.test(u);
 }
-let pendingFigmaUrl = null; // kept across the handoff so figma-ingest can pick it up later
 
 function enterFigmaStartMode() {
   dismissWelcome();
@@ -5599,18 +5599,18 @@ function enterFigmaStartMode() {
   skip.className = "ifigma-skip";
   skip.textContent = COPY.intake.figma.skip;
 
-  const submit = async () => {
+  const submit = () => {
     const url = input.value.trim();
     if (!isFigmaFrameUrl(url)) { err.textContent = COPY.intake.figma.invalidUrl; err.hidden = false; input.focus(); return; }
     err.hidden = true;
-    importBtn.disabled = true;
-    let res = null;
-    try { res = await window.desktop.figmaImportFrame({ url }); } catch { res = null; }
-    // Seam: figma-ingest fills res.ok with { tokens, digest, structure } → seed brand, route
-    // by structure. Until then, keep the URL and continue so the flow never dead-ends.
-    pendingFigmaUrl = url;
-    if (!res || !res.ok) addMsg("system", COPY.intake.figma.pending);
-    enterDesignBriefMode();
+    // Agent-driven, like the old Client Setup kicked /setup-project: hand off to the
+    // /figma-ingest command, which pulls the frame via the Figma MCP and writes the standard
+    // reference digest (+ figma.json tokens), then continues into the design brief. Open the
+    // chat so its progress + the "design the imported frame" handoff play out there.
+    resetIntake();
+    setChatCollapsed(false);
+    showPlaceholder(COPY.preview.figmaIngestStart);
+    sendText("/figma-ingest " + url);
   };
   importBtn.addEventListener("click", submit);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });

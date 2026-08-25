@@ -1637,20 +1637,6 @@ ipcMain.handle("license:status", () => {
   const key = (process.env.DERIVE_LICENSE_KEY || "").trim();
   return { hasLicense: !!key, hint: key ? key.slice(-4) : null };
 });
-
-// Onboarding "Start from Figma" → import a Figma frame (read-only) via the same Figma MCP
-// connection the export uses: get_variable_defs (tokens) + get_metadata (structure) + one
-// get_screenshot, distilled into a digest and brand-token seed. THIS IS THE SEAM: the real
-// ingest is the figma-ingest feature (electron/docs/figma-ingest-spec.md), not built yet, so
-// today this returns { ok:false, reason:"not-implemented" } and the renderer degrades to Get
-// Designing without dead-ending. Gated on the Figma export license (DERIVE_LICENSE_KEY).
-ipcMain.handle("figma:importFrame", async (_event, { url } = {}) => {
-  if (!(process.env.DERIVE_LICENSE_KEY || "").trim()) return { ok: false, reason: "unlicensed" };
-  if (!url || typeof url !== "string") return { ok: false, reason: "no-url" };
-  // TODO(figma-ingest): pull get_variable_defs + get_metadata + get_screenshot for this node,
-  // distill → { ok:true, tokens, digest, structure } (structure = page | styleguide | unknown).
-  return { ok: false, reason: "not-implemented", url };
-});
 ipcMain.handle("license:save", async (_event, { key }) => {
   const k = (key || "").trim();
   if (!k) return { ok: false, error: "Enter your license key first." };

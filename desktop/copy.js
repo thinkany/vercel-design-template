@@ -54,6 +54,11 @@ window.COPY = {
       title: "Let’s set up your project",
       text: "I’ll walk you through it in the chat, one question at a time. Answer along and your project takes shape here.",
     },
+    figmaIngestStart: {
+      emoji: "🎨",
+      title: "Importing your Figma frame",
+      text: "I’m reading the frame’s colors, type, and structure. It rides along as the style direction while we design.",
+    },
     gettingSetUp: "Getting set up",
     updatingDesign: "Updating your design",
     preparingElements: "Getting your site design elements prepared",
@@ -677,7 +682,6 @@ window.COPY = {
       importLabel: "Import",
       skip: "Skip, just start designing",
       invalidUrl: "That doesn’t look like a Figma frame link.",
-      pending: "Figma import is coming next, continuing to design for now.",
     },
     // "What are you designing for?" (Website vs App).
     deliverable: {
