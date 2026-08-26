@@ -5697,6 +5697,7 @@ async function showFigmaFindings() {
   // Wire the brand into tokens.css NOW (deterministic), so the next step starts branded, not on
   // the template defaults — regardless of whether it's "Design this page" or "Start designing".
   try { await window.desktop.applyFigmaBrand(); } catch {}
+  try { const fr = await window.desktop.getBuildFidelity(); buildHiFi = !!(fr && fr.hiFi); } catch {} // sync with settings
 
   const F = COPY.intake.figma;
   enterIntakeMode();
@@ -5786,6 +5787,25 @@ async function showFigmaFindings() {
     findings.appendChild(box);
   }
   intakeStack.appendChild(findings);
+
+  // Build-fidelity toggle here too (the onboard main pane) — designers may not open Claude
+  // settings. Shares the same global buildHiFi state (so it stays in sync with the drawer);
+  // flipping it persists immediately, so the build kicked below uses the chosen model.
+  const fid = document.createElement("div");
+  fid.className = "ifigma-fidelity";
+  const fidTxt = document.createElement("div"); fidTxt.className = "ifigma-fidelity-txt";
+  const fidLbl = document.createElement("div"); fidLbl.className = "ifigma-fidelity-lbl"; fidLbl.textContent = COPY.claude.fidelityLabel;
+  const fidSt = document.createElement("div"); fidSt.className = "ifigma-fidelity-state";
+  fidTxt.append(fidLbl, fidSt);
+  const fidSw = document.createElement("label"); fidSw.className = "fidelity-switch";
+  const fidCb = document.createElement("input"); fidCb.type = "checkbox"; fidCb.checked = buildHiFi;
+  const fidSl = document.createElement("span"); fidSl.className = "slider";
+  fidSw.append(fidCb, fidSl);
+  const paintFid = () => { fidSt.textContent = fidCb.checked ? COPY.claude.fidelityOn : COPY.claude.fidelityOff; };
+  paintFid();
+  fidCb.addEventListener("change", async () => { buildHiFi = fidCb.checked; paintFid(); try { await window.desktop.setBuildFidelity(buildHiFi); } catch { /* best-effort */ } });
+  fid.append(fidTxt, fidSw);
+  intakeStack.appendChild(fid);
 
   // Next-step cards (renderer-driven, pane-native).
   const opts = meta.structure === "page"
