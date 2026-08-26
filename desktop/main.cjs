@@ -1129,7 +1129,7 @@ let intakeBrief = null;
 // it (onQuery(null)) when the turn ends.
 let activeQuery = null;
 
-ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode }) => {
+ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode, model: turnModel }) => {
   if (!currentProject) {
     event.sender.send("agent:event", { type: "error", message: "No project is open." });
     return { sessionId };
@@ -1171,7 +1171,10 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode }) 
   // Image mode: "placeholder" = don't source images, hold each spot with an FPO
   // block; else "on" (the normal gather-into-public/ flow). Same env channel.
   process.env.TA_DESIGN_IMAGES = loadImagesPlaceholder() ? "placeholder" : "on";
-  const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, askIntake, onSuggest, model: currentModel, copyVoice: effectiveVoice(currentProject), onQuery: (q) => { activeQuery = q; }, reviewMode });
+  // A per-turn model override (turnModel) lets a specific turn run on a cheaper/faster model
+  // without changing the user's global pick — e.g. design BUILDS run on Sonnet (high output, low
+  // reasoning need) while the rest of the session stays on whatever they chose.
+  const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, askIntake, onSuggest, model: turnModel || currentModel, copyVoice: effectiveVoice(currentProject), onQuery: (q) => { activeQuery = q; }, reviewMode });
   // A review turn is an isolated, fresh session (its own Art Director persona); it must
   // not become the tracked chat session, or the next chat turn would resume the critique.
   if (!reviewMode && result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it

@@ -5,7 +5,7 @@ const { contextBridge, ipcRenderer, webUtils } = require("electron");
 contextBridge.exposeInMainWorld("desktop", {
   // ---- Agent ----
   sendPrompt: (prompt, sessionId, opts) =>
-    ipcRenderer.invoke("agent:prompt", { prompt, sessionId, reviewMode: !!(opts && opts.reviewMode) }),
+    ipcRenderer.invoke("agent:prompt", { prompt, sessionId, reviewMode: !!(opts && opts.reviewMode), model: (opts && opts.model) || null }),
   interruptAgent: () => ipcRenderer.invoke("agent:interrupt"),
   onAgentEvent: (cb) => {
     const listener = (_e, evt) => cb(evt);

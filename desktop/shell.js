@@ -4801,7 +4801,7 @@ function startDesigning() {
     try { const r = await window.desktop.getDesignPrompt(); if (r && r.prompt) prompt = r.prompt; } catch {}
     // Kick the agent FIRST (while intakeActive still guards refreshPreview from
     // showing its own "working" placeholder), THEN swap the pane to preparing.
-    runAgent(prompt);
+    runAgent(prompt, null, { model: BUILD_MODEL }); // the design build runs on Sonnet
     showPreparing();
   };
   if (anims.length) Promise.allSettled(anims.map((a) => a.finished)).then(go);
@@ -5573,6 +5573,10 @@ function renderStartFork() {
 // frame via the Figma MCP and writes the standard reference digest), like the old Client Setup
 // card kicked /setup-project.
 let awaitingFigmaIngest = false; // true between kicking /figma-ingest and its turn settling
+// Design BUILDS run on Sonnet regardless of the user's global model pick: a build is a
+// spec-following, high-output turn, so Sonnet (much cheaper output + far less thinking) fits it
+// while the pricier model stays reserved for the reasoning-heavy intake/decisions.
+const BUILD_MODEL = "claude-sonnet-5";
 
 function isFigmaFrameUrl(u) {
   return typeof u === "string" && /figma\.com\/(design|file|proto|board)\//i.test(u);
@@ -5767,7 +5771,7 @@ async function showFigmaFindings() {
     ? [
         { label: F.designPageLabel, desc: F.designPageDesc, onClick: () => {
             resetIntake(); setChatCollapsed(false); showPlaceholder(COPY.preview.figmaIngestStart);
-            runAgent("/design build this page from the imported Figma frame. The brand (--ta-* palette + fonts) is already wired into tokens.css, and `.thinkany/references/digest.md` has the section outline, component details, images and icons. Build from THAT and MATCH the source faithfully — fidelity comes first. To get the colors, icons, and detail right, DO look at the design: screenshot the frame's sections for visual reference (get_screenshot) as much as you need. Use the ingested images/icons by their `public/images/figma/` paths (already downloaded; do not re-fetch). The scaffold shape (DesignSurface, Header/Footer, pages.ts, menu.ts, tokens.css, brand.ts) is already inlined in /design — do not re-read those to recall structure. Work quietly per the low-chatter protocol: do not narrate routine setup (creating the working variation, etc.) — just do it.", COPY.intake.figma.echoBuildPage);
+            runAgent("/design build this page from the imported Figma frame. The brand (--ta-* palette + fonts) is already wired into tokens.css, and `.thinkany/references/digest.md` has the section outline, component details, images and icons. Build from THAT and MATCH the source faithfully — fidelity comes first. To get the colors, icons, and detail right, DO look at the design: screenshot the frame's sections for visual reference (get_screenshot) as much as you need. Use the ingested images/icons by their `public/images/figma/` paths (already downloaded; do not re-fetch). The scaffold shape (DesignSurface, Header/Footer, pages.ts, menu.ts, tokens.css, brand.ts) is already inlined in /design — do not re-read those to recall structure. Work quietly per the low-chatter protocol: do not narrate routine setup (creating the working variation, etc.) — just do it.", COPY.intake.figma.echoBuildPage, { model: BUILD_MODEL });
           } },
         { label: F.briefLabel, desc: F.briefDesc, onClick: enterDesignBriefMode },
       ]
@@ -5993,7 +5997,7 @@ async function runAgent(toSend, echoText, opts) {
   if (!review) refreshPreview(); // show the working placeholder (a review keeps the design visible)
   send.disabled = true;
   try {
-    const res = await window.desktop.sendPrompt(toSend, review ? null : sessionId, { reviewMode: review });
+    const res = await window.desktop.sendPrompt(toSend, review ? null : sessionId, { reviewMode: review, model: opts && opts.model });
     if (!review && res && res.sessionId) sessionId = res.sessionId; // never let a review hijack the chat session
   } catch (e) {
     agentBusy = false;
