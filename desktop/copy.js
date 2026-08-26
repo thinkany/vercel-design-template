@@ -703,6 +703,7 @@ window.COPY = {
       fontUploadDone: (n, family) => `Added ${n} file${n === 1 ? "" : "s"} for ${family}.`,
       fontUploadFail: "Could not add those files.",
       logoImported: "Logo imported.",
+      imagesNote: (n) => `${n} curated image${n === 1 ? "" : "s"} imported from the file, ready to use.`,
       logoUploadLead: (name) => (name ? `Couldn’t auto-export ${name}’s logo. Upload it (SVG or PNG) and it goes straight into the header.` : "Add a logo (SVG or PNG) and it goes straight into the header."),
       logoUploadBtn: "Upload logo",
       logoUploadDone: "Logo added.",

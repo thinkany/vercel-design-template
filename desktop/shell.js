@@ -5707,6 +5707,13 @@ async function showFigmaFindings() {
     findings.appendChild(ul);
   }
 
+  // Curated images pulled from the file (the client's own assets, ready to use).
+  const imgN = Array.isArray(meta.images) ? meta.images.filter((i) => i && i.path).length : 0;
+  if (imgN) {
+    const note = document.createElement("div"); note.className = "ifigma-fontup-note"; note.style.marginTop = "12px";
+    note.textContent = F.imagesNote(imgN); findings.appendChild(note);
+  }
+
   // Logo: a small "imported" note if auto-export worked, else a one-click upload fallback (the
   // reliable path when the logo is a nested component the agent couldn't cleanly export).
   if (meta.logo) {

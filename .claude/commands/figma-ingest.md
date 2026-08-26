@@ -101,6 +101,16 @@ to the closest webfont and note the substitution.
   returned nothing), leave `logo` null and briefly say so; the app then offers the designer a
   one-click upload on the findings screen. Do not export a random graphic as a fallback.
 
+**Images (ingest the curated ones — use them, don't source stock).** The frame's real imagery
+(photography, illustration, meaningful image fills) is **already curated for this brand and already
+present**, so it is the right source for the design — better than fetching stock. Export those image
+nodes/fills with **`download_assets`** into **`public/images/figma/`** (descriptive names, e.g.
+`hero.jpg`, `markets-aerospace.jpg`), and record each in `figma.json.images` as `{ name, path }`.
+Then in the digest add an **Images** line naming the folder and instructing the build to **use these
+first**. Skip icons, tiny decorative marks, the logo (handled above), and empty placeholder boxes
+(a dark rectangle with no photo is not an asset). If the frame has no real imagery (a bare component
+sheet often does not), skip and leave `images` empty — the normal `/design` image flow then applies.
+
 ## Write two files under `.thinkany/references/`
 
 **1. `digest.json`** + **`digest.md`** — the SAME shape reference-ingest emits, so `/design-brief`
@@ -143,6 +153,7 @@ _Distilled from the imported Figma frame. Treat this as the primary style direct
 - **Emulate:** ...
 - **Avoid:** ...
 - **Section outline:** Hero, Features, Pricing, Footer  (from the frame's named layers)
+- **Images:** curated images from the source Figma are in `public/images/figma/` — USE these first (they are the client's own assets); only source new images for anything they do not cover.
 ```
 
 **2. `figma.json`** — the token seed + structure (the brand-pre-fill source, P2, and the handoff
@@ -157,6 +168,7 @@ signal). Do not fold this into the digest:
   "tokens": { "colors": { "amber-500": "#F0BC48", "...": "#RRGGBB" }, "type": {...}, "spacing": {...}, "radii": {...} },
   "fonts": ["..."],
   "customFonts": [{ "family": "DotMatrix Two" }],
+  "images": [{ "name": "hero", "path": "/images/figma/hero.jpg" }],
   "sections": [{ "name": "Hero", "frame": "<frame name>" }],
   "structure": "page | styleguide | unknown",
   "brandName": "<the real company/brand name gleaned from the wordmark/footer, or null>",
