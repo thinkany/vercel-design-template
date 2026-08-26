@@ -79,12 +79,30 @@ classify the frame:
 **Feel (from the screenshot).** A short read: `overallFeel`, `type`, `layout`, `imagery`, and
 `emulate` / `avoid` notes. This is the vibe the tokens + structure cannot express.
 
-**Fonts (flag the non-web ones).** List the font families in `fonts`. Any family that is **not** a
-common Google / system webfont (e.g. a foundry face like "DotMatrix Two") goes in **`customFonts`** as
-`{ family }` — the app then surfaces an **upload control** so the designer can supply the actual files.
-Do not guess a substitute; record the real name. At styleguide/design time, if font files exist under
-`public/fonts/` (the designer uploaded them), point `--ta-font-*` at that family; otherwise fall back
-to the closest webfont and note the substitution.
+**Component details (the fidelity beyond palette).** The brand layer is not enough: the small
+decisions (button shape, link treatment, card style) are what make it read as THIS design, and they
+live on the components, not the tokens. For the few KEY components only, pull a **targeted
+`get_design_context` on that ONE node** (a primary button, a text link / CTA, a card) — node-scoped,
+so it stays cheap even though the full-page code view is off. Extract the exact values and record
+them as directives in `figma.json.components` + the digest's **Component details** line:
+- **Buttons:** shape + corner radius (e.g. pill / fully-rounded vs 8px vs square), padding, border,
+  fill, and any hover state.
+- **Links / CTAs:** treatment (underline, arrow icon, letter-spaced caps) and hover.
+- **Cards / containers:** hairline-rule vs boxed vs shadowed, radius, padding.
+These are the details a plain screenshot read misses. Capture the real values, not generic defaults.
+
+**Fonts + type roles (flag non-web faces, and map faces to roles so they are USED).** List the font
+families in `fonts`. Any family that is **not** a common Google / system webfont (e.g. "DotMatrix
+Two") goes in **`customFonts`** as `{ family }` — the app surfaces an upload control for the real
+files. Do not guess a substitute; record the real name.
+
+**Crucially, record which face fills which role** in `figma.json.typeRoles`, e.g.
+`{ "display": "DotMatrix Two", "eyebrow": "DotMatrix Two", "body": "Outfit", "mono": null }`, and state
+it in the digest. An uploaded font that is not wired to a `--ta-font-*` role **will not appear** (that
+is why DotMatrix was missing). So instruct the build, in the digest, to **set the `--ta-font-*` tokens
+to these families** — the uploaded custom files live in `public/fonts/` with their `@font-face` already
+in `fonts.css` — so eyebrows/labels/display render in the distinctive face and body in the readable
+one. If a custom font was not uploaded, fall back to the nearest webfont and note the substitution.
 
 **Brand name + logo (glean and ingest).** From the metadata + screenshot:
 - **Brand name.** Read the actual company/brand name from a wordmark/logo layer, a nav or footer
@@ -110,6 +128,13 @@ Then in the digest add an **Images** line naming the folder and instructing the 
 first**. Skip icons, tiny decorative marks, the logo (handled above), and empty placeholder boxes
 (a dark rectangle with no photo is not an asset). If the frame has no real imagery (a bare component
 sheet often does not), skip and leave `images` empty — the normal `/design` image flow then applies.
+
+**Icons (ingest the real SVGs, don't substitute).** Named icon / vector components (arrows, chevrons,
+UI glyphs), **especially ones with hover / non-hover states**, are curated assets the design should
+use verbatim, not a generic text arrow or a lucide swap. Export them with `download_assets` into
+**`public/images/figma/icons/`** (descriptive names, e.g. `arrow.svg`, `arrow-hover.svg`), record each
+in `figma.json.icons` as `{ name, path, hoverPath? }`, and note in the digest that links/CTAs use
+these exact SVGs (and their hover swap). Skip the logo (handled above) and purely decorative marks.
 
 ## Write two files under `.thinkany/references/`
 
@@ -153,6 +178,9 @@ _Distilled from the imported Figma frame. Treat this as the primary style direct
 - **Emulate:** ...
 - **Avoid:** ...
 - **Section outline:** Hero, Features, Pricing, Footer  (from the frame's named layers)
+- **Type roles (wire `--ta-font-*` to these, uploaded custom files are in `public/fonts/`):** Display/eyebrow = DotMatrix Two; Body = Outfit; ... USE them, do not leave the template default.
+- **Component details:** Buttons = pill / fully-rounded; Links = arrow-icon + letter-spaced caps (hover swaps the arrow); Cards = hairline rule, no box. MATCH these, not generic defaults.
+- **Icons:** real SVGs are in `public/images/figma/icons/` (e.g. `arrow.svg` + `arrow-hover.svg`) — use these for links/CTAs, not a text arrow or a substitute.
 - **Images:** curated images from the source Figma are in `public/images/figma/` — USE these first (they are the client's own assets); only source new images for anything they do not cover.
 ```
 
@@ -168,7 +196,10 @@ signal). Do not fold this into the digest:
   "tokens": { "colors": { "amber-500": "#F0BC48", "...": "#RRGGBB" }, "type": {...}, "spacing": {...}, "radii": {...} },
   "fonts": ["..."],
   "customFonts": [{ "family": "DotMatrix Two" }],
+  "typeRoles": { "display": "DotMatrix Two", "eyebrow": "DotMatrix Two", "body": "Outfit", "mono": null },
+  "components": { "button": "pill, 999px radius, letter-spaced caps, amber on dark", "link": "arrow-icon + micro-caps, hover swaps arrow", "card": "hairline rule, no box" },
   "images": [{ "name": "hero", "path": "/images/figma/hero.jpg" }],
+  "icons": [{ "name": "arrow", "path": "/images/figma/icons/arrow.svg", "hoverPath": "/images/figma/icons/arrow-hover.svg" }],
   "sections": [{ "name": "Hero", "frame": "<frame name>" }],
   "structure": "page | styleguide | unknown",
   "brandName": "<the real company/brand name gleaned from the wordmark/footer, or null>",
