@@ -3080,6 +3080,8 @@ window.desktop.onAgentEvent((evt) => {
       agentBusy = false;
       updateThinking(); // turn done → clear the dots
       clearIntakePending();
+      // Figma ingest just finished → read figma.json + show the findings/next-step in the pane.
+      if (awaitingFigmaIngest) { awaitingFigmaIngest = false; showFigmaFindings(); }
       // Turn ended mid-intake → the brief is complete: show the review actions.
       if (intakeActive && intakeph.classList.contains("flow")) showBriefComplete();
       endTurnGate(); // release serialization AFTER showBriefComplete decided for this turn
@@ -5564,6 +5566,8 @@ function renderStartFork() {
 // Import, and a skip. On Import we hand off to the /figma-ingest agent command (which pulls the
 // frame via the Figma MCP and writes the standard reference digest), like the old Client Setup
 // card kicked /setup-project.
+let awaitingFigmaIngest = false; // true between kicking /figma-ingest and its turn settling
+
 function isFigmaFrameUrl(u) {
   return typeof u === "string" && /figma\.com\/(design|file|proto|board)\//i.test(u);
 }
@@ -5607,15 +5611,24 @@ function enterFigmaStartMode() {
   skip.className = "ifigma-skip";
   skip.textContent = COPY.intake.figma.skip;
 
-  // Agent-driven, like the old Client Setup kicked /setup-project: hand off to the /figma-ingest
-  // command, which pulls the frame via the Figma MCP and writes the standard reference digest
-  // (+ figma.json tokens), then continues into the design brief. A frame URL is required — the
-  // connected (file-key-scoped) MCP has no ambient "current selection" to resolve without one.
-  // Open the chat so its progress + the "design the imported frame" handoff play out there.
+  // Stay FULL-SCREEN in the pane (no chat, like Get Designing): show a working state while
+  // /figma-ingest pulls the frame via the Figma MCP and writes the digest + figma.json; the
+  // result handler then reads figma.json and renders the findings + next-step cards here in the
+  // pane (showFigmaFindings). A frame URL is required (the connected MCP is file-key-scoped).
   const kick = (arg) => {
-    resetIntake();
-    setChatCollapsed(false);
-    showPlaceholder(COPY.preview.figmaIngestStart);
+    setChatCollapsed(true);
+    intakePhase = "figma";
+    intakeph.classList.add("start");
+    intakeph.classList.remove("flow", "hasbrief");
+    setIntakeHead(COPY.intake.figma.workingTitle, COPY.intake.figma.workingLead);
+    el("intake-brief").innerHTML = "";
+    intakeStack.innerHTML = "";
+    const working = document.createElement("div");
+    working.className = "ifigma-working";
+    working.innerHTML = "<i></i><i></i><i></i>";
+    intakeStack.appendChild(working);
+    updateBackButton();
+    awaitingFigmaIngest = true;
     sendText("/figma-ingest " + arg);
   };
   const submit = () => {
@@ -5640,6 +5653,81 @@ function enterFigmaStartMode() {
   setTimeout(() => input.focus(), 0);
   fadeSlideIn(intakeph.querySelector(".intake-head"), { dy: 40, duration: 700, delay: 40 });
   fadeSlideIn(wrap, { dy: 30, duration: 640, delay: 260 });
+}
+
+// After /figma-ingest settles: read figma.json and render the findings + next-step cards in the
+// full-screen pane (no chat), so the designer picks a card instead of typing. If the ingest wrote
+// no figma.json (it needed a URL / errored), fall back to the chat where the agent explained.
+async function showFigmaFindings() {
+  let meta = null;
+  try { meta = await window.desktop.readFigmaMeta(); } catch {}
+  if (!meta) { resetIntake(); setChatCollapsed(false); return; }
+
+  const F = COPY.intake.figma;
+  enterIntakeMode();
+  intakePhase = "figma";
+  intakeph.classList.add("start");
+  intakeph.classList.remove("flow", "hasbrief");
+  setIntakeHead(F.doneTitle(meta.fileName), meta.summary || F.doneLead);
+  el("intake-brief").innerHTML = "";
+  intakeStack.innerHTML = "";
+  renderBriefSummary(null);
+
+  // Findings: structure badge, palette swatches, type, caveats.
+  const findings = document.createElement("div");
+  findings.className = "ifigma-findings";
+  const badge = document.createElement("div");
+  badge.className = "ifigma-badge";
+  badge.textContent = meta.structure === "page" ? F.badgePage : meta.structure === "styleguide" ? F.badgeStyleguide : F.badgeUnknown;
+  findings.appendChild(badge);
+
+  const colors = meta.tokens && meta.tokens.colors ? Object.values(meta.tokens.colors).filter((c) => typeof c === "string") : [];
+  if (colors.length) {
+    const lbl = document.createElement("div"); lbl.className = "ifigma-flabel"; lbl.textContent = F.paletteLabel;
+    const sw = document.createElement("div"); sw.className = "ifigma-swatches";
+    colors.slice(0, 12).forEach((hex) => { const s = document.createElement("span"); s.className = "ifigma-swatch"; s.style.background = hex; s.title = hex; sw.appendChild(s); });
+    findings.append(lbl, sw);
+  }
+  const fonts = Array.isArray(meta.fonts) ? meta.fonts.filter(Boolean) : [];
+  if (fonts.length) {
+    const lbl = document.createElement("div"); lbl.className = "ifigma-flabel"; lbl.textContent = F.typeLabel;
+    const val = document.createElement("div"); val.className = "ifigma-fval"; val.textContent = fonts.join(", ");
+    findings.append(lbl, val);
+  }
+  const flags = Array.isArray(meta.flags) ? meta.flags.filter(Boolean) : [];
+  if (flags.length) {
+    const ul = document.createElement("ul"); ul.className = "ifigma-flags";
+    flags.forEach((f) => { const li = document.createElement("li"); li.textContent = f; ul.appendChild(li); });
+    findings.appendChild(ul);
+  }
+  intakeStack.appendChild(findings);
+
+  // Next-step cards (renderer-driven, pane-native).
+  const opts = meta.structure === "page"
+    ? [
+        { label: F.designPageLabel, desc: F.designPageDesc, onClick: () => {
+            resetIntake(); setChatCollapsed(false); showPlaceholder(COPY.preview.figmaIngestStart);
+            sendText("/design build this page from the imported Figma frame — use `.thinkany/references/digest.md` for the layout + feel and `figma.json` for the exact tokens");
+          } },
+        { label: F.briefLabel, desc: F.briefDesc, onClick: enterDesignBriefMode },
+      ]
+    : [ { label: F.startDesigningLabel, desc: F.startDesigningDesc, onClick: enterDesignBriefMode } ];
+
+  const row = document.createElement("div");
+  row.className = "istart-row";
+  for (const o of opts) {
+    const btn = document.createElement("button"); btn.type = "button"; btn.className = "istart-card istart-center";
+    const lbl = document.createElement("div"); lbl.className = "istart-label"; lbl.textContent = o.label;
+    const desc = document.createElement("div"); desc.className = "istart-desc"; desc.textContent = o.desc;
+    btn.append(lbl, desc);
+    btn.addEventListener("click", o.onClick);
+    row.appendChild(btn);
+  }
+  intakeStack.appendChild(row);
+  updateBackButton();
+  fadeSlideIn(intakeph.querySelector(".intake-head"), { dy: 40, duration: 700, delay: 40 });
+  fadeSlideIn(findings, { dy: 24, duration: 640, delay: 200 });
+  fadeSlideIn(row, { dy: 24, duration: 640, delay: 320 });
 }
 
 // "Get Designing" — drive the intake in the PANE (T5), not a chat brief. Clicking

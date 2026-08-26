@@ -1054,6 +1054,26 @@
       .ifigma-skip { margin-top: 2px; background: none; border: none; color: #999; font-size: 12.5px; cursor: pointer; }
       .ifigma-skip:hover { color: #555; text-decoration: underline; }
 
+      /* Ingest working state — three pulsing dots. */
+      .ifigma-working { display: flex; gap: 8px; justify-content: center; padding: 10px 0; }
+      .ifigma-working i { width: 9px; height: 9px; border-radius: 50%; background: #111; opacity: .25; animation: ifigmaPulse 1.1s ease-in-out infinite; }
+      .ifigma-working i:nth-child(2) { animation-delay: .18s; }
+      .ifigma-working i:nth-child(3) { animation-delay: .36s; }
+      @keyframes ifigmaPulse { 0%, 80%, 100% { opacity: .2; transform: scale(.85); } 40% { opacity: .9; transform: scale(1); } }
+
+      /* Ingest findings — badge, palette swatches, type, caveats. */
+      .ifigma-findings { width: min(560px, 92%); margin: 4px auto 18px; text-align: left; }
+      .ifigma-badge {
+        display: inline-block; padding: 4px 12px; border-radius: 999px; margin-bottom: 14px;
+        background: #f2f2f5; color: #333; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+      }
+      .ifigma-flabel { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: #8a8a93; margin: 14px 0 6px; }
+      .ifigma-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+      .ifigma-swatch { width: 26px; height: 26px; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+      .ifigma-fval { font-size: 13px; color: #333; }
+      .ifigma-flags { margin: 14px 0 0; padding-left: 18px; }
+      .ifigma-flags li { font-size: 12px; line-height: 1.5; color: #8a8a93; margin-bottom: 4px; }
+
       /* Read-only answer, shown once a card is submitted (feedback #2). */
       .icard-answer { font-size: 13.5px; line-height: 1.55; color: #1a1a1a; white-space: pre-wrap; }
       .icard-answer.empty { color: #aaa; font-style: italic; }

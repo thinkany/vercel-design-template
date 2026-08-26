@@ -682,6 +682,22 @@ window.COPY = {
       importLabel: "Import",
       skip: "Skip, just start designing",
       invalidUrl: "That doesn’t look like a Figma frame link.",
+      workingTitle: "Reading your Figma frame",
+      workingLead: "Pulling the colors, type, and structure. One moment.",
+      doneTitle: (name) => (name ? `Imported ${name}` : "Imported from Figma"),
+      doneLead: "Here’s what came across. Choose how to continue.",
+      paletteLabel: "Palette",
+      typeLabel: "Type",
+      badgePage: "Full page",
+      badgeStyleguide: "Component library",
+      badgeUnknown: "Figma frame",
+      // Next-step cards.
+      designPageLabel: "Design this page",
+      designPageDesc: "Build a version of this frame, using its sections as the layout.",
+      startDesigningLabel: "Start designing",
+      startDesigningDesc: "Use this as the style direction, then tell me what you’re building.",
+      briefLabel: "Start from a brief",
+      briefDesc: "Describe what you’re making; this rides along as the reference.",
     },
     // "What are you designing for?" (Website vs App).
     deliverable: {

@@ -1637,6 +1637,15 @@ ipcMain.handle("license:status", () => {
   const key = (process.env.DERIVE_LICENSE_KEY || "").trim();
   return { hasLicense: !!key, hint: key ? key.slice(-4) : null };
 });
+
+// "Start from Figma": after /figma-ingest writes .thinkany/references/figma.json, the renderer reads
+// it (on turn completion) to show the findings + next-step cards in the full-screen pane. Returns null
+// if the ingest did not produce it (e.g. it needed a URL) so the renderer degrades to the chat.
+ipcMain.handle("figma:readMeta", () => {
+  if (!currentProject) return null;
+  try { return JSON.parse(fs.readFileSync(path.join(currentProject, ".thinkany", "references", "figma.json"), "utf8")); }
+  catch { return null; }
+});
 ipcMain.handle("license:save", async (_event, { key }) => {
   const k = (key || "").trim();
   if (!k) return { ok: false, error: "Enter your license key first." };

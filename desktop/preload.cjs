@@ -75,6 +75,7 @@ contextBridge.exposeInMainWorld("desktop", {
 
   // ---- Derive license (Figma export) ----
   getLicenseStatus: () => ipcRenderer.invoke("license:status"),
+  readFigmaMeta: () => ipcRenderer.invoke("figma:readMeta"),
   saveLicense: (key) => ipcRenderer.invoke("license:save", { key }),
   clearLicense: () => ipcRenderer.invoke("license:clear"),
   getDesignLicenseStatus: () => ipcRenderer.invoke("license:designStatus"),

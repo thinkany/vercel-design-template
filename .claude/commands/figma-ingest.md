@@ -132,35 +132,40 @@ signal). Do not fold this into the digest:
   "fileName": "<the Figma file name>",
   "frames": [{ "nodeId": "<node-id>", "name": "<frame name>" }],
   "generatedAt": "<ISO now>",
-  "tokens": { "colors": { "...": "#RRGGBB" }, "type": {...}, "spacing": {...}, "radii": {...} },
+  "tokens": { "colors": { "amber-500": "#F0BC48", "...": "#RRGGBB" }, "type": {...}, "spacing": {...}, "radii": {...} },
   "fonts": ["..."],
   "sections": [{ "name": "Hero", "frame": "<frame name>" }],
   "structure": "page | styleguide | unknown",
   "nameSuggestion": "<a tidy project name derived from the file / frame name>",
-  "hasVariables": true
+  "hasVariables": true,
+  "summary": "<one plain sentence on the feel, e.g. engineering-serious: near-black canvas, one amber accent, documentary photography, hairline rules>",
+  "flags": ["<any caveat, e.g. no spacing/radii variables in the file>", "<e.g. DotMatrix Two is not a standard webfont, needs a source or substitute>"]
 }
 ```
 
 `frames` is one entry for a single ingest, several for multi-frame. `sections` carries the combined,
 frame-labelled outline. `nameSuggestion` is a clean title from the file/frame name (e.g. file
-"Acme Marketing v3" → "Acme"), used to pre-fill the project name downstream.
+"Acme Marketing v3" → "Acme"). `summary` (one sentence) + `flags` (caveats) are shown to the designer
+by the app. `tokens.colors` values are what the app renders as swatches, so keep them exact.
 
-## Then hand off
+## Then hand off — the APP drives the next step in the pane
 
-Report briefly what you found (file name, palette, fonts, structure, section count). Then:
+**Do NOT ask a chat question or run the next command yourself.** Once the files are written, the app
+reads `figma.json` and presents the findings + the next-step choice **as cards in the full-screen
+pane** (like Get Designing), so the designer never types a command. Your job ends at: write the three
+files, then a **single short confirmation line** in chat (e.g. "Imported skywater-website_R55 — choose
+how to continue in the panel."). Nothing more.
 
-- **Name suggestion.** When the design flow asks for the project/client name, offer
-  `nameSuggestion` as the default (editable) rather than a blank prompt.
-- **`structure: "page"`** → offer to **design the imported frame**: "This looks like a full page. Want
-  me to design a version of it?" If yes, run a `/design` build using the **section outline (in order)**
-  as the layout skeleton, the screenshot as the visual reference, and the palette/type as the brand.
-  If no, continue to the normal brief.
-- **`structure: "styleguide" | "unknown"`** → do NOT imply a layout. The tokens + digest are seeded;
-  continue to the normal brief: ask what they are building and design with this frame as the style
-  reference (the digest already rides `/design-brief`).
-- **Section → scaffold mapping (website).** When setting up a website's nav/pages, propose the menu
-  from the named sections (map hero/features/pricing/etc. to pages or in-page anchors), so the site
-  structure mirrors the Figma. The designer confirms; do not silently generate pages.
+The `structure` you record drives which cards the pane shows:
+
+- **`page`** → the pane offers "Design this page" (a `/design` build using the section outline as the
+  layout skeleton + the screenshot as reference) alongside "Start from a brief".
+- **`styleguide` | `unknown`** → the pane offers "Start designing" (the digest + tokens ride along as
+  the style direction; the designer says what they are building).
+
+So record `structure`, `summary`, `flags`, `nameSuggestion`, and the palette/type accurately — those
+are exactly what the pane renders. `nameSuggestion` pre-fills the project name; the named `sections`
+are available to map a website's nav/pages later (with confirmation, never silently).
 
 ## Degrade matrix (never hard-fail)
 
