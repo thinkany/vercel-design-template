@@ -5766,7 +5766,7 @@ async function showFigmaFindings() {
     ? [
         { label: F.designPageLabel, desc: F.designPageDesc, onClick: () => {
             resetIntake(); setChatCollapsed(false); showPlaceholder(COPY.preview.figmaIngestStart);
-            sendText("/design build this page from the imported Figma frame. The brand (--ta-* palette + fonts) is already wired into tokens.css, and `.thinkany/references/digest.md` has the section outline, component details, images and icons. Build from THAT. Do NOT screenshot the Figma frame section-by-section and do NOT read image files back into context — reference the ingested images/icons by their `public/images/figma/` paths. At most one overview screenshot if you truly need it; the digest carries the layout.");
+            sendText("/design build this page from the imported Figma frame. The brand (--ta-* palette + fonts) is already wired into tokens.css, and `.thinkany/references/digest.md` has the section outline, component details, images and icons. Build from THAT. Do NOT screenshot the Figma frame section-by-section and do NOT read image files back into context — reference the ingested images/icons by their `public/images/figma/` paths (one overview screenshot at most). The scaffold shape (DesignSurface, Header/Footer, pages.ts, menu.ts, tokens.css, brand.ts) is already inlined in /design — do not re-read those to recall structure; follow /design's cheat-sheet.");
           } },
         { label: F.briefLabel, desc: F.briefDesc, onClick: enterDesignBriefMode },
       ]
