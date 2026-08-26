@@ -79,6 +79,17 @@ classify the frame:
 **Feel (from the screenshot).** A short read: `overallFeel`, `type`, `layout`, `imagery`, and
 `emulate` / `avoid` notes. This is the vibe the tokens + structure cannot express.
 
+**Brand name + logo (glean and ingest).** From the metadata + screenshot:
+- **Brand name.** Read the actual company/brand name from a wordmark/logo layer, a nav or footer
+  logo, a footer copyright line, or the file name. Record it as `brandName` (the real name, e.g.
+  "SkyWater", not a tidy slug). If you genuinely cannot tell, leave it null. This pre-fills the
+  designer's "Company or brand name" field.
+- **Logo.** Find the primary logo node (a layer named logo / wordmark / brand, usually in the nav or
+  footer). Export it with **`download_assets`** (prefer SVG; PNG at 2x otherwise) and save it into the
+  project as **`public/images/logo.<ext>`**, then set **`VITE_BRAND_LOGO=/images/logo.<ext>`** in the
+  project `.env` (the scaffold's header reads that). Record the path as `logo`. If there is no clear
+  logo node, skip it (leave `logo` null) — do not export a random graphic.
+
 ## Write two files under `.thinkany/references/`
 
 **1. `digest.json`** + **`digest.md`** — the SAME shape reference-ingest emits, so `/design-brief`
@@ -136,6 +147,8 @@ signal). Do not fold this into the digest:
   "fonts": ["..."],
   "sections": [{ "name": "Hero", "frame": "<frame name>" }],
   "structure": "page | styleguide | unknown",
+  "brandName": "<the real company/brand name gleaned from the wordmark/footer, or null>",
+  "logo": "/images/logo.svg | null",
   "nameSuggestion": "<a tidy project name derived from the file / frame name>",
   "hasVariables": true,
   "summary": "<one plain sentence on the feel, e.g. engineering-serious: near-black canvas, one amber accent, documentary photography, hairline rules>",

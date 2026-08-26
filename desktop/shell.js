@@ -4107,14 +4107,19 @@ let clientIntakeGen = 0;
 
 // Build the fixed question script for this deliverable and walk it, one batch at a
 // time, then hand off to the model turn (sections + color + font, tailored to type).
-function startClientIntake(type) {
+async function startClientIntake(type) {
   const gen = ++clientIntakeGen;
   const kind = type === "app" ? "app" : "web site";
+  // If a Figma frame was imported, its gleaned brand name + project name pre-fill the fields
+  // (the logo is already wired via VITE_BRAND_LOGO by /figma-ingest). Null for a normal flow.
+  let seed = null;
+  try { seed = await window.desktop.readFigmaMeta(); } catch {}
+  if (gen !== clientIntakeGen || intakePhase !== "gathering") return; // superseded / backed out during the await
   const script = [
     [{ id: "what", field: "what", type: "open-text", long: true, maxLength: 400, label: COPY.intake.q.what, placeholder: COPY.intake.q.whatPlaceholder }],
     [
-      { id: "clientName", field: "clientName", type: "open-text", label: COPY.intake.q.clientName, skippable: true, agentDecidesLabel: COPY.intake.skip },
-      { id: "projectName", field: "projectName", type: "open-text", label: COPY.intake.q.projectName, skippable: true, agentDecidesLabel: COPY.intake.skip },
+      { id: "clientName", field: "clientName", type: "open-text", label: COPY.intake.q.clientName, skippable: true, agentDecidesLabel: COPY.intake.skip, value: (seed && seed.brandName) || undefined },
+      { id: "projectName", field: "projectName", type: "open-text", label: COPY.intake.q.projectName, skippable: true, agentDecidesLabel: COPY.intake.skip, value: (seed && seed.nameSuggestion) || undefined },
       { id: "logo", field: "logo", type: "logo", label: COPY.intake.q.logo, placeholder: COPY.intake.q.logoPlaceholder, skippable: true, agentDecidesLabel: COPY.intake.skip },
     ],
     [{ id: "reference", field: "references", type: "reference", maxLength: 200, label: COPY.intake.q.reference(kind), skippable: true, agentDecidesLabel: COPY.intake.skipReference }],
@@ -4902,6 +4907,7 @@ function buildOpenText(card, body, onChange, requestSubmit) {
   const field = document.createElement(long ? "textarea" : "input");
   field.className = long ? "icard-textarea" : "icard-input";
   if (card.placeholder) field.placeholder = card.placeholder;
+  if (card.value != null) field.value = card.value; // pre-fill (e.g. brand name gleaned from Figma)
   // Enter advances (Continue with no extra click), on both a single line and a
   // textarea; Shift+Enter inserts a newline in the textarea (chat-input convention).
   field.addEventListener("keydown", (e) => {
