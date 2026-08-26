@@ -144,7 +144,9 @@ UI glyphs), **especially ones with hover / non-hover states**, are curated asset
 use verbatim, not a generic text arrow or a lucide swap. Export them with `download_assets` into
 **`public/images/figma/icons/`** (descriptive names, e.g. `arrow.svg`, `arrow-hover.svg`), record each
 in `figma.json.icons` as `{ name, path, hoverPath? }`, and note in the digest that links/CTAs use
-these exact SVGs (and their hover swap). Skip the logo (handled above) and purely decorative marks.
+these exact SVGs (and their hover swap). **This INCLUDES the footer's social icons** (LinkedIn, X,
+YouTube, etc.) — export those too and record them; do not swap in a generic social-icon set, they are
+almost always a brand-specific weight/style. Skip the logo (handled above) and purely decorative marks.
 
 ## Write two files under `.thinkany/references/`
 
