@@ -698,6 +698,10 @@ window.COPY = {
       startDesigningDesc: "Use this as the style direction, then tell me what you’re building.",
       briefLabel: "Start from a brief",
       briefDesc: "Describe what you’re making; this rides along as the reference.",
+      fontUploadLead: (family) => `${family} isn’t a web font. Upload the files so the design can use it.`,
+      fontUploadBtn: "Upload font files",
+      fontUploadDone: (n, family) => `Added ${n} file${n === 1 ? "" : "s"} for ${family}.`,
+      fontUploadFail: "Could not add those files.",
     },
     // "What are you designing for?" (Website vs App).
     deliverable: {

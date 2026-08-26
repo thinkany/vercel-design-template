@@ -1646,6 +1646,50 @@ ipcMain.handle("figma:readMeta", () => {
   try { return JSON.parse(fs.readFileSync(path.join(currentProject, ".thinkany", "references", "figma.json"), "utf8")); }
   catch { return null; }
 });
+
+// Upload the files for a custom (non-web) font the Figma import flagged. Opens a multi-select
+// picker (add one or several weight files), copies them into public/fonts/, and appends a
+// weight/style-guessed @font-face block to src/styles/fonts.css so the design can use the real
+// family. The designer's --ta-font-* wiring to it happens at styleguide/design time.
+const FONT_FORMATS = { ".woff2": "woff2", ".woff": "woff", ".ttf": "truetype", ".otf": "opentype" };
+const FONT_WEIGHTS = { thin: 100, hairline: 100, extralight: 200, ultralight: 200, light: 300, book: 400, regular: 400, normal: 400, text: 400, medium: 500, semibold: 600, demibold: 600, bold: 700, extrabold: 800, ultrabold: 800, black: 900, heavy: 900 };
+const FONT_WKEYS = Object.keys(FONT_WEIGHTS).sort((a, b) => b.length - a.length); // longest first: "extralight" before "light"
+function installFontFiles(projectDir, family, paths) {
+  const fam = (family || "Custom Font").trim();
+  const fontsDir = path.join(projectDir, "public", "fonts");
+  fs.mkdirSync(fontsDir, { recursive: true });
+  const faces = [], saved = [];
+  for (const src of paths) {
+    const fmt = FONT_FORMATS[path.extname(src).toLowerCase()];
+    if (!fmt) continue; // .zip etc. not supported yet — individual font files only
+    const base = path.basename(src).replace(/\s+/g, "-");
+    try { fs.copyFileSync(src, path.join(fontsDir, base)); } catch { continue; }
+    saved.push(base);
+    const lower = base.toLowerCase();
+    let weight = 400; for (const k of FONT_WKEYS) if (lower.includes(k)) { weight = FONT_WEIGHTS[k]; break; }
+    const italic = /italic|oblique/.test(lower);
+    faces.push(`@font-face {\n  font-family: "${fam}";\n  src: url("/fonts/${base}") format("${fmt}");\n  font-weight: ${weight};\n  font-style: ${italic ? "italic" : "normal"};\n  font-display: swap;\n}`);
+  }
+  if (!faces.length) return { ok: false, error: "No usable font files (.woff2 / .woff / .ttf / .otf)." };
+  const cssPath = path.join(projectDir, "src", "styles", "fonts.css");
+  let css = ""; try { css = fs.readFileSync(cssPath, "utf8"); } catch {}
+  if (!css.includes(`font-family: "${fam}"`)) {
+    try { fs.writeFileSync(cssPath, css + `\n/* ${fam} — uploaded from the Figma import */\n${faces.join("\n")}\n`); }
+    catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+  }
+  return { ok: true, family: fam, files: saved };
+}
+ipcMain.handle("font:install", async (_event, { family } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: family ? `Upload the ${family} font files` : "Upload font files",
+    properties: ["openFile", "multiSelections"],
+    filters: [{ name: "Fonts", extensions: ["woff2", "woff", "ttf", "otf"] }],
+    buttonLabel: "Add fonts",
+  });
+  if (res.canceled || !res.filePaths.length) return { ok: false, canceled: true };
+  return installFontFiles(currentProject, family, res.filePaths);
+});
 ipcMain.handle("license:save", async (_event, { key }) => {
   const k = (key || "").trim();
   if (!k) return { ok: false, error: "Enter your license key first." };

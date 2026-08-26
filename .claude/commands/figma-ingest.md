@@ -79,6 +79,13 @@ classify the frame:
 **Feel (from the screenshot).** A short read: `overallFeel`, `type`, `layout`, `imagery`, and
 `emulate` / `avoid` notes. This is the vibe the tokens + structure cannot express.
 
+**Fonts (flag the non-web ones).** List the font families in `fonts`. Any family that is **not** a
+common Google / system webfont (e.g. a foundry face like "DotMatrix Two") goes in **`customFonts`** as
+`{ family }` — the app then surfaces an **upload control** so the designer can supply the actual files.
+Do not guess a substitute; record the real name. At styleguide/design time, if font files exist under
+`public/fonts/` (the designer uploaded them), point `--ta-font-*` at that family; otherwise fall back
+to the closest webfont and note the substitution.
+
 **Brand name + logo (glean and ingest).** From the metadata + screenshot:
 - **Brand name.** Read the actual company/brand name from a wordmark/logo layer, a nav or footer
   logo, a footer copyright line, or the file name. Record it as `brandName` (the real name, e.g.
@@ -145,6 +152,7 @@ signal). Do not fold this into the digest:
   "generatedAt": "<ISO now>",
   "tokens": { "colors": { "amber-500": "#F0BC48", "...": "#RRGGBB" }, "type": {...}, "spacing": {...}, "radii": {...} },
   "fonts": ["..."],
+  "customFonts": [{ "family": "DotMatrix Two" }],
   "sections": [{ "name": "Hero", "frame": "<frame name>" }],
   "structure": "page | styleguide | unknown",
   "brandName": "<the real company/brand name gleaned from the wordmark/footer, or null>",

@@ -5706,6 +5706,27 @@ async function showFigmaFindings() {
     flags.forEach((f) => { const li = document.createElement("li"); li.textContent = f; ul.appendChild(li); });
     findings.appendChild(ul);
   }
+
+  // A non-web font (e.g. DotMatrix Two) can't be assumed available → offer to upload its files
+  // (one or several weights). font:install copies them into public/fonts/ + writes @font-face.
+  const customFonts = Array.isArray(meta.customFonts) ? meta.customFonts.filter((f) => f && f.family) : [];
+  for (const cf of customFonts) {
+    const box = document.createElement("div");
+    box.className = "ifigma-fontup";
+    const lead = document.createElement("div"); lead.className = "ifigma-fontup-lead"; lead.textContent = F.fontUploadLead(cf.family);
+    const btn = document.createElement("button"); btn.type = "button"; btn.className = "ifigma-fontup-btn"; btn.textContent = F.fontUploadBtn;
+    const note = document.createElement("div"); note.className = "ifigma-fontup-note"; note.hidden = true;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      let res = null;
+      try { res = await window.desktop.installFont(cf.family); } catch {}
+      btn.disabled = false;
+      if (res && res.ok) { note.textContent = F.fontUploadDone((res.files || []).length, res.family); note.hidden = false; btn.hidden = true; }
+      else if (res && !res.canceled) { note.textContent = (res && res.error) || F.fontUploadFail; note.hidden = false; }
+    });
+    box.append(lead, btn, note);
+    findings.appendChild(box);
+  }
   intakeStack.appendChild(findings);
 
   // Next-step cards (renderer-driven, pane-native).
