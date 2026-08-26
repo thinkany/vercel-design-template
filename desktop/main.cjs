@@ -1610,6 +1610,11 @@ ipcMain.handle("key:status", () => {
   return { hasKey: !!key, keyHint: key ? key.slice(-4) : null };
 });
 ipcMain.handle("models:list", () => fetchModels());
+// Build-fidelity toggle: OFF (default) → design builds run on Sonnet (fast, low cost); ON → they
+// run on Opus (slower, pricier, but follows a detailed spec more faithfully — e.g. a Figma page).
+// A global pref (ui-state), independent of the user's per-session model pick.
+ipcMain.handle("fidelity:get", () => ({ hiFi: !!loadUiState().buildHiFi }));
+ipcMain.handle("fidelity:set", (_event, { hiFi } = {}) => { setUiState({ buildHiFi: !!hiFi }); return { ok: true, hiFi: !!hiFi }; });
 ipcMain.handle("model:get", () => ({ model: currentModel }));
 ipcMain.handle("model:set", (_event, { model }) => {
   currentModel = model || null;

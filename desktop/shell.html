@@ -298,6 +298,21 @@
       .toggle-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; font-size: 13px; cursor: pointer; }
       /* Dim a control that's disabled because Research is off (the dependency). */
       .toggle-row:has(input:disabled), .setrow:has(select:disabled) { opacity: .45; }
+      /* Build-fidelity slider switch (on/off), overriding the drawer's custom-checkbox look. */
+      .fidelity-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 2px 0 8px; }
+      .fidelity-state { font-size: 13px; font-weight: 600; color: #333; }
+      .fidelity-switch { position: relative; display: inline-block; width: 42px; height: 24px; flex: 0 0 auto; cursor: pointer; }
+      #modal-body .fidelity-switch input[type="checkbox"] {
+        position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: none;
+        background: none; opacity: 0; cursor: pointer; appearance: none; -webkit-appearance: none;
+      }
+      .fidelity-switch .slider { position: absolute; inset: 0; background: #d2d2da; border-radius: 999px; transition: background .18s; pointer-events: none; }
+      .fidelity-switch .slider::before {
+        content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #fff;
+        border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .18s;
+      }
+      .fidelity-switch input:checked ~ .slider { background: #111; }
+      .fidelity-switch input:checked ~ .slider::before { transform: translateX(18px); }
       /* Custom checkbox: white box → black when checked, with a thin 1px checkmark. */
       #modal-body input[type="checkbox"] {
         appearance: none; -webkit-appearance: none; margin: 2px 0 0; box-sizing: border-box;

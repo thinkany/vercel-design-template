@@ -2508,6 +2508,22 @@ async function renderClaude(body) {
   keyNote.textContent = COPY.claude.manageKeyInLicenses;
   body.appendChild(keyNote);
 
+  // ── Build fidelity (Sonnet default ↔ Opus high-fidelity) ─────────────────────
+  const fidSep = document.createElement("div"); fidSep.className = "drawer-sep"; body.appendChild(fidSep);
+  const fidLabel = document.createElement("div"); fidLabel.className = "sess-label"; fidLabel.textContent = COPY.claude.fidelityLabel; body.appendChild(fidLabel);
+  const fidDesc = document.createElement("div"); fidDesc.className = "sess-desc"; fidDesc.textContent = COPY.claude.fidelityDesc; body.appendChild(fidDesc);
+  const fidRow = document.createElement("div"); fidRow.className = "fidelity-row";
+  const fidState = document.createElement("span"); fidState.className = "fidelity-state";
+  const fidSwitch = document.createElement("label"); fidSwitch.className = "fidelity-switch";
+  const fidCb = document.createElement("input"); fidCb.type = "checkbox"; fidCb.checked = buildHiFi;
+  const fidSlider = document.createElement("span"); fidSlider.className = "slider";
+  fidSwitch.append(fidCb, fidSlider);
+  const paintFid = () => { fidState.textContent = fidCb.checked ? COPY.claude.fidelityOn : COPY.claude.fidelityOff; };
+  paintFid();
+  fidCb.addEventListener("change", async () => { buildHiFi = fidCb.checked; paintFid(); try { await window.desktop.setBuildFidelity(buildHiFi); } catch { /* best-effort */ } });
+  fidRow.append(fidState, fidSwitch);
+  body.appendChild(fidRow);
+
   // ── Images ──────────────────────────────────────────────────────────────────
   const imgSep = document.createElement("div");
   imgSep.className = "drawer-sep";
@@ -4801,7 +4817,7 @@ function startDesigning() {
     try { const r = await window.desktop.getDesignPrompt(); if (r && r.prompt) prompt = r.prompt; } catch {}
     // Kick the agent FIRST (while intakeActive still guards refreshPreview from
     // showing its own "working" placeholder), THEN swap the pane to preparing.
-    runAgent(prompt, null, { model: BUILD_MODEL }); // the design build runs on Sonnet
+    runAgent(prompt, null, { model: buildModel() }); // build on the fidelity-selected model
     showPreparing();
   };
   if (anims.length) Promise.allSettled(anims.map((a) => a.finished)).then(go);
@@ -5573,10 +5589,15 @@ function renderStartFork() {
 // frame via the Figma MCP and writes the standard reference digest), like the old Client Setup
 // card kicked /setup-project.
 let awaitingFigmaIngest = false; // true between kicking /figma-ingest and its turn settling
-// Design BUILDS run on Sonnet regardless of the user's global model pick: a build is a
-// spec-following, high-output turn, so Sonnet (much cheaper output + far less thinking) fits it
-// while the pricier model stays reserved for the reasoning-heavy intake/decisions.
-const BUILD_MODEL = "claude-sonnet-5";
+// Design BUILDS run on Sonnet by default (a spec-following, high-output turn: much cheaper +
+// far less thinking than the reasoning-heavy intake). The "Build fidelity" toggle (Claude
+// settings) flips builds to Opus for a high-fidelity final that follows a detailed spec more
+// closely. buildModel() resolves the current choice; buildHiFi is loaded/persisted via ui-state.
+const BUILD_MODEL_FAST = "claude-sonnet-5";
+const BUILD_MODEL_HIFI = "claude-opus-5";
+let buildHiFi = false;
+window.desktop.getBuildFidelity().then((r) => { buildHiFi = !!(r && r.hiFi); }).catch(() => {});
+const buildModel = () => (buildHiFi ? BUILD_MODEL_HIFI : BUILD_MODEL_FAST);
 
 function isFigmaFrameUrl(u) {
   return typeof u === "string" && /figma\.com\/(design|file|proto|board)\//i.test(u);
@@ -5771,7 +5792,7 @@ async function showFigmaFindings() {
     ? [
         { label: F.designPageLabel, desc: F.designPageDesc, onClick: () => {
             resetIntake(); setChatCollapsed(false); showPlaceholder(COPY.preview.figmaIngestStart);
-            runAgent("/design build this page from the imported Figma frame. The brand (--ta-* palette + fonts) is already wired into tokens.css, and `.thinkany/references/digest.md` has the section outline, component details, images and icons. Build from THAT and MATCH the source faithfully — fidelity comes first. To get the colors, icons, and detail right, DO look at the design: screenshot the frame's sections for visual reference (get_screenshot) as much as you need. Use the ingested images/icons by their `public/images/figma/` paths (already downloaded; do not re-fetch). The scaffold shape (DesignSurface, Header/Footer, pages.ts, menu.ts, tokens.css, brand.ts) is already inlined in /design — do not re-read those to recall structure. Work quietly per the low-chatter protocol: do not narrate routine setup (creating the working variation, etc.) — just do it.", COPY.intake.figma.echoBuildPage, { model: BUILD_MODEL });
+            runAgent("/design build this page from the imported Figma frame. The brand (--ta-* palette + fonts) is already wired into tokens.css, and `.thinkany/references/digest.md` has the section outline, component details, images and icons. Build from THAT and MATCH the source faithfully — fidelity comes first. To get the colors, icons, and detail right, DO look at the design: screenshot the frame's sections for visual reference (get_screenshot) as much as you need. Use the ingested images/icons by their `public/images/figma/` paths (already downloaded; do not re-fetch). The scaffold shape (DesignSurface, Header/Footer, pages.ts, menu.ts, tokens.css, brand.ts) is already inlined in /design — do not re-read those to recall structure. Work quietly per the low-chatter protocol: do not narrate routine setup (creating the working variation, etc.) — just do it.", COPY.intake.figma.echoBuildPage, { model: buildModel() });
           } },
         { label: F.briefLabel, desc: F.briefDesc, onClick: enterDesignBriefMode },
       ]
