@@ -231,11 +231,12 @@ by the app. `tokens.colors` values are what the app renders as swatches, so keep
 
 ## Then hand off — the APP drives the next step in the pane
 
-**Do NOT ask a chat question or run the next command yourself.** Once the files are written, the app
-reads `figma.json` and presents the findings + the next-step choice **as cards in the full-screen
-pane** (like Get Designing), so the designer never types a command. Your job ends at: write the three
-files, then a **single short confirmation line** in chat (e.g. "Imported skywater-website_R55 — choose
-how to continue in the panel."). Nothing more.
+**Do NOT ask a chat question, run the next command yourself, or post a chat summary.** Once the files
+are written, the app reads `figma.json` and presents the findings + the next-step choice **as cards in
+the full-screen pane** (like Get Designing), so the designer never types a command and never needs a
+chat recap. Your job ends the moment the three files are written: **STOP silently** — do not print a
+confirmation line ("Imported X — choose how to continue"), a summary, or any closing message. The pane
+IS the confirmation; a chat line here is redundant and confusing to the designer.
 
 The `structure` you record drives which cards the pane shows:
 
