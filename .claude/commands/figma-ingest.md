@@ -91,11 +91,15 @@ to the closest webfont and note the substitution.
   logo, a footer copyright line, or the file name. Record it as `brandName` (the real name, e.g.
   "SkyWater", not a tidy slug). If you genuinely cannot tell, leave it null. This pre-fills the
   designer's "Company or brand name" field.
-- **Logo.** Find the primary logo node (a layer named logo / wordmark / brand, usually in the nav or
-  footer). Export it with **`download_assets`** (prefer SVG; PNG at 2x otherwise) and save it into the
-  project as **`public/images/logo.<ext>`**, then set **`VITE_BRAND_LOGO=/images/logo.<ext>`** in the
-  project `.env` (the scaffold's header reads that). Record the path as `logo`. If there is no clear
-  logo node, skip it (leave `logo` null) — do not export a random graphic.
+- **Logo (best-effort).** A "logo" layer is often a **component set with variants** (State=default /
+  hover) wrapping the real artwork one level down. Drill in: find the logo component → its **default**
+  variant → the innermost image/vector node, and export **that** node with **`download_assets`**
+  (prefer SVG; PNG at 2x otherwise). Save it as **`public/images/logo.<ext>`** and set
+  **`VITE_BRAND_LOGO=/images/logo.<ext>`** in the project `.env` (the scaffold's header reads it).
+  **Only set `logo` to that path if a file was actually written** — never claim a logo you did not
+  verify was exported. If you cannot cleanly export it (nested instance, no exportable node, export
+  returned nothing), leave `logo` null and briefly say so; the app then offers the designer a
+  one-click upload on the findings screen. Do not export a random graphic as a fallback.
 
 ## Write two files under `.thinkany/references/`
 

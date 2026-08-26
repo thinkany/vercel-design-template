@@ -5707,6 +5707,28 @@ async function showFigmaFindings() {
     findings.appendChild(ul);
   }
 
+  // Logo: a small "imported" note if auto-export worked, else a one-click upload fallback (the
+  // reliable path when the logo is a nested component the agent couldn't cleanly export).
+  if (meta.logo) {
+    const done = document.createElement("div"); done.className = "ifigma-fontup-note"; done.style.marginTop = "14px";
+    done.textContent = F.logoImported; findings.appendChild(done);
+  } else {
+    const box = document.createElement("div"); box.className = "ifigma-fontup";
+    const lead = document.createElement("div"); lead.className = "ifigma-fontup-lead"; lead.textContent = F.logoUploadLead(meta.brandName);
+    const btn = document.createElement("button"); btn.type = "button"; btn.className = "ifigma-fontup-btn"; btn.textContent = F.logoUploadBtn;
+    const note = document.createElement("div"); note.className = "ifigma-fontup-note"; note.hidden = true;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      let res = null;
+      try { res = await window.desktop.uploadLogo(); } catch {}
+      btn.disabled = false;
+      if (res && res.ok) { note.textContent = F.logoUploadDone; note.hidden = false; btn.hidden = true; }
+      else if (res && !res.canceled) { note.textContent = (res && res.error) || F.logoUploadFail; note.hidden = false; }
+    });
+    box.append(lead, btn, note);
+    findings.appendChild(box);
+  }
+
   // A non-web font (e.g. DotMatrix Two) can't be assumed available → offer to upload its files
   // (one or several weights). font:install copies them into public/fonts/ + writes @font-face.
   const customFonts = Array.isArray(meta.customFonts) ? meta.customFonts.filter((f) => f && f.family) : [];

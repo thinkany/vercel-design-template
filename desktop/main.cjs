@@ -1690,6 +1690,34 @@ ipcMain.handle("font:install", async (_event, { family } = {}) => {
   if (res.canceled || !res.filePaths.length) return { ok: false, canceled: true };
   return installFontFiles(currentProject, family, res.filePaths);
 });
+
+// Manual logo upload from the Figma findings screen — the reliable fallback when auto-export
+// couldn't cleanly pull a nested/component logo. Mirrors saveDesignLogo's on-disk convention
+// (public/images/logo.<ext> + VITE_BRAND_LOGO) but takes a picked file path.
+function installLogoFromFile(projectDir, src) {
+  try {
+    const ext = (path.extname(src).toLowerCase() || ".png");
+    const dir = path.join(projectDir, "public", "images");
+    fs.mkdirSync(dir, { recursive: true });
+    for (const e of [".svg", ".png", ".jpg", ".jpeg", ".webp"]) { try { fs.unlinkSync(path.join(dir, "logo" + e)); } catch { /* not there */ } }
+    const fname = "logo" + ext;
+    fs.copyFileSync(src, path.join(dir, fname));
+    const rel = "/images/" + fname;
+    upsertProjectEnv(projectDir, "VITE_BRAND_LOGO", rel);
+    return { ok: true, src: rel, filename: path.basename(src) };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+ipcMain.handle("figma:uploadLogo", async () => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: "Upload the brand logo",
+    properties: ["openFile"],
+    filters: [{ name: "Images", extensions: ["svg", "png", "jpg", "jpeg", "webp"] }],
+    buttonLabel: "Add logo",
+  });
+  if (res.canceled || !res.filePaths.length) return { ok: false, canceled: true };
+  return installLogoFromFile(currentProject, res.filePaths[0]);
+});
 ipcMain.handle("license:save", async (_event, { key }) => {
   const k = (key || "").trim();
   if (!k) return { ok: false, error: "Enter your license key first." };
