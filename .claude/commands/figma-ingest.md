@@ -180,7 +180,7 @@ picks it up with no special-casing. `digest.json`:
 
 _Distilled from the imported Figma frame. Treat this as the primary style direction; the palette and type are EXACT (from the file's variables)._
 
-_Build from THIS digest. The brand is already wired into tokens.css. Do NOT screenshot the Figma frame section-by-section, and do NOT read image/screenshot files back into context — reference the ingested images/icons by their `public/images/figma/` paths. That re-reading is the single biggest cost and it is not needed: the section outline + component details below carry the layout._
+_Build from this digest, and MATCH the source faithfully — fidelity is the priority. The brand is already wired into tokens.css. To get the colors, icons, and detail right, DO look at the design: screenshot the frame's sections for visual reference (get_screenshot) as much as you need — that visual check is what makes the build accurate. Use the ingested images/icons by their `public/images/figma/` paths (they are already downloaded; don't re-fetch them)._
 
 - **Overall feel:** ...
 - **Type:** ...
