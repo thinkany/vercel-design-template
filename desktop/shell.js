@@ -5635,7 +5635,8 @@ function enterFigmaStartMode() {
     intakeStack.appendChild(working);
     updateBackButton();
     awaitingFigmaIngest = true;
-    sendText("/figma-ingest " + arg);
+    // Send the real command but SHOW a friendly label in the chat (runAgent echoes echoText).
+    runAgent("/figma-ingest " + arg, COPY.intake.figma.echoImport);
   };
   const submit = () => {
     const url = extractFigmaUrl(input.value) || input.value.trim();
@@ -5766,7 +5767,7 @@ async function showFigmaFindings() {
     ? [
         { label: F.designPageLabel, desc: F.designPageDesc, onClick: () => {
             resetIntake(); setChatCollapsed(false); showPlaceholder(COPY.preview.figmaIngestStart);
-            sendText("/design build this page from the imported Figma frame. The brand (--ta-* palette + fonts) is already wired into tokens.css, and `.thinkany/references/digest.md` has the section outline, component details, images and icons. Build from THAT. Do NOT screenshot the Figma frame section-by-section and do NOT read image files back into context — reference the ingested images/icons by their `public/images/figma/` paths (one overview screenshot at most). The scaffold shape (DesignSurface, Header/Footer, pages.ts, menu.ts, tokens.css, brand.ts) is already inlined in /design — do not re-read those to recall structure; follow /design's cheat-sheet.");
+            runAgent("/design build this page from the imported Figma frame. The brand (--ta-* palette + fonts) is already wired into tokens.css, and `.thinkany/references/digest.md` has the section outline, component details, images and icons. Build from THAT. Do NOT screenshot the Figma frame section-by-section and do NOT read image files back into context — reference the ingested images/icons by their `public/images/figma/` paths (one overview screenshot at most). The scaffold shape (DesignSurface, Header/Footer, pages.ts, menu.ts, tokens.css, brand.ts) is already inlined in /design — do not re-read those to recall structure; follow /design's cheat-sheet.", COPY.intake.figma.echoBuildPage);
           } },
         { label: F.briefLabel, desc: F.briefDesc, onClick: enterDesignBriefMode },
       ]

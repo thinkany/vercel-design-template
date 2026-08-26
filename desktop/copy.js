@@ -682,6 +682,8 @@ window.COPY = {
       importLabel: "Import",
       skip: "Skip, just start designing",
       invalidUrl: "That doesn’t look like a Figma frame link.",
+      echoImport: "Import my Figma URL",
+      echoBuildPage: "Build the page",
       workingTitle: "Reading your Figma frame",
       workingLead: "Pulling the colors, type, and structure. One moment.",
       doneTitle: (name) => (name ? `Imported ${name}` : "Imported from Figma"),
