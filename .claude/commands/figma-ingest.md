@@ -85,8 +85,12 @@ live on the components, not the tokens. For the few KEY components only, pull a 
 `get_design_context` on that ONE node** (a primary button, a text link / CTA, a card) — node-scoped,
 so it stays cheap even though the full-page code view is off. Extract the exact values and record
 them as directives in `figma.json.components` + the digest's **Component details** line:
-- **Buttons:** shape + corner radius (e.g. pill / fully-rounded vs 8px vs square), padding, border,
-  fill, and any hover state.
+- **Buttons:** capture the **exact** corner radius AND the button height. Classify crisply: if the
+  radius is >= half the height (or is 999 / 9999px, `50%`, or "full"), it is a **PILL** — record it
+  verbatim as `border-radius: 9999px`, never a rounded-down guess. Also padding, border, fill, and
+  hover. The single most common miss is a pill flattening to a subtle radius because the build fell
+  back to the scaffold's default button rounding — so record the exact value and that it must
+  OVERRIDE that default.
 - **Links / CTAs:** treatment (underline, arrow icon, letter-spaced caps) and hover.
 - **Cards / containers:** hairline-rule vs boxed vs shadowed, radius, padding.
 These are the details a plain screenshot read misses. Capture the real values, not generic defaults.
@@ -179,7 +183,7 @@ _Distilled from the imported Figma frame. Treat this as the primary style direct
 - **Avoid:** ...
 - **Section outline:** Hero, Features, Pricing, Footer  (from the frame's named layers)
 - **Type roles (wire `--ta-font-*` to these, uploaded custom files are in `public/fonts/`):** Display/eyebrow = DotMatrix Two; Body = Outfit; ... USE them, do not leave the template default.
-- **Component details:** Buttons = pill / fully-rounded; Links = arrow-icon + letter-spaced caps (hover swaps the arrow); Cards = hairline rule, no box. MATCH these, not generic defaults.
+- **Component details:** Buttons = **fully-rounded pill, `border-radius: 9999px`** — apply this EXACT value and OVERRIDE the scaffold's default button rounding; do NOT settle for a subtle radius. Links = arrow-icon + letter-spaced caps (hover swaps the arrow); Cards = hairline rule, no box. MATCH these, not generic defaults.
 - **Icons:** real SVGs are in `public/images/figma/icons/` (e.g. `arrow.svg` + `arrow-hover.svg`) — use these for links/CTAs, not a text arrow or a substitute.
 - **Images:** curated images from the source Figma are in `public/images/figma/` — USE these first (they are the client's own assets); only source new images for anything they do not cover.
 ```
@@ -197,7 +201,7 @@ signal). Do not fold this into the digest:
   "fonts": ["..."],
   "customFonts": [{ "family": "DotMatrix Two" }],
   "typeRoles": { "display": "DotMatrix Two", "eyebrow": "DotMatrix Two", "body": "Outfit", "mono": null },
-  "components": { "button": "pill, 999px radius, letter-spaced caps, amber on dark", "link": "arrow-icon + micro-caps, hover swaps arrow", "card": "hairline rule, no box" },
+  "components": { "button": "fully-rounded pill, border-radius: 9999px, letter-spaced caps, amber on dark", "link": "arrow-icon + micro-caps, hover swaps arrow", "card": "hairline rule, no box" },
   "images": [{ "name": "hero", "path": "/images/figma/hero.jpg" }],
   "icons": [{ "name": "arrow", "path": "/images/figma/icons/arrow.svg", "hoverPath": "/images/figma/icons/arrow-hover.svg" }],
   "sections": [{ "name": "Hero", "frame": "<frame name>" }],
