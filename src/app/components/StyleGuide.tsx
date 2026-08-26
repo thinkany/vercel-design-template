@@ -799,7 +799,7 @@ function HeaderSection() {
         />
         <DemoBox bg={C.white} pad={0}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 24px", borderBottom: `1px solid ${C.light}` }}>
-            <div style={{ fontFamily: F.display, fontSize: 22, fontWeight: 700, color: C.ink, letterSpacing: "-0.01em" }}>{siteConfig.clientName}</div>
+            <div style={{ fontFamily: F.display, fontSize: 22, fontWeight: 700, color: C.ink, letterSpacing: "-0.01em" }}>{siteConfig.isBranded ? siteConfig.clientName : ""}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
               {["Home", "About", "Work", "Contact"].map((l) => (
                 <span key={l} style={{ fontFamily: F.sans, fontSize: 13, fontWeight: 500, letterSpacing: "0.04em", color: C.dark }}>{l}</span>
@@ -930,7 +930,7 @@ export function StyleGuide({ onNavigate, variationId, needsSetup, onMarkUpdated,
       <div style={{ background: CA.ink, borderBottom: `3px solid ${CA.accent}` }}>
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "28px 48px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <div style={{ fontFamily: A.body, fontSize: 10, fontWeight: 600, letterSpacing: "0.18em", color: "#fff", marginBottom: 6, textTransform: "uppercase" }}>{siteConfig.clientName}</div>
+            <div style={{ fontFamily: A.body, fontSize: 10, fontWeight: 600, letterSpacing: "0.18em", color: "#fff", marginBottom: 6, textTransform: "uppercase" }}>{siteConfig.isBranded ? siteConfig.clientName : ""}</div>
             <h1 style={{ fontFamily: A.heading, fontSize: 28, fontWeight: 700, color: "#fff", margin: 0, lineHeight: 1.1 }}>{siteConfig.isBranded && siteConfig.projectName ? siteConfig.projectName : "Design System"}</h1>
             <div style={{ fontFamily: A.body, fontSize: 13, color: "rgba(255,255,255,0.5)", marginTop: 6, fontStyle: "italic" }}>
               Atomic Design System
@@ -995,7 +995,7 @@ export function StyleGuide({ onNavigate, variationId, needsSetup, onMarkUpdated,
             <div style={{ maxWidth: 680 }}>
               <div style={{ fontFamily: A.body, fontSize: 10, fontWeight: 600, letterSpacing: "0.18em", color: CA.accent, marginBottom: 12 }}>INTRODUCTION</div>
               <h1 style={{ fontFamily: A.heading, fontSize: 40, fontWeight: 700, color: CA.ink, lineHeight: 1.1, margin: "0 0 20px" }}>
-                The {siteConfig.clientName} Design System
+                {siteConfig.isBranded ? `The ${siteConfig.clientName} Design System` : "The Design System"}
               </h1>
               <p style={{ fontFamily: A.body, fontSize: 16, color: CA.dark, lineHeight: 1.7, marginBottom: 16 }}>
                 This system follows <strong>Brad Frost's Atomic Design</strong> methodology, extended downward with a <em>Primitives</em> (sub-atomic) layer that defines the raw tokens all atoms are built from.

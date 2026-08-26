@@ -1670,7 +1670,10 @@ function applyFigmaBrand(projectDir) {
   if (tr.body) { setVar("ta-font-sans", fam(tr.body, "system-ui, sans-serif")); nFonts++; }
   if (tr.mono) { setVar("ta-font-mono", fam(tr.mono, "ui-monospace, monospace")); nFonts++; }
   try { fs.writeFileSync(cssPath, css); } catch (e) { return { ok: false, reason: String((e && e.message) || e) }; }
-  return { ok: true, colors: nColors, fonts: nFonts };
+  // Set the gleaned brand name too, so the styleguide/header show it immediately instead of the
+  // "Client Name" placeholder (the name was known from ingest; no reason to wait for the build).
+  if (meta.brandName && typeof meta.brandName === "string") { try { upsertProjectEnv(projectDir, "VITE_CLIENT_NAME", meta.brandName.trim()); } catch { /* env write best-effort */ } }
+  return { ok: true, colors: nColors, fonts: nFonts, brandName: meta.brandName || null };
 }
 ipcMain.handle("figma:applyBrand", () => (currentProject ? applyFigmaBrand(currentProject) : { ok: false, reason: "no-project" }));
 
