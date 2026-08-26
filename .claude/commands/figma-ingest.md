@@ -66,6 +66,12 @@ Call these on the frame node, in order. Batch where the MCP allows.
 - `spacing`, `radii`: the numeric scales.
 Keep the exact values. These are the ground-truth brand seed (the payoff over guessing from pixels).
 
+**Also record `colorRoles`** — the palette mapped to the seven `--ta-*` roles (primary / accent /
+surface / ink / body / muted / border), AA-safe (text roles must clear WCAG AA on the surface; nudge
+a failing one and it is fine). The app **auto-wires `colorRoles` + `typeRoles` into `tokens.css`** the
+moment the ingest finishes, so the design starts on the real brand, not the template defaults. Get
+this mapping right — it is what the build actually renders.
+
 **Structure (from `get_metadata`).** Produce a short **section outline** (ordered named regions), and
 classify the frame:
 - `"page"` — reads as a real page: **≥ 2 stacked section-level auto-layout frames**, or named layers
@@ -174,6 +180,8 @@ picks it up with no special-casing. `digest.json`:
 
 _Distilled from the imported Figma frame. Treat this as the primary style direction; the palette and type are EXACT (from the file's variables)._
 
+_Build from THIS digest. The brand is already wired into tokens.css. Do NOT screenshot the Figma frame section-by-section, and do NOT read image/screenshot files back into context — reference the ingested images/icons by their `public/images/figma/` paths. That re-reading is the single biggest cost and it is not needed: the section outline + component details below carry the layout._
+
 - **Overall feel:** ...
 - **Type:** ...
 - **Layout:** ...
@@ -198,6 +206,7 @@ signal). Do not fold this into the digest:
   "frames": [{ "nodeId": "<node-id>", "name": "<frame name>" }],
   "generatedAt": "<ISO now>",
   "tokens": { "colors": { "amber-500": "#F0BC48", "...": "#RRGGBB" }, "type": {...}, "spacing": {...}, "radii": {...} },
+  "colorRoles": { "primary": "#F0BC48", "accent": "#B7872D", "surface": "#212121", "ink": "#FFFFFF", "body": "#C9C9C9", "muted": "#686868", "border": "#4C4C4C" },
   "fonts": ["..."],
   "customFonts": [{ "family": "DotMatrix Two" }],
   "typeRoles": { "display": "DotMatrix Two", "eyebrow": "DotMatrix Two", "body": "Outfit", "mono": null },

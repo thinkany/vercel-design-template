@@ -76,6 +76,7 @@ contextBridge.exposeInMainWorld("desktop", {
   // ---- Derive license (Figma export) ----
   getLicenseStatus: () => ipcRenderer.invoke("license:status"),
   readFigmaMeta: () => ipcRenderer.invoke("figma:readMeta"),
+  applyFigmaBrand: () => ipcRenderer.invoke("figma:applyBrand"),
   installFont: (family) => ipcRenderer.invoke("font:install", { family }),
   uploadLogo: () => ipcRenderer.invoke("figma:uploadLogo"),
   saveLicense: (key) => ipcRenderer.invoke("license:save", { key }),

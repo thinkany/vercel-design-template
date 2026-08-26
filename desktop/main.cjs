@@ -1647,6 +1647,30 @@ ipcMain.handle("figma:readMeta", () => {
   catch { return null; }
 });
 
+// Wire the imported Figma brand into tokens.css DETERMINISTICALLY, so any next step (Design this
+// page / Start designing) starts branded instead of on the template defaults. figma.json already
+// carries the exact mapping (colorRoles → the seven --ta-* roles, AA-safe; typeRoles → the faces);
+// this just applies it. Non-interactive on purpose — the designer can refine later via
+// /setup-styleguide. Fixes the "page built with default --ta-* colors + fonts" bug.
+function applyFigmaBrand(projectDir) {
+  let meta; try { meta = JSON.parse(fs.readFileSync(path.join(projectDir, ".thinkany", "references", "figma.json"), "utf8")); }
+  catch { return { ok: false, reason: "no-figma-json" }; }
+  const cssPath = path.join(projectDir, "src", "styles", "tokens.css");
+  let css; try { css = fs.readFileSync(cssPath, "utf8"); } catch { return { ok: false, reason: "no-tokens-css" }; }
+  const setVar = (name, val) => { if (!val) return; const re = new RegExp(`(--${name}\\s*:\\s*)[^;]+;`); if (re.test(css)) css = css.replace(re, `$1${val};`); };
+  const roles = (meta.colorRoles && typeof meta.colorRoles === "object") ? meta.colorRoles : {};
+  let nColors = 0; for (const [role, hex] of Object.entries(roles)) if (/^#[0-9a-fA-F]{3,8}$/.test(String(hex))) { setVar(`ta-${role}`, hex); nColors++; }
+  const tr = (meta.typeRoles && typeof meta.typeRoles === "object") ? meta.typeRoles : {};
+  const fam = (f, fb) => (f ? `"${f}", ${fb}` : null); // custom faces keep a fallback if not uploaded
+  let nFonts = 0;
+  if (tr.display) { setVar("ta-font-display", fam(tr.display, "system-ui, sans-serif")); nFonts++; }
+  if (tr.body) { setVar("ta-font-sans", fam(tr.body, "system-ui, sans-serif")); nFonts++; }
+  if (tr.mono) { setVar("ta-font-mono", fam(tr.mono, "ui-monospace, monospace")); nFonts++; }
+  try { fs.writeFileSync(cssPath, css); } catch (e) { return { ok: false, reason: String((e && e.message) || e) }; }
+  return { ok: true, colors: nColors, fonts: nFonts };
+}
+ipcMain.handle("figma:applyBrand", () => (currentProject ? applyFigmaBrand(currentProject) : { ok: false, reason: "no-project" }));
+
 // Upload the files for a custom (non-web) font the Figma import flagged. Opens a multi-select
 // picker (add one or several weight files), copies them into public/fonts/, and appends a
 // weight/style-guessed @font-face block to src/styles/fonts.css so the design can use the real
