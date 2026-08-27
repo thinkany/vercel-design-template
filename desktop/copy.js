@@ -664,6 +664,8 @@ window.COPY = {
       logo: "Logo (optional)",
       logoPlaceholder: "Drop or choose a logo image (PNG, SVG, JPG)",
       reference: (kind) => `Is there a ${kind} you love? Share it and what draws you to it.`,
+      heroLayout: "How should the hero (the first thing visitors see) be laid out?",
+      heroLayoutHelp: "Pick a starting structure, or let me choose.",
     },
     // The start fork. Shown only when Figma is licensed (Start from Figma + Get Designing);
     // unlicensed users skip it and go straight to Get Designing. (clientSetup* kept for now:

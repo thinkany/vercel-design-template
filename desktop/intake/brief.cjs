@@ -31,6 +31,7 @@
  *                                            public/, referenced by src); set by main,
  *                                            not a raw card value (never carries base64).
  * @property {string[]|null} notes           Free-form extra context the designer added.
+ * @property {string|null} heroLayout        Picked hero-section layout (a HERO_LAYOUTS id).
  * @property {object[]|null} referenceAssets  Uploaded design references (mirrors the ingest manifest).
  * @property {string|null} referenceDigest    The distilled reference direction (digest.md text).
  */
@@ -39,6 +40,10 @@ const BRIEF_FIELDS = [
   "deliverableType", "projectType", "what", "audience", "references", "colorSources", "fontSources",
   "sections", "variationAxes", "existingCode", "tone", "deviceTargets",
   "clientName", "projectName", "logo", "notes",
+  // Layout intent: the designer's picked hero-section layout (a HERO_LAYOUTS id,
+  // e.g. "split"). Client-rendered card, shown after sections only when Hero is
+  // among them. null = agent decides. First of a planned per-section "page flow".
+  "heroLayout",
   // Reference-ingest (set from the ingest, not from a card — see references.cjs / ingest.cjs):
   "referenceAssets", "referenceDigest",
   // Design-variety: the sampled Direction (design-variety-spec.md), set at build handoff,

@@ -3491,6 +3491,7 @@ function resetIntake() {
   startChoicesShown = false;
   refsRevealed = false;
   voiceStepDone = false;
+  heroStepDone = false;
   intakePhase = "idle";
   currentIntakeId = null;
   exitReview(); // clear the review's head-hidden state
@@ -3597,6 +3598,7 @@ function composeRail() {
       add("Fonts", brief.fontSources.map((f) => f && f.value).filter(Boolean).join(", "));
     }
     if (Array.isArray(brief.sections) && brief.sections.length) add("Sections", brief.sections.join(", "));
+    if (brief.heroLayout) add("Hero", HERO_LAYOUT_TITLE[brief.heroLayout] || brief.heroLayout);
     if (Array.isArray(brief.references) && brief.references.length) {
       add("Likes", brief.references.map((r) => r.url + (r.reason ? ` (${r.reason})` : "")).join("; "));
     }
@@ -4047,6 +4049,60 @@ function renderVoiceStep() {
   if (scroller) { try { scroller.scrollTo({ top: centerTo, behavior: "smooth" }); } catch { scroller.scrollTop = centerTo; } }
 }
 
+// ---- Hero-layout step (renderer-injected, after sections) --------------------
+// Shown right after the model turn (which gathers sections), but ONLY when Hero is
+// among the chosen sections. Mirrors the voice step: a single client card, folded
+// into the Brief via applyIntakeAnswers, then on submit advances the brief-complete
+// flow. Skippable ("I'll let you choose") = null = the agent decides the hero.
+let heroStepDone = false;
+
+function heroStepApplicable() {
+  const s = lastBrief && Array.isArray(lastBrief.sections) ? lastBrief.sections : null;
+  return !!(s && s.some((x) => /hero/i.test(String(x))));
+}
+
+function renderHeroStep() {
+  if (intakeStack.querySelector(".hero-step")) return; // already showing
+  currentIntakeId = null;
+  const card = {
+    id: "heroLayout", field: "heroLayout", type: "hero-layout",
+    label: COPY.intake.q.heroLayout, help: COPY.intake.q.heroLayoutHelp,
+    skippable: true, agentDecidesLabel: COPY.intake.letYouChoose,
+  };
+  const group = document.createElement("div");
+  group.className = "intake-group hero-step";
+  const continueBtn = document.createElement("button");
+  continueBtn.className = "intake-continue";
+  continueBtn.textContent = COPY.intake.continue;
+
+  const refreshReady = () => { continueBtn.disabled = !ctl.isReady(); };
+  const requestSubmit = () => { if (!group.classList.contains("answered") && ctl.isReady()) submit(); };
+  const ctl = renderIntakeCard(card, refreshReady, requestSubmit);
+  group.append(ctl.el, continueBtn);
+  refreshReady();
+
+  async function submit() {
+    if (group.classList.contains("answered")) return;
+    group.classList.add("answered");
+    const val = ctl.getValue();
+    ctl.collapse();
+    const done = doneNote();
+    continueBtn.replaceWith(done);
+    autoDismissTool(done, 900);
+    heroStepDone = true;
+    if (val && lastBrief) { lastBrief.heroLayout = val; composeRail(); } // immediate: brief rail
+    try { await window.desktop.applyIntakeAnswers([{ id: card.id, field: card.field, type: card.type }], { [card.id]: val }); } catch {}
+    setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then continue the flow
+  }
+  continueBtn.addEventListener("click", submit);
+
+  intakeStack.appendChild(group);
+  const scroller = intakeph.classList.contains("flow") ? intakeph.querySelector(".intake-inner") : intakeph;
+  const centerTo = scroller ? intakeCenterTarget(scroller, group) : 0;
+  fadeSlideIn(group, { dy: 44, duration: 720, delay: 60 });
+  if (scroller) { try { scroller.scrollTo({ top: centerTo, behavior: "smooth" }); } catch { scroller.scrollTop = centerTo; } }
+}
+
 // ---- Client-rendered intake (no model turn) ---------------------------------
 // The fixed brief questions (what / names / reference) are posed by the RENDERER and
 // folded straight into the Brief via applyIntakeAnswers — zero tokens, same rails as
@@ -4163,6 +4219,8 @@ function beginModelIntakeTurn(type) {
 
 function showBriefComplete() {
   if (intakePhase !== "gathering") return; // only from the gathering state
+  // Hero layout comes right after sections, but only if Hero is one of them.
+  if (!heroStepDone && heroStepApplicable()) { renderHeroStep(); return; }
   if (!voiceStepDone) { renderVoiceStep(); return; } // the Tone/rules step is the last question
   intakePhase = "review";
   currentIntakeId = null;
@@ -4840,6 +4898,86 @@ function showPreparing() {
 }
 
 // Dispatch to the per-type renderer. Every builder returns
+// ---- Hero-layout picker (client-rendered, single-select wireframe chips) ------
+// Shown after sections, only when Hero is among them (heroStepApplicable). Each chip
+// is a black-bordered tile: an inline SVG wireframe + a title beneath. The value is
+// the layout id → Brief.heroLayout → an explicit hero instruction in the design
+// prompt. Keep the ids in sync with HERO_LAYOUT_PHRASES in main.cjs. First of a
+// planned per-section "page flow"; the chip vocabulary here is meant to extend.
+const HERO_LAYOUTS = [
+  { id: "centered", title: "Centered", svg:
+    '<svg viewBox="0 0 120 84" aria-hidden="true">' +
+    '<rect x="34" y="22" width="52" height="8" rx="2" fill="#111"/>' +
+    '<rect x="40" y="36" width="40" height="5" rx="2" fill="#c7c7d0"/>' +
+    '<rect x="44" y="45" width="32" height="5" rx="2" fill="#c7c7d0"/>' +
+    '<rect x="40" y="56" width="18" height="9" rx="2" fill="#111"/>' +
+    '<rect x="62" y="56" width="18" height="9" rx="2" fill="none" stroke="#111" stroke-width="1.5"/>' +
+    '</svg>' },
+  { id: "split", title: "Split", svg:
+    '<svg viewBox="0 0 120 84" aria-hidden="true">' +
+    '<rect x="12" y="24" width="38" height="8" rx="2" fill="#111"/>' +
+    '<rect x="12" y="38" width="32" height="5" rx="2" fill="#c7c7d0"/>' +
+    '<rect x="12" y="47" width="28" height="5" rx="2" fill="#c7c7d0"/>' +
+    '<rect x="12" y="58" width="20" height="9" rx="2" fill="#111"/>' +
+    '<rect x="64" y="18" width="44" height="48" rx="3" fill="#ececf1"/>' +
+    '</svg>' },
+  { id: "full-screen", title: "Full Screen", svg:
+    '<svg viewBox="0 0 120 84" aria-hidden="true">' +
+    '<rect x="6" y="8" width="108" height="68" rx="3" fill="#ececf1"/>' +
+    '<rect x="40" y="30" width="40" height="8" rx="2" fill="#111"/>' +
+    '<rect x="46" y="44" width="28" height="5" rx="2" fill="#8a8a94"/>' +
+    '<rect x="48" y="55" width="24" height="9" rx="2" fill="#111"/>' +
+    '</svg>' },
+  { id: "minimal", title: "Type-led", svg:
+    '<svg viewBox="0 0 120 84" aria-hidden="true">' +
+    '<rect x="12" y="26" width="70" height="11" rx="2" fill="#111"/>' +
+    '<rect x="12" y="42" width="54" height="11" rx="2" fill="#111"/>' +
+    '<rect x="12" y="61" width="30" height="5" rx="2" fill="#c7c7d0"/>' +
+    '</svg>' },
+  { id: "showcase", title: "Showcase", svg:
+    '<svg viewBox="0 0 120 84" aria-hidden="true">' +
+    '<rect x="42" y="12" width="36" height="7" rx="2" fill="#111"/>' +
+    '<rect x="48" y="23" width="24" height="4" rx="2" fill="#c7c7d0"/>' +
+    '<rect x="20" y="34" width="80" height="40" rx="3" fill="#ececf1"/>' +
+    '</svg>' },
+];
+const HERO_LAYOUT_TITLE = Object.fromEntries(HERO_LAYOUTS.map((h) => [h.id, h.title]));
+
+function buildHeroLayout(card, body, onChange) {
+  let selected = null;
+  const tiles = [];
+  const grid = document.createElement("div");
+  grid.className = "ihero";
+  HERO_LAYOUTS.forEach((h) => {
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "ihero-chip";
+    tile.dataset.id = h.id;
+    const art = document.createElement("span");
+    art.className = "ihero-art";
+    art.innerHTML = h.svg;
+    const cap = document.createElement("span");
+    cap.className = "ihero-cap";
+    cap.textContent = h.title;
+    tile.append(art, cap);
+    tile.addEventListener("click", () => {
+      if (tile.disabled) return;
+      selected = h.id;
+      tiles.forEach((t) => t.classList.toggle("selected", t.dataset.id === selected));
+      onChange();
+    });
+    tiles.push(tile);
+    grid.appendChild(tile);
+  });
+  body.appendChild(grid);
+  return {
+    getValue: () => selected,
+    hasValue: () => selected != null,
+    setDisabled: (d) => tiles.forEach((t) => { t.disabled = d; }),
+    display: () => (selected ? (HERO_LAYOUT_TITLE[selected] || selected) : ""),
+  };
+}
+
 // { getValue, hasValue, setDisabled, display }; renderIntakeCard wraps it in the
 // card shell, adds the optional skip affordance, and exposes collapse() — which,
 // on submit, swaps the live inputs for a clean read-only value so no disabled
@@ -4872,6 +5010,7 @@ function renderIntakeCard(card, onChange, requestSubmit) {
     : card.type === "reference" ? buildReference(card, body, onChange)
     : card.type === "color-swatch" ? buildColorSwatch(card, body, onChange)
     : card.type === "font-pick" ? buildFontPick(card, body, onChange)
+    : card.type === "hero-layout" ? buildHeroLayout(card, body, onChange)
     : card.type === "logo" ? buildLogoUpload(card, body, onChange)
     : card.type === "voice" ? buildVoiceRules(card, body, onChange)
     : buildOpenText(card, body, onChange); // defensive fallback
@@ -5910,6 +6049,7 @@ async function pickDeliverable(type) {
   startChoicesShown = false;
   refsRevealed = false; // rail stays hidden until the first question is answered
   voiceStepDone = false; // the renderer-injected Tone/rules step hasn't run yet
+  heroStepDone = false; // the hero-layout step (after sections, if Hero chosen)
   intakeph.classList.add("flow"); // two-column mode: questions left, references rail right
   intakeph.classList.remove("start", "hasbrief");
   enterIntakeMode();

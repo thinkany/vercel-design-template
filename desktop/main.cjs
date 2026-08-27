@@ -1302,6 +1302,16 @@ ipcMain.handle("intake:setTone", (event, { tone } = {}) => {
 // extractors, applies the brand into v01 (which flips previewReady → the pane
 // reveals the live preview), then designs the page. Kept as an assembled NL string
 // because /design-brief is authored around $ARGUMENTS, not a structured object.
+// The designer's picked hero layout → an explicit, authoritative build instruction.
+// Keep the ids in sync with HERO_LAYOUTS in shell.js (the renderer catalog).
+const HERO_LAYOUT_PHRASES = {
+  "centered": "a centered hero — headline, subhead, and call-to-action buttons stacked and centered",
+  "split": "a split hero — the copy on one side and a supporting visual on the other",
+  "full-screen": "a full-screen hero that fills the viewport (100vh), with the copy overlaid on a full-bleed image or color",
+  "minimal": "a type-led hero — a large left-aligned headline with generous whitespace and no dominant image",
+  "showcase": "a product-showcase hero — a short headline up top with a large product visual dominating below",
+};
+
 function buildDesignPrompt(brief) {
   const b = brief || {};
   const parts = [];
@@ -1328,6 +1338,12 @@ function buildDesignPrompt(brief) {
   const fonts = list(b.fontSources).map((f) => f && f.value).filter(Boolean);
   if (fonts.length) parts.push(`Fonts ${fonts.join(", ")}`);
   if (list(b.sections).length) parts.push(`Include these sections: ${b.sections.join(", ")}`);
+  if (b.heroLayout && HERO_LAYOUT_PHRASES[b.heroLayout]) {
+    parts.push(
+      "Hero section layout (the designer’s explicit choice — honor this exactly for " +
+      `the hero, over any other hero guidance): ${HERO_LAYOUT_PHRASES[b.heroLayout]}`
+    );
+  }
   if (list(b.audience).length) parts.push(`Audience: ${b.audience.join(", ")}`);
   if (b.tone) parts.push(`Tone: ${b.tone}`);
   if (list(b.deviceTargets).length) parts.push(`Devices: ${b.deviceTargets.join(", ")}`);
