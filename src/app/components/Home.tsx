@@ -25,7 +25,7 @@ interface Props {
 // type, and components. It keeps the desktop/mobile responsive preview.
 function HomeContent({ onNavigate }: { onNavigate: (page: string) => void }) {
   return (
-    <div data-block="hero" data-block-name="Hero" className="min-h-full w-full bg-ta-surface flex flex-col items-center justify-center px-8 py-20 text-center">
+    <div data-block="hero" data-block-name="Hero" className="fill-screen w-full bg-ta-surface flex flex-col items-center justify-center px-8 py-20 text-center">
       {siteConfig.projectName && (
         <div className="font-ta-sans text-[11px] font-semibold tracking-[0.18em] uppercase text-ta-muted mb-5">
           {siteConfig.projectName}

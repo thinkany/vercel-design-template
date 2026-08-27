@@ -54,3 +54,14 @@ img {
 *:has(> .ta-img-hover):hover::after {
   opacity: 1;
 }
+
+/* Full-screen hero utility — use this (not raw `min-h-full`) for a hero meant to fill
+   the screen. `dvh` is self-contained: it reads the actual screen with no reliance on a
+   definite-height parent chain, so it Just Works with normal page scroll (the footer
+   stays reachable) and needs no special surface plumbing. On desktop it fills the live
+   window; in a Figma capture it fills the fixed export viewport — same result, both
+   places. (Reserved for full-screen sections only; every other section is content-height,
+   so this is the one spot a viewport unit is the right tool.) */
+.fill-screen {
+  min-height: 100dvh;
+}

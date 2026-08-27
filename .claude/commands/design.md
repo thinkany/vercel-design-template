@@ -272,6 +272,20 @@ file only when you're about to **change** it:
    `-translate-x-1/2` at `>100%` width) **MUST sit in a section with `overflow-hidden`**
    (`cqi` is a % of the whole surface, not the parent, so it leaks past the page edge
    otherwise). The page must **never scroll horizontally.**
+   **A full-screen ("fill the viewport") section uses the `fill-screen` utility for its
+   height, then FLEXES its content, it never stacks two full heights.** Make the section
+   **`fill-screen flex flex-col`**, `fill-screen` reads the screen directly (it's the one
+   sanctioned viewport-height tool, use it, NOT raw `min-h-full`/`vh`, for a full-screen
+   hero) so it fills in both the live preview and a Figma export with no parent-height
+   plumbing. Its main content region fills with **`flex-1`** (never a *second* full-height
+   declaration), and any secondary strip (stats row, scroll cue, logo bar) is a normal
+   last child the flex pins to the bottom. Make that `flex-1` region a **flex column**
+   (`flex flex-col justify-center`, or `justify-end` etc.) so its content actually centers
+   in the slack, a **`grid` there won't center**, its single auto row hugs the top and
+   leaves the slack below (put any multi-column split on an inner wrapper, e.g. a
+   capped-width `@lg:w-7/12`). A second full-height block inside the section, or a
+   full-height block *plus* a sibling, **ADD up and overflow:** it fills the screen but the
+   content mis-centers and the strip spills past the fold.
    **Font-relative measures go on the element that carries the font.** `ch`/`em`
    resolve against the *declaring* element's own computed font, not its descendants'.
    So `max-w-[20ch]` on a plain wrapper around a big `font-ta-display` heading sizes to
