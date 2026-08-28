@@ -1291,8 +1291,10 @@
       .idir-lev:hover, .idir-lev:focus-visible { color: #111; outline: none; }
       .idir-lev-ic { display: inline-flex; }
       .idir-lev-ic svg { width: 15px; height: 15px; display: block; }
+      /* Anchored to the icon and extending RIGHT (never past the panel's left edge on
+         narrow windows). The arrow stays over the "i". */
       .idir-lev-tip {
-        position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%) translateY(3px);
+        position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-16px) translateY(3px);
         width: max-content; max-width: 220px; padding: 8px 10px; border-radius: 7px;
         background: #111; color: #fff; font-size: 11.5px; font-weight: 400; letter-spacing: 0;
         text-transform: none; line-height: 1.45; text-align: left; white-space: normal;
@@ -1300,10 +1302,10 @@
         transition: opacity .12s, transform .12s; z-index: 40;
       }
       .idir-lev-tip::after {
-        content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+        content: ""; position: absolute; top: 100%; left: 16px; transform: translateX(-50%);
         border: 5px solid transparent; border-top-color: #111;
       }
-      .idir-lev:hover .idir-lev-tip, .idir-lev:focus-visible .idir-lev-tip { opacity: 1; transform: translateX(-50%) translateY(0); }
+      .idir-lev:hover .idir-lev-tip, .idir-lev:focus-visible .idir-lev-tip { opacity: 1; transform: translateX(-16px) translateY(0); }
       .idir-stops { display: flex; gap: 4px; }
       .idir-stop { flex: 1 1 0; min-width: 0; border: 1px solid #e0e0e6; border-radius: 7px; padding: 6px 4px; background: #fff; color: #555; font: inherit; font-size: 11.5px; text-transform: capitalize; cursor: pointer; transition: border-color .12s, background .12s, color .12s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .idir-stop:hover { border-color: #111; color: #111; }
