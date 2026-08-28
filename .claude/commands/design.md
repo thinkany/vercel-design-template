@@ -419,6 +419,16 @@ hand-rolls site nav. What you touch:
   `Header.tsx`/`Footer.tsx`, keep that logo-vs-wordmark branch** (`siteConfig.logo ?
   <img …/> : siteConfig.clientName`) so the logo isn't lost, capped to a sensible height
   with aspect preserved.
+- **The logo/wordmark IS the home link, don't add a standalone "Home" nav item.** A
+  separate "Home" link reads dated; the brand lockup fills that role. Link the logo to
+  home (`?v={id}`) and **omit the home page from the nav list** (filter it out of the
+  `pages.ts` map when rendering nav, keep About / Work / Pricing / Contact / etc.).
+- **Vary the header's height + proportion to the design, it's a design choice, not a
+  constant.** Don't default every site to the same thin fixed bar. Let the direction and
+  brand drive it: a bold / editorial / luxury design can carry a taller, more generous
+  header (larger logo, more padding, even a two-row or split header); a dense / utility one
+  stays compact. Match the header's weight to the design instead of reaching for one stock
+  height every time.
 - **Mobile menu ships by default** ([MobileMenu.tsx](../../src/app/components/MobileMenu.tsx)),
   a slide-in drawer, the designer never has to ask for one. It's an **in-frame overlay**
   (not a portal), the Header hamburger toggles it via shared state, and it slides from
