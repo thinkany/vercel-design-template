@@ -31,6 +31,7 @@
  *                                            public/, referenced by src); set by main,
  *                                            not a raw card value (never carries base64).
  * @property {string[]|null} notes           Free-form extra context the designer added.
+ * @property {string|null} menuLayout        Picked header/navigation layout (a MENU_LAYOUTS id).
  * @property {string|null} heroLayout        Picked hero-section layout (a HERO_LAYOUTS id).
  * @property {object[]|null} referenceAssets  Uploaded design references (mirrors the ingest manifest).
  * @property {string|null} referenceDigest    The distilled reference direction (digest.md text).
@@ -43,6 +44,10 @@ const BRIEF_FIELDS = [
   // Layout intent: the designer's picked hero-section layout (a HERO_LAYOUTS id,
   // e.g. "split"). Client-rendered card, shown after sections only when Hero is
   // among them. null = agent decides. First of a planned per-section "page flow".
+  // Header/nav layout: the designer's picked menu style (simple / dropdown / mega) +
+  // logo/link placement (a MENU_LAYOUTS id). Client-rendered card, shown just before
+  // the hero step, for website projects. null = agent decides.
+  "menuLayout",
   "heroLayout",
   // Reference-ingest (set from the ingest, not from a card — see references.cjs / ingest.cjs):
   "referenceAssets", "referenceDigest",

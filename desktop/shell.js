@@ -3492,6 +3492,7 @@ function resetIntake() {
   refsRevealed = false;
   voiceStepDone = false;
   heroStepDone = false;
+  menuStepDone = false;
   intakePhase = "idle";
   currentIntakeId = null;
   exitReview(); // clear the review's head-hidden state
@@ -3598,6 +3599,7 @@ function composeRail() {
       add("Fonts", brief.fontSources.map((f) => f && f.value).filter(Boolean).join(", "));
     }
     if (Array.isArray(brief.sections) && brief.sections.length) add("Sections", brief.sections.join(", "));
+    if (brief.menuLayout) add("Header", MENU_LAYOUT_TITLE[brief.menuLayout] || brief.menuLayout);
     if (brief.heroLayout) add("Hero", HERO_LAYOUT_TITLE[brief.heroLayout] || brief.heroLayout);
     if (Array.isArray(brief.references) && brief.references.length) {
       add("Likes", brief.references.map((r) => r.url + (r.reason ? ` (${r.reason})` : "")).join("; "));
@@ -4103,6 +4105,59 @@ function renderHeroStep() {
   if (scroller) { try { scroller.scrollTo({ top: centerTo, behavior: "smooth" }); } catch { scroller.scrollTop = centerTo; } }
 }
 
+// ---- Header / navigation step (renderer-injected, just before the hero step) --
+// Only for website projects (app/brand projects render no global header). Same shape
+// as the hero step: one client card (grouped menu wireframes), folded into the Brief,
+// then advances the flow. Skippable ("I'll let you choose") = null = the agent decides.
+let menuStepDone = false;
+
+function menuStepApplicable() {
+  // The site header/nav only renders for website projects (see DesignSurface chrome gate).
+  return !!(lastBrief && lastBrief.projectType !== "app");
+}
+
+function renderMenuStep() {
+  if (intakeStack.querySelector(".menu-step")) return; // already showing
+  currentIntakeId = null;
+  const card = {
+    id: "menuLayout", field: "menuLayout", type: "menu-layout",
+    label: COPY.intake.q.menuLayout, help: COPY.intake.q.menuLayoutHelp,
+    skippable: true, agentDecidesLabel: COPY.intake.letYouChoose,
+  };
+  const group = document.createElement("div");
+  group.className = "intake-group menu-step";
+  const continueBtn = document.createElement("button");
+  continueBtn.className = "intake-continue";
+  continueBtn.textContent = COPY.intake.continue;
+
+  const refreshReady = () => { continueBtn.disabled = !ctl.isReady(); };
+  const requestSubmit = () => { if (!group.classList.contains("answered") && ctl.isReady()) submit(); };
+  const ctl = renderIntakeCard(card, refreshReady, requestSubmit);
+  group.append(ctl.el, continueBtn);
+  refreshReady();
+
+  async function submit() {
+    if (group.classList.contains("answered")) return;
+    group.classList.add("answered");
+    const val = ctl.getValue();
+    ctl.collapse();
+    const done = doneNote();
+    continueBtn.replaceWith(done);
+    autoDismissTool(done, 900);
+    menuStepDone = true;
+    if (val && lastBrief) { lastBrief.menuLayout = val; composeRail(); } // immediate: brief rail
+    try { await window.desktop.applyIntakeAnswers([{ id: card.id, field: card.field, type: card.type }], { [card.id]: val }); } catch {}
+    setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then continue the flow
+  }
+  continueBtn.addEventListener("click", submit);
+
+  intakeStack.appendChild(group);
+  const scroller = intakeph.classList.contains("flow") ? intakeph.querySelector(".intake-inner") : intakeph;
+  const centerTo = scroller ? intakeCenterTarget(scroller, group) : 0;
+  fadeSlideIn(group, { dy: 44, duration: 720, delay: 60 });
+  if (scroller) { try { scroller.scrollTo({ top: centerTo, behavior: "smooth" }); } catch { scroller.scrollTop = centerTo; } }
+}
+
 // ---- Client-rendered intake (no model turn) ---------------------------------
 // The fixed brief questions (what / names / reference) are posed by the RENDERER and
 // folded straight into the Brief via applyIntakeAnswers — zero tokens, same rails as
@@ -4219,6 +4274,8 @@ function beginModelIntakeTurn(type) {
 
 function showBriefComplete() {
   if (intakePhase !== "gathering") return; // only from the gathering state
+  // Header / navigation layout comes first (website projects only), just before the hero.
+  if (!menuStepDone && menuStepApplicable()) { renderMenuStep(); return; }
   // Hero layout comes right after sections, but only if Hero is one of them.
   if (!heroStepDone && heroStepApplicable()) { renderHeroStep(); return; }
   if (!voiceStepDone) { renderVoiceStep(); return; } // the Tone/rules step is the last question
@@ -4257,6 +4314,10 @@ function exitReview() {
 // designer can steer or re-draw before building. All deck access is behind the seam
 // (directionMeta + sampleDirection IPCs); the renderer never imports the deck. The current
 // Direction is stored on the brief (main side) so "start designing" uses exactly this.
+// A thin "i in a circle" info glyph (matches the app's line-icon style), used on each
+// lever label to hang a hover tooltip off of.
+const INFO_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/></svg>';
+
 let _directionMeta = null;
 async function getDirectionMeta() {
   if (_directionMeta) return _directionMeta;
@@ -4343,7 +4404,27 @@ async function renderDirectionPanel(host, opts = {}) {
     row.className = "idir-axis";
     const label = document.createElement("div");
     label.className = "idir-axis-label";
-    label.textContent = (COPY.intake.direction.axisLabels || {})[name] || name;
+    const labelText = document.createElement("span");
+    labelText.textContent = (COPY.intake.direction.axisLabels || {})[name] || name;
+    label.appendChild(labelText);
+    // An "i" with a hover tooltip explaining the lever — so the meaning is available
+    // inline, without opening the "?" help overlay (which stays as-is).
+    const help = (COPY.intake.direction.axisHelp || {})[name];
+    if (help) {
+      const info = document.createElement("span");
+      info.className = "idir-lev"; // NOT .idir-info — that's the panel's "?" help trigger
+      info.tabIndex = 0;
+      info.setAttribute("aria-label", help);
+      const ic = document.createElement("span");
+      ic.className = "idir-lev-ic";
+      ic.innerHTML = INFO_SVG;
+      const tip = document.createElement("span");
+      tip.className = "idir-lev-tip";
+      tip.setAttribute("role", "tooltip");
+      tip.textContent = help;
+      info.append(ic, tip);
+      label.appendChild(info);
+    }
     const stopsWrap = document.createElement("div");
     stopsWrap.className = "idir-stops";
     const btns = [];
@@ -4978,6 +5059,101 @@ function buildHeroLayout(card, body, onChange) {
   };
 }
 
+// ---- Header / navigation picker (client-rendered, grouped wireframe chips) -----
+// Shown just before the hero step, for website projects. Three menu TYPES (simple /
+// dropdown / mega), each with the same three logo/link placements, drawn as small
+// header wireframes in the same chip style as the hero picker. Single-select across
+// all nine; the value is a MENU_LAYOUTS id → Brief.menuLayout → an explicit header
+// instruction in the design prompt. Keep ids in sync with MENU_LAYOUT_PHRASES (main.cjs).
+const MENU_GROUPS = [
+  { type: "simple", label: "Simple menu", panel: null, options: [
+    { id: "simple-left-right", logo: "left", links: "right", title: "Logo left, links right" },
+    { id: "simple-left-center", logo: "left", links: "center", title: "Logo left, links center" },
+    { id: "simple-center-split", logo: "center", links: "split", title: "Logo center, links sides" },
+  ] },
+  { type: "dropdown", label: "Dropdown menu", panel: "dropdown", options: [
+    { id: "dropdown-left-right", logo: "left", links: "right", title: "Logo left, links right" },
+    { id: "dropdown-left-center", logo: "left", links: "center", title: "Logo left, links center" },
+    { id: "dropdown-center-split", logo: "center", links: "split", title: "Logo center, links sides" },
+  ] },
+  { type: "mega", label: "Mega menu", panel: "mega", options: [
+    { id: "mega-left-right", logo: "left", links: "right", title: "Logo left, links right" },
+    { id: "mega-left-center", logo: "left", links: "center", title: "Logo left, links center" },
+    { id: "mega-center-split", logo: "center", links: "split", title: "Logo center, links sides" },
+  ] },
+];
+const MENU_LAYOUT_TITLE = Object.fromEntries(
+  MENU_GROUPS.flatMap((g) => g.options.map((o) => [o.id, `${g.label}, ${o.title.toLowerCase()}`])),
+);
+
+// Compose a small header wireframe: a header band with a logo mark + link bars placed
+// per (logo/links), plus a dropdown or mega panel hint below for those types.
+function menuChipSvg(logo, links, panel) {
+  const bar = (x) => `<rect x="${x}" y="19" width="12" height="4" rx="2" fill="#111"/>`;
+  let s = '<svg viewBox="0 0 120 84" aria-hidden="true">';
+  s += '<rect x="8" y="12" width="104" height="18" rx="3" fill="#ececf1"/>'; // header band
+  s += `<rect x="${logo === "center" ? 55 : 14}" y="16.5" width="10" height="9" rx="1.5" fill="#111"/>`; // logo
+  if (logo === "center") s += bar(16) + bar(32) + bar(74) + bar(90);        // split both sides
+  else if (links === "right") s += bar(66) + bar(82) + bar(98);
+  else s += bar(44) + bar(60) + bar(76);                                     // center
+  if (panel === "dropdown") {
+    const px = logo === "center" ? 74 : links === "center" ? 58 : 82;
+    s += `<rect x="${px}" y="34" width="28" height="20" rx="2" fill="#fff" stroke="#111" stroke-width="1"/>`;
+    s += `<rect x="${px + 5}" y="39" width="18" height="3" rx="1.5" fill="#c7c7d0"/>`;
+    s += `<rect x="${px + 5}" y="46" width="14" height="3" rx="1.5" fill="#c7c7d0"/>`;
+  } else if (panel === "mega") {
+    s += '<rect x="8" y="34" width="104" height="34" rx="2" fill="#fff" stroke="#111" stroke-width="1"/>';
+    for (let cx = 16; cx <= 94; cx += 26) {
+      s += `<rect x="${cx}" y="40" width="16" height="3" rx="1.5" fill="#111"/>`;
+      s += `<rect x="${cx}" y="47" width="14" height="2.5" rx="1.25" fill="#c7c7d0"/>`;
+      s += `<rect x="${cx}" y="53" width="14" height="2.5" rx="1.25" fill="#c7c7d0"/>`;
+      s += `<rect x="${cx}" y="59" width="10" height="2.5" rx="1.25" fill="#c7c7d0"/>`;
+    }
+  }
+  return s + "</svg>";
+}
+
+function buildMenuLayout(card, body, onChange) {
+  let selected = null;
+  const tiles = [];
+  MENU_GROUPS.forEach((group) => {
+    const gl = document.createElement("div");
+    gl.className = "imenu-group-label";
+    gl.textContent = group.label;
+    body.appendChild(gl);
+    const grid = document.createElement("div");
+    grid.className = "ihero imenu-grid";
+    group.options.forEach((opt) => {
+      const tile = document.createElement("button");
+      tile.type = "button";
+      tile.className = "ihero-chip";
+      tile.dataset.id = opt.id;
+      const art = document.createElement("span");
+      art.className = "ihero-art";
+      art.innerHTML = menuChipSvg(opt.logo, opt.links, group.panel);
+      const cap = document.createElement("span");
+      cap.className = "ihero-cap";
+      cap.textContent = opt.title;
+      tile.append(art, cap);
+      tile.addEventListener("click", () => {
+        if (tile.disabled) return;
+        selected = opt.id;
+        tiles.forEach((t) => t.classList.toggle("selected", t.dataset.id === selected));
+        onChange();
+      });
+      tiles.push(tile);
+      grid.appendChild(tile);
+    });
+    body.appendChild(grid);
+  });
+  return {
+    getValue: () => selected,
+    hasValue: () => selected != null,
+    setDisabled: (d) => tiles.forEach((t) => { t.disabled = d; }),
+    display: () => (selected ? (MENU_LAYOUT_TITLE[selected] || selected) : ""),
+  };
+}
+
 // { getValue, hasValue, setDisabled, display }; renderIntakeCard wraps it in the
 // card shell, adds the optional skip affordance, and exposes collapse() — which,
 // on submit, swaps the live inputs for a clean read-only value so no disabled
@@ -5011,6 +5187,7 @@ function renderIntakeCard(card, onChange, requestSubmit) {
     : card.type === "color-swatch" ? buildColorSwatch(card, body, onChange)
     : card.type === "font-pick" ? buildFontPick(card, body, onChange)
     : card.type === "hero-layout" ? buildHeroLayout(card, body, onChange)
+    : card.type === "menu-layout" ? buildMenuLayout(card, body, onChange)
     : card.type === "logo" ? buildLogoUpload(card, body, onChange)
     : card.type === "voice" ? buildVoiceRules(card, body, onChange)
     : buildOpenText(card, body, onChange); // defensive fallback
@@ -6050,6 +6227,7 @@ async function pickDeliverable(type) {
   refsRevealed = false; // rail stays hidden until the first question is answered
   voiceStepDone = false; // the renderer-injected Tone/rules step hasn't run yet
   heroStepDone = false; // the hero-layout step (after sections, if Hero chosen)
+  menuStepDone = false; // the header/nav step (before hero, website projects)
   intakeph.classList.add("flow"); // two-column mode: questions left, references rail right
   intakeph.classList.remove("start", "hasbrief");
   enterIntakeMode();

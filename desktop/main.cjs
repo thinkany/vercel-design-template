@@ -1302,6 +1302,22 @@ ipcMain.handle("intake:setTone", (event, { tone } = {}) => {
 // extractors, applies the brand into v01 (which flips previewReady → the pane
 // reveals the live preview), then designs the page. Kept as an assembled NL string
 // because /design-brief is authored around $ARGUMENTS, not a structured object.
+// The designer's picked header/navigation layout → an explicit build instruction.
+// Keep the ids in sync with MENU_LAYOUTS in shell.js (the renderer catalog). Type
+// (simple / dropdown / mega) governs the menu behaviour (menu.ts); the rest is the
+// logo/link placement in the Header.
+const MENU_LAYOUT_PHRASES = {
+  "simple-left-right": "a simple header (no dropdowns), logo on the left and nav links on the right",
+  "simple-left-center": "a simple header (no dropdowns), logo on the left and nav links centered",
+  "simple-center-split": "a simple header (no dropdowns), logo centered with nav links split to its left and right",
+  "dropdown-left-right": "a header with dropdown menus, logo on the left and nav links on the right",
+  "dropdown-left-center": "a header with dropdown menus, logo on the left and nav links centered",
+  "dropdown-center-split": "a header with dropdown menus, logo centered with nav links split to its left and right",
+  "mega-left-right": "a header with a full-width mega menu, logo on the left and nav links on the right",
+  "mega-left-center": "a header with a full-width mega menu, logo on the left and nav links centered",
+  "mega-center-split": "a header with a full-width mega menu, logo centered with nav links split to its left and right",
+};
+
 // The designer's picked hero layout → an explicit, authoritative build instruction.
 // Keep the ids in sync with HERO_LAYOUTS in shell.js (the renderer catalog).
 const HERO_LAYOUT_PHRASES = {
@@ -1338,6 +1354,13 @@ function buildDesignPrompt(brief) {
   const fonts = list(b.fontSources).map((f) => f && f.value).filter(Boolean);
   if (fonts.length) parts.push(`Fonts ${fonts.join(", ")}`);
   if (list(b.sections).length) parts.push(`Include these sections: ${b.sections.join(", ")}`);
+  if (b.menuLayout && MENU_LAYOUT_PHRASES[b.menuLayout]) {
+    parts.push(
+      "Header / navigation layout (the designer’s explicit choice — build the site " +
+      "header this way, configuring menu.ts for the menu style): " +
+      MENU_LAYOUT_PHRASES[b.menuLayout]
+    );
+  }
   if (b.heroLayout && HERO_LAYOUT_PHRASES[b.heroLayout]) {
     parts.push(
       "Hero section layout (the designer’s explicit choice — honor this exactly for " +
@@ -1387,6 +1410,7 @@ ipcMain.handle("intake:designPrompt", async () => {
       what: intakeBrief.what,
       tone: intakeBrief.tone,
       projectType: intakeBrief.projectType,
+      references: intakeBrief.references, // the "why I like it" steers the direction
       designer: designerId(), // reads this designer's anti-repetition memory (lever 3)
     });
     if (direction) { intakeBrief.direction = direction; intakeBrief.directionBlock = block; }
@@ -1424,6 +1448,7 @@ ipcMain.handle("intake:sampleDirection", async (event, { axes, lens } = {}) => {
     what: intakeBrief.what,
     tone: intakeBrief.tone,
     projectType: intakeBrief.projectType,
+    references: intakeBrief.references, // the "why I like it" steers the direction
     axes: axes && typeof axes === "object" ? axes : undefined,
     lens: lens || undefined,
     designer: designerId(), // a reroll also avoids the designer's recent lenses/motifs
@@ -1503,7 +1528,7 @@ ipcMain.handle("variation:read", (_event, { id } = {}) => {
 ipcMain.handle("direction:sampleFor", async (_event, { signals, axes, lens } = {}) => {
   if (!varietyLicensed()) return { direction: null };
   const s = signals || {};
-  const { direction, block } = await sampleDirection({ what: s.what, tone: s.tone, projectType: s.projectType, axes: axes && typeof axes === "object" ? axes : undefined, lens: lens || undefined, designer: designerId() });
+  const { direction, block } = await sampleDirection({ what: s.what, tone: s.tone, projectType: s.projectType, references: s.references, axes: axes && typeof axes === "object" ? axes : undefined, lens: lens || undefined, designer: designerId() });
   return { direction, block };
 });
 

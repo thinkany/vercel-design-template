@@ -597,6 +597,14 @@ window.COPY = {
       title: "Design direction",
       reroll: "↻ Reroll",
       axisLabels: { convention: "Convention", energy: "Energy", structure: "Structure", era: "Era", motion: "Motion" },
+      // Hover-tooltip copy for the "i" beside each lever label (what the axis does).
+      axisHelp: {
+        convention: "How familiar or novel the design language is — from common, expected patterns to experimental.",
+        energy: "The visual intensity — from calm and restrained to loud and maximal.",
+        structure: "How the layout is organized — from strict, ordered grids to loose and organic.",
+        era: "The stylistic era it evokes — from timeless to avant-garde and forward-looking.",
+        motion: "How much movement and animation — from fully static to kinetic.",
+      },
       groupDirections: "Directions",
       groupMovements: "Movements",
       helpTitle: "How the design direction works",
@@ -666,6 +674,8 @@ window.COPY = {
       reference: (kind) => `Is there a ${kind} you love? Share it and what draws you to it.`,
       heroLayout: "How should the hero (the first thing visitors see) be laid out?",
       heroLayoutHelp: "Pick a starting structure, or let me choose.",
+      menuLayout: "How should the site header and navigation be laid out?",
+      menuLayoutHelp: "Pick a header style, or let me choose.",
     },
     // The start fork. Shown only when Figma is licensed (Start from Figma + Get Designing);
     // unlicensed users skip it and go straight to Get Designing. (clientSetup* kept for now:
