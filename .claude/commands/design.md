@@ -322,6 +322,13 @@ file only when you're about to **change** it:
    (button, card, dialog, tabs, accordion, carousel, form, …), `lucide-react`
    icons, `motion` for animation, `recharts` for charts. Compose classNames with
    `cn()` from `ui/utils.ts`. Reach for these before hand-rolling.
+6. **Named `react` imports, never the `React.` namespace.** When you author a NEW
+   component (a divergent `Header.tsx`, a menu, a section wrapper), import types and
+   hooks by name, `import type { ReactNode } from "react"`, `import { useState } from
+   "react"`, matching the app components. Do **not** reach for `React.ReactNode` /
+   `React.useState`: page files have no global `React` (automatic JSX runtime), so it
+   errors and costs a self-correction. (The shadcn `ui/*` files use `React.` only
+   because they `import * as React`, don't copy that into a page/chrome component.)
 
 ## 4a. Honor the Design direction (when the prompt carries one)
 
