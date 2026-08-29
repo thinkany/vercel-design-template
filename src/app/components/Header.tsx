@@ -26,30 +26,32 @@ import { menuFor, type DropdownMenu, type MegaMenu } from "@/app/menu";
 function DropdownPanel({
   id, name, menu, open, onNavigate,
 }: { id: string; name: string; menu: DropdownMenu; open: boolean; onNavigate: (p: string) => void }) {
-  // Anchored under its nav item (parent is `relative`); flush to the header so the
-  // hover doesn't break crossing a gap. Marked as a block only when open.
-  //
-  // Keep it inside the frame: a left-aligned panel on a right-side nav item would
-  // spill past the right edge, so when it would overflow we flip to right-alignment.
-  // Measured against the HEADER (which spans the frame), not `window`, so it's
-  // correct inside the device-frame preview and the Figma export alike.
+  // Rendered at HEADER level (sibling of the mega panels), so `top-full` sits flush to the
+  // header's BOTTOM edge, matching the mega, rather than the nav item's bottom mid-header.
+  // Its horizontal position is measured from its trigger button (`[data-menu-item]`) so the
+  // panel opens directly under its item; if it would spill past the right edge we right-align
+  // it to the trigger instead. Measured against the HEADER (which spans the frame), not
+  // `window`, so it's correct in the device-frame preview and the Figma export alike.
   const ref = useRef<HTMLDivElement>(null);
-  const [alignRight, setAlignRight] = useState(false);
+  const [pos, setPos] = useState<{ left: number } | { right: number } | null>(null);
   useLayoutEffect(() => {
-    if (!open) return;
+    if (!open) { setPos(null); return; }
     const panel = ref.current;
-    const item = panel?.offsetParent as HTMLElement | null; // the `relative` nav item
     const header = panel?.closest("header");
-    if (!panel || !item || !header) return;
-    const itemLeft = item.getBoundingClientRect().left;
-    const headerRight = header.getBoundingClientRect().right;
-    setAlignRight(itemLeft + panel.offsetWidth > headerRight - 16);
-  }, [open]);
+    const trigger = header?.querySelector<HTMLElement>(`[data-menu-item="${id}"]`);
+    if (!panel || !header || !trigger) return;
+    const h = header.getBoundingClientRect();
+    const t = trigger.getBoundingClientRect();
+    // Left edge under the trigger; flip to right-aligned-to-trigger if it would overflow.
+    if (t.left - h.left + panel.offsetWidth > h.width - 16) setPos({ right: h.right - t.right });
+    else setPos({ left: t.left - h.left });
+  }, [open, id]);
   return (
     <div
       ref={ref}
       {...(open ? { "data-block": `menu-${id}`, "data-block-name": `Menu — ${name}` } : {})}
-      className={`absolute ${alignRight ? "right-0" : "left-0"} top-full z-40 min-w-[220px] flex-col border border-black/10 bg-ta-surface p-2 shadow-xl ${open ? "flex" : "hidden"}`}
+      style={pos ?? undefined}
+      className={`absolute top-full z-40 min-w-[220px] flex-col border border-black/10 bg-ta-surface p-2 shadow-xl ${open ? "flex" : "hidden"}`}
     >
       {menu.links.map((l) => (
         <button
@@ -163,9 +165,6 @@ export function Header({ onNavigate }: { onNavigate: (page: string) => void }) {
                     <ChevronDown size={13} className={`transition-transform ${activeItem === p.id ? "rotate-180" : ""}`} />
                   )}
                 </button>
-                {menu.kind === "dropdown" && (
-                  <DropdownPanel id={p.id} name={p.name} menu={menu} open={activeItem === p.id} onNavigate={onNavigate} />
-                )}
               </div>
             );
           })}
@@ -181,13 +180,16 @@ export function Header({ onNavigate }: { onNavigate: (page: string) => void }) {
         </button>
       </div>
 
-      {/* Mega panels live at header level so they can span the content column. Only
-          the active one renders open (each is its own captured block). */}
+      {/* Dropdown + mega panels both live at header level so they anchor flush to the
+          header's BOTTOM edge (a dropdown positions itself under its trigger; a mega spans
+          the content column). Only the active one renders open (each is its own block). */}
       {pages.map((p) => {
         const menu = menuFor(p.id);
-        return menu.kind === "mega" ? (
-          <MegaPanel key={p.id} id={p.id} name={p.name} menu={menu} open={activeItem === p.id} onNavigate={onNavigate} />
-        ) : null;
+        if (menu.kind === "mega")
+          return <MegaPanel key={p.id} id={p.id} name={p.name} menu={menu} open={activeItem === p.id} onNavigate={onNavigate} />;
+        if (menu.kind === "dropdown")
+          return <DropdownPanel key={p.id} id={p.id} name={p.name} menu={menu} open={activeItem === p.id} onNavigate={onNavigate} />;
+        return null;
       })}
     </header>
   );

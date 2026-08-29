@@ -438,7 +438,12 @@ hand-rolls site nav. What you touch:
   [`menu.ts`](../../src/app/menu.ts) (`none` / `dropdown` / `mega`, seeded from the
   setup `VITE_MENU_STYLE`, mix per item there). Panels are in-frame overlays in the
   Header (mega spans the content column). Open/active state is shared via
-  [`menuState.ts`](../../src/app/menuState.ts).
+  [`menuState.ts`](../../src/app/menuState.ts). **Both dropdown AND mega panels render at
+  HEADER level (not inside the nav item) with `absolute top-full`, so they anchor flush to
+  the header's BOTTOM edge**, a dropdown measures its trigger (`[data-menu-item]`) to
+  position under it. **Never anchor a dropdown inside its `relative` nav item** (its
+  `top-full` then lands at the item's bottom, mid-header, floating beneath the item instead
+  of dropping from the header). Match the base `Header.tsx` pattern when you diverge one.
 - **In-frame chrome must not portal.** shadcn `Sheet`/`Dialog`/`Drawer`/`Popover`
   render to `document.body` and escape the device frame, use inline absolute
   positioning (like `MobileMenu` / the Header menus) for anything meant to live inside
