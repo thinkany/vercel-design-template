@@ -354,6 +354,10 @@ window.COPY = {
   // ── Figma Export drawer (status; the key input lives in Licenses) ────────────
   figma: {
     licenseLabel: "Figma export license",
+    exportDesign: "Export Design",
+    exportCommand: "export to Figma",
+    exportDisabledHint: "Add your Figma export license to enable",
+    exportAfterBuild: "Export becomes available after build completes.",
     note: "Unlocks Figma export. Validated with the derive service; stored encrypted in your OS keychain.",
     manageInLicenses: "Add or remove this license in the Licenses drawer.",
   },

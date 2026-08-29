@@ -1507,6 +1507,34 @@ async function renderFigma(body) {
 
   body.appendChild(connStatusRow(COPY.figma.licenseLabel, lic.hasLicense, lic.hasLicense ? COPY.common.active : COPY.common.notSet, null, null));
 
+  // Export Design — populates + runs the "export to Figma" chat command (same as typing
+  // it). Enabled only when the license is active AND a build has finished (previewReady),
+  // since there's nothing to export until then.
+  const canExport = lic.hasLicense && design.previewReady;
+  const exportBtn = document.createElement("button");
+  exportBtn.type = "button";
+  exportBtn.className = "ifigma-export";
+  exportBtn.textContent = COPY.figma.exportDesign;
+  exportBtn.disabled = !canExport;
+  if (!lic.hasLicense) exportBtn.title = COPY.figma.exportDisabledHint;
+  else if (!design.previewReady) exportBtn.title = COPY.figma.exportAfterBuild;
+  exportBtn.addEventListener("click", () => {
+    if (exportBtn.disabled) return;
+    closeModal();
+    sendText(COPY.figma.exportCommand);
+  });
+  body.appendChild(exportBtn);
+
+  // Licensed but no finished build yet → explain why the button is waiting. (Only shown
+  // when the license is valid; an invalid license is already covered by the status row.)
+  if (lic.hasLicense && !design.previewReady) {
+    const waitMsg = document.createElement("div");
+    waitMsg.className = "muted";
+    waitMsg.style.marginTop = "8px";
+    waitMsg.textContent = COPY.figma.exportAfterBuild;
+    body.appendChild(waitMsg);
+  }
+
   const note = document.createElement("div");
   note.className = "muted";
   note.textContent = COPY.figma.note;

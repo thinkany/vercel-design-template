@@ -1067,6 +1067,16 @@
       .ifigma-import:hover { opacity: .9; }
       .ifigma-import:active { transform: translateY(1px); }
       .ifigma-import:disabled { opacity: .55; cursor: default; }
+      /* Export Design action in the Figma drawer — solid, full-width, gated on the license */
+      .ifigma-export {
+        display: block; width: 100%; margin: 14px 0 4px;
+        padding: 11px 20px; border-radius: 10px; border: none;
+        background: #111; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+        transition: opacity .12s, transform .06s;
+      }
+      .ifigma-export:hover:not(:disabled) { opacity: .9; }
+      .ifigma-export:active:not(:disabled) { transform: translateY(1px); }
+      .ifigma-export:disabled { opacity: .45; cursor: default; }
       .ifigma-skip { margin-top: 2px; background: none; border: none; color: #999; font-size: 12.5px; cursor: pointer; }
       .ifigma-skip:hover { color: #555; text-decoration: underline; }
 
