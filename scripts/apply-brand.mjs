@@ -64,11 +64,20 @@ function setBrandColor(ts, slug, value, text) {
   return ts.replace(re, `$1${value}$2${text}$3`);
 }
 // Insert an @import after the LAST existing @import (CSS requires @import atop).
+// A Google Fonts URL contains semicolons in its axis-weight lists
+// (…wght@0,8..60,300;0,8..60,400;…), so we must NOT treat the first ";" as the statement
+// end — that truncates the match mid-URL and splices the new import inside the base one.
+// Match a FULL `@import url(...);` instead: the URL has no ")" in it, so stop at the
+// closing paren, then find the last such statement and insert after it.
 function addFontImport(css, url) {
-  const re = /(@import[^;]*;)(?![\s\S]*@import)/;
   const line = `@import url('${url}');`;
   if (css.includes(line)) return css; // idempotent
-  return re.test(css) ? css.replace(re, `$1\n${line}`) : `${line}\n${css}`;
+  const re = /@import\s+url\([^)]*\)\s*;/g;
+  let last = null, m;
+  while ((m = re.exec(css)) !== null) last = m;
+  if (!last) return `${line}\n${css}`;
+  const end = last.index + last[0].length;
+  return css.slice(0, end) + `\n${line}` + css.slice(end);
 }
 function upsertEnv(env, key, value) {
   const line = `${key}="${value}"`;
