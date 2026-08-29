@@ -1328,6 +1328,20 @@ const HERO_LAYOUT_PHRASES = {
   "showcase": "a product-showcase hero — a short headline up top with a large product visual dominating below",
 };
 
+// The designer's picked contact/CTA build type → an explicit build instruction. Keep
+// the ids in sync with CTA_TYPES in shell.js (the renderer catalog). The template has
+// NO backend, so the form phrase tells the model to build a client-validated form with
+// a fake success state rather than invent a server call.
+const CTA_TYPE_PHRASES = {
+  "cta-form": "Build the contact / call-to-action section as a contact form (name, email, message, submit), " +
+    "using react-hook-form + the shadcn form components (form/input/textarea/label/button), with client-side " +
+    "validation and inline errors. There is NO backend, so do not POST anywhere or invent an API call: on a " +
+    "valid submit, show a graceful success state (e.g. “Thanks — we’ll be in touch”) instead of sending",
+  "cta-button": "Build the contact / call-to-action section as a button-led call to action (a prominent " +
+    "button or link like “Get in touch” or “Book a call”, plus supporting contact details such as email / " +
+    "phone / social), not a form",
+};
+
 function buildDesignPrompt(brief) {
   const b = brief || {};
   const parts = [];
@@ -1365,6 +1379,12 @@ function buildDesignPrompt(brief) {
     parts.push(
       "Hero section layout (the designer’s explicit choice — honor this exactly for " +
       `the hero, over any other hero guidance): ${HERO_LAYOUT_PHRASES[b.heroLayout]}`
+    );
+  }
+  if (b.ctaType && CTA_TYPE_PHRASES[b.ctaType]) {
+    parts.push(
+      "Contact / call-to-action section (the designer’s explicit choice — build it this way): " +
+      CTA_TYPE_PHRASES[b.ctaType]
     );
   }
   if (list(b.audience).length) parts.push(`Audience: ${b.audience.join(", ")}`);
@@ -1656,6 +1676,43 @@ ipcMain.handle("models:list", () => fetchModels());
 // A global pref (ui-state), independent of the user's per-session model pick.
 ipcMain.handle("fidelity:get", () => ({ hiFi: !!loadUiState().buildHiFi }));
 ipcMain.handle("fidelity:set", (_event, { hiFi } = {}) => { setUiState({ buildHiFi: !!hiFi }); return { ok: true, hiFi: !!hiFi }; });
+
+// Quiet-build narration (Phase 3): one live Art-Director sentence per build phase, from a
+// cheap Haiku call. Default-ON; a ui-state toggle disables it. Additive — the renderer keeps
+// its curated line on any failure/timeout, so this never blocks or breaks the build spine.
+function narrateEnabled() { const v = loadUiState().buildNarrate; return v === undefined ? true : !!v; }
+ipcMain.handle("narrate:get", () => ({ enabled: narrateEnabled() }));
+ipcMain.handle("narrate:set", (_e, { enabled } = {}) => { setUiState({ buildNarrate: !!enabled }); return { ok: true, enabled: !!enabled }; });
+ipcMain.handle("narrate:line", async (_e, { phase, title, bits } = {}) => {
+  if (!narrateEnabled() || !process.env.ANTHROPIC_API_KEY) return { ok: false };
+  try {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk"); // precedent: ingest.cjs visionPass
+    const client = new Anthropic();
+    const b = bits || {};
+    const facts = [
+      `Phase: ${title || phase}`,
+      b.paletteWord && b.paletteWord !== "palette" ? `Palette: ${b.paletteWord}` : "",
+      b.fontWords && b.fontWords !== "your type" ? `Type: ${b.fontWords}` : "",
+      b.heroWord ? `Hero layout: ${b.heroWord}` : "",
+    ].filter(Boolean).join("; ");
+    const call = client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 60,
+      temperature: 1,
+      system:
+        "You are a seasoned art director narrating a live website build to the client. Reply with " +
+        "ONE warm, specific, present-tense sentence about the current phase, under 18 words. No " +
+        "em-dashes, no preamble, no surrounding quotes.",
+      messages: [{ role: "user", content: facts }],
+    });
+    const msg = await Promise.race([
+      call,
+      new Promise((_, rej) => setTimeout(() => rej(new Error("narrate timeout")), 4000)),
+    ]);
+    const line = (msg?.content?.[0]?.text || "").trim().replace(/^["']+|["']+$/g, "");
+    return line ? { ok: true, line } : { ok: false };
+  } catch { return { ok: false }; }
+});
 ipcMain.handle("model:get", () => ({ model: currentModel }));
 ipcMain.handle("model:set", (_event, { model }) => {
   currentModel = model || null;

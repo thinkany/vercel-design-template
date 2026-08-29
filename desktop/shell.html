@@ -846,6 +846,17 @@
          calm, unhurried feel instead of a fast one-way sweep. */
       @keyframes ph-bounce { from { transform: translateX(0%); } to { transform: translateX(150%); } }
 
+      /* Quiet-build narration spine: a determinate "Step N of M" with a segmented bar.
+         Filled = done, the active segment carries the calm intra-phase shimmer so a long
+         phase still shows life. See docs/quiet-build-narration-spec.md. */
+      .ph-steplabel { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #9a9aa2; margin-bottom: 10px; }
+      .ph-steplabel[hidden] { display: none; }
+      .ph-steps { display: flex; gap: 6px; width: 260px; margin: 18px auto 0; }
+      .ph-steps[hidden] { display: none; }
+      .ph-steps .seg { flex: 1 1 0; height: 4px; background: #e4e4ea; border-radius: 4px; position: relative; overflow: hidden; }
+      .ph-steps .seg.done { background: #111; }
+      .ph-steps .seg.active::after { content: ""; position: absolute; inset: 0; width: 45%; background: #111; border-radius: 4px; animation: ph-bounce 2.3s ease-in-out infinite alternate; }
+
       /* ---- Intake host (in-pane onboarding — T3/T4) ------------------------- */
       #intakeph {
         position: absolute; inset: 0; overflow-y: auto;
@@ -1074,7 +1085,7 @@
       .ifigma-export {
         display: block; width: 100%; margin: 14px 0 4px;
         padding: 11px 20px; border-radius: 10px; border: none;
-        background: #111; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+        background: #111; color: #fff; font-size: 14px; font-weight: 400; cursor: pointer;
         transition: opacity .12s, transform .06s;
       }
       .ifigma-export:hover:not(:disabled) { opacity: .9; }
@@ -1173,6 +1184,8 @@
       /* read-only "applied" pills (e.g. global copy rules already in effect) */
       .ichip.applied { cursor: default; border: 1px dashed #cfcfd6; color: #666; background: #f7f7f9; }
       .ichip.applied:hover { background: #f7f7f9; }
+      /* global-rule pills: pre-selected + toggleable; unselecting one skips it here */
+      .ichip.global:not(.selected) { border-style: dashed; border-color: #cfcfd6; color: #999; text-decoration: line-through; }
       .voice-applied-note { font-size: 12px; color: #888; margin: 0 0 8px; }
 
       /* hero-layout — single-select wireframe chips (black border, SVG + caption below) */
@@ -1469,8 +1482,10 @@
         <div id="previewph">
           <div class="ph-inner">
             <div class="ph-emoji">👋</div>
+            <div class="ph-steplabel" id="ph-steplabel" hidden></div>
             <h2 id="ph-title" data-copy="preview.noProject.title"></h2>
             <p id="ph-text" data-copy="preview.noProject.text"></p>
+            <div class="ph-steps" id="ph-steps" hidden></div>
             <div class="ph-progress" id="ph-progress" hidden><div class="ph-progress-bar"></div></div>
           </div>
         </div>

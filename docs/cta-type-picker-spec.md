@@ -1,6 +1,7 @@
 # Contact / CTA type picker — Form vs Contact Button — spec
 
-**Status:** SPEC'd 2026-08-28, not built. Author: Rob's ask.
+**Status:** BUILT 2026-08-29 (feature/onboarding-intake, uncommitted). Spec'd 2026-08-28. Author: Rob's ask.
+Default no-backend behavior: fake success state (option 1). Fixed field set (name/email/message).
 **Where:** electron app intake picker (`desktop/shell.js` + `shell.html` + `copy.js`),
 `main.cjs` phrase injection; scaffold `/design` build rule.
 

@@ -33,6 +33,7 @@
  * @property {string[]|null} notes           Free-form extra context the designer added.
  * @property {string|null} menuLayout        Picked header/navigation layout (a MENU_LAYOUTS id).
  * @property {string|null} heroLayout        Picked hero-section layout (a HERO_LAYOUTS id).
+ * @property {string|null} ctaType           How the contact/CTA section is built ("cta-form" | "cta-button").
  * @property {object[]|null} referenceAssets  Uploaded design references (mirrors the ingest manifest).
  * @property {string|null} referenceDigest    The distilled reference direction (digest.md text).
  */
@@ -49,6 +50,10 @@ const BRIEF_FIELDS = [
   // the hero step, for website projects. null = agent decides.
   "menuLayout",
   "heroLayout",
+  // Contact/CTA build type: "cta-form" (a client-validated contact form) or
+  // "cta-button" (a button-led call to action, no form). Client-rendered card, shown
+  // only when Contact or CTA is among the chosen sections. null = agent decides.
+  "ctaType",
   // Reference-ingest (set from the ingest, not from a card — see references.cjs / ingest.cjs):
   "referenceAssets", "referenceDigest",
   // Design-variety: the sampled Direction (design-variety-spec.md), set at build handoff,

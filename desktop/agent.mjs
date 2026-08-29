@@ -5,6 +5,8 @@
 //   onEvent(evt) is called for each streamed chunk, where evt is one of:
 //     { type: "text",   text }            assistant text delta
 //     { type: "tool",   name }            a tool-use the agent invoked
+//     { type: "activity", name, target }  a completed tool-use + its file/command target
+//     { type: "todo",   todos }           a TodoWrite call's list (drives the build spine)
 //     { type: "result", text, usage }     end of the assistant turn (usage = the
 //                                          SDK's token usage for context sizing)
 //     { type: "error",  message }         something failed
@@ -352,6 +354,11 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
           for (const block of content) {
             if (block?.type === "tool_use") {
               onEvent({ type: "activity", name: block.name, target: toolTarget(block.input) });
+              // The /design build is TodoWrite-driven; forward the list so the renderer's
+              // quiet-build spine can advance to the phase the agent is actually on.
+              if (block.name === "TodoWrite" && Array.isArray(block.input?.todos)) {
+                onEvent({ type: "todo", todos: block.input.todos });
+              }
             }
           }
           break;

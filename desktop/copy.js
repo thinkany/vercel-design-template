@@ -98,6 +98,77 @@ window.COPY = {
     ],
   },
 
+  // ── Quiet-build narration: the Art-Director progress spine ──────────────────
+  // Shown in the preparing pane during the quiet Get-Designing build (chat hidden).
+  // Keyed by phase id (see computePhaseList in shell.js). {tokens} are filled from the
+  // Brief by briefBits() (paletteWord, fontWords, heroWord, sectionsWord, refName).
+  // Lines are progress-neutral (no "almost done"); rotated ~5s. slowLine adds a beat of
+  // reassurance for the long phases. Voice: a seasoned art director thinking aloud to a
+  // client — warm, specific, unhurried, confident. See docs/quiet-build-narration-spec.md.
+  build: {
+    stepLabel: (n, m) => `Step ${n} of ${m}`,
+    phases: {
+      understanding: {
+        title: "Reading your brief",
+        lines: [
+          "Taking in everything you told me and shaping the plan.",
+          "Getting my head around the look and the feel you’re after.",
+        ],
+      },
+      research: {
+        title: "Studying comparable sites",
+        lines: [
+          "Pulling up the strongest sites in your space to see where the bar sits.",
+          "Looking at how the best in your field handle this, so yours can go further.",
+        ],
+        slowLine: "This is the slow, worthwhile part. Good research is what keeps a design from feeling generic.",
+      },
+      foundations: {
+        title: "Setting the palette and type",
+        lines: [
+          "Mixing your {paletteWord} and pairing it with {fontWords}.",
+          "Getting the colors and type right first. Everything else hangs off this.",
+          "Laying the foundation your whole design will stand on.",
+        ],
+      },
+      header: {
+        title: "The header and navigation",
+        lines: [
+          "Laying out the header so visitors always know where they are.",
+          "Setting the navigation and the logo lockup.",
+        ],
+      },
+      hero: {
+        title: "The hero",
+        lines: [
+          "Blocking in the {heroWord} hero and giving the headline room to breathe.",
+          "This is the first thing visitors see, so I’m making it land.",
+        ],
+      },
+      sections: {
+        title: "The page sections",
+        lines: [
+          "Building out {sectionsWord}, one considered block at a time.",
+          "Setting the rhythm down the page so it reads with a clear flow.",
+        ],
+      },
+      contact: {
+        title: "The contact section",
+        lines: [
+          "Wiring up the contact section so reaching you feels effortless.",
+          "Making the last step, getting in touch, the easy one.",
+        ],
+      },
+      polish: {
+        title: "Polish and responsive",
+        lines: [
+          "Tightening the spacing and the details until it feels considered.",
+          "Making sure it holds together on every screen size.",
+        ],
+      },
+    },
+  },
+
   // ── Chat: tool-activity bubble verbs + the long-session nudges ──────────────
   chat: {
     // Playful stand-ins shown while a Bash tool runs.
@@ -476,7 +547,7 @@ window.COPY = {
     projectRulesEmpty: "No project-specific rules.",
     globalRules: "Global rules",
     globalRulesSub: "Apply to every project.",
-    globalsApplied: "Applied from your global rules:",
+    globalsApplied: "Your global rules (on by default; click one to skip it for this project):",
     ignoreGlobal: "Ignore global rules for this project",
     globalRulePlaceholder: "Add a global rule…",
     globalRulesEmpty: "No global rules yet.",
@@ -526,6 +597,9 @@ window.COPY = {
     imagesLabel: "Images",
     imagesDesc: "By default the design sources real images. Turn this on to skip that and hold every image spot with a marked placeholder instead, so you can drop in your own.",
     imagesToggle: "No images, placeholders only",
+    narrateLabel: "Narrate builds",
+    narrateDesc: "While a design builds, narrate what’s happening behind the scenes in an art-director voice. On by default; turn it off for a quieter, no-frills progress bar.",
+    narrateToggle: "Narrate the build with a live art-director voice",
     imagesOnPlaceholders: "✓ Placeholders only, I won’t source images.",
     imagesOnSourcing: "✓ Image sourcing back on.",
     researchLabel: "Research the field",
@@ -685,6 +759,8 @@ window.COPY = {
       heroLayoutHelp: "Pick a starting structure, or let me choose.",
       menuLayout: "How should the site header and navigation be laid out?",
       menuLayoutHelp: "Pick a header style, or let me choose.",
+      ctaType: "How should the contact / call-to-action section work?",
+      ctaTypeHelp: "A contact form, or a button-led call to action. Or let me choose.",
     },
     // The start fork. Shown only when Figma is licensed (Start from Figma + Get Designing);
     // unlicensed users skip it and go straight to Get Designing. (clientSetup* kept for now:

@@ -159,6 +159,11 @@ const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 let homeTab = null;         // the Home tab opened during the early reveal
 let homeBuilding = false;   // true while the Home tab is still being designed
 let buildMsgTimer = null;   // rotates the build-overlay subline
+// Quiet build (Get Designing): hold the preparing pane + a closed chat for the WHOLE
+// initial build — no mid-build browser/Style-guide reveal, no chat narration — then
+// reveal the finished design at the turn's end. Scoped to startDesigning so setup /
+// edit / reroll flows keep their normal progressive reveal.
+let quietBuildActive = false;
 
 // ---- Resizable chat | preview divider (min 400px, remembered) ---------------
 (function initChatResize() {
@@ -703,6 +708,24 @@ function finishBuildReveal() {
   updateRerollBtn(); // initial build done → the reroll button may now appear
 }
 
+// Quiet build (Get Designing) finished: nothing showed during the build, so now reveal the
+// completed design — both tabs, landing on the Home page — and open the chat for iteration.
+async function finishQuietBuild() {
+  quietBuildActive = false;
+  buildNarration.end(); // stop the spine rotation + hide the step chrome before the reveal
+  try { design = await window.desktop.getDesignState(); } catch {}
+  designJustActivated = true;
+  await showBrowser("home");   // probes the preview, opens Style guide + Home, lands on Home
+  setChatCollapsed(false);     // open the chat now, for iteration
+  showPreviewHelp();
+  healBuildPreview();          // clear any blank/premature first paint
+  // Get Designing captured the client/project name into .env after the bar title was set;
+  // refresh it now so the bar shows the real name.
+  window.desktop.getProjectStatus().then((p) => { if (p) setProjTitle(p); }).catch(() => {});
+  leanEditPending = true;      // next turn is an edit → fresh, lean session
+  updateRerollBtn();
+}
+
 // A large fresh design can PAINT a beat before Vite finishes compiling it, so the
 // first reveal sometimes shows a blank (empty #root) or error-overlay'd tab. Auto-
 // heal ONCE, a short settle after the reveal: reload any build tab that reads blank
@@ -727,7 +750,7 @@ async function healBuildPreview() {
   }
 }
 
-async function showBrowser() {
+async function showBrowser(landOn) {
   if (!viteUrl || tabsOpened) return;
   tabsOpened = true; // claim immediately so re-entrant calls don't double-open
   // Keep the "Working…" placeholder up until the server actually SERVES the
@@ -744,8 +767,9 @@ async function showBrowser() {
   previewph.hidden = true;
   browser.hidden = false;
   const style = openTab(styleUrl, "Style guide");
-  openTab(quickUrl("home"), "Home");
-  setActiveTab(style); // default to the styleguide — that's where the swatches are
+  const home = openTab(quickUrl("home"), "Home");
+  // Default to the styleguide (swatches); the quiet-build finished reveal lands on Home (the design).
+  setActiveTab(landOn === "home" ? home : style);
   // Only when the styleguide was just created this session: reload once so its
   // fresh swatches show without a manual refresh (avoids churn on reopen).
   if (designJustActivated) {
@@ -2580,6 +2604,18 @@ async function renderClaude(body) {
   });
   body.appendChild(imgRow);
 
+  // ── Narrate builds (the live Art-Director line during the quiet build) ────────
+  const narSep = document.createElement("div"); narSep.className = "drawer-sep"; body.appendChild(narSep);
+  const narLabel = document.createElement("div"); narLabel.className = "sess-label"; narLabel.textContent = COPY.claude.narrateLabel; body.appendChild(narLabel);
+  const narDesc = document.createElement("div"); narDesc.className = "sess-desc"; narDesc.textContent = COPY.claude.narrateDesc; body.appendChild(narDesc);
+  const narMode = await window.desktop.getNarrate();
+  const narRow = document.createElement("label"); narRow.className = "toggle-row";
+  const narCb = document.createElement("input"); narCb.type = "checkbox"; narCb.checked = !!narMode.enabled;
+  const narTxt = document.createElement("span"); narTxt.textContent = COPY.claude.narrateToggle;
+  narRow.append(narCb, narTxt);
+  narCb.addEventListener("change", () => { window.desktop.setNarrate(narCb.checked); });
+  body.appendChild(narRow);
+
   // ── Research the field (licensed enhancement — only rendered when licensed) ──
   const research = await window.desktop.getResearch();
   if (research.licensed) {
@@ -3082,14 +3118,14 @@ function finalizeAssistant() {
 window.desktop.onAgentEvent((evt) => {
   switch (evt.type) {
     case "text":
+      if (quietBuildActive) break; // quiet build: no chat narration until the finished reveal
       if (!assistantEl) { assistantEl = addMsg("assistant", ""); updateThinking(); lastAutoScrollTop = log.scrollTop; }
       assistantEl.textContent += evt.text;
       stickStreamScroll();
       break;
     case "tool":
       finalizeAssistant();
-      autoDismissTool(addMsg("tool", toolBubbleLabel(evt)));
-      updateThinking(); // re-pin the dots below the tool bubble while it's still working
+      if (!quietBuildActive) { autoDismissTool(addMsg("tool", toolBubbleLabel(evt))); updateThinking(); } // suppress tool bubbles during the quiet build
       // A tool call may have just written the color palette — poll until the
       // styleguide is preview-ready (not merely when the variation folder
       // appears), then open the live preview mid-turn.
@@ -3099,9 +3135,10 @@ window.desktop.onAgentEvent((evt) => {
           design = d;
           if (!flipped) return;
           designJustActivated = true;
-          // In the Get-Designing build: reveal the Style guide LIVE now and keep
-          // the Home tab covered (it's still being written). Otherwise (setup),
-          // the normal reveal opens both tabs.
+          // Quiet build: DON'T reveal mid-build (no browser, no Style guide) — the preparing
+          // pane holds until the whole turn finishes (finishQuietBuild). Setup/other flows
+          // keep the normal reveal.
+          if (quietBuildActive) { buildNarration.advancePast("foundations"); return; }
           if (intakePhase === "designing" && !tabsOpened) revealDuringBuild();
           else refreshPreview();
         });
@@ -3113,7 +3150,14 @@ window.desktop.onAgentEvent((evt) => {
         guardPreviewForEdit(friendlyActivity(evt.name, evt.target));
       }
       break;
+    case "todo":
+      // Authoritative spine advance: the agent moved to a new todo (Phase 2 hook).
+      if (quietBuildActive) { const ph = phaseForTodo(evt.todos); if (ph) buildNarration.advanceTo(ph); }
+      break;
     case "activity":
+      // Quiet build: the Art-Director spine owns the pane; use activity only to advance
+      // the phase (never overwrite its curated line with the plain friendlyActivity text).
+      if (quietBuildActive) { const ph = phaseForActivity(evt.name, evt.target); if (ph) buildNarration.advanceTo(ph); break; }
       // Narrate what's happening in plain language: in the preview placeholder
       // (setup / guarded edit) or on the Home-tab cover during the build.
       if (!tabsOpened || guarding) setWorkingMessage(friendlyActivity(evt.name, evt.target));
@@ -3130,6 +3174,9 @@ window.desktop.onAgentEvent((evt) => {
       if (intakeActive && intakeph.classList.contains("flow")) showBriefComplete();
       endTurnGate(); // release serialization AFTER showBriefComplete decided for this turn
       updateSessionGauge(evt.usage, evt.modelUsage); // refresh the context gauge + maybe nudge
+      // Quiet build finished → reveal the completed design now (both tabs, land on Home) and
+      // open the chat for iteration. Nothing showed during the build.
+      if (quietBuildActive) { finishQuietBuild(); break; }
       // Home was revealed mid-build under a cover → the design is done: uncover it.
       if (homeBuilding) { finishBuildReveal(); break; }
       // Guarding a live edit → the agent is DONE; settle Vite, then reveal.
@@ -3157,6 +3204,7 @@ window.desktop.onAgentEvent((evt) => {
       endTurnGate(); // release serialization on error too
       // Even on error, settle-then-reveal so the designer isn't stuck behind a
       // cover (the chat carries the error detail).
+      if (quietBuildActive) { finishQuietBuild(); break; } // reveal + open chat (the error is in it)
       if (homeBuilding) { finishBuildReveal(); break; }
       if (guarding) { revealPreviewAfterEdit(); break; }
       refreshPreview();
@@ -3521,6 +3569,7 @@ function resetIntake() {
   voiceStepDone = false;
   heroStepDone = false;
   menuStepDone = false;
+  ctaStepDone = false;
   intakePhase = "idle";
   currentIntakeId = null;
   exitReview(); // clear the review's head-hidden state
@@ -3629,6 +3678,7 @@ function composeRail() {
     if (Array.isArray(brief.sections) && brief.sections.length) add("Sections", brief.sections.join(", "));
     if (brief.menuLayout) add("Header", MENU_LAYOUT_TITLE[brief.menuLayout] || brief.menuLayout);
     if (brief.heroLayout) add("Hero", HERO_LAYOUT_TITLE[brief.heroLayout] || brief.heroLayout);
+    if (brief.ctaType) add("Contact", CTA_TYPE_TITLE[brief.ctaType] || brief.ctaType);
     if (Array.isArray(brief.references) && brief.references.length) {
       add("Likes", brief.references.map((r) => r.url + (r.reason ? ` (${r.reason})` : "")).join("; "));
     }
@@ -4186,6 +4236,59 @@ function renderMenuStep() {
   if (scroller) { try { scroller.scrollTo({ top: centerTo, behavior: "smooth" }); } catch { scroller.scrollTop = centerTo; } }
 }
 
+// ---- Contact / CTA type step (renderer-injected, after the hero step) --------
+// Shown only when Contact or CTA is among the chosen sections. Same shape as the hero
+// step: one client card (Form vs Contact Button), folded into the Brief, then advances
+// the flow. Skippable ("I'll let you choose") = null = the agent decides.
+let ctaStepDone = false;
+
+function ctaStepApplicable() {
+  const s = lastBrief && Array.isArray(lastBrief.sections) ? lastBrief.sections : null;
+  return !!(s && s.some((x) => /contact|cta|call[\s-]?to[\s-]?action/i.test(String(x))));
+}
+
+function renderCtaStep() {
+  if (intakeStack.querySelector(".cta-step")) return; // already showing
+  currentIntakeId = null;
+  const card = {
+    id: "ctaType", field: "ctaType", type: "cta-type",
+    label: COPY.intake.q.ctaType, help: COPY.intake.q.ctaTypeHelp,
+    skippable: true, agentDecidesLabel: COPY.intake.letYouChoose,
+  };
+  const group = document.createElement("div");
+  group.className = "intake-group cta-step";
+  const continueBtn = document.createElement("button");
+  continueBtn.className = "intake-continue";
+  continueBtn.textContent = COPY.intake.continue;
+
+  const refreshReady = () => { continueBtn.disabled = !ctl.isReady(); };
+  const requestSubmit = () => { if (!group.classList.contains("answered") && ctl.isReady()) submit(); };
+  const ctl = renderIntakeCard(card, refreshReady, requestSubmit);
+  group.append(ctl.el, continueBtn);
+  refreshReady();
+
+  async function submit() {
+    if (group.classList.contains("answered")) return;
+    group.classList.add("answered");
+    const val = ctl.getValue();
+    ctl.collapse();
+    const done = doneNote();
+    continueBtn.replaceWith(done);
+    autoDismissTool(done, 900);
+    ctaStepDone = true;
+    if (val && lastBrief) { lastBrief.ctaType = val; composeRail(); } // immediate: brief rail
+    try { await window.desktop.applyIntakeAnswers([{ id: card.id, field: card.field, type: card.type }], { [card.id]: val }); } catch {}
+    setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then continue the flow
+  }
+  continueBtn.addEventListener("click", submit);
+
+  intakeStack.appendChild(group);
+  const scroller = intakeph.classList.contains("flow") ? intakeph.querySelector(".intake-inner") : intakeph;
+  const centerTo = scroller ? intakeCenterTarget(scroller, group) : 0;
+  fadeSlideIn(group, { dy: 44, duration: 720, delay: 60 });
+  if (scroller) { try { scroller.scrollTo({ top: centerTo, behavior: "smooth" }); } catch { scroller.scrollTop = centerTo; } }
+}
+
 // ---- Client-rendered intake (no model turn) ---------------------------------
 // The fixed brief questions (what / names / reference) are posed by the RENDERER and
 // folded straight into the Brief via applyIntakeAnswers — zero tokens, same rails as
@@ -4306,6 +4409,8 @@ function showBriefComplete() {
   if (!menuStepDone && menuStepApplicable()) { renderMenuStep(); return; }
   // Hero layout comes right after sections, but only if Hero is one of them.
   if (!heroStepDone && heroStepApplicable()) { renderHeroStep(); return; }
+  // Contact/CTA type comes after the hero, but only if Contact or CTA is a section.
+  if (!ctaStepDone && ctaStepApplicable()) { renderCtaStep(); return; }
   if (!voiceStepDone) { renderVoiceStep(); return; } // the Tone/rules step is the last question
   intakePhase = "review";
   currentIntakeId = null;
@@ -5037,7 +5142,8 @@ async function updateArtDirectorRailBtn(url) {
 // with a persistent "preparing" status + rotating messages until the design shows.
 function startDesigning() {
   intakePhase = "designing";
-  setChatCollapsed(false); // questions are answered → slide the chat open for the build
+  quietBuildActive = true;    // hold a quiet pane + closed chat until the build fully finishes
+  setChatCollapsed(true);     // keep the chat closed through the build (no narration) — opens on reveal
   updateBackButton();
   clearIntakePending();
   const leaving = [intakeph.querySelector(".intake-head"), el("intake-brief"), ...Array.from(intakeStack.children)].filter(Boolean);
@@ -5051,14 +5157,186 @@ function startDesigning() {
     // Assemble the Brief into a /design-brief invocation (Phase 2) and hand off.
     let prompt = "/design-brief a clean, modern marketing website";
     try { const r = await window.desktop.getDesignPrompt(); if (r && r.prompt) prompt = r.prompt; } catch {}
+    // Is the licensed research step on? It adds a (slow) phase to the narration spine.
+    let research = false;
+    try { const rs = await window.desktop.getResearch(); research = !!(rs && rs.effective); } catch {}
     // Kick the agent FIRST (while intakeActive still guards refreshPreview from
-    // showing its own "working" placeholder), THEN swap the pane to preparing.
+    // showing its own "working" placeholder), THEN swap the pane to preparing and start
+    // the Art-Director narration spine (owns the pane text through the whole quiet build).
     runAgent(prompt, null, { model: buildModel() }); // build on the fidelity-selected model
     showPreparing();
+    buildNarration.begin(computePhaseList(lastBrief, { research }), briefBits(lastBrief));
   };
   if (anims.length) Promise.allSettled(anims.map((a) => a.finished)).then(go);
   else go();
 }
+
+// ---- Quiet-build narration: an Art-Director progress spine --------------------
+// See docs/quiet-build-narration-spec.md. Derives an ordered phase list from the Brief,
+// shows a determinate "Step N of M" spine in the preparing pane, and advances it on the
+// signals that already flow during the quiet build (tool activity + the previewReady flip).
+// Curated copy lives in COPY.build.phases; the TodoWrite hook (precise advance) is Phase 2.
+
+// Ordered phase catalog. `when(brief, opts)` gates inclusion; ids match COPY.build.phases.
+const NARRATION_PHASES = [
+  { id: "understanding", when: () => true },
+  { id: "research", when: (_b, o) => !!o.research },
+  { id: "foundations", when: () => true },
+  { id: "header", when: (b) => (b.projectType || "website") !== "app" },
+  { id: "hero", when: (b) => narrationHasSection(b, /hero/i) || !!b.heroLayout },
+  { id: "sections", when: () => true },
+  { id: "contact", when: (b) => !!b.ctaType || narrationHasSection(b, /contact|cta|call[\s-]?to[\s-]?action/i) },
+  { id: "polish", when: () => true },
+];
+function narrationHasSection(b, re) {
+  return !!(b && Array.isArray(b.sections) && b.sections.some((s) => re.test(String(s))));
+}
+function computePhaseList(brief, opts) {
+  const b = brief || {};
+  return NARRATION_PHASES.filter((p) => p.when(b, opts || {})).map((p) => p.id);
+}
+
+// Map a completed tool activity (name + target) to the phase it implies — the fallback
+// advance until the TodoWrite hook lands (Phase 2). Returns a phase id or null.
+function phaseForActivity(name, target) {
+  const t = (target || "").toLowerCase();
+  if (/(brand\.ts|tokens\.css|fonts\.css|theme\.css)/.test(t)) return "foundations";
+  if (name === "WebFetch" || /\bcurl\b/.test(t)) return "research";
+  if (/header\.tsx|menustate|menu\.ts/.test(t)) return "header";
+  if (/hero/.test(t)) return "hero";
+  if (/contact|cta/.test(t)) return "contact";
+  if (/home\.tsx|\/components\/|section/.test(t)) return "sections";
+  return null;
+}
+
+// Map the agent's current TodoWrite item to a phase — the authoritative spine driver
+// (Phase 2). Uses the in-progress todo (else the first pending), keyword-matched. Returns
+// a phase id or null; advanceTo is forward-only, so a stale todo can never regress it.
+function phaseForTodo(todos) {
+  if (!Array.isArray(todos)) return null;
+  const cur = todos.find((t) => t && t.status === "in_progress")
+    || todos.find((t) => t && t.status === "pending");
+  if (!cur) return null;
+  const s = `${cur.content || ""} ${cur.activeForm || ""}`.toLowerCase();
+  if (/research|competitor|comparable|study|reference site/.test(s)) return "research";
+  if (/palette|brand|token|font|colou?r|foundation|style ?guide|theme/.test(s)) return "foundations";
+  if (/header|nav|menu/.test(s)) return "header";
+  if (/hero/.test(s)) return "hero";
+  if (/contact|cta|call to action|\bform\b/.test(s)) return "contact";
+  if (/polish|responsive|refine|final|\bqa\b|review|cleanup/.test(s)) return "polish";
+  if (/section|feature|content|page|footer|about|pricing|faq/.test(s)) return "sections";
+  return null;
+}
+
+// Brief → the tokens the AD copy interpolates, each with a graceful fallback so a sparse
+// brief still reads well.
+function briefBits(brief) {
+  const b = brief || {};
+  const vals = (arr) => (Array.isArray(arr) ? arr.map((x) => x && x.value).filter(Boolean) : []);
+  const colors = vals(b.colorSources);
+  const fonts = vals(b.fontSources);
+  const sections = Array.isArray(b.sections) ? b.sections : [];
+  const heroWord = b.heroLayout ? String(HERO_LAYOUT_TITLE[b.heroLayout] || "").toLowerCase() : "";
+  return {
+    paletteWord: colors.length ? colors.slice(0, 2).join(" and ") : "palette",
+    fontWords: fonts.length ? fonts.slice(0, 2).join(" and ") : "your type",
+    heroWord, // may be "" — token collapse handles the empty slot
+    sectionsWord: sections.length ? "your sections" : "the page",
+  };
+}
+function fillTokens(str, bits) {
+  return String(str || "")
+    .replace(/\{(\w+)\}/g, (_, k) => (bits && bits[k] != null ? bits[k] : ""))
+    .replace(/ {2,}/g, " ")
+    .trim();
+}
+
+const buildNarration = (() => {
+  let phases = [];
+  let idx = -1;
+  let lineIdx = 0;
+  let timer = null;
+  let bits = {};
+  let reqSeq = 0;        // bumps each phase change; a late Haiku line for an old phase is dropped
+  let haikuShown = false; // a bespoke line is up for this phase → pause the curated rotation
+  const phaseDef = (id) => (COPY.build && COPY.build.phases && COPY.build.phases[id]) || null;
+
+  // Phase 3: ask main for one live Art-Director sentence for this phase (default-on;
+  // degrades silently to the curated line on disable/failure/timeout, or if it lands late).
+  function requestNarration(phaseId) {
+    const my = reqSeq;
+    const def = phaseDef(phaseId);
+    const title = def ? fillTokens(def.title, bits) : phaseId;
+    if (!window.desktop || !window.desktop.narrateLine) return;
+    window.desktop.narrateLine({ phase: phaseId, title, bits }).then((r) => {
+      if (!r || !r.ok || !r.line) return;
+      if (my !== reqSeq || !phases.length) return; // phase moved on / build ended
+      haikuShown = true;
+      phText.textContent = r.line;
+    }).catch(() => {});
+  }
+
+  function renderSteps() {
+    const box = el("ph-steps");
+    if (!box) return;
+    box.innerHTML = "";
+    phases.forEach((_id, i) => {
+      const seg = document.createElement("span");
+      seg.className = "seg" + (i < idx ? " done" : i === idx ? " active" : "");
+      box.appendChild(seg);
+    });
+    box.hidden = phases.length === 0;
+  }
+  function showLine() {
+    if (haikuShown) return; // a bespoke live line is up this phase — don't rotate over it
+    const def = phaseDef(phases[idx]);
+    if (!def || !def.lines || !def.lines.length) return;
+    const pool = def.slowLine ? [...def.lines, def.slowLine] : def.lines;
+    phText.textContent = fillTokens(pool[lineIdx % pool.length], bits);
+  }
+  function renderPhase() {
+    const def = phaseDef(phases[idx]);
+    if (!def) return;
+    reqSeq++;          // new phase → invalidate any in-flight Haiku request
+    haikuShown = false;
+    const label = el("ph-steplabel");
+    if (label) { label.textContent = COPY.build.stepLabel(idx + 1, phases.length); label.hidden = false; }
+    phTitle.textContent = fillTokens(def.title, bits);
+    lineIdx = 0;
+    showLine();          // curated line shows immediately; the Haiku line overrides if/when it lands
+    renderSteps();
+    requestNarration(phases[idx]);
+  }
+  return {
+    begin(phaseList, briefBitsObj) {
+      phases = phaseList && phaseList.length ? phaseList : ["understanding", "foundations", "sections", "polish"];
+      bits = briefBitsObj || {};
+      idx = 0;
+      stopWorking();               // take over from the generic rotation
+      if (phProgress) phProgress.hidden = true; // the segmented spine replaces the bounce bar
+      renderPhase();
+      if (timer) clearInterval(timer);
+      timer = setInterval(() => { lineIdx++; showLine(); }, 5000);
+    },
+    // Jump forward to an explicit phase (never backward).
+    advanceTo(id) {
+      const to = phases.indexOf(id);
+      if (to > idx) { idx = to; renderPhase(); }
+    },
+    // Advance to the phase right AFTER `id` (used on the previewReady flip → past foundations).
+    advancePast(id) {
+      const at = phases.indexOf(id);
+      if (at >= 0 && at + 1 > idx && at + 1 < phases.length) { idx = at + 1; renderPhase(); }
+    },
+    end() {
+      if (timer) { clearInterval(timer); timer = null; }
+      const box = el("ph-steps"); if (box) box.hidden = true;
+      const label = el("ph-steplabel"); if (label) label.hidden = true;
+      phases = []; idx = -1;
+    },
+    isActive() { return phases.length > 0; },
+  };
+})();
 
 const PREPARING_MESSAGES = COPY.preview.preparingMessages;
 function showPreparing() {
@@ -5069,7 +5347,9 @@ function showPreparing() {
   phTitle.textContent = COPY.preview.preparingElements;
   phProgress.hidden = false;
   stopWorking(); // clear any stale rotation so ours (build-flavored) takes over
-  startWorking(PREPARING_MESSAGES);
+  // Quiet build: the Art-Director spine owns the pane text (begin() is called right after
+  // in startDesigning). Otherwise fall back to the generic rotation.
+  if (!buildNarration.isActive()) startWorking(PREPARING_MESSAGES);
   // The mid-turn readiness poll (in the "tool" handler) reveals the Style guide the
   // moment previewReady flips, keeping the Home tab covered until the build ends.
   resetBuildReveal();
@@ -5251,6 +5531,67 @@ function buildMenuLayout(card, body, onChange) {
   };
 }
 
+// ---- Contact / CTA type picker (client-rendered, single-select wireframe chips) --
+// Shown after the hero step, only when Contact or CTA is among the chosen sections
+// (ctaStepApplicable). Two chips — a contact Form vs a button-led Contact CTA — drawn
+// in the same chip style as the hero picker. The value is a CTA_TYPES id → Brief.ctaType
+// → an explicit build instruction in the design prompt. Keep the ids in sync with
+// CTA_TYPE_PHRASES in main.cjs.
+const CTA_TYPES = [
+  { id: "cta-form", title: "Contact form", svg:
+    '<svg viewBox="0 0 120 84" aria-hidden="true">' +
+    '<rect x="30" y="12" width="60" height="6" rx="2" fill="#111"/>' +
+    '<rect x="22" y="26" width="76" height="9" rx="2" fill="none" stroke="#c7c7d0" stroke-width="1.5"/>' +
+    '<rect x="22" y="39" width="76" height="9" rx="2" fill="none" stroke="#c7c7d0" stroke-width="1.5"/>' +
+    '<rect x="22" y="52" width="76" height="14" rx="2" fill="none" stroke="#c7c7d0" stroke-width="1.5"/>' +
+    '<rect x="22" y="70" width="26" height="8" rx="2" fill="#111"/>' +
+    '</svg>' },
+  { id: "cta-button", title: "Contact button", svg:
+    '<svg viewBox="0 0 120 84" aria-hidden="true">' +
+    '<rect x="30" y="18" width="60" height="8" rx="2" fill="#111"/>' +
+    '<rect x="38" y="31" width="44" height="5" rx="2" fill="#c7c7d0"/>' +
+    '<rect x="42" y="44" width="36" height="12" rx="3" fill="#111"/>' +
+    '<rect x="44" y="63" width="32" height="4" rx="2" fill="#c7c7d0"/>' +
+    '<rect x="48" y="71" width="24" height="4" rx="2" fill="#c7c7d0"/>' +
+    '</svg>' },
+];
+const CTA_TYPE_TITLE = Object.fromEntries(CTA_TYPES.map((c) => [c.id, c.title]));
+
+function buildCtaType(card, body, onChange) {
+  let selected = null;
+  const tiles = [];
+  const grid = document.createElement("div");
+  grid.className = "ihero";
+  CTA_TYPES.forEach((c) => {
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "ihero-chip";
+    tile.dataset.id = c.id;
+    const art = document.createElement("span");
+    art.className = "ihero-art";
+    art.innerHTML = c.svg;
+    const cap = document.createElement("span");
+    cap.className = "ihero-cap";
+    cap.textContent = c.title;
+    tile.append(art, cap);
+    tile.addEventListener("click", () => {
+      if (tile.disabled) return;
+      selected = c.id;
+      tiles.forEach((t) => t.classList.toggle("selected", t.dataset.id === selected));
+      onChange();
+    });
+    tiles.push(tile);
+    grid.appendChild(tile);
+  });
+  body.appendChild(grid);
+  return {
+    getValue: () => selected,
+    hasValue: () => selected != null,
+    setDisabled: (d) => tiles.forEach((t) => { t.disabled = d; }),
+    display: () => (selected ? (CTA_TYPE_TITLE[selected] || selected) : ""),
+  };
+}
+
 // { getValue, hasValue, setDisabled, display }; renderIntakeCard wraps it in the
 // card shell, adds the optional skip affordance, and exposes collapse() — which,
 // on submit, swaps the live inputs for a clean read-only value so no disabled
@@ -5285,6 +5626,7 @@ function renderIntakeCard(card, onChange, requestSubmit) {
     : card.type === "font-pick" ? buildFontPick(card, body, onChange)
     : card.type === "hero-layout" ? buildHeroLayout(card, body, onChange)
     : card.type === "menu-layout" ? buildMenuLayout(card, body, onChange)
+    : card.type === "cta-type" ? buildCtaType(card, body, onChange)
     : card.type === "logo" ? buildLogoUpload(card, body, onChange)
     : card.type === "voice" ? buildVoiceRules(card, body, onChange)
     : buildOpenText(card, body, onChange); // defensive fallback
@@ -5731,10 +6073,30 @@ function buildVoiceRules(card, body, onChange) {
   const v = lastVoice || { project: {}, global: [] };
   const globals = (v.global || []).filter(Boolean);
   const proj = v.project || {};
-  const projRules = (proj.rules || []).filter(Boolean);
+  const isGlobal = (r) => globals.some((g) => g.toLowerCase() === r.toLowerCase());
+  // Reconcile the loaded project voice into (a) the project's OWN rules (globals
+  // stripped out) and (b) which globals are selected. Globals are on by default; a
+  // project that previously opted out (declineGlobal) keeps the globals it copied
+  // into its own rule list, so those read back as still-selected.
+  const projRulesRaw = (proj.rules || []).filter(Boolean);
+  const projRules = projRulesRaw.filter((r) => !isGlobal(r));
+  const globalSel = new Set(
+    proj.declineGlobal
+      ? globals.filter((g) => projRulesRaw.some((r) => r.toLowerCase() === g.toLowerCase()))
+      : globals,
+  );
 
+  // All globals on → keep the app-level merge (declineGlobal false, own rules only).
+  // Any global unselected → this project opts OUT of the global set (declineGlobal,
+  // which the drawer's "Ignore global rules" checkbox reflects); the kept globals are
+  // copied into the project's own rules so they still apply.
   const persist = () => {
-    try { window.desktop.saveProjectVoice({ ...proj, tone: toneInput.value.trim(), rules: projRules.slice() }); } catch {}
+    const allOn = globals.every((g) => globalSel.has(g));
+    const declineGlobal = globals.length > 0 && !allOn;
+    const rules = declineGlobal
+      ? [...globals.filter((g) => globalSel.has(g)), ...projRules]
+      : projRules.slice();
+    try { window.desktop.saveProjectVoice({ ...proj, tone: toneInput.value.trim(), rules, declineGlobal }); } catch {}
   };
 
   // ── Tone: default tones as pills + a custom field (the card label asks the tone) ──
@@ -5763,12 +6125,23 @@ function buildVoiceRules(card, body, onChange) {
   const rLabel = voiceHeader(COPY.voice.projectRulesLabel); rLabel.style.marginTop = "18px";
   body.appendChild(rLabel);
 
-  // Global rules, applied (read-only) — only shown when one or more is set.
+  // Global rules — pre-selected, toggleable pills (only shown when one or more is set).
+  // Unselecting any flips this project to "ignore global rules" (persist() sets the
+  // declineGlobal flag + copies the kept globals into the project's own rules).
   if (globals.length) {
     const note = document.createElement("div"); note.className = "voice-applied-note";
     note.textContent = COPY.voice.globalsApplied;
     const gw = document.createElement("div"); gw.className = "ichips"; gw.style.marginBottom = "12px";
-    globals.forEach((g) => { const s = document.createElement("span"); s.className = "ichip applied"; s.textContent = g; gw.appendChild(s); });
+    globals.forEach((g) => {
+      const p = document.createElement("button"); p.type = "button"; p.className = "ichip global"; p.textContent = g;
+      p.classList.toggle("selected", globalSel.has(g));
+      p.addEventListener("click", () => {
+        if (globalSel.has(g)) globalSel.delete(g); else globalSel.add(g);
+        p.classList.toggle("selected", globalSel.has(g));
+        persist(); onChange();
+      });
+      gw.appendChild(p);
+    });
     body.append(note, gw);
   }
 
@@ -6325,6 +6698,7 @@ async function pickDeliverable(type) {
   voiceStepDone = false; // the renderer-injected Tone/rules step hasn't run yet
   heroStepDone = false; // the hero-layout step (after sections, if Hero chosen)
   menuStepDone = false; // the header/nav step (before hero, website projects)
+  ctaStepDone = false; // the contact/CTA type step (after hero, if Contact/CTA chosen)
   intakeph.classList.add("flow"); // two-column mode: questions left, references rail right
   intakeph.classList.remove("start", "hasbrief");
   enterIntakeMode();
