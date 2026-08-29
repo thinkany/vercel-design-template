@@ -4879,6 +4879,19 @@ function openRecModal(rec, mode) {
   // shown (they drive the builder on Apply, but the designer only needs the read).
   if (rec.why) { const w = document.createElement("div"); w.className = "adrec-modal-why"; w.textContent = rec.why; card.appendChild(w); }
 
+  // A type/font 'decision' with candidates → an inline font-pick (reuse the brief's picker,
+  // each shown in its own face + a custom-entry field). Apply below swaps the font role.
+  let fontCtl = null, fontApplyBtn = null;
+  const fontRole = rec.fontRole || "display";
+  const isFontRec = mode !== "completed" && rec.kind === "decision" && Array.isArray(rec.fontOptions) && rec.fontOptions.length > 0;
+  if (isFontRec) {
+    const lab = document.createElement("div"); lab.className = "adrec-fontpick-label"; lab.textContent = COPY.director.fontPickLabel; card.appendChild(lab);
+    const pickWrap = document.createElement("div"); pickWrap.className = "adrec-fontpick"; card.appendChild(pickWrap);
+    fontCtl = buildFontPick({ type: "font-pick", options: rec.fontOptions }, pickWrap, () => {
+      if (fontApplyBtn) fontApplyBtn.disabled = !fontCtl.hasValue() || !appHasKey;
+    });
+  }
+
   const actions = document.createElement("div"); actions.className = "adrec-modal-actions";
   if (mode === "completed") {
     // Read-only reference — the action was already taken. Close only.
@@ -4904,6 +4917,24 @@ function openRecModal(rec, mode) {
       if (!appHasKey) { apply.disabled = true; apply.title = COPY.director.needKey; }
       else apply.addEventListener("click", () => { closeRecModal(); applyRec(rec); });
       actions.appendChild(apply);
+    } else if (isFontRec) {
+      // Apply the picked font — enabled once a candidate is selected (and a key is present).
+      const apply = document.createElement("button"); apply.className = "adrec-apply-btn"; apply.textContent = COPY.director.applyFont;
+      apply.disabled = true;
+      if (!appHasKey) apply.title = COPY.director.needKey;
+      fontApplyBtn = apply;
+      apply.addEventListener("click", () => {
+        if (apply.disabled || !fontCtl) return;
+        const font = fontCtl.getValue(); if (!font) return;
+        applyFontRec(rec, font, fontRole);
+      });
+      actions.appendChild(apply);
+    } else if (rec.kind === "asset" && rec.assetSourceable) {
+      // Have the Art Director source the imagery via the /design image pipeline.
+      const source = document.createElement("button"); source.className = "adrec-apply-btn"; source.textContent = COPY.director.sourceImagery;
+      if (!appHasKey) { source.disabled = true; source.title = COPY.director.needKey; }
+      else source.addEventListener("click", () => sourceAssetRec(rec));
+      actions.appendChild(source);
     } else {
       const note = document.createElement("span"); note.className = "adrec-modal-tagnote";
       note.textContent = rec.kind === "asset" ? COPY.director.assetNote : COPY.director.decisionNote;
@@ -4945,6 +4976,44 @@ function applyRec(rec) {
     `editing only files under \`src/variations/${id}/\`. Do not rebuild the page or touch anything else. ` +
     `Keep to the design rules (tokens/utilities, container queries).\n\n${rec.title}\n${rec.apply}`;
   runAgent(prompt, COPY.director.applyingEcho(rec.title), {});
+}
+
+// A font 'decision': swap the designer's chosen font into the variation's type role.
+function applyFontRec(rec, font, role) {
+  const id = directorState.id;
+  if (!rec || !id || !font || !appHasKey) return;
+  const prompt =
+    `[Apply an Art Director recommendation to design variation ${id}.] Set the ${role} typeface to "${font}" ` +
+    `for this variation: point --ta-font-${role} at "${font}" (in the variation's tokens/theme), add the Google ` +
+    `Fonts @import so it loads, and keep brand.ts's type role in sync. Change ONLY the ${role} type role — do ` +
+    `not restyle the page. Keep to the design rules.\n\n${rec.title}`;
+  runRecCommand(rec, prompt, COPY.director.applyingFont(font));
+}
+
+// A sourceable 'asset': source + place imagery via the /design §4b image pipeline.
+function sourceAssetRec(rec) {
+  const id = directorState.id;
+  if (!rec || !id || !appHasKey) return;
+  const hint = rec.assetHint ? ` Art direction for the image: ${rec.assetHint}.` : "";
+  const prompt =
+    `[Apply an Art Director recommendation to design variation ${id}.] Source and place imagery for this ` +
+    `recommendation. Use the /design image flow: a licensed non-browser download into public/images with a ` +
+    `credits.json entry (or a placeholder + a note if nothing suitable is free — never a headless browser), ` +
+    `then wire it into the variation's design where the review describes.${hint} Keep to the design rules.` +
+    `\n\n${rec.title}\n${rec.why}`;
+  runRecCommand(rec, prompt, COPY.director.sourcingAsset);
+}
+
+// Shared tail: move the rec to completed, close the drawer, and run the scoped builder turn.
+function runRecCommand(rec, prompt, echo) {
+  const id = directorState.id;
+  if (!rec || !id || !appHasKey) return;
+  directorState.active = directorState.active.filter((r) => r.id !== rec.id);
+  if (!directorState.completed.some((r) => r.id === rec.id)) directorState.completed.push(rec);
+  persistDirector();
+  closeRecModal();
+  closeModal();
+  runAgent(prompt, echo, {});
 }
 
 // Rail Art Director icon: exposed only while a built design is previewed and idle. Mirrors

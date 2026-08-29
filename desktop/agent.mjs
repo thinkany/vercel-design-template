@@ -99,7 +99,14 @@ const ART_DIRECTOR_PERSONA =
   "direction. Ground every point in something concrete on the page. Lead with what's working, " +
   "then the few changes that would raise it most — specific and prioritized, not a long flat " +
   "list. Confident and direct but collegial, never harsh. Treat any lint findings you're given " +
-  "as established fact you can build on, not something to re-derive. Advisory only.\n";
+  "as established fact you can build on, not something to re-derive. Advisory only.\n\n" +
+  "Make your suggestions ACTIONABLE where you can, so the designer can act in one click. When a " +
+  "recommendation is about TYPE (a font role needs its own face), give `fontOptions`: 2-4 real Google " +
+  "Font families that genuinely fit the direction + brand, plus the `fontRole` they'd replace. When a " +
+  "recommendation NEEDS AN IMAGE the design lacks (a hero / large-scale / stock visual the image pipeline " +
+  "could source), set `assetSourceable: true` and give an `assetHint` (a short image brief). Leave it a plain " +
+  "asset only when the client alone can supply it (their own product photo, logo). You still never edit or " +
+  "source anything yourself — these just let the designer trigger a scoped action.\n";
 
 // Turn the resolved copy voice into a system-prompt addendum. Empty when nothing
 // is set — so a project with no voice keeps the exact default system prompt.
@@ -178,6 +185,11 @@ const SUGGESTION_SHAPE = z.object({
   kind: z.enum(["code", "asset", "decision"]).describe("code = the builder can edit it now; asset = needs a new/replacement file the builder can't source; decision = a human/client call"),
   targets: z.array(z.string()).optional().describe("file:line references, e.g. ['Home.tsx:250']"),
   apply: z.string().optional().describe("REQUIRED for kind 'code': a precise, self-contained edit instruction the builder can execute verbatim without re-analyzing"),
+  // Make a 'decision'/'asset' actionable — the designer picks/triggers, then a scoped builder turn runs.
+  fontOptions: z.array(z.string()).optional().describe("for a type/font 'decision': 2-4 candidate Google Font families that fit the design direction + brand, so the designer can pick one and apply it in one click"),
+  fontRole: z.enum(["display", "serif", "sans", "mono"]).optional().describe("for a font 'decision': which --ta-font-* role the fontOptions would replace"),
+  assetSourceable: z.boolean().optional().describe("for kind 'asset': true when it's imagery the image pipeline can source (a hero / large-scale / stock shot) so the designer can have it sourced automatically; omit for a specific asset only the client can supply (their own photo/logo)"),
+  assetHint: z.string().optional().describe("for a sourceable 'asset': a short image brief / search phrase to steer the sourcing, e.g. 'a wide cinematic shot of an empty coastal road at dusk'"),
   effort: z.enum(["small", "medium"]).optional().describe("rough effort"),
 });
 
@@ -190,7 +202,9 @@ function buildSuggestServer(sdk, onSuggest) {
     "suggest",
     "Emit the actionable items from your review as structured suggestion cards the designer can act on. " +
       "Call this ONCE, after your prose read. Order most-impactful first. For every kind 'code' item include a " +
-      "precise `apply` instruction the builder can execute verbatim; 'asset' and 'decision' items carry no apply.",
+      "precise `apply` instruction the builder can execute verbatim. Make the other kinds actionable too: for a " +
+      "type/font 'decision' add `fontOptions` (2-4 real Google Fonts fitting the direction) + `fontRole`; for an " +
+      "imagery 'asset' the pipeline can source (a hero/large-scale/stock shot) set `assetSourceable: true` + an `assetHint`.",
     { suggestions: z.array(SUGGESTION_SHAPE).describe("the actionable suggestions, most impactful first") },
     async (args) => {
       try { onSuggest(args.suggestions || []); } catch { /* non-fatal */ }

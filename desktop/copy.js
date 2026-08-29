@@ -217,6 +217,11 @@ window.COPY = {
     applyingEcho: (title) => `Apply: ${title}`,
     assetNote: "Needs a new asset — your call to supply it.",
     decisionNote: "A call for you (or the client) to make.",
+    fontPickLabel: "Pick a typeface to apply, or type your own:",
+    applyFont: "Apply font",
+    applyingFont: (font) => `Apply font: ${font}`,
+    sourceImagery: "Source imagery",
+    sourcingAsset: "Sourcing imagery for this recommendation…",
   },
 
   // ── Preview browser: nav buttons + quick links ──────────────────────────────
