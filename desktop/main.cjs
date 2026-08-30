@@ -979,6 +979,9 @@ function createWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       // contextIsolation + sandbox stay at their secure defaults (true).
       webviewTag: true, // the preview pane uses <webview> for a real tabbed browser
+      // Dev-only flag the preload reads synchronously → the renderer loads the (unshipped)
+      // narration pacing harness only when running unpackaged. Never present in a built app.
+      additionalArguments: app.isPackaged ? [] : ["--ta-dev"],
     },
   });
   mainWindow.loadFile(path.join(__dirname, "shell.html"));
@@ -2160,9 +2163,50 @@ ipcMain.handle("company:defaultStatus", () => {
   if (!hasDefaultCompanyProfile()) return { has: false };
   try {
     const profile = JSON.parse(fs.readFileSync(defaultCompanyProfilePath(), "utf8"));
-    return { has: true, companyName: profile.companyName || "" };
+    // Pull the picked font families back out so the drawer's Update form can pre-fill them.
+    const famName = (stack) => { const m = /^\s*['"]?([^'",]+)/.exec(String(stack || "")); return m ? m[1].trim() : ""; };
+    const f = profile.fonts || {};
+    const external = f.mode && f.mode !== "default";
+    return {
+      has: true,
+      companyName: profile.companyName || "",
+      headingFont: external ? famName(f.headingFamily) : "",
+      bodyFont: external ? famName(f.bodyFamily) : "",
+      logoName: (profile.logo && profile.logo.filename) || "",
+    };
   } catch {
     return { has: true, companyName: "" };
+  }
+});
+// Save the default profile straight from the drawer FIELDS (no project needed) — builds the
+// same profile object /import-company consumes and writes it to the app default. On update, an
+// existing logo is preserved when the form didn't include a new one.
+ipcMain.handle("company:saveDefaultFields", async (_e, form) => {
+  try {
+    const { buildCompanyProfile } = await companyProfileEngine();
+    const f = form || {};
+    const profile = buildCompanyProfile(f);
+    if (!profile.companyName) return { ok: false, error: "Add a company name first." };
+    // On update, carry over what the form didn't re-supply: an existing logo, and prior
+    // self-hosted (uploaded) fonts when the font names weren't changed and no new file was
+    // uploaded — so editing just the name never silently drops a brand logo or brand font.
+    if (hasDefaultCompanyProfile()) {
+      try {
+        const prev = JSON.parse(fs.readFileSync(defaultCompanyProfilePath(), "utf8"));
+        if (!profile.logo && prev.logo) profile.logo = prev.logo;
+        const famName = (stack) => { const m = /^\s*['"]?([^'",]+)/.exec(String(stack || "")); return m ? m[1].trim() : ""; };
+        const hasUpload = f.headingFontFile || f.bodyFontFile;
+        if (!hasUpload && prev.fonts && prev.fonts.mode === "selfhosted" && profile.fonts.mode !== "selfhosted") {
+          const prevH = famName(prev.fonts.headingFamily), prevB = famName(prev.fonts.bodyFamily);
+          const unchanged = (f.headingFont || prevH) === prevH && (f.bodyFont || prevB) === prevB;
+          if (unchanged) profile.fonts = prev.fonts; // keep the uploaded brand fonts
+        }
+      } catch {}
+    }
+    fs.writeFileSync(defaultCompanyProfilePath(), JSON.stringify(profile, null, 2));
+    return { ok: true, companyName: profile.companyName };
+  } catch (e) {
+    return { ok: false, error: `Could not save the profile: ${e.message}` };
   }
 });
 // Pack the CURRENT project's company identity and store it as the app default.

@@ -68,15 +68,16 @@
       /* Publish uses a stroke icon; it goes full-opacity (white, like the rest of the
          rail) once Vercel is connected. .activated is toggled in shell.js from vercel-status. */
       #rail-publish.activated { opacity: 1; }
-      /* Rail order (visual, top→bottom): Switch Project · Claude · Figma · Publish · Company · Voice · Help.
+      /* Rail order (visual, top→bottom): Switch Project · Claude · Figma · Publish ·
+         Art Director · Voice · Company · Licenses · Help.
          --i is the visual index, used to stagger the open/close animation top→bottom. */
       #rail-projects { order: 1; --i: 0; }
       #rail-claude   { order: 2; --i: 1; }
       #rail-figma    { order: 3; --i: 2; }
       #rail-publish  { order: 4; --i: 3; }
-      #rail-company  { order: 5; --i: 4; }
+      #rail-artdirector { order: 5; --i: 4; }
       #rail-voice    { order: 6; --i: 5; }
-      #rail-artdirector { order: 7; --i: 6; }
+      #rail-company  { order: 7; --i: 6; }
       #rail-licenses { order: 8; --i: 7; }
       #rail-help     { order: 9; --i: 8; }
       /* Art Director confer lives on the rail, exposed only once a built design is being
@@ -276,8 +277,12 @@
       .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
       .chip { font-size: 11.5px; background: #f5f5f7; border: 1px solid #e3e3e8; color: #555; padding: 4px 9px; border-radius: 999px; cursor: pointer; transition: background .25s linear, border-color .25s linear; }
       .chip:hover { border-color: #111; background: #ececf1; }   /* black hover outline — brand-neutral */
+      /* read-only "applied" chip: a selected/active option, in our green */
+      .chip.applied { background: #e6f7ef; border-color: #bfe6d4; color: #0a7; cursor: default; }
+      .chip.applied:hover { background: #e6f7ef; border-color: #bfe6d4; }
       .rulelist { margin: 4px 0; }
-      .rulerow { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #f7f7f9; border: 1px solid #ececf1; border-radius: 7px; margin-bottom: 6px; font-size: 12.5px; }
+      /* a selected rule row — our green active tint so picks stand out */
+      .rulerow { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #e6f7ef; border: 1px solid #cdeadd; border-radius: 7px; margin-bottom: 6px; font-size: 12.5px; }
       .rule-t { flex: 1; }
       .rule-x { border: none; background: none; color: #b0b0b8; font-size: 16px; line-height: 1; cursor: pointer; padding: 0 2px; transition: color .25s linear; }
       .rule-x:hover { color: #e5484d; }
@@ -367,6 +372,11 @@
       /* Collapse-on-hover disconnect: just the unplug icon, expands leftward to
          reveal the label (label sits BEFORE the icon). Same red as .panelbtn.danger. */
       /* Same height as the status badge (both driven by line-height:1.55 @ 12px). */
+      /* A "?" help button that sits on the right of a drawer status row (across from its
+         label) and opens an openHelpOverlay card. */
+      .row-help { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: none; background: transparent; color: #9a9aa2; cursor: pointer; transition: color .12s; }
+      .row-help:hover { color: #111; }
+      .row-help svg { width: 18px; height: 18px; display: block; }
       .disc-collapse {
         display: inline-flex; align-items: center; gap: 0; flex: 0 0 auto; box-sizing: border-box;
         padding: 1px 4px; border-radius: 999px; border: 1px solid #e7b7b3; background: #fff;
@@ -1020,6 +1030,10 @@
 
       /* A card group = one intake() call's cards + its Continue button. */
       .intake-group { display: flex; flex-direction: column; gap: 14px; }
+      /* Company Profile drawer form: same column + gap as the intake cards. The
+         [hidden] rule stays higher-specificity so the Create/Update toggle still hides it. */
+      .company-form { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+      .company-form[hidden] { display: none; }
       .intake-group.answered .icard, .intake-group.answered .intake-continue { pointer-events: none; }
 
       /* Start fork — two side-by-side choice cards, centered in the pane with the
@@ -1233,6 +1247,11 @@
       .ifont-add { flex: 0 0 auto; border: 1px solid #111; border-radius: 9px; padding: 0 16px; background: #111; color: #fff; font-size: 13px; cursor: pointer; transition: opacity .12s; }
       .ifont-add:hover { opacity: .85; }
       .ifont-add:disabled { opacity: .4; cursor: default; }
+      /* Upload-a-font-file: a full-width row under the font list (dashed, to read as an upload
+         affordance distinct from the solid selectable rows), above the "or type" input. */
+      .ifont-upload { display: block; width: 100%; margin-top: 8px; text-align: center; border: 1px dashed #c9c9d2; border-radius: 9px; padding: 10px 14px; background: #fafafb; color: #555; font-size: 13px; cursor: pointer; transition: border-color .12s, background .12s, color .12s; }
+      .ifont-upload:hover { border-color: #111; color: #111; }
+      .ifont-upload:disabled { opacity: .4; cursor: default; }
 
       /* reference — up to 3 url + why entries */
       .iref-field { margin-bottom: 9px; }

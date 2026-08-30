@@ -420,6 +420,11 @@ window.COPY = {
     activeWith: (name) => `Active · ${name}`,
     defaultNote: "Applied automatically to every new project. Set your agency identity once and skip it on every future setup.",
     saveDefault: "Save this project’s identity as my default",
+    createProfile: "Create profile",
+    updateProfile: "Update company profile",
+    saveProfile: "Save profile",
+    nameRequired: "Add a company name first.",
+    currentLogo: (name) => `Current logo: ${name}. Upload a new one to replace it.`,
     clearDefault: "Clear default",
     exportNeedsProject: "Open a project to export its company profile to a file.",
     exportIntro: "Export this project’s agency identity as a portable file (to move between machines or share).",
@@ -431,11 +436,38 @@ window.COPY = {
   figma: {
     licenseLabel: "Figma export license",
     exportDesign: "Export Design",
-    exportCommand: "export to Figma",
+    exportScopeLabel: "What to export",
+    scopeStyleguide: "Styleguide + Blocks",
+    scopePages: "Pages",
+    exportPickScope: "Tick at least one thing to export.",
+    // The chat command the drawer sends — names the ticked scope so the agent doesn't
+    // re-ask it (P15). Kept in sync with export-figma.md's "already names a scope" cases.
+    exportCommandFor: (styleguide, pages) =>
+      styleguide && pages ? "export to Figma — both the Styleguide + Blocks and the Pages"
+      : styleguide ? "export the Styleguide + Blocks to Figma"
+      : pages ? "export just the Pages to Figma (recompose the pages from the blocks)"
+      : "export to Figma",
     exportDisabledHint: "Add your Figma export license to enable",
     exportAfterBuild: "Export becomes available after build completes.",
     note: "Unlocks Figma export. Validated with the derive service; stored encrypted in your OS keychain.",
     manageInLicenses: "Add or remove this license in the Licenses drawer.",
+    exportHelpTitle: "What gets exported to Figma",
+    exportHelpHtml: `
+    <div class="iref-help-head">
+      <div class="iref-help-title">What gets exported to Figma</div>
+      <button type="button" class="iref-help-x" aria-label="Close">✕</button>
+    </div>
+    <p>Pick what to send. You can choose either, or both. “Both” is the full, cohesive result in one Figma file.</p>
+
+    <h4>Styleguide + Blocks</h4>
+    <p>Your design system as editable Figma objects: real color <b>variables</b>, the spacing and radius scales, type specimens, and every section of the design rebuilt as a reusable <b>Block</b> (a component). This is the building blocks only, no full page layouts are assembled.</p>
+    <p>Note: If you make changes to the variables (colors, fonts etc.) or structural changes to page sections after an initial export, you’ll need to re-run the export for Styleguide + Blocks before running your Page(s) export.</p>
+
+    <h4>Pages</h4>
+    <p>Your complete page layouts (app screens, for an app project), composed by stacking the Blocks above into full pages. It reuses the Styleguide + Blocks, so it assumes they were exported already.</p>
+
+    <div class="iref-help-note">Styleguide + Blocks is recommended for a completed design’s first export. Upon confirming the export for accuracy, Pages can be exported separately and cheaply anytime a page (or pages) layout changes. The initial export will take some time and depends on the complexity of the design.</div>
+  `,
   },
 
   // ── Keys & Licenses drawer (your keys + app licenses, one place) ────────────
@@ -548,6 +580,7 @@ window.COPY = {
     globalRules: "Global rules",
     globalRulesSub: "Apply to every project.",
     globalsApplied: "Your global rules (on by default; click one to skip it for this project):",
+    appliedFromGlobal: "Applied from your global rules:",
     ignoreGlobal: "Ignore global rules for this project",
     globalRulePlaceholder: "Add a global rule…",
     globalRulesEmpty: "No global rules yet.",
@@ -745,6 +778,7 @@ window.COPY = {
     },
     fontCustomPlaceholder: "Or type any font name…",
     fontCustomAdd: "Add",
+    fontUpload: "⬆ Upload a font file",
     // Client-rendered intake questions, asked in the pane with NO model turn. Sections,
     // color, and font stay model-driven (one turn) so their options fit the vibe + type.
     q: {

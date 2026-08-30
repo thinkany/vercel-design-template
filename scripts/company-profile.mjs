@@ -55,6 +55,13 @@ const FONT_MIME = {
   ".ttf": "font/ttf",
   ".otf": "font/otf",
 };
+// CSS @font-face `format()` keyword per extension.
+const FONT_FORMAT = {
+  ".woff2": "woff2",
+  ".woff": "woff",
+  ".ttf": "truetype",
+  ".otf": "opentype",
+};
 
 // ── small file/text helpers ───────────────────────────────────────────────────
 const read = (p) => readFile(p, "utf8");
@@ -171,25 +178,53 @@ export async function runPack({ project = process.cwd(), out } = {}) {
 }
 
 // Build a company profile OBJECT (same shape as a packed profile.json) straight from
-// form fields — the in-pane "Brand This Project" form's data, so it can be handed to
-// runUnpack without a file on disk. Fonts entered as Google-Font family NAMES become
-// an external stylesheet (loaded by both the gate and, via runUnpack §6, the app).
-export function buildCompanyProfile({ companyName, headingFont, bodyFont, logo } = {}) {
-  const heading = headingFont ? `'${headingFont}', system-ui, sans-serif` : DEFAULT_HEADING;
-  const body = bodyFont ? `'${bodyFont}', system-ui, sans-serif` : DEFAULT_BODY;
-  const names = [...new Set([headingFont, bodyFont].filter(Boolean))];
+// form fields. Each font role can be a Google-Font family NAME (→ external stylesheet) OR
+// an UPLOADED file `{ family, filename, mime, b64 }` (→ self-hosted @font-face). A mix is
+// fine: uploaded files become @font-face and any Google-named role rides along as an
+// additive stylesheet (runUnpack §6 loads it whenever stylesheetHref is present).
+export function buildCompanyProfile({ companyName, headingFont, bodyFont, headingFontFile, bodyFontFile, logo } = {}) {
+  const stack = (name, file, dflt) =>
+    file && file.family ? `'${file.family}', system-ui, sans-serif`
+    : name ? `'${name}', system-ui, sans-serif`
+    : dflt;
+  const headingFamily = stack(headingFont, headingFontFile, DEFAULT_HEADING);
+  const bodyFamily = stack(bodyFont, bodyFontFile, DEFAULT_BODY);
+
+  const uploads = [headingFontFile, bodyFontFile].filter((f) => f && f.b64 && f.family);
+  const names = [...new Set([
+    headingFont && !headingFontFile ? headingFont : null,
+    bodyFont && !bodyFontFile ? bodyFont : null,
+  ].filter(Boolean))];
   // wght@400;700 only — virtually every Google font has both, so the css2 request
   // never 400s (an unavailable weight fails the whole stylesheet).
   const fam = (n) => `family=${encodeURIComponent(n).replace(/%20/g, "+")}:wght@400;700`;
-  const fonts = names.length
-    ? {
-        mode: "external",
-        headingFamily: heading,
-        bodyFamily: body,
-        stylesheetHref: `https://fonts.googleapis.com/css2?${names.map(fam).join("&")}&display=swap`,
-        preconnect: "https://fonts.gstatic.com",
+  const stylesheetHref = names.length
+    ? `https://fonts.googleapis.com/css2?${names.map(fam).join("&")}&display=swap`
+    : "";
+
+  let fonts;
+  if (uploads.length) {
+    const seen = new Set();
+    const files = [];
+    const faceBlocks = [];
+    for (const u of uploads) {
+      const filename = String(u.filename || "font").replace(/[^\w.-]+/g, "-");
+      const ext = filename.slice(filename.lastIndexOf(".")).toLowerCase();
+      if (!seen.has(filename)) {
+        seen.add(filename);
+        files.push({ name: filename, mime: u.mime || FONT_MIME[ext] || "font/woff2", b64: u.b64 });
       }
-    : { mode: "default", headingFamily: DEFAULT_HEADING, bodyFamily: DEFAULT_BODY };
+      faceBlocks.push(
+        `@font-face {\n  font-family: '${u.family}';\n  src: url('/fonts/${filename}') format('${FONT_FORMAT[ext] || "woff2"}');\n  font-weight: 400 700;\n  font-style: normal;\n  font-display: swap;\n}`
+      );
+    }
+    fonts = { mode: "selfhosted", headingFamily, bodyFamily, files, faceBlocks: faceBlocks.join("\n\n") };
+    if (stylesheetHref) { fonts.stylesheetHref = stylesheetHref; fonts.preconnect = "https://fonts.gstatic.com"; }
+  } else if (names.length) {
+    fonts = { mode: "external", headingFamily, bodyFamily, stylesheetHref, preconnect: "https://fonts.gstatic.com" };
+  } else {
+    fonts = { mode: "default", headingFamily: DEFAULT_HEADING, bodyFamily: DEFAULT_BODY };
+  }
   return {
     kind: PROFILE_KIND,
     version: PROFILE_VERSION,
@@ -351,7 +386,7 @@ export async function runUnpack({ project = process.cwd(), input, profile: inlin
   // The gate loads its own copy (§3b); the APP loads its admin fonts from
   // src/styles/fonts.css. Add the stylesheet as a second @import (still valid: it
   // stays at the top, before any non-import rule). Idempotent.
-  if (fonts.mode === "external" && fonts.stylesheetHref) {
+  if (fonts.stylesheetHref) {
     const fPath = p("src/styles/fonts.css");
     if (exists(fPath)) {
       let f = await read(fPath);

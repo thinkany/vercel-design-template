@@ -89,8 +89,20 @@ early (before/around foundations) per `/design-brief`; place `research` before
    `Home.tsx`/hero markers → hero/sections; contact-form markers → contact; etc.
 
 The spine never moves backward: a signal can only advance `N` (max of current and mapped).
-So sparse or out-of-order todos can't make it regress. Between advances, an intra-phase
-animation (the existing bounce bar) keeps visible life so a long phase never looks frozen.
+So sparse or out-of-order todos can't make it regress.
+
+### Pacing (v2, after live feedback)
+
+Signals arrive in bursts and don't track wall-clock, so the display is decoupled from them:
+a signal only bumps a **target** index; a ~300ms **ticker** walks the **shown** phase toward
+target one step at a time, holding each for a **minimum dwell (~2.6s)**. Multi-step jumps
+therefore read as a smooth walk, and no phase flashes. Once settled (shown === target), the
+message line rotates slowly (**~22s**, was 5s — it felt too quick). Haiku is requested only
+for the settled phase, not for steps merely walked through. On completion, `finish()` walks
+briskly through any remaining steps (~260ms each), fills every segment, holds a ~500ms "done"
+beat, then clears — so the last phase actually registers before the reveal. The wide
+indeterminate bounce bar is removed during the build; the segmented step bar (with an
+intra-phase shimmer on the active segment) is the only progress affordance.
 
 ---
 

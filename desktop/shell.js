@@ -712,7 +712,7 @@ function finishBuildReveal() {
 // completed design — both tabs, landing on the Home page — and open the chat for iteration.
 async function finishQuietBuild() {
   quietBuildActive = false;
-  buildNarration.end(); // stop the spine rotation + hide the step chrome before the reveal
+  await buildNarration.finish(); // fill through the last step + a brief "done" beat, then clear
   try { design = await window.desktop.getDesignState(); } catch {}
   designJustActivated = true;
   await showBrowser("home");   // probes the preview, opens Style guide + Home, lands on Home
@@ -1438,89 +1438,147 @@ async function switchToExisting() {
   await enterProjectFromResult(await window.desktop.openProject());
 }
 
-// --- Company profile: export the agency identity ---
+// --- Company profile: the agency identity, created/edited right here + auto-applied to
+// every new project. Create or Update reveals the fields (name, admin/gate fonts, logo);
+// "Save profile" writes them straight to the default. An open project with a company name
+// can also push its identity up as the default. When active, an unplug delete clears it. ---
 async function renderCompany(body) {
-  // --- App DEFAULT profile: your agency identity, auto-applied to new projects ---
-  const def = await window.desktop.getDefaultCompany();
-  const row = document.createElement("div");
-  row.className = "setrow";
-  const k = document.createElement("div");
-  k.className = "k";
-  k.textContent = COPY.company.defaultTitle;
-  const badge = document.createElement("span");
-  badge.className = "badge " + (def.has ? "ok" : "off");
-  badge.textContent = def.has ? (def.companyName ? COPY.company.activeWith(def.companyName) : COPY.common.active) : COPY.common.notSet;
-  row.append(k, badge);
-  body.appendChild(row);
+  const def = await window.desktop.getDefaultCompany(); // { has, companyName, headingFont, bodyFont, logoName }
+  const proj = await window.desktop.getProjectStatus();
 
+  // Header (Licenses-style): title + Active/Not-set badge + an unplug delete when active.
+  body.appendChild(connStatusRow(
+    COPY.company.defaultTitle,
+    def.has,
+    def.has ? (def.companyName ? COPY.company.activeWith(def.companyName) : COPY.common.active) : COPY.common.notSet,
+    def.has ? COPY.company.clearDefault : null,
+    def.has ? async () => { await window.desktop.clearDefaultCompany(); openModal("company"); } : null,
+  ));
   const defNote = document.createElement("div");
   defNote.className = "muted";
   defNote.textContent = COPY.company.defaultNote;
   body.appendChild(defNote);
 
-  const proj = await window.desktop.getProjectStatus();
+  // The fields form (name / heading font / body font / logo), hidden until Create/Update.
+  const formWrap = document.createElement("div");
+  formWrap.className = "company-form"; // column + 14px gap (matches the intake card spacing)
+  formWrap.hidden = true;
 
-  if (proj.hasProject) {
-    const saveBtn = document.createElement("button");
-    saveBtn.className = "panelbtn primary";
-    saveBtn.textContent = COPY.company.saveDefault;
-    const msg = document.createElement("div");
-    msg.className = "muted";
-    saveBtn.addEventListener("click", async () => {
-      saveBtn.disabled = true;
-      saveBtn.textContent = COPY.common.saving;
-      msg.textContent = "";
+  // Create (no profile yet) or Update (profile exists) → reveal the prefilled fields.
+  const editBtn = document.createElement("button");
+  editBtn.className = "panelbtn" + (def.has ? "" : " primary");
+  editBtn.textContent = def.has ? COPY.company.updateProfile : COPY.company.createProfile;
+  editBtn.addEventListener("click", () => {
+    editBtn.hidden = true;
+    if (saveProjBtn) saveProjBtn.hidden = true;
+    buildForm();
+    formWrap.hidden = false;
+  });
+  body.appendChild(editBtn);
+
+  // Quick path: push THIS project's identity up as the default. Only offered when a project
+  // is open AND its company identity is completed (a company name is set). (req #4)
+  let saveProjBtn = null;
+  if (proj.hasProject && proj.company) {
+    saveProjBtn = document.createElement("button");
+    saveProjBtn.className = "panelbtn";
+    saveProjBtn.textContent = COPY.company.saveDefault;
+    const pmsg = document.createElement("div");
+    pmsg.className = "muted";
+    pmsg.style.marginTop = "6px";
+    saveProjBtn.addEventListener("click", async () => {
+      saveProjBtn.disabled = true;
+      saveProjBtn.textContent = COPY.common.saving;
+      pmsg.textContent = "";
       const res = await window.desktop.saveDefaultCompany();
-      if (res.ok) {
-        openModal("company"); // refresh → Active
-      } else {
-        msg.textContent = res.error || COPY.common.couldNotSave;
-        msg.style.color = "#e5484d";
-        saveBtn.disabled = false;
-        saveBtn.textContent = COPY.company.saveDefault;
+      if (res.ok) openModal("company");
+      else {
+        pmsg.textContent = res.error || COPY.common.couldNotSave;
+        pmsg.style.color = "#e5484d";
+        saveProjBtn.disabled = false;
+        saveProjBtn.textContent = COPY.company.saveDefault;
       }
     });
-    body.append(saveBtn, msg);
+    body.append(saveProjBtn, pmsg);
   }
-  if (def.has) {
-    const clearBtn = document.createElement("button");
-    clearBtn.className = "panelbtn danger";
-    clearBtn.textContent = COPY.company.clearDefault;
-    clearBtn.addEventListener("click", async () => {
-      await window.desktop.clearDefaultCompany();
-      openModal("company");
+
+  body.appendChild(formWrap);
+
+  function buildForm() {
+    formWrap.innerHTML = "";
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "panelbtn primary";
+    saveBtn.style.marginTop = "6px";
+    saveBtn.textContent = COPY.company.saveProfile;
+    const saveMsg = document.createElement("div");
+    saveMsg.className = "muted";
+    saveMsg.style.marginTop = "8px";
+    const cards = [
+      { id: "companyName", type: "open-text", label: COPY.companyForm.nameLabel, placeholder: COPY.companyForm.namePlaceholder, maxLength: 60, value: def.companyName || undefined },
+      { id: "headingFont", type: "font-pick", label: COPY.companyForm.headingFontLabel, help: COPY.companyForm.headingFontHelp, options: COMPANY_HEADING_FONTS, value: def.headingFont || undefined, allowUpload: true, skippable: true, agentDecidesLabel: COPY.companyForm.useDefault },
+      { id: "bodyFont", type: "font-pick", label: COPY.companyForm.bodyFontLabel, options: COMPANY_BODY_FONTS, value: def.bodyFont || undefined, allowUpload: true, skippable: true, agentDecidesLabel: COPY.companyForm.useDefault },
+      { id: "logo", type: "logo", label: COPY.companyForm.logoLabel, placeholder: COPY.companyForm.logoPlaceholder }, // optional: the upload zone is the affordance, no skip button
+    ];
+    // Only the company name is required; fonts + logo are optional (default fonts / no logo),
+    // so gate Save on the name alone rather than every card being filled-or-skipped.
+    const refreshSave = () => {
+      const nameCtl = controls.find((c) => c.card.id === "companyName");
+      saveBtn.disabled = !nameCtl || !nameCtl.isReady();
+    };
+    const controls = cards.map((card) => {
+      const r = renderIntakeCard(card, refreshSave, () => {});
+      formWrap.appendChild(r.el);
+      return { card, ...r };
     });
-    body.appendChild(clearBtn);
+    if (def.logoName) {
+      const n = document.createElement("div");
+      n.className = "muted";
+      n.textContent = COPY.company.currentLogo(def.logoName);
+      formWrap.appendChild(n);
+    }
+    saveBtn.addEventListener("click", async () => {
+      const vals = {};
+      const files = {};
+      for (const c of controls) { vals[c.card.id] = c.getValue(); if (c.getUpload) files[c.card.id] = c.getUpload(); }
+      if (!vals.companyName) { saveMsg.textContent = COPY.company.nameRequired; saveMsg.style.color = "#e5484d"; return; }
+      saveBtn.disabled = true;
+      saveBtn.textContent = COPY.common.saving;
+      const res = await window.desktop.saveDefaultCompanyFields({
+        companyName: vals.companyName,
+        headingFont: vals.headingFont || null,
+        bodyFont: vals.bodyFont || null,
+        headingFontFile: files.headingFont || null, // a self-hosted upload (or null)
+        bodyFontFile: files.bodyFont || null,
+        logo: vals.logo || null,
+      });
+      if (res && res.ok) openModal("company"); // refresh → Active + collapsed
+      else {
+        saveMsg.textContent = (res && res.error) || COPY.common.couldNotSave;
+        saveMsg.style.color = "#e5484d";
+        saveBtn.disabled = false;
+        saveBtn.textContent = COPY.company.saveProfile;
+      }
+    });
+    formWrap.append(saveBtn, saveMsg);
+    refreshSave();
   }
 
-  // --- Export THIS project's profile to a portable file (move between machines) ---
-  const hr = document.createElement("div");
-  hr.style.cssText = "height:1px;background:var(--border,#2a2a2a);margin:14px 0;";
-  body.appendChild(hr);
-
-  if (!proj.hasProject) {
-    const note = document.createElement("div");
-    note.className = "muted";
-    note.textContent = COPY.company.exportNeedsProject;
-    body.appendChild(note);
-    return;
-  }
-  const intro = document.createElement("p");
-  intro.className = "muted";
-  intro.style.margin = "0 0 12px";
-  intro.textContent = COPY.company.exportIntro;
-  body.appendChild(intro);
-  const exportBtn = document.createElement("button");
-  exportBtn.className = "panelbtn";
-  exportBtn.textContent = COPY.company.exportBtn;
-  exportBtn.disabled = !proj.companyProfile;
-  exportBtn.addEventListener("click", () => exportCompany(exportBtn));
-  body.appendChild(exportBtn);
-  if (!proj.companyProfile) {
-    const note = document.createElement("div");
-    note.className = "muted";
-    note.textContent = COPY.company.noProfileYet;
-    body.appendChild(note);
+  // --- Export the profile to a portable file (move between machines) — only when the open
+  // project already has an exported company-profile.json. ---
+  if (proj.hasProject && proj.companyProfile) {
+    const hr = document.createElement("div");
+    hr.style.cssText = "height:1px;background:var(--border,#2a2a2a);margin:14px 0;";
+    body.appendChild(hr);
+    const intro = document.createElement("p");
+    intro.className = "muted";
+    intro.style.margin = "0 0 12px";
+    intro.textContent = COPY.company.exportIntro;
+    body.appendChild(intro);
+    const exportBtn = document.createElement("button");
+    exportBtn.className = "panelbtn";
+    exportBtn.textContent = COPY.company.exportBtn;
+    exportBtn.addEventListener("click", () => exportCompany(exportBtn));
+    body.appendChild(exportBtn);
   }
 }
 
@@ -1531,26 +1589,73 @@ async function renderFigma(body) {
 
   body.appendChild(connStatusRow(COPY.figma.licenseLabel, lic.hasLicense, lic.hasLicense ? COPY.common.active : COPY.common.notSet, null, null));
 
-  // Export Design — populates + runs the "export to Figma" chat command (same as typing
-  // it). Enabled only when the license is active AND a build has finished (previewReady),
-  // since there's nothing to export until then.
-  const canExport = lic.hasLicense && design.previewReady;
+  // Export scope (P15) as checkboxes — shown once licensed. "Export Design" builds the chat
+  // command from the ticked parts so the agent runs straight away without re-asking the scope.
+  // (Destination / update-vs-new file (P16/P17) are still confirmed in chat on first export.)
+  let cbStyleguide = null;
+  let cbPages = null;
+  if (lic.hasLicense) {
+    // "What to export" header, with a "?" pushed to the right that opens the options help.
+    const scopeHead = document.createElement("div");
+    scopeHead.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;";
+    const scopeLabel = document.createElement("div");
+    scopeLabel.className = "sess-label";
+    scopeLabel.style.marginBottom = "0"; // the flex header owns the spacing now
+    scopeLabel.textContent = COPY.figma.exportScopeLabel;
+    const help = document.createElement("button");
+    help.type = "button";
+    help.className = "row-help";
+    help.title = COPY.figma.exportHelpTitle;
+    help.setAttribute("aria-label", COPY.figma.exportHelpTitle);
+    help.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>';
+    help.addEventListener("click", () => openHelpOverlay(COPY.figma.exportHelpHtml));
+    scopeHead.append(scopeLabel, help);
+    body.appendChild(scopeHead);
+    const scopeRow = (text, checked) => {
+      const row = document.createElement("label");
+      row.className = "toggle-row";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = checked;
+      const t = document.createElement("span");
+      t.textContent = text;
+      row.append(cb, t);
+      body.appendChild(row);
+      return cb;
+    };
+    // Styleguide + Blocks on by default (the recommended first export); Pages off — it's
+    // re-sent separately once the first export is confirmed.
+    cbStyleguide = scopeRow(COPY.figma.scopeStyleguide, true);
+    cbPages = scopeRow(COPY.figma.scopePages, false);
+  }
+
+  // Export Design — enabled only when licensed, a build has finished (previewReady), and at
+  // least one scope is ticked.
   const exportBtn = document.createElement("button");
   exportBtn.type = "button";
   exportBtn.className = "ifigma-export";
   exportBtn.textContent = COPY.figma.exportDesign;
-  exportBtn.disabled = !canExport;
-  if (!lic.hasLicense) exportBtn.title = COPY.figma.exportDisabledHint;
-  else if (!design.previewReady) exportBtn.title = COPY.figma.exportAfterBuild;
+  const updateExport = () => {
+    const anyScope = !cbStyleguide || cbStyleguide.checked || cbPages.checked;
+    exportBtn.disabled = !(lic.hasLicense && design.previewReady) || !anyScope;
+    exportBtn.title =
+      !lic.hasLicense ? COPY.figma.exportDisabledHint
+      : !design.previewReady ? COPY.figma.exportAfterBuild
+      : !anyScope ? COPY.figma.exportPickScope
+      : "";
+  };
+  if (cbStyleguide) { cbStyleguide.addEventListener("change", updateExport); cbPages.addEventListener("change", updateExport); }
+  updateExport();
   exportBtn.addEventListener("click", () => {
     if (exportBtn.disabled) return;
     closeModal();
-    sendText(COPY.figma.exportCommand);
+    const sg = !cbStyleguide || cbStyleguide.checked;
+    const pg = !cbPages || cbPages.checked;
+    sendText(COPY.figma.exportCommandFor(sg, pg));
   });
   body.appendChild(exportBtn);
 
-  // Licensed but no finished build yet → explain why the button is waiting. (Only shown
-  // when the license is valid; an invalid license is already covered by the status row.)
+  // Licensed but no finished build yet → explain why the button is waiting.
   if (lic.hasLicense && !design.previewReady) {
     const waitMsg = document.createElement("div");
     waitMsg.className = "muted";
@@ -1559,10 +1664,13 @@ async function renderFigma(body) {
     body.appendChild(waitMsg);
   }
 
-  const note = document.createElement("div");
-  note.className = "muted";
-  note.textContent = COPY.figma.note;
-  body.appendChild(note);
+  // What the license unlocks — shown only when it's NOT active (removed once licensed).
+  if (!lic.hasLicense) {
+    const note = document.createElement("div");
+    note.className = "muted";
+    note.textContent = COPY.figma.note;
+    body.appendChild(note);
+  }
 
   const manage = document.createElement("div");
   manage.className = "muted";
@@ -2339,17 +2447,24 @@ async function renderPublish(body) {
 const TONE_EXAMPLES = COPY.voice.toneExamples;
 const RULE_EXAMPLES = COPY.voice.ruleExamples;
 
-// A row of clickable "+ example" chips; onPick(text) adds/sets it.
-function exampleChips(examples, onPick) {
+// A row of clickable "+ example" chips; onPick(text) adds/sets it. `hidden(ex)` (optional)
+// filters out options that are already selected, and the returned refresh() re-applies that
+// filter after the selection changes. Returns { el, refresh }.
+function exampleChips(examples, onPick, hidden) {
   const wrap = document.createElement("div");
   wrap.className = "chips";
-  examples.forEach((ex) => {
-    const b = document.createElement("button");
-    b.className = "chip"; b.type = "button"; b.textContent = "+ " + ex;
-    b.addEventListener("click", () => onPick(ex));
-    wrap.appendChild(b);
-  });
-  return wrap;
+  const refresh = () => {
+    wrap.innerHTML = "";
+    (examples || []).forEach((ex) => {
+      if (hidden && hidden(ex)) return; // already picked → drop it from the options
+      const b = document.createElement("button");
+      b.className = "chip"; b.type = "button"; b.textContent = "+ " + ex;
+      b.addEventListener("click", () => onPick(ex));
+      wrap.appendChild(b);
+    });
+  };
+  refresh();
+  return { el: wrap, refresh };
 }
 
 // An editable list bound to `arr` (mutated in place). disabled → read-only + struck.
@@ -2357,6 +2472,7 @@ function ruleListEl(arr, opts = {}) {
   const box = document.createElement("div");
   box.className = "rulelist" + (opts.disabled ? " disabled" : "");
   const rows = document.createElement("div");
+  let chipRefresh = null; // set once the example chips exist; refreshes their picked-out filter
   const rerender = () => {
     rows.innerHTML = "";
     if (!arr.length) {
@@ -2373,6 +2489,7 @@ function ruleListEl(arr, opts = {}) {
       }
       rows.appendChild(row);
     });
+    if (chipRefresh) chipRefresh(); // a removed rule reappears as an option; an added one drops
   };
   box.appendChild(rows);
   const add = (text) => {
@@ -2386,7 +2503,9 @@ function ruleListEl(arr, opts = {}) {
     const btn = document.createElement("button"); btn.className = "panelbtn"; btn.type = "button"; btn.textContent = COPY.ruleList.add;
     btn.addEventListener("click", () => { add(inp.value); inp.value = ""; });
     addRow.append(inp, btn); box.appendChild(addRow);
-    box.appendChild(exampleChips(opts.examples || [], add));
+    const chips = exampleChips(opts.examples || [], add, (ex) => arr.some((r) => r.toLowerCase() === ex.toLowerCase()));
+    chipRefresh = chips.refresh;
+    box.appendChild(chips.el);
   }
   rerender();
   return box;
@@ -2419,13 +2538,38 @@ async function renderVoice(body) {
   body.appendChild(toneLabel);
   const toneInput = document.createElement("input");
   toneInput.className = "field"; toneInput.placeholder = COPY.voice.tonePlaceholder; toneInput.value = state.tone;
-  toneInput.addEventListener("input", () => { state.tone = toneInput.value; });
+  toneInput.addEventListener("input", () => { state.tone = toneInput.value; toneChips.refresh(); });
   body.appendChild(toneInput);
-  body.appendChild(exampleChips(TONE_EXAMPLES, (ex) => { state.tone = ex; toneInput.value = ex; }));
+  // The picked tone drops out of the options (a single-value list); refresh on every change.
+  const toneChips = exampleChips(
+    TONE_EXAMPLES,
+    (ex) => { state.tone = ex; toneInput.value = ex; toneChips.refresh(); },
+    (ex) => state.tone.trim().toLowerCase() === ex.toLowerCase(),
+  );
+  body.appendChild(toneChips.el);
 
   const prLabel = document.createElement("div"); prLabel.className = "voice-label"; prLabel.textContent = COPY.voice.projectRulesLabel;
   body.appendChild(prLabel);
   body.appendChild(ruleListEl(state.projRules, { examples: RULE_EXAMPLES, placeholder: COPY.voice.projectRulePlaceholder, emptyText: COPY.voice.projectRulesEmpty }));
+
+  // Applied global rules — shown here (read-only, selected) so This project reflects what's
+  // actually in effect. Hidden when the project ignores globals. Kept in sync as the Global
+  // section is edited or the Ignore toggle flips (see below).
+  const appliedNote = document.createElement("div"); appliedNote.className = "voice-applied-note"; appliedNote.textContent = COPY.voice.appliedFromGlobal;
+  const appliedWrap = document.createElement("div"); appliedWrap.className = "chips";
+  const renderAppliedGlobals = () => {
+    const show = !state.decline && state.globalRules.length > 0;
+    appliedNote.hidden = !show;
+    appliedWrap.hidden = !show;
+    appliedWrap.innerHTML = "";
+    if (!show) return;
+    state.globalRules.forEach((g) => {
+      const c = document.createElement("span"); c.className = "chip applied"; c.textContent = "✓ " + g;
+      appliedWrap.appendChild(c);
+    });
+  };
+  body.append(appliedNote, appliedWrap);
+  renderAppliedGlobals();
 
   // ── Global rules ── (divider to set it apart from the project grouping)
   const divider = document.createElement("div"); divider.className = "voice-divider";
@@ -2443,9 +2587,10 @@ async function renderVoice(body) {
     globalWrap.appendChild(ruleListEl(state.globalRules, {
       examples: RULE_EXAMPLES, placeholder: COPY.voice.globalRulePlaceholder,
       emptyText: COPY.voice.globalRulesEmpty, disabled: state.decline,
+      onChange: renderAppliedGlobals, // editing a global updates the This-project mirror
     }));
   };
-  chk.addEventListener("change", () => { state.decline = chk.checked; renderGlobal(); });
+  chk.addEventListener("change", () => { state.decline = chk.checked; renderGlobal(); renderAppliedGlobals(); });
   renderGlobal();
   body.appendChild(globalWrap);
 
@@ -5200,7 +5345,7 @@ function computePhaseList(brief, opts) {
 // advance until the TodoWrite hook lands (Phase 2). Returns a phase id or null.
 function phaseForActivity(name, target) {
   const t = (target || "").toLowerCase();
-  if (/(brand\.ts|tokens\.css|fonts\.css|theme\.css)/.test(t)) return "foundations";
+  if (/brand\.ts|tokens\.css|fonts\.css|theme\.css|apply-brand|extract-palette|resolve-fonts/.test(t)) return "foundations";
   if (name === "WebFetch" || /\bcurl\b/.test(t)) return "research";
   if (/header\.tsx|menustate|menu\.ts/.test(t)) return "header";
   if (/hero/.test(t)) return "hero";
@@ -5252,18 +5397,36 @@ function fillTokens(str, bits) {
 }
 
 const buildNarration = (() => {
+  // Signals arrive in bursts and don't track wall-clock time, so we DON'T snap the display
+  // straight to them. A ticker walks the SHOWN phase toward the signalled TARGET one step at
+  // a time, holding each for a minimum dwell — jumps read as a smooth walk, nothing flashes,
+  // and lines rotate slowly once settled. See docs/quiet-build-narration-spec.md.
+  const TICK_MS = 300;         // ticker cadence
+  const MIN_DWELL_MS = 2600;   // a step is held at least this long while catching up to target
+  const ROTATE_MS = 22000;     // line rotation once settled on a phase (was 5000 — too quick)
+  const FINISH_STEP_MS = 260;  // brisk walk through any remaining steps at the very end
+  const FINISH_HOLD_MS = 500;  // a short "all done" beat before the reveal
   let phases = [];
-  let idx = -1;
+  let target = -1;   // furthest phase reached from real signals
+  let shown = -1;    // the phase currently on screen (walks toward target)
   let lineIdx = 0;
-  let timer = null;
+  let stepAt = 0;    // when `shown` last changed (Date.now)
+  let lineAt = 0;    // when the line last changed
+  let ticker = null;
   let bits = {};
-  let reqSeq = 0;        // bumps each phase change; a late Haiku line for an old phase is dropped
+  let reqSeq = 0;         // bumps each phase change; a late Haiku line for an old phase is dropped
   let haikuShown = false; // a bespoke line is up for this phase → pause the curated rotation
+  let finishing = false;  // during the end flush we don't request new Haiku lines
+  let noHaiku = false;    // begin({haiku:false}) → curated-only (the dev demo, token-free)
+  let scale = 1;          // begin({scale}) → the dev demo scales ALL timing so fast mode stays faithful
+  const now = () => Date.now();
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const phaseDef = (id) => (COPY.build && COPY.build.phases && COPY.build.phases[id]) || null;
 
   // Phase 3: ask main for one live Art-Director sentence for this phase (default-on;
   // degrades silently to the curated line on disable/failure/timeout, or if it lands late).
   function requestNarration(phaseId) {
+    if (noHaiku) return; // curated-only (dev demo) — no model call, no tokens
     const my = reqSeq;
     const def = phaseDef(phaseId);
     const title = def ? fillTokens(def.title, bits) : phaseId;
@@ -5276,64 +5439,81 @@ const buildNarration = (() => {
     }).catch(() => {});
   }
 
-  function renderSteps() {
+  function renderSteps(allDone) {
     const box = el("ph-steps");
     if (!box) return;
     box.innerHTML = "";
     phases.forEach((_id, i) => {
+      const cls = allDone ? "done" : i < shown ? "done" : i === shown ? "active" : "";
       const seg = document.createElement("span");
-      seg.className = "seg" + (i < idx ? " done" : i === idx ? " active" : "");
+      seg.className = "seg" + (cls ? " " + cls : "");
       box.appendChild(seg);
     });
     box.hidden = phases.length === 0;
   }
   function showLine() {
     if (haikuShown) return; // a bespoke live line is up this phase — don't rotate over it
-    const def = phaseDef(phases[idx]);
+    const def = phaseDef(phases[shown]);
     if (!def || !def.lines || !def.lines.length) return;
     const pool = def.slowLine ? [...def.lines, def.slowLine] : def.lines;
     phText.textContent = fillTokens(pool[lineIdx % pool.length], bits);
   }
+  // Render the currently-shown phase. Haiku is requested only once we've SETTLED on the
+  // target (not for steps merely walked through), to avoid flashing lines + wasted calls.
   function renderPhase() {
-    const def = phaseDef(phases[idx]);
+    const def = phaseDef(phases[shown]);
     if (!def) return;
-    reqSeq++;          // new phase → invalidate any in-flight Haiku request
+    reqSeq++;
     haikuShown = false;
-    const label = el("ph-steplabel");
-    if (label) { label.textContent = COPY.build.stepLabel(idx + 1, phases.length); label.hidden = false; }
-    phTitle.textContent = fillTokens(def.title, bits);
     lineIdx = 0;
-    showLine();          // curated line shows immediately; the Haiku line overrides if/when it lands
-    renderSteps();
-    requestNarration(phases[idx]);
+    lineAt = now();
+    const label = el("ph-steplabel");
+    if (label) { label.textContent = COPY.build.stepLabel(shown + 1, phases.length); label.hidden = false; }
+    phTitle.textContent = fillTokens(def.title, bits);
+    showLine();
+    renderSteps(false);
+    if (shown === target && !finishing) requestNarration(phases[shown]);
+  }
+  function tick() {
+    const t = now();
+    if (shown < target && (t - stepAt) >= MIN_DWELL_MS * scale) { shown++; stepAt = t; renderPhase(); return; }
+    if (shown === target && !haikuShown && (t - lineAt) >= ROTATE_MS * scale) { lineIdx++; lineAt = t; showLine(); }
+  }
+  function stop() {
+    if (ticker) { clearInterval(ticker); ticker = null; }
+    const box = el("ph-steps"); if (box) box.hidden = true;
+    const label = el("ph-steplabel"); if (label) label.hidden = true;
+    phases = []; target = shown = -1; finishing = false;
   }
   return {
-    begin(phaseList, briefBitsObj) {
+    begin(phaseList, briefBitsObj, opts) {
       phases = phaseList && phaseList.length ? phaseList : ["understanding", "foundations", "sections", "polish"];
       bits = briefBitsObj || {};
-      idx = 0;
+      noHaiku = !!(opts && opts.haiku === false);
+      scale = opts && opts.scale > 0 ? opts.scale : 1;
+      target = 0; shown = 0; stepAt = now(); finishing = false;
       stopWorking();               // take over from the generic rotation
-      if (phProgress) phProgress.hidden = true; // the segmented spine replaces the bounce bar
       renderPhase();
-      if (timer) clearInterval(timer);
-      timer = setInterval(() => { lineIdx++; showLine(); }, 5000);
+      if (ticker) clearInterval(ticker);
+      ticker = setInterval(tick, TICK_MS);
     },
-    // Jump forward to an explicit phase (never backward).
-    advanceTo(id) {
-      const to = phases.indexOf(id);
-      if (to > idx) { idx = to; renderPhase(); }
+    // Signals only bump the TARGET; the ticker walks the display toward it (never backward).
+    advanceTo(id) { const to = phases.indexOf(id); if (to > target) target = to; },
+    advancePast(id) { const at = phases.indexOf(id); if (at >= 0 && at + 1 < phases.length && at + 1 > target) target = at + 1; },
+    // Build finished: walk briskly through any remaining steps, fill every segment, hold a
+    // short beat, then clear — so the final phase actually registers before the reveal
+    // (fixes "step 7 feels non-existent"). Bounded, so the reveal never drags.
+    async finish() {
+      if (ticker) { clearInterval(ticker); ticker = null; }
+      if (!phases.length) return;
+      finishing = true;
+      target = phases.length - 1;
+      while (shown < target) { shown++; renderPhase(); await wait(FINISH_STEP_MS * scale); }
+      renderSteps(true);           // every segment filled
+      await wait(FINISH_HOLD_MS * scale);
+      stop();
     },
-    // Advance to the phase right AFTER `id` (used on the previewReady flip → past foundations).
-    advancePast(id) {
-      const at = phases.indexOf(id);
-      if (at >= 0 && at + 1 > idx && at + 1 < phases.length) { idx = at + 1; renderPhase(); }
-    },
-    end() {
-      if (timer) { clearInterval(timer); timer = null; }
-      const box = el("ph-steps"); if (box) box.hidden = true;
-      const label = el("ph-steplabel"); if (label) label.hidden = true;
-      phases = []; idx = -1;
-    },
+    end() { stop(); },
     isActive() { return phases.length > 0; },
   };
 })();
@@ -5345,7 +5525,7 @@ function showPreparing() {
   previewph.hidden = false;
   setPhEmoji("✨");
   phTitle.textContent = COPY.preview.preparingElements;
-  phProgress.hidden = false;
+  phProgress.hidden = true; // the segmented step spine replaces the wide bounce bar
   stopWorking(); // clear any stale rotation so ours (build-flavored) takes over
   // Quiet build: the Art-Director spine owns the pane text (begin() is called right after
   // in startDesigning). Otherwise fall back to the generic rotation.
@@ -5353,6 +5533,18 @@ function showPreparing() {
   // The mid-turn readiness poll (in the "tool" handler) reveals the Style guide the
   // moment previewReady flips, keeping the Home tab covered until the build ends.
   resetBuildReveal();
+}
+
+// ---- Dev-only: narration pacing harness (NOT shipped) ------------------------
+// The pacing tuner lives in desktop/dev/narration-harness.js — git-tracked for future
+// reference, excluded from the packaged bundle (package.json build.files), and loaded ONLY
+// when running unpackaged (preload's synchronous `dev` flag, set from main's --ta-dev arg).
+// Here we just expose the internals the harness drives, then inject its script.
+if (window.desktop && window.desktop.dev) {
+  window.__taNarration = { buildNarration, computePhaseList, briefBits, showPreparing };
+  const s = document.createElement("script");
+  s.src = "dev/narration-harness.js"; // relative to shell.html (desktop/)
+  document.head.appendChild(s);
 }
 
 // Dispatch to the per-type renderer. Every builder returns
@@ -5975,6 +6167,9 @@ function buildFontPick(card, body, onChange) {
   const initial = (card.options || []).filter(Boolean);
   loadGoogleFonts(initial);
   initial.forEach((name) => addOption(name));
+  // Pre-fill (e.g. the company drawer's Update form) — add + select the saved font, even if
+  // it's not one of the presets. addOption dedupes, so a preset value just gets selected.
+  if (card.value) { loadGoogleFonts([card.value]); addOption(card.value, { pick: true }); }
 
   // Custom entry: type any font family, load it from Google Fonts, add it as a picked
   // option previewed in its own face. If the name is not a real Google font the link
@@ -6001,10 +6196,58 @@ function buildFontPick(card, body, onChange) {
   custom.append(input, add);
   body.appendChild(custom);
 
+  // Optional (company profile): upload a custom font FILE (a self-hosted brand font not on
+  // Google). Gated on card.allowUpload so the design-intake picker is unchanged. Uploaded
+  // fonts are tracked by family; getUpload() returns the file for the selected one so the
+  // profile can embed it as @font-face.
+  const uploads = new Map(); // family → { filename, mime, b64, family }
+  let upBtn = null;
+  const faceName = (filename) =>
+    String(filename).replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ")
+      .replace(/\b(regular|bold|italic|light|medium|semibold|thin|black|book|roman|variable|vf)\b/gi, "")
+      .replace(/\s+/g, " ").trim() || "Custom Font";
+  if (card.allowUpload) {
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = ".woff2,.woff,.ttf,.otf";
+    fileInput.style.display = "none";
+    upBtn = document.createElement("button");
+    upBtn.type = "button";
+    upBtn.className = "ifont-upload"; // full-width row, under the font list
+    upBtn.textContent = COPY.intake.fontUpload;
+    upBtn.addEventListener("click", () => { if (!upBtn.disabled) fileInput.click(); });
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = String(reader.result || "");
+        const b64 = dataUrl.split(",")[1] || "";
+        if (!b64) return;
+        const filename = (file.name || "font").replace(/[^\w.-]+/g, "-");
+        let family = faceName(filename);
+        while (uploads.has(family) && uploads.get(family).filename !== filename) family += " 2";
+        uploads.set(family, { filename, mime: file.type || "", b64, family });
+        // Inject an @font-face so the option previews + renders in the uploaded face.
+        const style = document.createElement("style");
+        style.textContent = `@font-face{font-family:'${family}';src:url('${dataUrl}');font-display:swap;}`;
+        document.head.appendChild(style);
+        addOption(family, { pick: true });
+        fileInput.value = "";
+      };
+      reader.readAsDataURL(file);
+    });
+    // Under the selectable fonts, above the "or type" row — so the text input gets a full row.
+    body.insertBefore(upBtn, custom);
+    body.appendChild(fileInput); // hidden; position irrelevant
+  }
+
   return {
     getValue: () => selected,
+    // The uploaded file for the selected family (self-hosted), or null (a Google name / none).
+    getUpload: () => (selected && uploads.has(selected) ? uploads.get(selected) : null),
     hasValue: () => !!selected,
-    setDisabled: (d) => { options.forEach((o) => { o.btn.disabled = d; }); input.disabled = d; add.disabled = d; },
+    setDisabled: (d) => { options.forEach((o) => { o.btn.disabled = d; }); input.disabled = d; add.disabled = d; if (upBtn) upBtn.disabled = d; },
     display: () => selected || "",
   };
 }

@@ -82,6 +82,9 @@ contextBridge.exposeInMainWorld("desktop", {
   getNarrate: () => ipcRenderer.invoke("narrate:get"),
   setNarrate: (enabled) => ipcRenderer.invoke("narrate:set", { enabled }),
   narrateLine: (payload) => ipcRenderer.invoke("narrate:line", payload),
+  // Synchronous dev flag (main injects --ta-dev only when unpackaged). Gates the unshipped
+  // narration pacing harness in the renderer.
+  dev: process.argv.includes("--ta-dev"),
   installFont: (family) => ipcRenderer.invoke("font:install", { family }),
   uploadLogo: () => ipcRenderer.invoke("figma:uploadLogo"),
   saveLicense: (key) => ipcRenderer.invoke("license:save", { key }),
@@ -121,6 +124,7 @@ contextBridge.exposeInMainWorld("desktop", {
   downloadCompany: () => ipcRenderer.invoke("company:download"),
   getDefaultCompany: () => ipcRenderer.invoke("company:defaultStatus"),
   saveDefaultCompany: () => ipcRenderer.invoke("company:saveDefault"),
+  saveDefaultCompanyFields: (form) => ipcRenderer.invoke("company:saveDefaultFields", form),
   clearDefaultCompany: () => ipcRenderer.invoke("company:clearDefault"),
   createProject: () => ipcRenderer.invoke("project:create"),
   openProject: () => ipcRenderer.invoke("project:open"),
