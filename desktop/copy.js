@@ -299,6 +299,11 @@ window.COPY = {
     applyingFont: (font) => `Apply font: ${font}`,
     sourceImagery: "Source imagery",
     sourcingAsset: "Sourcing imagery for this recommendation…",
+    makeCall: "Make the call",
+    makeCallPlaceholder: "Add any direction for Claude (optional)…",
+    makeCallUpload: "Upload a file",
+    makeCallSend: "Send to Claude",
+    makingCall: (title) => `Make the call: ${title}`,
   },
 
   // ── Preview browser: nav buttons + quick links ──────────────────────────────

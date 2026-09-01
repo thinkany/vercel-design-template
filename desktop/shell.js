@@ -5244,6 +5244,43 @@ function openRecModal(rec, mode) {
     });
   }
 
+  // A plain 'decision' / non-sourceable 'asset' has no one-click action. Show its note as its
+  // OWN paragraph right under the description (same soft gray), rather than crammed into the
+  // action row — that gives the Show-on-page button room to breathe.
+  const isNoteOnly = mode !== "completed" && !(rec.kind === "code" && rec.apply) && !isFontRec && !(rec.kind === "asset" && rec.assetSourceable);
+  if (isNoteOnly) {
+    const note = document.createElement("div"); note.className = "adrec-modal-note";
+    note.textContent = rec.kind === "asset" ? COPY.director.assetNote : COPY.director.decisionNote;
+    card.appendChild(note);
+  }
+
+  // Assigned below: the inline "make the call" field the button reveals. Available for any
+  // 'decision' (non-font) or 'asset' — including a sourceable asset, so the designer can
+  // override the one-click auto-source with their own direction / file.
+  let makeCallForm = null;
+  const canMakeCall = mode !== "completed" && !isFontRec && !(rec.kind === "code" && rec.apply) && (rec.kind === "decision" || rec.kind === "asset");
+  const buildMakeCallBtn = () => {
+    const mk = document.createElement("button"); mk.className = "adrec-makecall-btn"; mk.textContent = COPY.director.makeCall;
+    if (!appHasKey) { mk.disabled = true; mk.title = COPY.director.needKey; }
+    else mk.addEventListener("click", () => {
+      if (!makeCallForm) return;
+      const opening = !makeCallForm.classList.contains("open");
+      makeCallForm.classList.toggle("open", opening);
+      mk.classList.toggle("active", opening);
+      if (opening) { const ta = makeCallForm.querySelector("textarea"); setTimeout(() => ta && ta.focus(), 80); }
+    });
+    return mk;
+  };
+  const buildSourceBtn = () => {
+    const source = document.createElement("button"); source.className = "adrec-source-btn"; source.textContent = COPY.director.sourceImagery;
+    if (!appHasKey) { source.disabled = true; source.title = COPY.director.needKey; }
+    else source.addEventListener("click", () => sourceAssetRec(rec));
+    return source;
+  };
+  // A sourceable asset offers TWO actions (auto-source + make the call). Rather than cram both
+  // into the action row, they get their own even-split row below it (see after `actions`).
+  const dualAction = mode !== "completed" && rec.kind === "asset" && rec.assetSourceable;
+
   const actions = document.createElement("div"); actions.className = "adrec-modal-actions";
   if (mode === "completed") {
     // Read-only reference — the action was already taken. Close only.
@@ -5290,20 +5327,32 @@ function openRecModal(rec, mode) {
         applyFontRec(rec, font, fontRole);
       });
       right.appendChild(apply);
-    } else if (rec.kind === "asset" && rec.assetSourceable) {
-      // Have the Art Director source the imagery via the /design image pipeline.
-      const source = document.createElement("button"); source.className = "adrec-apply-btn"; source.textContent = COPY.director.sourceImagery;
-      if (!appHasKey) { source.disabled = true; source.title = COPY.director.needKey; }
-      else source.addEventListener("click", () => sourceAssetRec(rec));
-      right.appendChild(source);
-    } else {
-      const note = document.createElement("span"); note.className = "adrec-modal-tagnote";
-      note.textContent = rec.kind === "asset" ? COPY.director.assetNote : COPY.director.decisionNote;
-      right.appendChild(note);
+    } else if (dualAction) {
+      // Source imagery + Make the call go on their own even-split row below — the top row
+      // keeps only Show on page here.
+    } else if (canMakeCall) {
+      // Plain decision / non-sourceable asset → the ONLY right-side action is "Make the call".
+      right.appendChild(buildMakeCallBtn());
     }
     actions.appendChild(right);
   }
   card.appendChild(actions);
+
+  // Sourceable asset: the two actions on their own row, splitting the width evenly.
+  if (dualAction) {
+    const split = document.createElement("div"); split.className = "adrec-action-split";
+    split.append(buildSourceBtn(), buildMakeCallBtn());
+    card.appendChild(split);
+  }
+
+  // The "Make the call" field: soft-animated open below the action row. A comment to Claude +
+  // an optional upload; Send closes the modal and hands off to a scoped builder turn that
+  // executes on the designer's direction AND the Art Director's recommendation.
+  if (canMakeCall) {
+    makeCallForm = buildMakeCallField((comment, attached) => { closeRecModal(); makeCallRec(rec, comment, attached); });
+    card.appendChild(makeCallForm);
+  }
+
   overlay.appendChild(card);
   document.body.appendChild(overlay);
 }
@@ -5364,6 +5413,67 @@ function sourceAssetRec(rec) {
     `then wire it into the variation's design where the review describes.${hint} Keep to the design rules.` +
     `\n\n${rec.title}\n${rec.why}`;
   runRecCommand(rec, prompt, COPY.director.sourcingAsset);
+}
+
+// "Make the call" (a 'decision' / 'asset'): the designer sends direction + an optional file
+// straight from the card, and a scoped builder turn executes on THAT plus the Art Director's
+// recommendation. The rec is completed like any other applied item.
+function makeCallRec(rec, comment, attached) {
+  const id = directorState.id;
+  if (!rec || !id || !appHasKey) return;
+  const lines = [
+    `[Act on an Art Director recommendation the designer is deciding, for design variation ${id}.]`,
+    `Recommendation: ${rec.title}`,
+  ];
+  if (rec.why) lines.push(`Why: ${rec.why}`);
+  if (Array.isArray(rec.targets) && rec.targets.length) lines.push(`Targets: ${rec.targets.join(", ")}`);
+  lines.push("");
+  lines.push(comment
+    ? `The designer's direction:\n${comment}`
+    : `The designer approved this call — act on it using your judgment per the recommendation.`);
+  if (attached && attached.rel) lines.push(`\nThe designer attached a file to use: ${attached.rel} (${attached.kind}).`);
+  lines.push(`\nMake the change now, editing only files under \`src/variations/${id}/\`. Follow the /design rules. Do not rebuild the page.`);
+  runRecCommand(rec, lines.join("\n"), COPY.director.makingCall(rec.title));
+}
+
+// The inline "make the call" field (a comment to Claude + an optional upload). Shared by the
+// suggestion modal and the review bar. `onSend(comment, attached)` runs on submit. Hidden
+// until its trigger toggles the `.open` class (see makeCallToggleBtn).
+function buildMakeCallField(onSend) {
+  const form = document.createElement("div"); form.className = "adrec-makecall";
+  const inner = document.createElement("div"); inner.className = "adrec-makecall-inner";
+  const ta = document.createElement("textarea"); ta.className = "adrec-makecall-input"; ta.rows = 3; ta.placeholder = COPY.director.makeCallPlaceholder;
+  const row = document.createElement("div"); row.className = "adrec-makecall-row";
+  const upload = document.createElement("button"); upload.className = "adrec-upload-btn"; upload.textContent = COPY.director.makeCallUpload;
+  const fname = document.createElement("span"); fname.className = "adrec-upload-name";
+  let attached = null;
+  upload.addEventListener("click", async () => {
+    try {
+      const res = await window.desktop.attachFile();
+      if (res && res.ok) { attached = res; fname.textContent = res.name; fname.style.color = ""; }
+      else if (res && res.error) { fname.textContent = res.error; fname.style.color = "#e5484d"; }
+    } catch {}
+  });
+  const send = document.createElement("button"); send.className = "adrec-apply-btn"; send.textContent = COPY.director.makeCallSend;
+  if (!appHasKey) { send.disabled = true; send.title = COPY.director.needKey; }
+  else send.addEventListener("click", () => onSend(ta.value.trim(), attached));
+  row.append(upload, fname, send);
+  inner.append(ta, row);
+  form.appendChild(inner);
+  return form;
+}
+
+// A "Make the call" toggle button bound to a make-call field: click reveals/hides it (soft).
+function makeCallToggleBtn(field) {
+  const mk = document.createElement("button"); mk.className = "adrec-makecall-btn"; mk.textContent = COPY.director.makeCall;
+  if (!appHasKey) { mk.disabled = true; mk.title = COPY.director.needKey; }
+  else mk.addEventListener("click", () => {
+    const opening = !field.classList.contains("open");
+    field.classList.toggle("open", opening);
+    mk.classList.toggle("active", opening);
+    if (opening) { const ta = field.querySelector("textarea"); setTimeout(() => ta && ta.focus(), 80); }
+  });
+  return mk;
 }
 
 // Shared tail: move the rec to completed, close the drawer, and run the scoped builder turn.
@@ -5840,7 +5950,8 @@ function adReviewStep(d) {
   if (!adReview || adReview.recs.length < 2) return;
   const n = adReview.recs.length;
   adReview.idx = ((adReview.idx + d) % n + n) % n;
-  adReview.expanded = false; // collapse the description when moving on
+  // Keep the dropdown open across steps so the designer reads + acts on each rec in place;
+  // updateAdToolbar (via adHighlightCurrent) rebuilds its title/why/actions for the new rec.
   adHighlightCurrent();
 }
 function adReviewNext() { adReviewStep(1); }
@@ -5868,8 +5979,10 @@ function showAdToolbar() {
   if (!adToolbarEl) {
     adToolbarEl = document.createElement("div");
     adToolbarEl.id = "ad-toolbar";
-    // A FIXED top row (truncated title + caret + count + buttons) that never moves, plus a
-    // dropdown that animates open BELOW it carrying the full title (as a heading) + the why.
+    // A FIXED top row (truncated title + caret + count + step/exit) that never moves, plus a
+    // dropdown that animates open below it carrying the full title, the why, and the rec's
+    // ACTIONS (Apply / Source imagery / Make the call) — everything for the walkthrough in one
+    // spot. "Make the call" expands the dropdown further with its field baked in.
     adToolbarEl.innerHTML =
       '<div class="ad-tb-row">' +
         '<div class="ad-tb-head"><span class="a11y-tb-title"></span>' +
@@ -5877,24 +5990,22 @@ function showAdToolbar() {
         '<span class="a11y-tb-count"></span>' +
         '<button class="a11y-tb-btn" data-a="prev">‹ Prev</button>' +
         '<button class="a11y-tb-btn" data-a="next">Next ›</button>' +
-        '<button class="a11y-tb-btn a11y-tb-fix" data-a="fix"></button>' +
         '<button class="a11y-tb-btn a11y-tb-exit" data-a="exit"></button>' +
       '</div>' +
-      '<div class="ad-tb-drop">' +
+      '<div class="ad-tb-drop"><div class="ad-tb-drop-inner"><div class="ad-tb-panel">' +
         '<div class="ad-tb-drop-title"></div>' +
         '<div class="ad-tb-why"></div>' +
-      '</div>';
+        '<div class="ad-tb-actions"></div>' +
+      '</div></div></div>';
     document.body.appendChild(adToolbarEl);
     adToolbarEl.addEventListener("click", (e) => {
       const t = e.target.closest && e.target.closest("[data-a]");
       const a = t && t.getAttribute("data-a");
       if (a === "prev") adReviewPrev();
       else if (a === "next") adReviewNext();
-      else if (a === "fix") adReviewFix();
       else if (a === "exit") exitAdReview();
       else if (a === "expand") adToggleExpand();
     });
-    adToolbarEl.querySelector(".a11y-tb-fix").textContent = COPY.director.applyThis;
     adToolbarEl.querySelector(".a11y-tb-exit").textContent = COPY.director.exitReview;
   }
   adToolbarEl.hidden = false;
@@ -5914,16 +6025,54 @@ function updateAdToolbar() {
   why.textContent = rec.why || "";
   why.hidden = !rec.why;
   adToolbarEl.querySelector(".ad-tb-caret").classList.toggle("open", !!adReview.expanded);
-  // Position + status.
   const status = adReview.count ? COPY.director.shownOnPage : COPY.director.notOnView;
   adToolbarEl.querySelector(".a11y-tb-count").textContent = multi ? `${adReview.idx + 1}/${adReview.recs.length} · ${status}` : status;
-  // Prev/Next only when there's a list to walk.
   adToolbarEl.querySelectorAll('[data-a="prev"],[data-a="next"]').forEach((b) => { b.hidden = !multi; });
-  // Fix only for a code-actionable rec.
-  const canFix = !!(rec.kind === "code" && rec.apply);
-  const fix = adToolbarEl.querySelector(".a11y-tb-fix");
-  fix.hidden = !canFix;
-  if (canFix) { fix.disabled = !appHasKey; if (!appHasKey) fix.title = COPY.director.needKey; else fix.removeAttribute("title"); }
+  // The rec's actions live in the dropdown, rebuilt per rec as you step Next/Prev.
+  renderAdBarActions(adToolbarEl.querySelector(".ad-tb-actions"), rec);
+}
+
+// Build the action buttons for the current rec INSIDE the review-bar dropdown — the same
+// actions as the suggestion modal, so the designer can act mid-walkthrough. Each action exits
+// the review (clears the overlay, restores the preview) then runs; "Make the call" reveals its
+// field inline first. Rebuilt each step, so the field always starts fresh + collapsed.
+function renderAdBarActions(el, rec) {
+  if (!el) return;
+  // Only rebuild when the rec actually changes (a step). Re-rendering for the SAME rec (a caret
+  // toggle, a re-highlight) would wipe a half-typed make-the-call comment, so skip it.
+  const recId = (rec && rec.id) || "";
+  if (el.dataset.recId === recId && el.childElementCount) return;
+  el.dataset.recId = recId;
+  el.innerHTML = "";
+  if (!rec || !rec.kind) return;
+  const noKey = !appHasKey;
+  const isFontRec = rec.kind === "decision" && Array.isArray(rec.fontOptions) && rec.fontOptions.length > 0;
+  const row = document.createElement("div"); row.className = "adrec-action-split";
+
+  if (rec.kind === "code" && rec.apply) {
+    const apply = document.createElement("button"); apply.className = "adrec-apply-btn"; apply.textContent = COPY.director.applyThis;
+    if (noKey) { apply.disabled = true; apply.title = COPY.director.needKey; }
+    else apply.addEventListener("click", () => { const r = rec; exitAdReview(); applyRec(r); });
+    row.appendChild(apply); el.appendChild(row);
+  } else if (isFontRec) {
+    // The font pick has its own inline picker — open the modal for it.
+    const choose = document.createElement("button"); choose.className = "adrec-apply-btn"; choose.textContent = COPY.director.applyFont;
+    if (noKey) { choose.disabled = true; choose.title = COPY.director.needKey; }
+    else choose.addEventListener("click", () => { const r = rec; exitAdReview(); openRecModal(r, "active"); });
+    row.appendChild(choose); el.appendChild(row);
+  } else if (rec.kind === "decision" || rec.kind === "asset") {
+    const field = buildMakeCallField((comment, attached) => { const r = rec; exitAdReview(); makeCallRec(r, comment, attached); });
+    const mkBtn = makeCallToggleBtn(field);
+    if (rec.kind === "asset" && rec.assetSourceable) {
+      const source = document.createElement("button"); source.className = "adrec-source-btn"; source.textContent = COPY.director.sourceImagery;
+      if (noKey) { source.disabled = true; source.title = COPY.director.needKey; }
+      else source.addEventListener("click", () => { const r = rec; exitAdReview(); sourceAssetRec(r); });
+      row.append(source, mkBtn);
+    } else {
+      row.appendChild(mkBtn);
+    }
+    el.append(row, field);
+  }
 }
 
 // ---- Start designing (#3) ---------------------------------------------------

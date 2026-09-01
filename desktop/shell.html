@@ -700,10 +700,17 @@
       .ad-tb-caret:hover { color: #fff; }
       .ad-tb-caret svg { transition: transform .28s ease; }
       .ad-tb-caret.open svg { transform: rotate(180deg); }
-      .ad-tb-drop { max-height: 0; overflow: hidden; opacity: 0; margin-top: 0; transition: max-height .38s ease-out, opacity .44s ease, margin-top .38s ease-out; }
-      #ad-toolbar.expanded .ad-tb-drop { max-height: 340px; opacity: 1; margin-top: 8px; }
-      .ad-tb-drop-title { font-weight: 600; font-size: 13px; line-height: 1.4; }
-      .ad-tb-why { color: #c8c8d0; font-size: 12px; line-height: 1.45; margin-top: 5px; }
+      /* grid-rows (0fr→1fr) so the panel eases to the EXACT content height — and grows in step
+         when the make-the-call field opens inside it. The panel is light so it can reuse the
+         modal's light action buttons + field on the otherwise-dark bar. */
+      .ad-tb-drop { display: grid; grid-template-rows: 0fr; min-height: 0; opacity: 0; margin-top: 0; transition: grid-template-rows .38s ease-out, opacity .44s ease, margin-top .38s ease-out; }
+      #ad-toolbar.expanded .ad-tb-drop { grid-template-rows: 1fr; opacity: 1; margin-top: 10px; }
+      /* The collapsing grid item carries NO padding/bg (so it truly hits 0 height); the visible
+         white panel + its padding live one level in, clipped away when collapsed. */
+      .ad-tb-drop-inner { overflow: hidden; min-height: 0; }
+      .ad-tb-panel { background: #fff; border-radius: 10px; padding: 14px 16px; color: #1a1a1a; }
+      .ad-tb-drop-title { font-weight: 600; font-size: 13.5px; line-height: 1.4; color: #1a1a1a; }
+      .ad-tb-why { color: #555; font-size: 12.5px; line-height: 1.5; margin-top: 6px; }
       /* Inline font-pick for an actionable type 'decision' (reuses .ifonts / .ifont) */
       .adrec-fontpick-label { font-size: 12.5px; color: #6a6a72; margin-top: 14px; }
       .adrec-fontpick { margin-top: 8px; max-height: 260px; overflow-y: auto; }
@@ -722,6 +729,32 @@
       .a11y-show-btn { border: none; background: #0a7; color: #fff; border-radius: 8px; padding: 9px 16px; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity .12s; }
       .a11y-show-btn:hover { opacity: .88; }
       .adrec-modal-tagnote { margin-left: auto; font-size: 12px; color: #8a8a92; }
+      /* Same soft gray + size as the tagnote, but its own paragraph under the description. */
+      .adrec-modal-note { font-size: 12px; color: #8a8a92; line-height: 1.5; margin-top: 10px; }
+      /* "Make the call" — a secondary/outlined action so it never fights the dark primary
+         (e.g. Source imagery) when both appear on a sourceable asset. */
+      .adrec-makecall-btn { border: 1px solid #d8d8de; background: none; color: #444; border-radius: 8px; padding: 8px 16px; font: inherit; font-size: 13px; cursor: pointer; transition: border-color .12s, color .12s; }
+      .adrec-makecall-btn:hover, .adrec-makecall-btn.active { border-color: #111; color: #111; }
+      .adrec-makecall-btn:disabled { opacity: .5; cursor: not-allowed; }
+      /* Source imagery — a softer gray (not aggressive black) since it's an alternative,
+         not the single primary action. */
+      .adrec-source-btn { border: none; background: #6a6a72; color: #fff; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: background .12s; }
+      .adrec-source-btn:hover { background: #55555c; }
+      .adrec-source-btn:disabled { background: #c9c9d0; cursor: not-allowed; }
+      /* Two actions (Source imagery + Make the call) on their own row, split evenly. Matched
+         to the other buttons' height (not the taller default). */
+      .adrec-action-split { display: flex; gap: 8px; margin-top: 12px; }
+      .adrec-action-split > button { flex: 1 1 0; margin-left: 0; padding: 8px 16px; text-align: center; }
+      /* "Make the call" field — soft-animated open (grid-rows eases to the exact height). */
+      .adrec-makecall { display: grid; grid-template-rows: 0fr; opacity: 0; margin-top: 0; transition: grid-template-rows .3s ease, opacity .25s ease, margin-top .3s ease; }
+      .adrec-makecall.open { grid-template-rows: 1fr; opacity: 1; margin-top: 14px; }
+      .adrec-makecall-inner { overflow: hidden; }
+      .adrec-makecall-input { width: 100%; box-sizing: border-box; border: 1px solid #d8d8de; border-radius: 8px; padding: 10px 12px; font: inherit; font-size: 13px; line-height: 1.5; color: #1a1a1a; resize: vertical; min-height: 68px; }
+      .adrec-makecall-input:focus { outline: none; border-color: #111; }
+      .adrec-makecall-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+      .adrec-upload-btn { flex-shrink: 0; border: 1px solid #d8d8de; background: none; color: #444; border-radius: 8px; padding: 8px 14px; font: inherit; font-size: 13px; cursor: pointer; transition: border-color .12s, color .12s; }
+      .adrec-upload-btn:hover { border-color: #111; color: #111; }
+      .adrec-upload-name { flex: 1 1 auto; min-width: 0; font-size: 12px; color: #8a8a92; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       /* Rail cue: a dot whenever the current design has active recommendations queued. Red
          when any are actionable (code); white when only "needs an asset" / "your call" remain. */
       #rail-artdirector.has-code::before, #rail-a11y.has-code::before,
