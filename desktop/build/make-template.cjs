@@ -44,6 +44,14 @@ function run() {
     path.join(outDir, "package.json"),
   );
 
+  // Likewise the root CLAUDE.md is the app-DEV contract; a scaffolded project needs the
+  // scaffold's designer-facing CLAUDE.md instead — inject it. (Keep scaffold-CLAUDE.md in sync
+  // if the scaffold's design contract changes.)
+  fs.copyFileSync(
+    path.join(appRoot, "desktop", "build", "scaffold-CLAUDE.md"),
+    path.join(outDir, "CLAUDE.md"),
+  );
+
   const count = execSync(`find "${outDir}" -type f | wc -l`).toString().trim();
   console.log(`[make-template] wrote pristine template snapshot → desktop/template/ (${count} files)`);
 }

@@ -790,10 +790,13 @@ function scaffoldProject(targetDir) {
       .map((p) => `--exclude="${p}" --exclude="${p}/*"`)
       .join(" ");
     execSync(`git -C "${appRoot}" archive main | tar -x ${excludes} -C "${targetDir}"`, { stdio: "pipe" });
-    // The archived root package.json is the ELECTRON app's; swap in the clean scaffold one.
-    // (The bundled-snapshot branch above already carries the swapped copy from make-template.)
+    // The archived root package.json + CLAUDE.md are the ELECTRON app's; swap in the clean
+    // scaffold ones. (The bundled-snapshot branch above already carries the swapped copies
+    // from make-template.)
     const scaffoldPkg = path.join(appRoot, "desktop", "build", "scaffold-package.json");
     if (fs.existsSync(scaffoldPkg)) fs.copyFileSync(scaffoldPkg, path.join(targetDir, "package.json"));
+    const scaffoldClaude = path.join(appRoot, "desktop", "build", "scaffold-CLAUDE.md");
+    if (fs.existsSync(scaffoldClaude)) fs.copyFileSync(scaffoldClaude, path.join(targetDir, "CLAUDE.md"));
   }
   // Guarantee nothing on the exclude list survived, regardless of source/variant.
   for (const p of TEMPLATE_EXCLUDE) {

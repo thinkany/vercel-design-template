@@ -23,6 +23,9 @@ const TEMPLATE_EXCLUDE = [
   "INSTALL.md",        // app install docs
   "VERCEL-PUBLISH.md", // app publish docs
   "DEVELOPMENT.md",    // app-development guide (repo structure + workflow)
+  // NOTE: CLAUDE.md is NOT excluded — the root (app-dev) copy is OVERWRITTEN with the scaffold's
+  // designer contract from scaffold-CLAUDE.md (same pattern as package.json). Excluding it would
+  // make the belt-and-suspenders rm delete the injected copy.
 ];
 
 module.exports = { TEMPLATE_EXCLUDE };
