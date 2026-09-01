@@ -119,7 +119,9 @@ a 3-up card row) and `nav.pattern`. This is **inspired by structure, not copied:
 outline is the skeleton; the copy, imagery, and styling are the brand's own. If the
 outline is thin/missing (SPA or no reference), fall back to a conventional order
 (nav → hero → features → social proof → CTA → footer). Source images per `/design` §4b
-(one bounded `curl`, placeholder on a miss).
+(one bounded `curl`, placeholder on a miss). **Accessibility is opt-in: only when `A11Y=aa`,
+author to WCAG 2.1 AA per [`/design`](design.md) §4d** (headings/landmarks, `alt`, underlined
+links, focus, ≥24px targets, reduced-motion); off by default, design freely.
 
 **The `## Design direction` block (if present in the brief above) is authoritative for the
 design's composition**, apply it per [`/design`](design.md) §4a: the lens + its named motif

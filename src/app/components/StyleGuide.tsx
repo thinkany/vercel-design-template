@@ -293,6 +293,24 @@ function isLightSwatch(text: string): boolean {
   return t !== "#ffffff" && t !== "#fff";
 }
 
+// WCAG contrast, local to the styleguide (mirrors scripts/lib/contrast.mjs so this
+// component needs no cross-tool import). Powers the live AA readout below: apply-brand
+// makes the palette contrast-safe by construction, and a hand-edit that breaks a pair
+// surfaces here.
+function _lin(c: number): number { const s = c / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); }
+function _lum(hex: string): number | null {
+  const h = String(hex || "").trim().replace(/^#/, "");
+  const f = h.length === 3 ? h.split("").map((x) => x + x).join("") : h.slice(0, 6);
+  if (!/^[0-9a-fA-F]{6}$/.test(f)) return null;
+  return 0.2126 * _lin(parseInt(f.slice(0, 2), 16)) + 0.7152 * _lin(parseInt(f.slice(2, 4), 16)) + 0.0722 * _lin(parseInt(f.slice(4, 6), 16));
+}
+function contrastRatio(a: string, b: string): number | null {
+  const la = _lum(a), lb = _lum(b);
+  if (la == null || lb == null) return null;
+  const [hi, lo] = la >= lb ? [la, lb] : [lb, la];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
 function ColorsSection({ groups, brandNeedsSetup, onMarkBrandEstablished }: {
   groups: PaletteGroup[];
   brandNeedsSetup?: boolean;
@@ -365,8 +383,54 @@ function ColorsSection({ groups, brandNeedsSetup, onMarkBrandEstablished }: {
             );
           })}
         </div>
+
+        <AccessibilityReadout brandColors={brandColors} resolved={resolved} />
       </div>
     </section>
+  );
+}
+
+// The AA contract pairs, rendered live from the resolved tokens + brand on-colors. The
+// visible proof that the palette meets WCAG (4.5:1 text, 3:1 non-text UI). See §1.4.
+function AccessibilityReadout({ brandColors, resolved }: { brandColors: PaletteGroup["colors"]; resolved: Record<string, string> }) {
+  const by: Record<string, { value: string; text: string }> = {};
+  brandColors.forEach((c) => { by[c.token] = { value: resolved[c.token] || c.value, text: c.text }; });
+  const surf = by["--ta-surface"]?.value;
+  if (!surf) return null;
+  const pairs = [
+    { id: "P1", label: "Body on surface",         fg: by["--ta-body"]?.value,    bg: surf,                    min: 4.5 },
+    { id: "P2", label: "Headings (ink) on surface", fg: by["--ta-ink"]?.value,   bg: surf,                    min: 4.5 },
+    { id: "P3", label: "Muted on surface",         fg: by["--ta-muted"]?.value,  bg: surf,                    min: 4.5 },
+    { id: "P4", label: "Label on primary",         fg: by["--ta-primary"]?.text, bg: by["--ta-primary"]?.value, min: 4.5 },
+    { id: "P5", label: "Label on accent",          fg: by["--ta-accent"]?.text,  bg: by["--ta-accent"]?.value,  min: 4.5 },
+    { id: "P6", label: "Label on dark section",    fg: by["--ta-ink"]?.text,     bg: by["--ta-ink"]?.value,     min: 4.5 },
+    { id: "P7", label: "Primary as link text",     fg: by["--ta-primary"]?.value, bg: surf,                   min: 4.5 },
+    { id: "P8", label: "Accent as text",           fg: by["--ta-accent"]?.value, bg: surf,                    min: 4.5 },
+    { id: "P9", label: "Border on surface",        fg: by["--ta-border"]?.value, bg: surf,                    min: 3, warn: true },
+  ];
+  return (
+    <div style={{ marginTop: 40 }}>
+      <SubHead>Accessibility · AA Contrast</SubHead>
+      <div style={{ fontFamily: A.body, fontSize: 13, color: CA.mid, lineHeight: 1.5, margin: "-4px 0 16px" }}>
+        A live reference: each text pairing checked against WCAG 2.1 AA (4.5:1 for text, 3:1 for non-text UI). Accessibility is opt-in, so the palette is written exactly as chosen; turn on AA mode to auto-fix any pair that falls short.
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {pairs.map((p) => {
+          const r = p.fg && p.bg ? contrastRatio(p.fg, p.bg) : null;
+          const ok = r != null && r >= p.min;
+          return (
+            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ width: 56, height: 34, borderRadius: 3, background: p.bg, color: p.fg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: A.body, fontSize: 15, fontWeight: 600, border: "1px solid rgba(0,0,0,0.08)", flexShrink: 0 }}>Aa</div>
+              <div style={{ fontFamily: A.body, fontSize: 13, color: CA.ink, flex: 1 }}>{p.label}</div>
+              <div style={{ fontFamily: A.mono, fontSize: 12, color: CA.mid, width: 68, textAlign: "right" }}>{r != null ? r.toFixed(2) + ":1" : "—"}</div>
+              <div style={{ width: 66, textAlign: "right", fontFamily: A.body, fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", color: p.warn ? CA.mid : ok ? "#0a7" : "#e5484d" }}>
+                {p.warn ? "3:1 UI" : ok ? "✓ AA" : "✗ FAIL"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

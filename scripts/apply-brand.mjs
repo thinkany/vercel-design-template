@@ -21,6 +21,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { ratio, adjustForContrast, CONTRACT_PAIRS } from "./lib/contrast.mjs";
 
 // ---- args -------------------------------------------------------------------
 function parseArgs(argv) {
@@ -144,6 +145,50 @@ function firstFamily(stack) {
   return /^var\(/i.test(first) ? "" : first;
 }
 
+// ---- accessibility: contrast-safe tokens (spec §1.3) ------------------------
+// The single deterministic gate. BEFORE writing tokens, evaluate the AA contract pairs
+// and nudge the FOREGROUND member of any failing pair (never the brand background), so
+// the palette is contrast-safe by construction. Mutates `roles` in place; returns a
+// per-pair readout + provenance notes for the summary. Ordering follows CONTRACT_PAIRS
+// (P2 adjusts --ta-ink before P6 uses it as a background).
+function enforceContrast(roles) {
+  const notes = [];      // what was nudged, from→to (provenance)
+  const warnings = [];   // P9 non-text + link colors kept for brand (need underline)
+  const linkFlags = [];  // P7/P8 → links must carry a non-color affordance (Phase 2)
+  const pairs = [];      // per-pair result for the styleguide Accessibility section
+  const rr = (a, b) => +(ratio(a, b) || 0).toFixed(2);
+
+  for (const p of CONTRACT_PAIRS) {
+    const roleKey = p.on || p.fg;
+    const role = roles[roleKey];
+    const bgHex = p.on ? role?.value : roles[p.bg]?.value;
+    if (!role || !bgHex) continue;
+    const field = p.on ? "text" : "value";       // on-pairs adjust the role's `text` on-color
+    const before = role[field] || (p.on ? "#ffffff" : "");
+    const r0 = ratio(before, bgHex);
+    if (r0 == null) continue;
+    let adjusted = false;
+
+    if (r0 < p.threshold) {
+      if (p.warnOnly) {
+        warnings.push(`${p.id} ${roleKey} on ${p.bg} ${r0.toFixed(2)} < ${p.threshold} (${p.note}) — decorative-exempt, left as-is`);
+      } else if (p.link) {
+        linkFlags.push(roleKey);
+        warnings.push(`${p.id} ${roleKey} as link text ${r0.toFixed(2)} < ${p.threshold} — brand color kept; links must use a non-color affordance (underline)`);
+      } else {
+        const after = adjustForContrast(before, bgHex, p.threshold);
+        if (after && after !== before) {
+          role[field] = after;
+          adjusted = true;
+          notes.push(`${roleKey}.${field} ${before} → ${after} (${p.id} ${p.note}: ${r0.toFixed(2)} → ${rr(after, bgHex)})`);
+        }
+      }
+    }
+    pairs.push({ id: p.id, note: p.note, fg: role[field], bg: bgHex, threshold: p.threshold, ratio: rr(role[field], bgHex), pass: (ratio(role[field], bgHex) || 0) >= p.threshold, warnOnly: !!p.warnOnly, adjusted });
+  }
+  return { notes, warnings, linkAffordanceNeeded: [...new Set(linkFlags)], pairs };
+}
+
 // ---- the apply --------------------------------------------------------------
 const ROLES = ["primary", "accent", "surface", "ink", "body", "muted", "border"];
 const FONT_ROLES = { display: "--ta-font-display", serif: "--ta-font-serif", sans: "--ta-font-sans", mono: "--ta-font-mono" };
@@ -213,6 +258,10 @@ function main() {
   const palette = readJson(args.palette);
   const roles = palette.roles;
   if (!roles || !roles.primary) die("palette JSON has no .roles — is this extract-palette.mjs output?");
+  // Accessibility is OPT-IN (default off) so it never alters a deliberately-chosen palette.
+  // On (--aa, or TA_DESIGN_A11Y=aa): make the palette contrast-safe (AA) before it's written.
+  const aaOn = args.aa === true || String(args.aa || "").toLowerCase() === "aa" || process.env.TA_DESIGN_A11Y === "aa";
+  const a11y = aaOn ? enforceContrast(roles) : { mode: "off", notes: [], warnings: [], linkAffordanceNeeded: [], pairs: [] };
   const fonts = args.fonts && fs.existsSync(args.fonts) ? readJson(args.fonts) : null;
 
   const { dir, created } = ensureVariation();
@@ -244,14 +293,18 @@ function main() {
     fontTokens,
     fontsImported: importedFonts,
     env: envWrote,
+    accessibility: a11y, // contrast-safe pairs: { notes, warnings, linkAffordanceNeeded, pairs }
     paths: { tokens: path.relative(ROOT, tokensPath), brand: path.relative(ROOT, brandPath), fonts: path.relative(ROOT, fontsCssPath) },
   };
   process.stdout.write(JSON.stringify(summary, null, 2) + "\n");
   console.error(
     `\napply-brand: ${created ? "created" : "updated"} ${VAR} — primary ${roles.primary.value}` +
       (fontTokens.length ? `, fonts ${fontTokens.length}` : "") +
-      (envWrote.length ? `, env ${envWrote.length}` : "") + "\n"
+      (envWrote.length ? `, env ${envWrote.length}` : "") +
+      (a11y.notes.length ? `, contrast-fixed ${a11y.notes.length}` : "") + "\n"
   );
+  if (a11y.notes.length) console.error("apply-brand: AA contrast adjustments —\n  " + a11y.notes.join("\n  ") + "\n");
+  if (a11y.warnings.length) console.error("apply-brand: AA warnings —\n  " + a11y.warnings.join("\n  ") + "\n");
 }
 
 main();

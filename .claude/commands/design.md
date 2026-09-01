@@ -63,13 +63,13 @@ The design only appears if the Vite dev server is running. On the **first** buil
 request of a session, check before diving in:
 
 - **Is it up + what mode am I in? One batched call** does the server ping AND reads
-  the three design-mode flags together, so §2b/§4b never spawn their own `echo`:
+  the design-mode flags together, so §2b/§4b/§4d never spawn their own `echo`:
   ```bash
-  echo "http=$(curl -s -o /dev/null -w '%{http_code}' "${TA_PREVIEW_URL:-http://localhost:5173}") IMAGES=${TA_DESIGN_IMAGES:-off} RESEARCH=${TA_DESIGN_RESEARCH:-off} BROAD=${TA_DESIGN_RESEARCH_BROAD:-off}"
+  echo "http=$(curl -s -o /dev/null -w '%{http_code}' "${TA_PREVIEW_URL:-http://localhost:5173}") IMAGES=${TA_DESIGN_IMAGES:-off} RESEARCH=${TA_DESIGN_RESEARCH:-off} BROAD=${TA_DESIGN_RESEARCH_BROAD:-off} A11Y=${TA_DESIGN_A11Y:-off}"
   ```
   `http=200` means the preview is live (anything else, it isn't; `$TA_PREVIEW_URL`
-  is the app's real port, falling back to `:5173`). Note the three flags for §2b
-  (research) and §4b (images), don't re-`echo` them later in the build.
+  is the app's real port, falling back to `:5173`). Note the flags for §2b (research),
+  §4b (images), and §4d (accessibility, `A11Y=aa`), don't re-`echo` them later in the build.
 - **If it's not running, OFFER to start it** (it's a command, ask first, don't
   silently launch): run **`npm run dev`** in the background. This project needs
   **Node ≥ 20.19** (`.nvmrc` pins 22); if the shell's active node is older, select
@@ -452,6 +452,47 @@ hand-rolls site nav. What you touch:
 - **Chrome is website-only** (`projectType === "website"`); app/brand projects render
   none. A single page opts out with **`chrome={false}`** on `<DesignSurface>` (e.g. a
   full-bleed landing).
+
+## 4d. Accessibility (WCAG 2.1 AA), opt-in
+
+**Accessibility is OPT-IN, and OFF by default** — so it never constrains the creative work.
+**Only engage this section when `A11Y=aa`** (from the session-start flags, alongside
+`IMAGES`/`RESEARCH`). When it's off (the default), **ignore §4d entirely and author with full
+freedom**; nothing here applies.
+
+When `A11Y=aa`, the design ships **built to WCAG 2.1 AA**. Color contrast is handled for you:
+the `--ta-*` tokens are made contrast-safe as *pairs* at brand-apply time (`apply-brand.mjs
+--aa` + `scripts/lib/contrast.mjs`), so you never hand-check a ratio, **just use the tokens,
+never hardcode a hex** (rule 1). The rest is markup discipline, follow these while authoring:
+
+1. **Structure & landmarks.** Exactly **one `<h1>`** per page, then headings in order
+   with **no level skips** (`h1→h2→h3`, never `h1→h3`). Use real landmarks
+   (`<main>` for the page body; `<section>` with a heading per block; `<nav>`/`<header>`/
+   `<footer>` come from the global chrome). Use `<ul>/<ol>` for lists, `<button>` for
+   actions, `<a>` for navigation, never a `<div>` with an onClick.
+2. **Images.** Every `<img>` has an `alt`: a **meaningful** description for content
+   images, **`alt=""`** for purely decorative ones. The FPO `ImagePlaceholder` already
+   sets `role="img"` + a label, so placeholders are covered.
+3. **Color is never the only signal.** Don't convey meaning with color alone (state,
+   required, error). **Links in body copy get a non-color affordance, an underline**
+   (or equivalent), not just the brand color, this honors the P7/P8 link flag from the
+   contrast gate and covers color-blind readers.
+4. **Focus is always visible.** Every interactive element shows a clear focus ring;
+   **never remove `outline` without replacing it** (`focus-visible:ring-2 ring-ta-primary`
+   or similar). Keep focus order = reading order (don't reorder with positive `tabindex`).
+5. **Targets ≥ 24×24px.** Interactive targets (icon buttons, close X's, nav toggles) are
+   at least 24px each way (SC 2.5.8); give small glyphs padding to reach it.
+6. **Respect reduced motion.** Wrap non-essential animation/parallax/autoplay in
+   `motion-reduce:*` utilities or a `prefers-reduced-motion` guard (also for any `motion`/
+   WAAPI you drive), so it stills for users who ask.
+7. **Forms.** Every control has a programmatic label (`<label htmlFor>` or `aria-label`),
+   not just a placeholder; errors are conveyed in **text**, not color alone; group related
+   inputs with `<fieldset>/<legend>`.
+
+The shadcn/Radix `ui/*` components are already keyboard- and ARIA-accessible, so when AA mode
+is on, composing from them (rather than hand-rolling) starts you compliant. In AA mode these
+rules are in force and the post-turn audit checks them. **Off (the default): none of this
+applies — the palette is written exactly as chosen and the design is authored freely.**
 
 ## 5. Verify, the designer's eyes, not a screenshot
 
