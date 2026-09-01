@@ -4171,6 +4171,7 @@ function renderIntakeGroup(id, cards) {
     // the second answer differs from the first (works whether or not more follow).
     showIntakePending(TAKING_IN_MESSAGES[takingInIdx % TAKING_IN_MESSAGES.length]);
     takingInIdx++;
+    makeCardsEditable(group, controls, persistIntakeEdit);
     await window.desktop.answerIntake(id, answers);
   }
   continueBtn.addEventListener("click", submit);
@@ -4208,6 +4209,59 @@ function doneNote() {
   d.textContent = COPY.intake.gotIt;
   return d;
 }
+
+// Click-to-edit: once a card group is answered (collapsed), let the designer re-open it
+// to revise their answer instead of getting one shot at each question. Clicking the
+// collapsed card (or its "Edit" link) re-opens the live controls with a Save button; Save
+// re-persists just those fields via `persist` (the brief rail refreshes itself from the
+// agent:brief echo) and re-collapses — it does NOT advance or rewind the flow. Note:
+// editing an early free-text/sections answer won't re-run the model turn that already
+// consumed it, but the revised value IS what the build reads from the Brief.
+function makeCardsEditable(group, controls, persist) {
+  if (!controls || !controls.length) return;
+  const edit = document.createElement("button");
+  edit.type = "button";
+  edit.className = "intake-edit";
+  edit.textContent = COPY.intake.edit;
+  // Lives INSIDE the (last) card, tucked into its lower-right corner — not floating below
+  // the card in the group. The Save button, by contrast, sits at group level like Continue.
+  (controls[controls.length - 1].el || group).appendChild(edit);
+
+  let editing = false, saveBtn = null;
+  function open() {
+    if (editing || !group.classList.contains("answered")) return;
+    editing = true;
+    group.classList.add("editing");
+    edit.style.display = "none";
+    controls.forEach((c) => c.expand());
+    saveBtn = document.createElement("button");
+    saveBtn.className = "intake-continue";
+    saveBtn.textContent = COPY.intake.saveEdit;
+    saveBtn.addEventListener("click", commit);
+    group.appendChild(saveBtn);
+  }
+  async function commit() {
+    if (!controls.every((c) => c.isReady())) return; // a required field was cleared
+    const answers = {}, meta = [];
+    controls.forEach((c) => { answers[c.card.id] = c.getValue(); meta.push({ id: c.card.id, field: c.card.field, type: c.card.type }); c.collapse(); });
+    if (saveBtn) { saveBtn.remove(); saveBtn = null; }
+    edit.style.display = "";
+    group.classList.remove("editing");
+    editing = false;
+    try { await persist(meta, answers); } catch {}
+  }
+  edit.addEventListener("click", open);
+  // The whole collapsed card is a click target too (the literal "click to edit").
+  group.addEventListener("click", (e) => {
+    if (editing || e.target.closest("button")) return;
+    if (e.target.closest(".icard.collapsed")) open();
+  });
+}
+
+// The default edit persist for cards that fold into the Brief (everything but the voice
+// step). applyIntakeAnswers re-folds identically to the original submit and echoes the
+// updated Brief back (agent:brief → rail refresh).
+const persistIntakeEdit = (meta, answers) => window.desktop.applyIntakeAnswers(meta, answers);
 
 // A soft, conversational "thinking" line under the answered card, shown while the
 // agent lines up the next batch (the designer is watching the pane, not the chat).
@@ -4275,6 +4329,8 @@ function renderVoiceStep() {
     continueBtn.replaceWith(done);
     autoDismissTool(done, 900);
     voiceStepDone = true;
+    // Editable: re-picking a tone re-persists it (rules persist live in buildVoiceRules).
+    makeCardsEditable(group, [ctl], (_meta, a) => window.desktop.setBriefTone(a.tone || null));
     setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then the review
   }
   continueBtn.addEventListener("click", submit);
@@ -4328,6 +4384,7 @@ function renderHeroStep() {
     autoDismissTool(done, 900);
     heroStepDone = true;
     if (val && lastBrief) { lastBrief.heroLayout = val; composeRail(); } // immediate: brief rail
+    makeCardsEditable(group, [ctl], persistIntakeEdit);
     try { await window.desktop.applyIntakeAnswers([{ id: card.id, field: card.field, type: card.type }], { [card.id]: val }); } catch {}
     setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then continue the flow
   }
@@ -4381,6 +4438,7 @@ function renderMenuStep() {
     autoDismissTool(done, 900);
     menuStepDone = true;
     if (val && lastBrief) { lastBrief.menuLayout = val; composeRail(); } // immediate: brief rail
+    makeCardsEditable(group, [ctl], persistIntakeEdit);
     try { await window.desktop.applyIntakeAnswers([{ id: card.id, field: card.field, type: card.type }], { [card.id]: val }); } catch {}
     setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then continue the flow
   }
@@ -4434,6 +4492,7 @@ function renderCtaStep() {
     autoDismissTool(done, 900);
     ctaStepDone = true;
     if (val && lastBrief) { lastBrief.ctaType = val; composeRail(); } // immediate: brief rail
+    makeCardsEditable(group, [ctl], persistIntakeEdit);
     try { await window.desktop.applyIntakeAnswers([{ id: card.id, field: card.field, type: card.type }], { [card.id]: val }); } catch {}
     setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then continue the flow
   }
@@ -4500,6 +4559,7 @@ function renderClientBatch(cards, onDone) {
     if (!refsRevealed) { refsRevealed = true; composeRail(); } // first answer reveals the rail
     showIntakePending(TAKING_IN_MESSAGES[takingInIdx % TAKING_IN_MESSAGES.length]);
     takingInIdx++;
+    makeCardsEditable(group, controls, persistIntakeEdit);
     try { await window.desktop.applyIntakeAnswers(meta, answers); } catch {}
     onDone();
   }
@@ -4972,7 +5032,7 @@ async function reviewDesign(id) {
 // findings as established fact, and ask for the judgment a lint can't make. Read-only.
 function buildArtDirectorCritiquePrompt(id, res) {
   const findings = (res.findings || [])
-    .map((f) => `- [${f.severity}/${f.rule}] ${f.line ? `${f.file}:${f.line}` : f.file} — ${f.message}`)
+    .map((f) => `- [${f.severity}/${f.rule}] ${f.line ? `${f.file}:${f.line}` : f.file} · ${f.message}`)
     .join("\n") || "(nothing flagged)";
   // Surface the sampled DESIGN DIRECTION directly (don't rely on the model to read + internalize
   // variation.json), so the critique judges against the exact intended aesthetic.
@@ -4986,22 +5046,22 @@ function buildArtDirectorCritiquePrompt(id, res) {
     if (kv(dir.motifs)) dirLines.push(`- Named motifs: ${kv(dir.motifs)}`);
   }
   const directionBlock = dirLines.length
-    ? `This design was built to a specific DESIGN DIRECTION — critique it AGAINST this (it's the intended aesthetic and the bar, not a suggestion):\n${dirLines.join("\n")}\n`
+    ? `This design was built to a specific DESIGN DIRECTION. Critique it AGAINST this (it's the intended aesthetic and the bar, not a suggestion):\n${dirLines.join("\n")}\n`
     : "";
   const directionJudgment = dirLines.length
-    ? `and — most importantly — how well it DELIVERS ON THE DESIGN DIRECTION above: does the page read unmistakably as ${label || "its intended direction"}? do the named motifs and the axes (energy, structure, era, etc.) actually land, or has it drifted back toward a generic centroid? Call out any drift from the direction specifically.`
+    ? `and, most importantly, how well it DELIVERS ON THE DESIGN DIRECTION above: does the page read unmistakably as ${label || "its intended direction"}? do the named motifs and the axes (energy, structure, era, etc.) actually land, or has it drifted back toward a generic centroid? Call out any drift from the direction specifically.`
     : `and whether it reads as its intended design direction.`;
   return [
-    `Give your Art Director read of design variation ${id}. It is already built — you are reviewing, not building.`,
+    `Give your Art Director read of design variation ${id}. It is already built; you are reviewing, not building.`,
     `Read only what you need: \`src/variations/${id}/components/Home.tsx\` (and any other component in that folder), its palette in \`src/variations/${id}/styles/tokens.css\`, and its brief + design direction in \`src/variations/${id}/variation.json\`.`,
     ``,
     directionBlock,
-    `An automated rule + palette pass already ran. Treat these as established fact — build on them, don't re-derive or merely repeat them:`,
+    `An automated rule + palette pass already ran. Treat these as established fact to build on, not something to re-derive or merely repeat:`,
     findings,
     ``,
-    `Now give the judgment the lint can't: visual hierarchy, spacing rhythm and balance, type pairing and scale, palette harmony and how the palette carries the mood, imagery, ${directionJudgment} Lead with what's working, then the few highest-leverage changes, specific and grounded in the actual page. Keep it tight. Do NOT edit anything — this is advisory.`,
+    `Now give the judgment the lint can't: visual hierarchy, spacing rhythm and balance, type pairing and scale, palette harmony and how the palette carries the mood, imagery, ${directionJudgment} Lead with what's working, then the few highest-leverage changes, specific and grounded in the actual page. Keep it tight. Do NOT edit anything; this is advisory.`,
     ``,
-    `Then, ONCE, call the \`suggest\` tool (mcp__artdirector__suggest) with your actionable items as structured cards, most impactful first. For each: a short imperative title, a one-line why, targets (file:line), and a kind — "code" (the builder can edit it: give a precise \`apply\` instruction it can run verbatim on \`src/variations/${id}/\`), "asset" (needs a new/replacement file you can't source, e.g. a photo — no apply), or "decision" (a client/human call — no apply). Fold in the code-actionable lint findings above too.`,
+    `Then, ONCE, call the \`suggest\` tool (mcp__artdirector__suggest) with your actionable items as structured cards, most impactful first. For each: a short imperative title, a one-line why, targets (file:line), and a kind: "code" (the builder can edit it: give a precise \`apply\` instruction it can run verbatim on \`src/variations/${id}/\`), "asset" (needs a new/replacement file you can't source, e.g. a photo, no apply), or "decision" (a client/human call, no apply). Whenever a suggestion points at a specific visible section or element, also give an \`anchor\` so the designer can SEE it highlighted on the page instead of hunting: prefer \`anchor.block\` (a data-block value on the section) or \`anchor.text\` (a short exact heading/button label from that element). Fold in the code-actionable lint findings above too.`,
   ].join("\n");
 }
 
@@ -5192,12 +5252,21 @@ function openRecModal(rec, mode) {
       dismiss.addEventListener("click", () => { dismissRec(rec); closeRecModal(); });
       actions.appendChild(dismiss);
     }
+    // Show on page + the primary action, grouped on the right — identical layout to the
+    // AA modal (.a11y-right pushes them right; the green Show button sits before the action).
+    const right = document.createElement("div"); right.className = "a11y-right";
+    if (rec.anchor) {
+      const show = document.createElement("button"); show.className = "a11y-show-btn";
+      show.textContent = COPY.director.showOnPage; show.title = COPY.director.showOnPageTip;
+      show.addEventListener("click", () => { closeRecModal(); showAdOnPage(rec); });
+      right.appendChild(show);
+    }
     if (rec.kind === "code" && rec.apply) {
       const apply = document.createElement("button"); apply.className = "adrec-apply-btn"; apply.textContent = COPY.director.applyThis;
       // Apply runs a builder turn → needs a key. Disabled (not hidden) in read-only mode.
       if (!appHasKey) { apply.disabled = true; apply.title = COPY.director.needKey; }
       else apply.addEventListener("click", () => { closeRecModal(); applyRec(rec); });
-      actions.appendChild(apply);
+      right.appendChild(apply);
     } else if (isFontRec) {
       // Apply the picked font — enabled once a candidate is selected (and a key is present).
       const apply = document.createElement("button"); apply.className = "adrec-apply-btn"; apply.textContent = COPY.director.applyFont;
@@ -5209,18 +5278,19 @@ function openRecModal(rec, mode) {
         const font = fontCtl.getValue(); if (!font) return;
         applyFontRec(rec, font, fontRole);
       });
-      actions.appendChild(apply);
+      right.appendChild(apply);
     } else if (rec.kind === "asset" && rec.assetSourceable) {
       // Have the Art Director source the imagery via the /design image pipeline.
       const source = document.createElement("button"); source.className = "adrec-apply-btn"; source.textContent = COPY.director.sourceImagery;
       if (!appHasKey) { source.disabled = true; source.title = COPY.director.needKey; }
       else source.addEventListener("click", () => sourceAssetRec(rec));
-      actions.appendChild(source);
+      right.appendChild(source);
     } else {
       const note = document.createElement("span"); note.className = "adrec-modal-tagnote";
       note.textContent = rec.kind === "asset" ? COPY.director.assetNote : COPY.director.decisionNote;
-      actions.appendChild(note);
+      right.appendChild(note);
     }
+    actions.appendChild(right);
   }
   card.appendChild(actions);
   overlay.appendChild(card);
@@ -5689,6 +5759,160 @@ function updateA11yToolbar() {
   a11yToolbarEl.querySelector(".a11y-tb-count").textContent = n ? COPY.a11y.ofCount(a11yReview.idx + 1, n) : COPY.a11y.notAtSize;
   const dis = n < 2;
   a11yToolbarEl.querySelectorAll('[data-a="prev"],[data-a="next"]').forEach((b) => { b.disabled = dis; });
+}
+
+// ---- Art Director "Show on page" --------------------------------------------
+// The AA review can point at exact elements because axe hands us CSS selectors. A
+// Director suggestion has no selector — so it carries an `anchor` (a data-block value,
+// a visible text snippet, or a CSS selector) that we resolve to an element on the clean
+// capture route, then outline + pulse it. Amber accent + an eye marker set it apart from
+// the red/green AA overlay. One anchor → one element, so there's no Prev/Next, just Fix
+// (when the suggestion is code-actionable) + Exit.
+const AD_HIGHLIGHT_JS = `(function(){
+  if (window.__adHighlight) window.__adHighlight.clear();
+  var els=[], boxes=[], icons=[], wraps=[], layer=null, styleEl=null;
+  var ICON='<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="2.6"/></svg>';
+  function css(){ if(styleEl) return; styleEl=document.createElement('style'); styleEl.id='__ad-style'; styleEl.textContent='@keyframes __adP{0%{box-shadow:0 0 0 0 rgba(217,119,6,.5)}100%{box-shadow:0 0 0 12px rgba(217,119,6,0)}}#__ad-layer{position:absolute;top:0;left:0;pointer-events:none;z-index:2147483000}#__ad-layer .b{position:absolute;box-sizing:border-box;border:2px solid #d97706;border-radius:6px;background:rgba(217,119,6,.07)}#__ad-layer .ic{position:absolute;width:22px;height:22px;border-radius:50%;background:#d97706;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 5px rgba(0,0,0,.35)}#__ad-layer .cur .b{border-color:#b45309;background:rgba(180,83,9,.11)}#__ad-layer .cur .ic{background:#b45309;animation:__adP 1.2s ease-out infinite}'; document.head.appendChild(styleEl); }
+  function pos(){ for(var i=0;i<els.length;i++){ var el=els[i]; if(!el) continue; var r=el.getBoundingClientRect(); var t=r.top+window.scrollY,l=r.left+window.scrollX; boxes[i].style.top=t+'px'; boxes[i].style.left=l+'px'; boxes[i].style.width=r.width+'px'; boxes[i].style.height=r.height+'px'; icons[i].style.top=(t-8)+'px'; icons[i].style.left=(l-8)+'px'; } }
+  function byText(txt){ txt=(txt||'').trim().toLowerCase(); if(!txt) return null; var best=null,bl=Infinity; var all=document.querySelectorAll('h1,h2,h3,h4,h5,h6,button,a,p,span,li,figcaption,label,blockquote,strong,em'); for(var i=0;i<all.length;i++){ var e=all[i]; var t=(e.textContent||'').trim().toLowerCase(); if(!t) continue; if(t.indexOf(txt)!==-1 && t.length<bl){ best=e; bl=t.length; } } return best; }
+  function resolve(a){ if(!a) return null; try{ if(a.block){ var e=document.querySelector('[data-block="'+String(a.block).replace(/"/g,'')+'"]'); if(e) return e; } }catch(_){} try{ if(a.selector){ var s=document.querySelector(a.selector); if(s) return s; } }catch(_){} if(a.text) return byText(a.text); return null; }
+  window.__adHighlight={
+    show:function(anchors){ this.clear(); css(); layer=document.createElement('div'); layer.id='__ad-layer'; document.body.appendChild(layer);
+      els=(anchors||[]).map(resolve);
+      for(var i=0;i<els.length;i++){ var w=document.createElement('div'); w.className='wrap'; var b=document.createElement('div'); b.className='b'; var ic=document.createElement('div'); ic.className='ic'; ic.innerHTML=ICON; w.appendChild(b); w.appendChild(ic); layer.appendChild(w); wraps.push(w); boxes.push(b); icons.push(ic); }
+      pos(); window.addEventListener('scroll',pos,true); window.addEventListener('resize',pos);
+      return els.filter(Boolean).length; },
+    focus:function(i){ for(var j=0;j<wraps.length;j++) wraps[j].className='wrap'+(j===i?' cur':''); var el=els[i]; if(el&&el.scrollIntoView) el.scrollIntoView({behavior:'smooth',block:'center'}); },
+    clear:function(){ if(layer){layer.remove();layer=null;} if(styleEl){styleEl.remove();styleEl=null;} window.removeEventListener('scroll',pos,true); window.removeEventListener('resize',pos); els=[];boxes=[];icons=[];wraps=[]; }
+  };
+})();`;
+
+let adReview = null;   // { recs, idx, tab, prevUrl, count, expanded }
+let adToolbarEl = null;
+const AD_CARET_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+
+async function showAdOnPage(rec) {
+  if (!rec || !activeTab || !viteUrl) return;
+  const id = directorState.id || currentPreviewVariation();
+  if (!id || id === "v00") return;
+  closeRecModal(); closeModal();
+  // Walk the whole active list from this rec, so Next steps through every item; fall back to
+  // just this rec when it isn't in the active list (e.g. opened from the archive).
+  let recs = directorState.active || [];
+  let idx = recs.findIndex((r) => r && r.id === rec.id);
+  if (idx < 0) { recs = [rec]; idx = 0; }
+  const tab = activeTab;
+  adReview = { recs, idx, tab, prevUrl: tab.url, count: 0, expanded: false };
+  showAdToolbar();
+  navigate(tab, `${viteUrl}/?v=${id}&capture=desktop`);
+  onceWebviewLoaded(tab.wv, async () => {
+    if (!adReview) return;
+    try { await tab.wv.executeJavaScript(AD_HIGHLIGHT_JS); } catch { /* injection blocked → bar still exits */ }
+    adHighlightCurrent();
+  });
+}
+// (Re)highlight the current rec's anchor on the already-loaded capture page. No re-navigation,
+// so Next/Prev are instant. An anchorless (or unresolvable) rec just clears the overlay.
+async function adHighlightCurrent() {
+  if (!adReview) return;
+  const cur = adReview.recs[adReview.idx];
+  const anchor = cur && cur.anchor ? [cur.anchor] : [];
+  try {
+    const n = await adReview.tab.wv.executeJavaScript(`window.__adHighlight ? window.__adHighlight.show(${JSON.stringify(anchor)}) : 0`);
+    adReview.count = n || 0;
+    if (n) adReview.tab.wv.executeJavaScript(`window.__adHighlight.focus(0)`);
+    else adReview.tab.wv.executeJavaScript("window.__adHighlight && window.__adHighlight.clear()");
+  } catch { adReview.count = 0; }
+  updateAdToolbar();
+}
+function adReviewStep(d) {
+  if (!adReview || adReview.recs.length < 2) return;
+  const n = adReview.recs.length;
+  adReview.idx = ((adReview.idx + d) % n + n) % n;
+  adReview.expanded = false; // collapse the description when moving on
+  adHighlightCurrent();
+}
+function adReviewNext() { adReviewStep(1); }
+function adReviewPrev() { adReviewStep(-1); }
+// Open/close the description. Width and corner radius are fixed (see CSS), so opening only
+// grows the height via the dropdown's max-height transition — it stays a rounded rectangle
+// the whole way, never morphing through a pill.
+function adToggleExpand() { if (adReview) { adReview.expanded = !adReview.expanded; updateAdToolbar(); } }
+// Fix straight from the bar (code suggestions only): clear the overlay + restore the preview,
+// then run the same scoped builder turn Apply runs.
+function adReviewFix() {
+  if (!adReview || !appHasKey) return;
+  const rec = adReview.recs[adReview.idx];
+  if (!(rec && rec.kind === "code" && rec.apply)) return;
+  exitAdReview(); applyRec(rec);
+}
+function exitAdReview() {
+  if (!adReview) return;
+  const r = adReview; adReview = null;
+  try { r.tab.wv.executeJavaScript("window.__adHighlight && window.__adHighlight.clear()"); } catch {}
+  if (r.prevUrl) navigate(r.tab, r.prevUrl);
+  hideAdToolbar();
+}
+function showAdToolbar() {
+  if (!adToolbarEl) {
+    adToolbarEl = document.createElement("div");
+    adToolbarEl.id = "ad-toolbar";
+    // A FIXED top row (truncated title + caret + count + buttons) that never moves, plus a
+    // dropdown that animates open BELOW it carrying the full title (as a heading) + the why.
+    adToolbarEl.innerHTML =
+      '<div class="ad-tb-row">' +
+        '<div class="ad-tb-head"><span class="a11y-tb-title"></span>' +
+        '<button class="ad-tb-caret" data-a="expand" aria-label="Expand">' + AD_CARET_SVG + '</button></div>' +
+        '<span class="a11y-tb-count"></span>' +
+        '<button class="a11y-tb-btn" data-a="prev">‹ Prev</button>' +
+        '<button class="a11y-tb-btn" data-a="next">Next ›</button>' +
+        '<button class="a11y-tb-btn a11y-tb-fix" data-a="fix"></button>' +
+        '<button class="a11y-tb-btn a11y-tb-exit" data-a="exit"></button>' +
+      '</div>' +
+      '<div class="ad-tb-drop">' +
+        '<div class="ad-tb-drop-title"></div>' +
+        '<div class="ad-tb-why"></div>' +
+      '</div>';
+    document.body.appendChild(adToolbarEl);
+    adToolbarEl.addEventListener("click", (e) => {
+      const t = e.target.closest && e.target.closest("[data-a]");
+      const a = t && t.getAttribute("data-a");
+      if (a === "prev") adReviewPrev();
+      else if (a === "next") adReviewNext();
+      else if (a === "fix") adReviewFix();
+      else if (a === "exit") exitAdReview();
+      else if (a === "expand") adToggleExpand();
+    });
+    adToolbarEl.querySelector(".a11y-tb-fix").textContent = COPY.director.applyThis;
+    adToolbarEl.querySelector(".a11y-tb-exit").textContent = COPY.director.exitReview;
+  }
+  adToolbarEl.hidden = false;
+  updateAdToolbar();
+}
+function hideAdToolbar() { if (adToolbarEl) adToolbarEl.hidden = true; }
+function updateAdToolbar() {
+  if (!adToolbarEl || !adReview) return;
+  const rec = adReview.recs[adReview.idx] || {};
+  const multi = adReview.recs.length > 1;
+  adToolbarEl.classList.toggle("expanded", !!adReview.expanded);
+  adToolbarEl.querySelector(".a11y-tb-title").textContent = rec.title || "";
+  // The dropdown carries the full title (as a heading) + the why; the row title stays
+  // truncated and fixed, so opening the dropdown never shifts it.
+  adToolbarEl.querySelector(".ad-tb-drop-title").textContent = rec.title || "";
+  const why = adToolbarEl.querySelector(".ad-tb-why");
+  why.textContent = rec.why || "";
+  why.hidden = !rec.why;
+  adToolbarEl.querySelector(".ad-tb-caret").classList.toggle("open", !!adReview.expanded);
+  // Position + status.
+  const status = adReview.count ? COPY.director.shownOnPage : COPY.director.notOnView;
+  adToolbarEl.querySelector(".a11y-tb-count").textContent = multi ? `${adReview.idx + 1}/${adReview.recs.length} · ${status}` : status;
+  // Prev/Next only when there's a list to walk.
+  adToolbarEl.querySelectorAll('[data-a="prev"],[data-a="next"]').forEach((b) => { b.hidden = !multi; });
+  // Fix only for a code-actionable rec.
+  const canFix = !!(rec.kind === "code" && rec.apply);
+  const fix = adToolbarEl.querySelector(".a11y-tb-fix");
+  fix.hidden = !canFix;
+  if (canFix) { fix.disabled = !appHasKey; if (!appHasKey) fix.title = COPY.director.needKey; else fix.removeAttribute("title"); }
 }
 
 // ---- Start designing (#3) ---------------------------------------------------
@@ -6253,22 +6477,36 @@ function renderIntakeCard(card, onChange, requestSubmit) {
     elc.appendChild(skipBtn);
   }
 
+  // Post-submit: show a read-only summary of the answer BUT keep the live inputs in
+  // the DOM (hidden), so the card can be re-opened and edited later without re-seeding
+  // every control type. expand() reverses it. (See makeCardsEditable / click-to-edit.)
+  let answerEl = null;
+  const paintAnswer = () => {
+    const text = skipped ? "" : built.display();
+    if (!answerEl) { answerEl = document.createElement("div"); answerEl.className = "icard-answer"; elc.appendChild(answerEl); }
+    answerEl.classList.toggle("empty", !text);
+    answerEl.textContent = text || COPY.intake.skipped;
+  };
   return {
     el: elc,
+    card, // the card meta (id/field/type) — used by the edit path to re-persist
     getValue: () => (skipped ? null : built.getValue()),
     // A card is ready only when it has a value OR was explicitly skipped (the Skip
     // button). Skippable no longer means ready-by-default, so Continue / Enter can
     // never pass a question the designer hasn't answered or skipped on purpose.
     isReady: () => skipped || built.hasValue(),
-    // Post-submit: replace the inputs with a plain read-only value + drop the skip.
     collapse: () => {
-      const text = skipped ? "" : built.display();
-      body.innerHTML = "";
-      const ans = document.createElement("div");
-      ans.className = "icard-answer" + (text ? "" : " empty");
-      ans.textContent = text || COPY.intake.skipped;
-      body.appendChild(ans);
-      if (skipBtn) skipBtn.remove();
+      paintAnswer();
+      elc.classList.add("collapsed");
+      body.style.display = "none";
+      if (skipBtn) skipBtn.style.display = "none";
+      answerEl.style.display = "";
+    },
+    expand: () => {
+      elc.classList.remove("collapsed");
+      body.style.display = "";
+      if (skipBtn) skipBtn.style.display = "";
+      if (answerEl) answerEl.style.display = "none";
     },
   };
 }

@@ -92,23 +92,40 @@ const CHAT_PERSONA =
 const ART_DIRECTOR_PERSONA =
   "\n\n# Your role: Art Director (read-only design review)\n" +
   "You are a seasoned art director reviewing a design a colleague built. You are NOT the " +
-  "designer and you do not touch the work — never edit a file, never run a build. If you " +
+  "designer and you do not touch the work: never edit a file, never run a build. If you " +
   "want to 'fix' something, describe the change and let the designer decide; the person who " +
   "asked owns the call.\n\n" +
   "Judge what a lint cannot: visual hierarchy (does the eye land where it should), spacing " +
-  "rhythm and balance, type pairing and scale, colour/palette harmony and how the palette " +
+  "rhythm and balance, type pairing and scale, color and palette harmony and how the palette " +
   "carries the mood, use of imagery, and whether the page reads as its intended design " +
-  "direction. Ground every point in something concrete on the page. Lead with what's working, " +
-  "then the few changes that would raise it most — specific and prioritized, not a long flat " +
-  "list. Confident and direct but collegial, never harsh. Treat any lint findings you're given " +
-  "as established fact you can build on, not something to re-derive. Advisory only.\n\n" +
+  "direction. Ground every point in something you can actually see on the page. Lead with " +
+  "what's working, then the few changes that would raise it most, specific and prioritized, " +
+  "not a long flat list. Treat any lint findings you're given as established fact you can " +
+  "build on, not something to re-derive. Advisory only.\n\n" +
+  "# How you speak\n" +
+  "Sound like a seasoned art director talking shop with a designer, not an engineer reading a " +
+  "spec. Talk about the READ: where the eye goes, how the page breathes, where the tension and " +
+  "rhythm live, what the type and color make the reader feel. Be vivid and plain, warm but " +
+  "candid, confident without being harsh, the way you'd say it standing at the designer's " +
+  "shoulder.\n" +
+  "Keep the machinery out of sight. Do NOT quote internal names, tokens, motif labels, or prop " +
+  "names to the designer (never write things like `featureLayout=stagger`, `--ta-primary`, or a " +
+  "field name). Those are your private grounding; translate the intent into how the page " +
+  "actually reads. For example, say 'the feature rows are meant to stagger, but each only nudges " +
+  "its middle card, and in opposite directions, so it reads as symmetry instead of an offset " +
+  "rhythm' rather than naming the motif. Point to places the way a person would (the hero, the " +
+  "pricing row, the third card), never by file or line.\n" +
+  "Never use an em-dash in anything the designer reads, not in your prose and not in a " +
+  "suggestion's title or reasoning. Use a comma, a colon, parentheses, or two sentences.\n" +
+  "Write in US English: 'color' not 'colour', 'center' not 'centre', '-ize' endings. Keep all " +
+  "spelling and vocabulary US English throughout.\n\n" +
   "Make your suggestions ACTIONABLE where you can, so the designer can act in one click. When a " +
   "recommendation is about TYPE (a font role needs its own face), give `fontOptions`: 2-4 real Google " +
   "Font families that genuinely fit the direction + brand, plus the `fontRole` they'd replace. When a " +
   "recommendation NEEDS AN IMAGE the design lacks (a hero / large-scale / stock visual the image pipeline " +
   "could source), set `assetSourceable: true` and give an `assetHint` (a short image brief). Leave it a plain " +
   "asset only when the client alone can supply it (their own product photo, logo). You still never edit or " +
-  "source anything yourself — these just let the designer trigger a scoped action.\n";
+  "source anything yourself: these just let the designer trigger a scoped action.\n";
 
 // Turn the resolved copy voice into a system-prompt addendum. Empty when nothing
 // is set — so a project with no voice keeps the exact default system prompt.
@@ -182,10 +199,15 @@ function buildIntakeServer(sdk, askIntake) {
 // instruction) is present only for kind "code" — the one kind the builder can execute.
 const SUGGESTION_SHAPE = z.object({
   id: z.string().describe("stable id within this review, e.g. 'tonal-arc'"),
-  title: z.string().describe("short imperative title, e.g. 'Band the Making section in bg-ta-primary'"),
-  why: z.string().describe("one-line rationale, grounded in the design"),
+  title: z.string().describe("short imperative title in plain designer language (no tokens/prop names, no em-dash), e.g. 'Give the Making section its own color band'"),
+  why: z.string().describe("one-line rationale in plain language (no tokens, no em-dash), grounded in what you can see on the page"),
   kind: z.enum(["code", "asset", "decision"]).describe("code = the builder can edit it now; asset = needs a new/replacement file the builder can't source; decision = a human/client call"),
   targets: z.array(z.string()).optional().describe("file:line references, e.g. ['Home.tsx:250']"),
+  anchor: z.object({
+    block: z.string().optional().describe("a data-block value on a section wrapper (best for section-level notes, e.g. 'making' for <section data-block=\"making\">)"),
+    text: z.string().optional().describe("a short EXACT visible text snippet from the element — a heading or button label, e.g. 'Get Started' — matched case-insensitively"),
+    selector: z.string().optional().describe("a CSS selector as a fallback, e.g. '.hero h1'"),
+  }).optional().describe("how to locate on the rendered page the element this suggestion is about, so the designer can SEE it highlighted instead of hunting. Prefer `block` for a section, `text` for a specific heading/button. Provide it whenever the suggestion points at a specific visible section or element."),
   apply: z.string().optional().describe("REQUIRED for kind 'code': a precise, self-contained edit instruction the builder can execute verbatim without re-analyzing"),
   // Make a 'decision'/'asset' actionable — the designer picks/triggers, then a scoped builder turn runs.
   fontOptions: z.array(z.string()).optional().describe("for a type/font 'decision': 2-4 candidate Google Font families that fit the design direction + brand, so the designer can pick one and apply it in one click"),

@@ -674,11 +674,11 @@
       .a11y-inst-more { font-size: 12px; color: #999; font-style: italic; }
       /* "Show on page" review toolbar — floats over the preview while stepping through the
          highlighted failing elements. */
-      #a11y-toolbar { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; align-items: center; gap: 10px; background: #17171b; color: #fff; border-radius: 999px; padding: 6px 8px 6px 16px; box-shadow: 0 6px 20px rgba(0,0,0,.32); font-size: 12.5px; }
-      #a11y-toolbar[hidden] { display: none; }
+      #a11y-toolbar, #ad-toolbar { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; align-items: center; gap: 10px; background: #17171b; color: #fff; border-radius: 999px; padding: 6px 8px 6px 16px; box-shadow: 0 6px 20px rgba(0,0,0,.32); font-size: 12.5px; }
+      #a11y-toolbar[hidden], #ad-toolbar[hidden] { display: none; }
       .a11y-tb-title { font-weight: 600; max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .a11y-tb-count { color: #9a9aa2; margin-right: 4px; white-space: nowrap; flex-shrink: 0; }
-      #a11y-toolbar .a11y-tb-btn { flex-shrink: 0; }
+      #a11y-toolbar .a11y-tb-btn, #ad-toolbar .a11y-tb-btn { flex-shrink: 0; }
       .a11y-tb-btn { border: none; background: #2a2a32; color: #fff; border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; cursor: pointer; transition: background .12s; }
       .a11y-tb-btn:hover { background: #3a3a44; }
       .a11y-tb-btn:disabled { opacity: .4; cursor: default; }
@@ -687,6 +687,23 @@
       .a11y-tb-fix:disabled:hover { background: #0a7; }
       .a11y-tb-exit { background: #2a2a32; }      /* neutral so Fix is the standout action */
       .a11y-tb-exit:hover { background: #3a3a44; }
+      /* AD review bar only: FIXED width + a constant (non-pill) corner radius, so opening only
+         grows the height via a soft dropdown below a fixed top row. It stays a rounded
+         rectangle the whole way and the truncated title never moves. AA bar keeps its pill. */
+      #ad-toolbar { flex-direction: column; align-items: stretch; gap: 0; width: min(600px, 92vw); border-radius: 18px; padding: 8px 8px 8px 16px; }
+      .ad-tb-row { display: flex; align-items: center; gap: 10px; }
+      .ad-tb-head { display: flex; align-items: center; gap: 4px; flex: 1 1 auto; min-width: 0; } /* title + caret fill the row; count/buttons sit right */
+      /* Title truncates within the head; dim it while open so the dropdown heading leads. */
+      #ad-toolbar .a11y-tb-title { flex: 0 1 auto; min-width: 0; max-width: none; transition: opacity .28s ease; }
+      #ad-toolbar.expanded .a11y-tb-title { opacity: .5; }
+      .ad-tb-caret { flex-shrink: 0; border: none; background: none; color: #9a9aa2; cursor: pointer; padding: 0 2px; display: inline-flex; align-items: center; }
+      .ad-tb-caret:hover { color: #fff; }
+      .ad-tb-caret svg { transition: transform .28s ease; }
+      .ad-tb-caret.open svg { transform: rotate(180deg); }
+      .ad-tb-drop { max-height: 0; overflow: hidden; opacity: 0; margin-top: 0; transition: max-height .38s ease-out, opacity .44s ease, margin-top .38s ease-out; }
+      #ad-toolbar.expanded .ad-tb-drop { max-height: 340px; opacity: 1; margin-top: 8px; }
+      .ad-tb-drop-title { font-weight: 600; font-size: 13px; line-height: 1.4; }
+      .ad-tb-why { color: #c8c8d0; font-size: 12px; line-height: 1.45; margin-top: 5px; }
       /* Inline font-pick for an actionable type 'decision' (reuses .ifonts / .ifont) */
       .adrec-fontpick-label { font-size: 12.5px; color: #6a6a72; margin-top: 14px; }
       .adrec-fontpick { margin-top: 8px; max-height: 260px; overflow-y: auto; }
@@ -1176,6 +1193,23 @@
       /* Read-only answer, shown once a card is submitted (feedback #2). */
       .icard-answer { font-size: 13.5px; line-height: 1.55; color: #1a1a1a; white-space: pre-wrap; }
       .icard-answer.empty { color: #aaa; font-style: italic; }
+
+      /* Click-to-edit: a collapsed card can be re-opened even though its group is
+         "answered" (which otherwise disables pointer events). Hover lifts the card with a
+         subtle shadow (no copy recolor); "Edit" sits in the card's lower-right, in green. */
+      .intake-group.answered .icard.collapsed { pointer-events: auto; cursor: pointer; transition: box-shadow .18s ease; }
+      .intake-group.answered .icard.collapsed:hover { box-shadow: 0 4px 14px rgba(0,0,0,.10); }
+      .intake-group.editing .icard,
+      .intake-group.editing .intake-continue { pointer-events: auto; }
+      .intake-edit {
+        display: block;
+        width: fit-content;
+        margin: 8px 0 0 auto;   /* inside the card, tucked to the lower-right */
+        background: none; border: none; padding: 0;
+        font: inherit; font-size: 12.5px; color: #0a7; cursor: pointer;
+      }
+      .intake-edit:hover { text-decoration: underline; }
+      .intake-group.editing .intake-edit { display: none; }
 
       .icard {
         border: 1px solid #e3e3e9; border-radius: 12px; padding: 16px 16px 15px;
