@@ -30,6 +30,7 @@ const railFigma = el("rail-figma");
 const railVoice = el("rail-voice");
 const railClaude = el("rail-claude");
 const railDirector = el("rail-artdirector");
+const railA11y = el("rail-a11y");
 const railLicenses = el("rail-licenses");
 const modal = el("modal");
 const modalTitle = el("modal-title");
@@ -706,6 +707,7 @@ function finishBuildReveal() {
   // The next turn is an edit → start it fresh + lean instead of resuming all that.
   leanEditPending = true;
   updateRerollBtn(); // initial build done → the reroll button may now appear
+  maybeAutoA11yReview(); // auto-run the accessibility review if that setting is on
 }
 
 // Quiet build (Get Designing) finished: nothing showed during the build, so now reveal the
@@ -724,6 +726,7 @@ async function finishQuietBuild() {
   window.desktop.getProjectStatus().then((p) => { if (p) setProjTitle(p); }).catch(() => {});
   leanEditPending = true;      // next turn is an edit → fresh, lean session
   updateRerollBtn();
+  maybeAutoA11yReview();       // auto-run the accessibility review if that setting is on
 }
 
 // A large fresh design can PAINT a beat before Vite finishes compiling it, so the
@@ -1064,7 +1067,7 @@ createproject.addEventListener("click", () => chooseProject("create"));
 openproject.addEventListener("click", () => chooseProject("open"));
 
 // ---- Sidebar panels ----------------------------------------------------------
-const RAILS = { help: railHelp, projects: railProjects, publish: railPublish, company: railCompany, figma: railFigma, voice: railVoice, claude: railClaude, director: railDirector, licenses: railLicenses };
+const RAILS = { help: railHelp, projects: railProjects, publish: railPublish, company: railCompany, figma: railFigma, voice: railVoice, claude: railClaude, director: railDirector, a11y: railA11y, licenses: railLicenses };
 const PANELS = {
   help: { title: COPY.panels.help, render: renderHelp },
   projects: { title: COPY.panels.projects, render: renderProjects },
@@ -1074,6 +1077,7 @@ const PANELS = {
   voice: { title: COPY.panels.voice, render: renderVoice },
   claude: { title: COPY.panels.claude, render: renderClaude },
   director: { title: COPY.panels.director, render: renderDirector },
+  a11y: { title: COPY.panels.a11y, render: renderA11y },
   licenses: { title: COPY.panels.licenses, render: renderLicenses },
 };
 
@@ -1114,6 +1118,7 @@ railFigma.addEventListener("click", () => toggleModal("figma"));
 railVoice.addEventListener("click", () => toggleModal("voice"));
 railClaude.addEventListener("click", () => toggleModal("claude"));
 railDirector.addEventListener("click", () => toggleModal("director"));
+if (railA11y) railA11y.addEventListener("click", () => toggleModal("a11y"));
 railLicenses.addEventListener("click", () => toggleModal("licenses"));
 
 // Sidebar collapse pull-tab (the gear). Preference persists in localStorage — the
@@ -4914,6 +4919,7 @@ async function doReroll(sourceId, direction) {
 // The preview-toolbar reroll button shows only when licensed AND viewing a specific design.
 async function updateRerollBtn(url) {
   updateArtDirectorRailBtn(url); // same readiness signal drives the rail Art Director icon
+  updateA11yRailBtn(); // refresh the Accessibility rail dot for the previewed design
   const btn = el("reroll-btn");
   if (!btn) return;
   const meta = await getDirectionMeta();
@@ -4961,14 +4967,32 @@ function buildArtDirectorCritiquePrompt(id, res) {
   const findings = (res.findings || [])
     .map((f) => `- [${f.severity}/${f.rule}] ${f.line ? `${f.file}:${f.line}` : f.file} — ${f.message}`)
     .join("\n") || "(nothing flagged)";
+  // Surface the sampled DESIGN DIRECTION directly (don't rely on the model to read + internalize
+  // variation.json), so the critique judges against the exact intended aesthetic.
+  const dir = res.direction && typeof res.direction === "object" ? res.direction : null;
+  const label = dir && (dir.lensLabel || dir.lens);
+  const kv = (o) => (o && typeof o === "object" ? Object.entries(o).map(([k, v]) => `${k}=${v}`).join(", ") : "");
+  const dirLines = [];
+  if (dir) {
+    if (label) dirLines.push(`- Lens / style: ${label}`);
+    if (kv(dir.axes)) dirLines.push(`- Axes: ${kv(dir.axes)}`);
+    if (kv(dir.motifs)) dirLines.push(`- Named motifs: ${kv(dir.motifs)}`);
+  }
+  const directionBlock = dirLines.length
+    ? `This design was built to a specific DESIGN DIRECTION — critique it AGAINST this (it's the intended aesthetic and the bar, not a suggestion):\n${dirLines.join("\n")}\n`
+    : "";
+  const directionJudgment = dirLines.length
+    ? `and — most importantly — how well it DELIVERS ON THE DESIGN DIRECTION above: does the page read unmistakably as ${label || "its intended direction"}? do the named motifs and the axes (energy, structure, era, etc.) actually land, or has it drifted back toward a generic centroid? Call out any drift from the direction specifically.`
+    : `and whether it reads as its intended design direction.`;
   return [
     `Give your Art Director read of design variation ${id}. It is already built — you are reviewing, not building.`,
     `Read only what you need: \`src/variations/${id}/components/Home.tsx\` (and any other component in that folder), its palette in \`src/variations/${id}/styles/tokens.css\`, and its brief + design direction in \`src/variations/${id}/variation.json\`.`,
     ``,
+    directionBlock,
     `An automated rule + palette pass already ran. Treat these as established fact — build on them, don't re-derive or merely repeat them:`,
     findings,
     ``,
-    `Now give the judgment the lint can't: visual hierarchy, spacing rhythm and balance, type pairing and scale, palette harmony and how the palette carries the mood, imagery, and whether it reads as its intended design direction. Lead with what's working, then the few highest-leverage changes, specific and grounded in the actual page. Keep it tight. Do NOT edit anything — this is advisory.`,
+    `Now give the judgment the lint can't: visual hierarchy, spacing rhythm and balance, type pairing and scale, palette harmony and how the palette carries the mood, imagery, ${directionJudgment} Lead with what's working, then the few highest-leverage changes, specific and grounded in the actual page. Keep it tight. Do NOT edit anything — this is advisory.`,
     ``,
     `Then, ONCE, call the \`suggest\` tool (mcp__artdirector__suggest) with your actionable items as structured cards, most impactful first. For each: a short imperative title, a one-line why, targets (file:line), and a kind — "code" (the builder can edit it: give a precise \`apply\` instruction it can run verbatim on \`src/variations/${id}/\`), "asset" (needs a new/replacement file you can't source, e.g. a photo — no apply), or "decision" (a client/human call — no apply). Fold in the code-actionable lint findings above too.`,
   ].join("\n");
@@ -5280,6 +5304,384 @@ async function updateArtDirectorRailBtn(url) {
   railDirector.hidden = !avail;
   if (!avail) { railDirector.classList.remove("has-code", "has-passive"); if (isModalOpen("director")) closeModal(); return; }
   updateDirectorIndicator(v); // reflect the previewed design's queue state
+}
+
+// ---- Accessibility review drawer (P4) — axe findings → Fix/Hold/Dismiss --------
+// Reuses the Art Director drawer's `.adrec` row/modal machinery, but the "review" is a
+// DETERMINISTIC axe audit (main.auditA11y), not an agent turn. Findings are GROUPED by rule
+// (38 low-contrast elements → one row), and Fix runs a scoped builder edit turn. Gated on the
+// opt-in AA mode; on-demand + retroactive (works on any built design, incl. AA-off ones).
+let a11yState = { id: null, active: [], dismissed: [], completed: [], ranAt: null };
+let a11yAuditing = false;
+let a11yError = "";
+
+const A11Y_RULE_LABEL = {
+  "color-contrast": "Low-contrast text", "color-contrast-enhanced": "Low-contrast text",
+  "image-alt": "Images missing alt text", "heading-order": "Heading levels skip",
+  "link-name": "Links without a name", "button-name": "Buttons without a name",
+  "label": "Form controls without a label", "target-size": "Targets under 24px",
+  "landmark-one-main": "No main landmark", "region": "Content outside a landmark",
+  "list": "Broken list structure", "listitem": "List item out of a list",
+  "definition-list": "Definition list structure", "dlitem": "Item outside a definition list",
+  "aria-required-attr": "Missing required ARIA", "aria-required-children": "Missing required ARIA children",
+  "aria-required-parent": "ARIA element out of its parent", "duplicate-id": "Duplicate id",
+  "nested-interactive": "Nested interactive elements", "scrollable-region-focusable": "Scrollable region not focusable",
+  "empty-heading": "Empty heading", "landmark-unique": "Duplicate landmark",
+};
+const A11Y_FIX = {
+  "color-contrast": "Raise text/background contrast to at least 4.5:1 (3:1 for large text) — prefer the --ta-* tokens (they're contrast-safe) or darken the specific text color; never lighten a brand surface.",
+  "image-alt": "Add a meaningful alt to each image (or alt=\"\" if purely decorative).",
+  "heading-order": "Fix heading levels so they don't skip (h1 → h2 → h3; one h1 per page).",
+  "link-name": "Give each link discernible text (visible label or aria-label).",
+  "button-name": "Give each button a discernible accessible name (text or aria-label).",
+  "label": "Associate every form control with a <label htmlFor> or an aria-label.",
+  "target-size": "Make interactive targets at least 24×24px (pad small glyphs/buttons).",
+  "landmark-one-main": "Wrap the page body in a single <main> landmark.",
+  "region": "Ensure content sits within a landmark (header/nav/main/footer/section).",
+};
+function a11yFixHint(rule) { return A11Y_FIX[rule] || "Resolve this WCAG issue while keeping the design intact."; }
+function a11yImpactRank(i) { return ({ critical: 0, serious: 1, moderate: 2, minor: 3 })[i] ?? 4; }
+
+// axe returns per-node findings; group them into one row per rule (with its instances).
+function groupA11yFindings(nodes) {
+  const byRule = new Map();
+  for (const n of nodes || []) {
+    const g = byRule.get(n.rule);
+    if (g) { g.instances.push(n); if (a11yImpactRank(n.impact) < a11yImpactRank(g.impact)) g.impact = n.impact; }
+    else byRule.set(n.rule, { id: n.rule, rule: n.rule, impact: n.impact, help: n.help, helpUrl: n.helpUrl, wcag: n.wcag || [], kind: "code", instances: [n] });
+  }
+  const out = [...byRule.values()].map((g) => {
+    const label = A11Y_RULE_LABEL[g.rule] || g.help || g.rule;
+    return { ...g, count: g.instances.length, title: g.instances.length > 1 ? `${label} (${g.instances.length})` : label };
+  });
+  out.sort((a, b) => a11yImpactRank(a.impact) - a11yImpactRank(b.impact));
+  return out;
+}
+
+function refreshA11y() { if (!isModalOpen("a11y")) return; modalBody.innerHTML = ""; renderA11y(modalBody); }
+
+async function renderA11y(body) {
+  const aa = await window.desktop.getA11yMode().catch(() => ({ enabled: false }));
+  const lead = document.createElement("div"); lead.className = "muted"; lead.style.cssText = "font-size:12.5px;margin-bottom:12px;";
+  lead.textContent = COPY.a11y.lead;
+  body.appendChild(lead);
+
+  if (!aa.enabled) {
+    const off = document.createElement("div"); off.className = "muted"; off.style.cssText = "font-size:12.5px;margin-bottom:12px;";
+    off.textContent = COPY.a11y.offNote;
+    body.appendChild(off);
+  } else {
+    const id = currentPreviewVariation();
+    if (!id || id === "v00") {
+      const n = document.createElement("div"); n.className = "muted"; n.textContent = COPY.a11y.needDesign; body.appendChild(n);
+    } else {
+      let store = { active: [], dismissed: [], completed: [], ranAt: null };
+      try { store = await window.desktop.loadA11y(id); } catch {}
+      a11yState = { id, active: store.active || [], dismissed: store.dismissed || [], completed: store.completed || [], ranAt: store.ranAt || null };
+
+      const runBtn = document.createElement("button"); runBtn.className = "panelbtn primary";
+      runBtn.textContent = a11yAuditing ? COPY.a11y.running : (a11yState.ranAt ? COPY.a11y.reRun : COPY.a11y.run);
+      runBtn.disabled = a11yAuditing || !design.previewReady;
+      if (!design.previewReady) runBtn.title = COPY.a11y.needBuild;
+      runBtn.addEventListener("click", () => runA11yReview(id));
+      body.appendChild(runBtn);
+
+      if (a11yError) { const e = document.createElement("div"); e.className = "muted"; e.style.cssText = "font-size:12.5px;margin-top:10px;color:#e5484d;"; e.textContent = a11yError; body.appendChild(e); }
+
+      if (a11yState.ranAt && !a11yState.active.length && !a11yAuditing) {
+        const clean = document.createElement("div"); clean.className = "muted"; clean.style.cssText = "font-size:12.5px;margin-top:14px;";
+        clean.textContent = (a11yState.dismissed.length || a11yState.completed.length) ? COPY.a11y.allHandled : COPY.a11y.clean;
+        body.appendChild(clean);
+      } else if (a11yState.active.length) {
+        const list = document.createElement("div"); list.className = "adrec-list"; list.style.marginTop = "14px";
+        for (const f of a11yState.active) list.appendChild(buildA11yRow(f));
+        body.appendChild(list);
+      }
+      if (a11yState.completed.length) body.appendChild(buildA11yArchive(a11yState.completed, true));
+      if (a11yState.dismissed.length) body.appendChild(buildA11yArchive(a11yState.dismissed, false));
+    }
+  }
+
+  // ── Global Rules ── always the last section: the AA-mode master switch + the
+  // after-build auto-review toggle. Master lives here (not the Claude drawer) so
+  // every accessibility control sits together.
+  const gsep = document.createElement("div"); gsep.className = "drawer-sep"; body.appendChild(gsep);
+  const glabel = document.createElement("div"); glabel.className = "sess-label"; glabel.textContent = COPY.a11y.globalHeading; body.appendChild(glabel);
+
+  const mdesc = document.createElement("div"); mdesc.className = "sess-desc"; mdesc.textContent = COPY.a11y.modeDesc; body.appendChild(mdesc);
+  const modeRow = document.createElement("label"); modeRow.className = "toggle-row";
+  const modeCb = document.createElement("input"); modeCb.type = "checkbox"; modeCb.checked = !!aa.enabled;
+  const modeTxt = document.createElement("span"); modeTxt.textContent = COPY.a11y.modeToggle;
+  modeRow.append(modeCb, modeTxt);
+  modeCb.addEventListener("change", async () => { await window.desktop.setA11yMode(modeCb.checked); refreshA11y(); updateA11yRailBtn(); });
+  body.appendChild(modeRow);
+
+  if (aa.enabled) {
+    const adesc = document.createElement("div"); adesc.className = "sess-desc"; adesc.textContent = COPY.a11y.autoDesc; body.appendChild(adesc);
+    const autoRow = document.createElement("label"); autoRow.className = "toggle-row";
+    const autoCb = document.createElement("input"); autoCb.type = "checkbox"; autoCb.checked = !!aa.auto;
+    const autoTxt = document.createElement("span"); autoTxt.textContent = COPY.a11y.autoToggle;
+    autoRow.append(autoCb, autoTxt);
+    autoCb.addEventListener("change", () => { window.desktop.setA11yAuto(autoCb.checked); });
+    body.appendChild(autoRow);
+  }
+}
+
+async function runA11yReview(id) {
+  if (a11yAuditing) return;
+  // Auto-run can fire with the drawer closed → make sure state is loaded for THIS variation
+  // (so Held/Dismissed/Completed are honored) before merging in the fresh findings.
+  if (a11yState.id !== id) {
+    let store = { active: [], dismissed: [], completed: [], ranAt: null };
+    try { store = await window.desktop.loadA11y(id); } catch {}
+    a11yState = { id, active: store.active || [], dismissed: store.dismissed || [], completed: store.completed || [], ranAt: store.ranAt || null };
+  }
+  a11yAuditing = true; a11yError = ""; refreshA11y();
+  let res = null;
+  try { res = await window.desktop.auditA11y(id); } catch (e) { res = { ok: false, error: e.message }; }
+  a11yAuditing = false;
+  if (!res || !res.ok) { a11yError = (res && res.error) || COPY.a11y.failed; refreshA11y(); return; }
+  const grouped = groupA11yFindings(res.findings);
+  // Keep prior Held/Dismissed/Completed state — don't resurface a rule already handled.
+  const seen = new Set([...(a11yState.dismissed || []), ...(a11yState.completed || [])].map((r) => r.id));
+  a11yState.active = grouped.filter((g) => !seen.has(g.id));
+  a11yState.ranAt = res.ranAt || Date.now();
+  try { await window.desktop.saveA11y(id, a11yState.active, a11yState.dismissed, a11yState.completed, a11yState.ranAt); } catch {}
+  updateA11yRailBtn(); // light the rail dot if issues were found
+  refreshA11y();
+}
+
+// After a build completes: if AA mode + auto-review are both on, run the review (deterministic,
+// no chat, no tokens) so the rail dot reflects any issues without the designer asking.
+async function maybeAutoA11yReview() {
+  try {
+    const aa = await window.desktop.getA11yMode();
+    if (!aa || !aa.enabled || !aa.auto) return;
+    const id = currentPreviewVariation();
+    if (!id || id === "v00" || !design.previewReady) return;
+    await runA11yReview(id);
+  } catch {}
+}
+
+function buildA11yRow(f) {
+  const row = document.createElement("button"); row.className = "adrec";
+  const title = document.createElement("span"); title.className = "adrec-title"; title.textContent = f.title;
+  const chip = document.createElement("span"); chip.className = "adrec-kind a11y-impact-" + (f.impact || "moderate");
+  chip.textContent = f.impact || "moderate";
+  row.append(title, chip);
+  row.addEventListener("click", () => openA11yModal(f, "active"));
+  return row;
+}
+function buildA11yArchive(items, completed) {
+  const wrap = document.createElement("details"); wrap.className = "adrec-archive" + (completed ? " adrec-completed" : "");
+  const sum = document.createElement("summary"); sum.textContent = completed ? COPY.a11y.fixed(items.length) : COPY.a11y.dismissed(items.length); wrap.appendChild(sum);
+  const list = document.createElement("div"); list.className = "adrec-list";
+  for (const f of items) {
+    const row = document.createElement("div"); row.className = "adrec " + (completed ? "adrec-done" : "adrec-dismissed");
+    const title = document.createElement("span"); title.className = "adrec-title"; title.textContent = f.title;
+    if (completed) { const tag = document.createElement("span"); tag.className = "adrec-donetag"; tag.textContent = COPY.a11y.fixedTag; row.appendChild(title); row.appendChild(tag); row.addEventListener("click", () => openA11yModal(f, "completed")); }
+    else { const restore = document.createElement("button"); restore.className = "adrec-restore"; restore.textContent = COPY.director.restore; restore.addEventListener("click", (e) => { e.stopPropagation(); restoreA11y(f); }); row.append(title, restore); row.addEventListener("click", () => openA11yModal(f, "archived")); }
+    list.appendChild(row);
+  }
+  wrap.appendChild(list);
+  return wrap;
+}
+
+function closeA11yModal() { const o = el("a11y-overlay"); if (o) o.remove(); }
+function openA11yModal(f, mode) {
+  mode = mode || "active";
+  closeA11yModal();
+  const overlay = document.createElement("div"); overlay.className = "adrec-overlay"; overlay.id = "a11y-overlay";
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeA11yModal(); });
+  const card = document.createElement("div"); card.className = "adrec-modal";
+  const title = document.createElement("div"); title.className = "adrec-modal-title"; title.textContent = f.title; card.appendChild(title);
+  const meta = document.createElement("div"); meta.className = "adrec-modal-kind a11y-impact-" + (f.impact || "moderate");
+  meta.textContent = `${f.impact || "moderate"}${(f.wcag || []).length ? " · " + f.wcag.join(", ").toUpperCase() : ""}`;
+  card.appendChild(meta);
+  if (f.help) { const w = document.createElement("div"); w.className = "adrec-modal-why"; w.textContent = f.help; card.appendChild(w); }
+  // The offending elements (first several) — selector + why + which breakpoints.
+  const inst = document.createElement("div"); inst.className = "a11y-instances";
+  (f.instances || []).slice(0, 8).forEach((n) => {
+    const row = document.createElement("div"); row.className = "a11y-inst";
+    const sel = document.createElement("div"); sel.className = "a11y-inst-sel"; sel.textContent = n.selector + (n.breakpoints && n.breakpoints.length ? `  ·  ${n.breakpoints.join(", ")}` : "");
+    row.appendChild(sel);
+    if (n.failureSummary) { const fs = document.createElement("div"); fs.className = "a11y-inst-why"; fs.textContent = String(n.failureSummary).replace(/\s*\n\s*/g, " ").replace(/^Fix (any|all) of the following:\s*/i, ""); row.appendChild(fs); }
+    inst.appendChild(row);
+  });
+  if ((f.instances || []).length > 8) { const more = document.createElement("div"); more.className = "a11y-inst-more"; more.textContent = COPY.a11y.andMore(f.instances.length - 8); inst.appendChild(more); }
+  card.appendChild(inst);
+
+  const actions = document.createElement("div"); actions.className = "adrec-modal-actions";
+  if (mode === "completed") {
+    const close = document.createElement("button"); close.className = "adrec-hold-btn"; close.textContent = COPY.director.close;
+    close.addEventListener("click", () => closeA11yModal()); actions.appendChild(close);
+  } else {
+    const hold = document.createElement("button"); hold.className = "adrec-hold-btn"; hold.textContent = COPY.director.hold; hold.title = COPY.director.holdTip;
+    hold.addEventListener("click", () => closeA11yModal()); actions.appendChild(hold);
+    if (mode !== "archived") {
+      const dismiss = document.createElement("button"); dismiss.className = "adrec-dismiss-btn"; dismiss.textContent = COPY.director.dismiss; dismiss.title = COPY.director.dismissTip;
+      dismiss.addEventListener("click", () => { dismissA11y(f); closeA11yModal(); }); actions.appendChild(dismiss);
+    }
+    // Show on page + Fix, grouped together on the right.
+    const right = document.createElement("div"); right.className = "a11y-right";
+    const show = document.createElement("button"); show.className = "a11y-show-btn"; show.textContent = COPY.a11y.showOnPage; show.title = COPY.a11y.showOnPageTip;
+    show.addEventListener("click", () => showA11yOnPage(f));
+    const fix = document.createElement("button"); fix.className = "adrec-apply-btn"; fix.textContent = COPY.a11y.fix;
+    if (!appHasKey) { fix.disabled = true; fix.title = COPY.director.needKey; }
+    else fix.addEventListener("click", () => { closeA11yModal(); fixA11y(f); });
+    right.append(show, fix);
+    actions.appendChild(right);
+  }
+  card.appendChild(actions);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+}
+
+function persistA11y() {
+  if (!a11yState.id) return;
+  try { window.desktop.saveA11y(a11yState.id, a11yState.active, a11yState.dismissed, a11yState.completed, a11yState.ranAt); } catch {}
+  refreshA11y();
+}
+function dismissA11y(f) { a11yState.active = a11yState.active.filter((x) => x.id !== f.id); if (!a11yState.dismissed.some((x) => x.id === f.id)) a11yState.dismissed.push(f); persistA11y(); }
+function restoreA11y(f) { a11yState.dismissed = a11yState.dismissed.filter((x) => x.id !== f.id); if (!a11yState.active.some((x) => x.id === f.id)) a11yState.active.push(f); persistA11y(); }
+// Fix = a scoped BUILDER edit turn (never reviewMode), handed the rule + remediation + the
+// exact elements axe flagged. Moves the finding to Completed (re-run to confirm it's gone).
+function fixA11y(f) {
+  const id = a11yState.id;
+  if (!f || !id || !appHasKey) return;
+  a11yState.active = a11yState.active.filter((x) => x.id !== f.id);
+  if (!a11yState.completed.some((x) => x.id === f.id)) a11yState.completed.push(f);
+  persistA11y();
+  closeModal();
+  const list = (f.instances || []).slice(0, 12).map((n, i) =>
+    `${i + 1}. ${n.selector}\n   why: ${String(n.failureSummary || "").replace(/\s*\n\s*/g, " ")}\n   html: ${String(n.html || "").slice(0, 160)}`
+  ).join("\n");
+  const prompt =
+    `[Fix an accessibility (WCAG 2.1 AA) finding in design variation ${id}.] Rule: ${f.rule} — ${f.help}. ` +
+    `${a11yFixHint(f.rule)}\n` +
+    `Fix ONLY this, editing only files under \`src/variations/${id}/\`; don't rebuild the page or touch anything else. ` +
+    `Keep the design's look intact and use the --ta-* tokens/utilities. The ${f.count} element(s) axe flagged:\n${list}`;
+  runAgent(prompt, COPY.a11y.fixingEcho(f.title), {});
+}
+
+// Rail icon: always available; when clicked, the drawer adapts to AA-mode on/off. No license gate.
+async function updateA11yRailBtn() {
+  if (!railA11y) return;
+  railA11y.classList.remove("has-code", "has-passive");
+  const v = currentPreviewVariation();
+  if (!v || v === "v00") return;
+  let store = { active: [] };
+  try { store = await window.desktop.loadA11y(v); } catch {}
+  if ((store.active || []).some((f) => a11yImpactRank(f.impact) <= 1)) railA11y.classList.add("has-code");
+  else if ((store.active || []).length) railA11y.classList.add("has-passive");
+}
+
+// ---- Accessibility "Show on page" review overlay ----------------------------
+// Selectors from axe match the CLEAN capture route, not the framed live preview — so
+// "Show on page" flips the active tab to the capture render (what was audited) and injects
+// this overlay: a pulsing accessibility marker + outline on each failing element. A floating
+// toolbar (shell-side) steps through them and exits back to the normal preview.
+const A11Y_HIGHLIGHT_JS = `(function(){
+  if (window.__a11yHighlight) window.__a11yHighlight.clear();
+  var els=[], boxes=[], icons=[], wraps=[], layer=null, styleEl=null;
+  var ICON='<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="6" r="1.4"/><path d="M4.5 8.5c2.4 1 4.9 1.5 7.5 1.5s5.1-.5 7.5-1.5"/><path d="M12 10v5"/><path d="m8.5 20 3.5-5 3.5 5"/></svg>';
+  function css(){ if(styleEl) return; styleEl=document.createElement('style'); styleEl.id='__a11y-style'; styleEl.textContent='@keyframes __a11yP{0%{box-shadow:0 0 0 0 rgba(192,38,30,.55)}100%{box-shadow:0 0 0 11px rgba(192,38,30,0)}}#__a11y-layer{position:absolute;top:0;left:0;pointer-events:none;z-index:2147483000}#__a11y-layer .b{position:absolute;box-sizing:border-box;border:2px solid #0a7;border-radius:5px;background:rgba(10,119,105,.06)}#__a11y-layer .ic{position:absolute;width:22px;height:22px;border-radius:50%;background:#0a7;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 5px rgba(0,0,0,.35)}#__a11y-layer .cur .b{border-color:#c0261e;background:rgba(192,38,30,.09)}#__a11y-layer .cur .ic{background:#c0261e;animation:__a11yP 1.2s ease-out infinite}'; document.head.appendChild(styleEl); }
+  function pos(){ for(var i=0;i<els.length;i++){ var el=els[i]; if(!el) continue; var r=el.getBoundingClientRect(); var t=r.top+window.scrollY,l=r.left+window.scrollX; boxes[i].style.top=t+'px'; boxes[i].style.left=l+'px'; boxes[i].style.width=r.width+'px'; boxes[i].style.height=r.height+'px'; icons[i].style.top=(t-8)+'px'; icons[i].style.left=(l-8)+'px'; } }
+  window.__a11yHighlight={
+    show:function(sels){ this.clear(); css(); layer=document.createElement('div'); layer.id='__a11y-layer'; document.body.appendChild(layer);
+      els=sels.map(function(s){ try{return document.querySelector(s);}catch(e){return null;} });
+      for(var i=0;i<els.length;i++){ var w=document.createElement('div'); w.className='wrap'; var b=document.createElement('div'); b.className='b'; var ic=document.createElement('div'); ic.className='ic'; ic.innerHTML=ICON; w.appendChild(b); w.appendChild(ic); layer.appendChild(w); wraps.push(w); boxes.push(b); icons.push(ic); }
+      pos(); window.addEventListener('scroll',pos,true); window.addEventListener('resize',pos);
+      return els.filter(Boolean).length; },
+    focus:function(i){ for(var j=0;j<wraps.length;j++) wraps[j].className='wrap'+(j===i?' cur':''); var el=els[i]; if(el&&el.scrollIntoView) el.scrollIntoView({behavior:'smooth',block:'center'}); },
+    clear:function(){ if(layer){layer.remove();layer=null;} if(styleEl){styleEl.remove();styleEl=null;} window.removeEventListener('scroll',pos,true); window.removeEventListener('resize',pos); els=[];boxes=[];icons=[];wraps=[]; }
+  };
+})();`;
+
+let a11yReview = null; // { finding, sels, idx, count, tab, prevUrl }
+let a11yToolbarEl = null;
+
+function onceWebviewLoaded(wv, fn) {
+  let done = false;
+  const h = () => { if (done) return; done = true; try { wv.removeEventListener("did-finish-load", h); } catch {} fn(); };
+  try { wv.addEventListener("did-finish-load", h); } catch {}
+  setTimeout(() => { if (!done) h(); }, 2600); // fallback if the event is missed
+}
+async function showA11yOnPage(f) {
+  if (!f || !activeTab || !viteUrl) return;
+  const id = a11yState.id || currentPreviewVariation();
+  if (!id || id === "v00") return;
+  closeA11yModal(); closeModal();
+  const sels = (f.instances || []).map((n) => n.selector).filter(Boolean);
+  const tab = activeTab;
+  a11yReview = { finding: f, sels, idx: 0, count: 0, tab, prevUrl: tab.url };
+  showA11yToolbar();
+  navigate(tab, `${viteUrl}/?v=${id}&capture=desktop`);
+  onceWebviewLoaded(tab.wv, async () => {
+    if (!a11yReview) return;
+    try {
+      await tab.wv.executeJavaScript(A11Y_HIGHLIGHT_JS);
+      const n = await tab.wv.executeJavaScript(`window.__a11yHighlight.show(${JSON.stringify(sels)})`);
+      a11yReview.count = n || 0;
+      a11yReviewFocus(0);
+    } catch { updateA11yToolbar(); }
+  });
+}
+function a11yReviewFocus(i) {
+  if (!a11yReview) return;
+  const n = a11yReview.count || 0;
+  if (n) { a11yReview.idx = ((i % n) + n) % n; try { a11yReview.tab.wv.executeJavaScript(`window.__a11yHighlight.focus(${a11yReview.idx})`); } catch {} }
+  updateA11yToolbar();
+}
+function a11yReviewNext() { if (a11yReview) a11yReviewFocus(a11yReview.idx + 1); }
+function a11yReviewPrev() { if (a11yReview) a11yReviewFocus(a11yReview.idx - 1); }
+// Kick off the fix for the finding being reviewed, straight from the banner: clear the
+// overlay + restore the preview, then run the scoped builder turn (streams in chat).
+function a11yReviewFix() {
+  if (!a11yReview || !appHasKey) return;
+  const f = a11yReview.finding;
+  exitA11yReview();
+  fixA11y(f);
+}
+function exitA11yReview() {
+  if (!a11yReview) return;
+  const r = a11yReview; a11yReview = null;
+  try { r.tab.wv.executeJavaScript("window.__a11yHighlight && window.__a11yHighlight.clear()"); } catch {}
+  if (r.prevUrl) navigate(r.tab, r.prevUrl);
+  hideA11yToolbar();
+}
+function showA11yToolbar() {
+  if (!a11yToolbarEl) {
+    a11yToolbarEl = document.createElement("div");
+    a11yToolbarEl.id = "a11y-toolbar";
+    a11yToolbarEl.innerHTML =
+      '<span class="a11y-tb-title"></span><span class="a11y-tb-count"></span>' +
+      '<button class="a11y-tb-btn" data-a="prev">‹ Prev</button>' +
+      '<button class="a11y-tb-btn" data-a="next">Next ›</button>' +
+      '<button class="a11y-tb-btn a11y-tb-fix" data-a="fix"></button>' +
+      '<button class="a11y-tb-btn a11y-tb-exit" data-a="exit"></button>';
+    document.body.appendChild(a11yToolbarEl);
+    a11yToolbarEl.addEventListener("click", (e) => {
+      const a = e.target && e.target.getAttribute && e.target.getAttribute("data-a");
+      if (a === "prev") a11yReviewPrev(); else if (a === "next") a11yReviewNext(); else if (a === "fix") a11yReviewFix(); else if (a === "exit") exitA11yReview();
+    });
+    a11yToolbarEl.querySelector(".a11y-tb-fix").textContent = COPY.a11y.fix;
+    a11yToolbarEl.querySelector(".a11y-tb-exit").textContent = COPY.a11y.exitReview;
+  }
+  const fixBtn = a11yToolbarEl.querySelector(".a11y-tb-fix");
+  fixBtn.disabled = !appHasKey;
+  if (!appHasKey) fixBtn.title = COPY.director.needKey; else fixBtn.removeAttribute("title");
+  a11yToolbarEl.hidden = false;
+  updateA11yToolbar();
+}
+function hideA11yToolbar() { if (a11yToolbarEl) a11yToolbarEl.hidden = true; }
+function updateA11yToolbar() {
+  if (!a11yToolbarEl || !a11yReview) return;
+  a11yToolbarEl.querySelector(".a11y-tb-title").textContent = a11yReview.finding.title;
+  const n = a11yReview.count || 0;
+  a11yToolbarEl.querySelector(".a11y-tb-count").textContent = n ? COPY.a11y.ofCount(a11yReview.idx + 1, n) : COPY.a11y.notAtSize;
+  const dis = n < 2;
+  a11yToolbarEl.querySelectorAll('[data-a="prev"],[data-a="next"]').forEach((b) => { b.disabled = dis; });
 }
 
 // ---- Start designing (#3) ---------------------------------------------------

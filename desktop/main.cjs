@@ -1174,6 +1174,9 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode, mo
   // Image mode: "placeholder" = don't source images, hold each spot with an FPO
   // block; else "on" (the normal gather-into-public/ flow). Same env channel.
   process.env.TA_DESIGN_IMAGES = loadImagesPlaceholder() ? "placeholder" : "on";
+  // Accessibility mode: "aa" = build to WCAG AA (§4d rules + apply-brand --aa contrast gate);
+  // "off" (default) = author freely, palette untouched. Opt-in — same env channel.
+  process.env.TA_DESIGN_A11Y = a11yModeOn() ? "aa" : "off";
   // A per-turn model override (turnModel) lets a specific turn run on a cheaper/faster model
   // without changing the user's global pick — e.g. design BUILDS run on Sonnet (high output, low
   // reasoning need) while the rest of the session stays on whatever they chose.
@@ -1538,6 +1541,28 @@ ipcMain.handle("artdirector:saveRecs", (_event, { id, active, dismissed, complet
   return { ok: true };
 });
 
+// Accessibility review findings, persisted per variation (mirrors the Art Director store) so
+// Held/Dismissed/Completed state survives restarts + re-runs. .thinkany/a11y.json.
+function a11yStorePath(dir) { return path.join(dir, ".thinkany", "a11y.json"); }
+function loadA11yStore(dir) {
+  try { return JSON.parse(fs.readFileSync(a11yStorePath(dir), "utf8")); } catch { return {}; }
+}
+ipcMain.handle("a11y:load", (_event, { id } = {}) => {
+  if (!currentProject || !id) return { active: [], dismissed: [], completed: [], ranAt: null };
+  const rec = loadA11yStore(currentProject)[id];
+  return { active: (rec && rec.active) || [], dismissed: (rec && rec.dismissed) || [], completed: (rec && rec.completed) || [], ranAt: (rec && rec.ranAt) || null };
+});
+ipcMain.handle("a11y:save", (_event, { id, active, dismissed, completed, ranAt } = {}) => {
+  if (!currentProject || !id) return { ok: false };
+  const store = loadA11yStore(currentProject);
+  store[id] = { active: active || [], dismissed: dismissed || [], completed: completed || [], ranAt: ranAt || null, updatedAt: new Date().toISOString() };
+  try {
+    fs.mkdirSync(path.join(currentProject, ".thinkany"), { recursive: true });
+    fs.writeFileSync(a11yStorePath(currentProject), JSON.stringify(store, null, 2));
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+  return { ok: true };
+});
+
 // Read a variation's variation.json (for the reroll: its brief + current direction seed
 // the panel and the fork). Not gated — reading is harmless; the reroll UI is gated.
 ipcMain.handle("variation:read", (_event, { id } = {}) => {
@@ -1679,6 +1704,15 @@ ipcMain.handle("models:list", () => fetchModels());
 // A global pref (ui-state), independent of the user's per-session model pick.
 ipcMain.handle("fidelity:get", () => ({ hiFi: !!loadUiState().buildHiFi }));
 ipcMain.handle("fidelity:set", (_event, { hiFi } = {}) => { setUiState({ buildHiFi: !!hiFi }); return { ok: true, hiFi: !!hiFi }; });
+
+// Accessibility (AA) mode — opt-in, default OFF. On: builds author to WCAG AA (§4d + apply-brand
+// --aa) and the Accessibility review drawer is enabled. A global ui-state pref.
+function a11yModeOn() { return !!loadUiState().buildA11y; }
+function a11yAutoOn() { return !!loadUiState().buildA11yAuto; }
+ipcMain.handle("a11y:get", () => ({ enabled: a11yModeOn(), auto: a11yAutoOn() }));
+ipcMain.handle("a11y:set", (_e, { enabled } = {}) => { setUiState({ buildA11y: !!enabled }); return { ok: true, enabled: !!enabled }; });
+// Auto-run the accessibility review after a build completes (on) vs manual-only (off).
+ipcMain.handle("a11y:setAuto", (_e, { auto } = {}) => { setUiState({ buildA11yAuto: !!auto }); return { ok: true, auto: !!auto }; });
 
 // Quiet-build narration (Phase 3): one live Art-Director sentence per build phase, from a
 // cheap Haiku call. Default-ON; a ui-state toggle disables it. Additive — the renderer keeps
@@ -2114,6 +2148,115 @@ ipcMain.handle("preview:probe", async (_event, { url }) => {
     return { ok: false };
   }
 });
+
+// ---- Accessibility audit (P3) — axe-core, on demand, per breakpoint ----------
+// Runs axe against the CURRENT design's isolated capture route in a hidden window (the
+// capture-bridge pattern), at each breakpoint width. Deterministic — ZERO model tokens. The
+// review drawer (P4) turns the findings into Fix/Hold/Dismiss rows. On-demand + retroactive:
+// works on any built design, including ones authored with AA mode off.
+const A11Y_BREAKPOINTS = [
+  { name: "desktop", w: 1440, h: 900 },
+  { name: "tablet", w: 834, h: 1112 },
+  { name: "mobile", w: 390, h: 780 },
+];
+let _axeSrc = null;
+function axeSource() {
+  if (_axeSrc == null) {
+    let p;
+    try { p = require.resolve("axe-core/axe.min.js"); }
+    catch { p = path.join(appRoot, "node_modules", "axe-core", "axe.min.js"); }
+    _axeSrc = fs.readFileSync(p, "utf8");
+  }
+  return _axeSrc;
+}
+async function waitForCaptureReady(wc, timeout = 8000) {
+  // Prefer the explicit render gate, but fall back to "#root has painted content" so the
+  // audit still runs on older scaffolds (or any page) that predate data-capture-ready.
+  const probe = '(function(){var r=document.querySelector("#root");return !!document.querySelector("[data-capture-ready]")||!!(r&&r.children.length);})()';
+  const start = Date.now();
+  for (;;) {
+    let ready = false;
+    try { ready = await wc.executeJavaScript(probe, true); } catch {}
+    if (ready) return true;
+    if (Date.now() - start > timeout) return false;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+async function auditA11y(variationId) {
+  if (!viteUrl) return { ok: false, error: "The preview isn't running yet — open a built design first." };
+  const vid = variationId || "v01";
+  const win = new BrowserWindow({
+    show: false,
+    width: 1440,
+    height: 900,
+    webPreferences: { backgroundThrottling: false, partition: "a11y-audit" },
+  });
+  const wc = win.webContents;
+  const byKey = new Map(); // "rule::selector" → finding (accumulates the breakpoints it hits)
+  try {
+    for (const bp of A11Y_BREAKPOINTS) {
+      win.setContentSize(bp.w, bp.h);
+      try { await wc.loadURL(`${viteUrl}/?v=${vid}&capture=${bp.name}`); }
+      catch (e) { if (!/ERR_ABORTED|\(-3\)/.test(String(e && e.message))) throw e; }
+      await waitForCaptureReady(wc, 12000);
+      // Wait for images + fonts to actually load before scanning — otherwise text over a
+      // not-yet-painted image falsely fails contrast (inflates the findings).
+      try {
+        await wc.executeJavaScript(
+          `(async () => {
+            const imgs = Array.from(document.images || []);
+            await Promise.race([
+              Promise.all(imgs.map((i) => i.complete ? 0 : new Promise((r) => { i.addEventListener("load", r, { once: true }); i.addEventListener("error", r, { once: true }); }))),
+              new Promise((r) => setTimeout(r, 4000)),
+            ]);
+            try { await document.fonts.ready; } catch (e) {}
+            await new Promise((r) => setTimeout(r, 200));
+          })()`,
+          true,
+        );
+      } catch {}
+      await wc.executeJavaScript(axeSource(), true); // inject axe into the page's main world
+      const violations = await wc.executeJavaScript(
+        `(async () => {
+          if (typeof axe === "undefined") return [];
+          const r = await axe.run(document, {
+            runOnly: { type: "tag", values: ["wcag2a","wcag2aa","wcag21a","wcag21aa"] },
+            resultTypes: ["violations"],
+          });
+          return (r.violations || []).map((v) => ({
+            id: v.id, impact: v.impact, help: v.help, helpUrl: v.helpUrl,
+            wcag: (v.tags || []).filter((t) => /^wcag\\d/.test(t)),
+            nodes: (v.nodes || []).map((n) => ({
+              target: n.target, html: String(n.html || "").slice(0, 400), failureSummary: n.failureSummary,
+            })),
+          }));
+        })()`,
+        true,
+      );
+      for (const v of violations || []) {
+        for (const n of v.nodes || []) {
+          const sel = Array.isArray(n.target) ? n.target.join(" ") : String(n.target || "");
+          const key = `${v.id}::${sel}`;
+          const hit = byKey.get(key);
+          if (hit) { if (!hit.breakpoints.includes(bp.name)) hit.breakpoints.push(bp.name); }
+          else byKey.set(key, {
+            key, rule: v.id, impact: v.impact || "moderate", help: v.help, helpUrl: v.helpUrl,
+            wcag: v.wcag || [], selector: sel, html: n.html, failureSummary: n.failureSummary,
+            breakpoints: [bp.name],
+          });
+        }
+      }
+    }
+  } catch (e) {
+    win.destroy();
+    return { ok: false, error: `Audit failed: ${e.message}` };
+  }
+  win.destroy();
+  const order = { critical: 0, serious: 1, moderate: 2, minor: 3 };
+  const findings = [...byKey.values()].sort((a, b) => (order[a.impact] ?? 9) - (order[b.impact] ?? 9));
+  return { ok: true, findings, count: findings.length, ranAt: Date.now(), variationId: vid };
+}
+ipcMain.handle("a11y:audit", (_e, { variationId } = {}) => auditA11y(variationId));
 ipcMain.handle("company:status", () => ({ exists: hasCompanyProfile(currentProject) }));
 
 // Apply the COMPANY layer (company name + admin/gate fonts + logo) to the current

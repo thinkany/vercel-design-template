@@ -171,6 +171,17 @@ function lintPalette(palette) {
 
 // ---- entry -------------------------------------------------------------------
 const SEV_ORDER = { high: 0, review: 1, note: 2 };
+// The sampled design direction (lens / axes / motifs) this variation was built to — so the
+// model critique can judge AGAINST the intended aesthetic, not in a vacuum. Verbatim from
+// variation.json (design-brief writes it there). Null when a design carries no direction.
+function readDirection(projectDir, variationId) {
+  if (!variationId || variationId === "v00") return null;
+  try {
+    const meta = JSON.parse(readFileSafe(path.join(projectDir, "src", "variations", variationId, "variation.json")) || "{}");
+    return meta && typeof meta.direction === "object" ? meta.direction : null;
+  } catch { return null; }
+}
+
 function reviewVariation(projectDir, variationId) {
   const files = componentFiles(projectDir, variationId);
   const palette = readPalette(projectDir, variationId);
@@ -181,7 +192,7 @@ function reviewVariation(projectDir, variationId) {
   findings.sort((a, b) =>
     (SEV_ORDER[a.severity] - SEV_ORDER[b.severity]) || a.file.localeCompare(b.file) || a.line - b.line);
   const counts = findings.reduce((c, f) => { c[f.severity] = (c[f.severity] || 0) + 1; return c; }, {});
-  return { variationId, findings, counts, filesReviewed: files.map((f) => f.name) };
+  return { variationId, findings, counts, filesReviewed: files.map((f) => f.name), direction: readDirection(projectDir, variationId) };
 }
 
 module.exports = { reviewVariation, contrastRatio, parseTokens };

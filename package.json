@@ -50,6 +50,7 @@
     "@radix-ui/react-tooltip": "1.1.8",
     "@tailwindcss/vite": "4.1.12",
     "@vitejs/plugin-react": "4.7.0",
+    "axe-core": "^4.13.0",
     "canvas-confetti": "1.9.4",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",

@@ -69,17 +69,18 @@
          rail) once Vercel is connected. .activated is toggled in shell.js from vercel-status. */
       #rail-publish.activated { opacity: 1; }
       /* Rail order (visual, top→bottom): Switch Project · Claude · Figma · Publish ·
-         Art Director · Voice · Company · Licenses · Help.
+         Art Director · Accessibility · Voice · Company · Licenses · Help.
          --i is the visual index, used to stagger the open/close animation top→bottom. */
       #rail-projects { order: 1; --i: 0; }
       #rail-claude   { order: 2; --i: 1; }
       #rail-figma    { order: 3; --i: 2; }
       #rail-publish  { order: 4; --i: 3; }
       #rail-artdirector { order: 5; --i: 4; }
-      #rail-voice    { order: 6; --i: 5; }
-      #rail-company  { order: 7; --i: 6; }
-      #rail-licenses { order: 8; --i: 7; }
-      #rail-help     { order: 9; --i: 8; }
+      #rail-a11y     { order: 6; --i: 5; }
+      #rail-voice    { order: 7; --i: 6; }
+      #rail-company  { order: 8; --i: 7; }
+      #rail-licenses { order: 9; --i: 8; }
+      #rail-help     { order: 10; --i: 9; }
       /* Art Director confer lives on the rail, exposed only once a built design is being
          previewed (updateArtDirectorRailBtn). Hidden = not reviewable yet. */
       #rail-artdirector[hidden] { display: none; }
@@ -661,6 +662,31 @@
       .adrec-modal-title { font-size: 16px; font-weight: 600; color: #111; line-height: 1.3; }
       .adrec-modal-kind { display: inline-block; margin-top: 8px; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; border-radius: 999px; padding: 2px 9px; }
       .adrec-modal-why { font-size: 13.5px; color: #333; line-height: 1.5; margin-top: 12px; }
+      /* Accessibility review: impact chips + the flagged-element list in the finding modal. */
+      .a11y-impact-critical { background: #fde8e6; color: #c0261e; }
+      .a11y-impact-serious  { background: #fdeee6; color: #b4530a; }
+      .a11y-impact-moderate { background: #fff6e0; color: #8a6d1a; }
+      .a11y-impact-minor    { background: #eef0f2; color: #555; }
+      .a11y-instances { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; max-height: 260px; overflow-y: auto; }
+      .a11y-inst { border-left: 2px solid #ececf1; padding: 2px 0 2px 10px; }
+      .a11y-inst-sel { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #444; word-break: break-all; }
+      .a11y-inst-why { font-size: 12px; color: #777; line-height: 1.45; margin-top: 3px; }
+      .a11y-inst-more { font-size: 12px; color: #999; font-style: italic; }
+      /* "Show on page" review toolbar — floats over the preview while stepping through the
+         highlighted failing elements. */
+      #a11y-toolbar { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; align-items: center; gap: 10px; background: #17171b; color: #fff; border-radius: 999px; padding: 6px 8px 6px 16px; box-shadow: 0 6px 20px rgba(0,0,0,.32); font-size: 12.5px; }
+      #a11y-toolbar[hidden] { display: none; }
+      .a11y-tb-title { font-weight: 600; max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .a11y-tb-count { color: #9a9aa2; margin-right: 4px; white-space: nowrap; flex-shrink: 0; }
+      #a11y-toolbar .a11y-tb-btn { flex-shrink: 0; }
+      .a11y-tb-btn { border: none; background: #2a2a32; color: #fff; border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; cursor: pointer; transition: background .12s; }
+      .a11y-tb-btn:hover { background: #3a3a44; }
+      .a11y-tb-btn:disabled { opacity: .4; cursor: default; }
+      .a11y-tb-fix { background: #0a7; }          /* the green CTA — fix the highlighted issue */
+      .a11y-tb-fix:hover { background: #0b8a63; }
+      .a11y-tb-fix:disabled:hover { background: #0a7; }
+      .a11y-tb-exit { background: #2a2a32; }      /* neutral so Fix is the standout action */
+      .a11y-tb-exit:hover { background: #3a3a44; }
       /* Inline font-pick for an actionable type 'decision' (reuses .ifonts / .ifont) */
       .adrec-fontpick-label { font-size: 12.5px; color: #6a6a72; margin-top: 14px; }
       .adrec-fontpick { margin-top: 8px; max-height: 260px; overflow-y: auto; }
@@ -673,13 +699,18 @@
       .adrec-hold-btn:hover { color: #111; }
       .adrec-dismiss-btn { border: 1px solid #d8d8de; background: none; color: #444; border-radius: 8px; padding: 9px 16px; font: inherit; font-size: 13px; cursor: pointer; transition: border-color .12s, color .12s; }
       .adrec-dismiss-btn:hover { border-color: #111; color: #111; }
+      /* "Show on page" — grouped with Fix on the right, in our green. */
+      .a11y-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+      .a11y-right .adrec-apply-btn { margin-left: 0; }
+      .a11y-show-btn { border: none; background: #0a7; color: #fff; border-radius: 8px; padding: 9px 16px; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity .12s; }
+      .a11y-show-btn:hover { opacity: .88; }
       .adrec-modal-tagnote { margin-left: auto; font-size: 12px; color: #8a8a92; }
       /* Rail cue: a dot whenever the current design has active recommendations queued. Red
          when any are actionable (code); white when only "needs an asset" / "your call" remain. */
-      #rail-artdirector.has-code::before,
-      #rail-artdirector.has-passive::before { content: ""; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; }
-      #rail-artdirector.has-code::before { background: #c0261e; }
-      #rail-artdirector.has-passive::before { background: #fff; }
+      #rail-artdirector.has-code::before, #rail-a11y.has-code::before,
+      #rail-artdirector.has-passive::before, #rail-a11y.has-passive::before { content: ""; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; }
+      #rail-artdirector.has-code::before, #rail-a11y.has-code::before { background: #c0261e; }
+      #rail-artdirector.has-passive::before, #rail-a11y.has-passive::before { background: #fff; }
       .qopt.qupload { border-color: #111; background: #f4f4f7; }
       /* Once a file is attached, match every other chosen option: black fill, white
          text (the .qupload base background would otherwise keep it light and hide
@@ -1414,6 +1445,9 @@
         </button>
         <button class="railbtn" id="rail-artdirector" hidden data-copy-aria="rail.artdirector" data-copy-tip="rail.artdirector">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+        </button>
+        <button class="railbtn" id="rail-a11y" data-copy-aria="rail.a11y" data-copy-tip="rail.a11y">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="6.6" r="1.3"/><path d="M5.5 9.3c2 .9 4.2 1.3 6.5 1.3s4.5-.4 6.5-1.3"/><path d="M12 10.6v4.4"/><path d="m8.8 20 3.2-5 3.2 5"/></svg>
         </button>
         <div id="gauge" hidden role="button" tabindex="0" data-copy-tip="rail.sessionUsage" data-copy-aria="rail.sessionUsageAria">
           <svg viewBox="0 0 28 28" aria-hidden="true"><circle class="track" cx="14" cy="14" r="13"></circle><circle class="prog" cx="14" cy="14" r="13"></circle></svg>
