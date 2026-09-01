@@ -547,15 +547,16 @@ wrap (5d).
 
 ### 5a. Branding recap + build-time note
 
-Give the concise recap of what Phase I set (this is the recap deliberately held back
-from setup-project step 5): **Company**, **Client**, **Project**, **Type** (with the
-active previews), and **Menus**. Then the build-time note: these are Vite build-time
+Give the concise recap of what's now in place (this is the recap deliberately held
+back from setup-project step 7): **Company** (from the Company Profile), **Client**,
+**Project**, **Type** (with the active previews), and **Menus**. Then the build-time
+note: these are Vite build-time
 values, so the local preview picks them up on reload, but a published build only
 reflects changes on a fresh publish.
 
 ### 5b. Publish, it's built into the app
 
-Now introduce sharing (held back from setup-project step 6). Sharing a live, client-
+Now introduce sharing (held back from setup-project step 7). Sharing a live, client-
 ready preview is one button, the **Publish** icon in the left rail. The app does the
 whole job: **no GitHub push, no manual Vercel import, no environment variables to
 paste**. What to tell them:
@@ -573,26 +574,15 @@ Under the hood the gate runs on Vercel's edge (`middleware.js`, which can't read
 `PROJECT_TITLE` / `ADMIN_PASS`) in the Vercel project, so the designer never touches
 environment variables and secrets never go in `.env`.
 
-### 5c. Offer to save the company profile
+### 5c. Point them to the Company Profile for reuse
 
-Finally, offer to save the company layer for reuse (held back from setup-project step
-7). The company name, admin fonts, and logo are the **same for every project** this
-designer does, so offer to export them as a portable **company profile** for the next
-fresh copy (`/import-company`). **Skip this offer** if a profile was *imported
-unchanged* in setup-project 0.5 (nothing new to save); if they tweaked an imported
-value, still offer so they can re-save.
-
-Ask with `AskUserQuestion`, header **"Save profile"**; `question`:
-
-> Want to save these company settings, your name, admin fonts, and logo, so you
-> can reuse them on your next project without setting them up again?
-
-Options: **"Yes, save my company profile"** (default, first) / **"No thanks"**.
-
-- **On "Yes"** → run the **[`/export-company`](export-company.md)** flow
-  (`node scripts/company-profile.mjs pack`) and tell them where `company-profile.json`
-  landed + to keep it somewhere reusable.
-- **On "No"** → continue.
+The company layer (name, admin fonts, logo) is the **same for every project** this
+designer does, and the app already owns it: the **Company Profile panel** saves it as
+a reusable default and auto-applies it to each new project. So don't run a save/export
+flow here, just a **one-line pointer** so they know it exists, e.g. *"Your company
+identity is saved in the Company Profile panel and reused automatically on your next
+project, no need to set it up again."* Skip even that if it's obviously already
+familiar to them.
 
 ### 5d. Warm wrap
 

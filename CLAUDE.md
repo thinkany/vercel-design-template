@@ -85,8 +85,8 @@ fonts/colors).
   `font-ta-*` utilities. **Never hardcode a hex or font stack**, always the token/utility.
 - **`--admin-*`** = the **tooling** chrome (Dashboard, styleguide chrome, preview gate).
   Colors are fixed, **never touch `--admin-*` colors** during branding. One exception: the
-  two type roles `--admin-font-heading`/`--admin-font-body` are the *agency* fonts, set by
-  `/setup-project`.
+  two type roles `--admin-font-heading`/`--admin-font-body` are the *agency* fonts, set by the
+  **Company Profile** panel (not `/setup-project`).
 - **shadcn primitives** (`--primary`, `--secondary`, `--foreground`, …) = the namespace the
   40 `ui/*.tsx` components read. They ship at stock defaults (so shadcn renders off-brand)
   until `/setup-styleguide` step 1c bridges the brand-carrying ones to `--ta-*` via `var()`
@@ -141,15 +141,17 @@ The CORE/KEEP split is clean **because** the designer's work is siloed in `src/v
 
 ### Company profile
 
-The **agency layer**, the things `/setup-project` sets that are the same for every project a
-designer does (company name `VITE_COMPANY_NAME`, admin/gate fonts, login logo), can be saved
-once and reused. [scripts/company-profile.mjs](scripts/company-profile.mjs) (zero-dep) `pack`s
+The **agency layer**, the things the same for every project a designer does (company name
+`VITE_COMPANY_NAME`, admin/gate fonts, login logo), can be saved once and reused. It's owned by
+the app's **Company Profile** panel: the app auto-applies the saved default profile when it
+creates a project, and the panel creates/edits it (this is the layer `/setup-project` used to set,
+now moved out of it). [scripts/company-profile.mjs](scripts/company-profile.mjs) (zero-dep) `pack`s
 it into one portable, base64-embedded `company-profile.json` and `unpack`s it onto a fresh copy
 (deterministic anchored substitution, skipping + reporting anything that doesn't match, never
 clobbering). Front doors: [`/export-company`](.claude/commands/export-company.md) /
-[`/import-company`](.claude/commands/import-company.md); `/setup-project` also offers import as
-its first step + export at the end. **Not** the per-client design (`VITE_CLIENT_NAME`, project
-name/type, `--ta-*`, `brand.ts`, menus).
+[`/import-company`](.claude/commands/import-company.md), plus the Company Profile panel's own
+import/export. **Not** the per-client design (`VITE_CLIENT_NAME`, project name/type, `--ta-*`,
+`brand.ts`, menus), which `/setup-project` + `/setup-styleguide` still set.
 
 ## Reuse what's already here, don't rebuild
 
@@ -193,9 +195,11 @@ The onboarding prompt copy (P1–P17 wording: question text, headers, options) i
 locked in these command files, not here**; edit it there, don't duplicate it into this file.
 Invoke the skill the moment its phase begins, don't re-derive its rules from this file.
 
-- **[`/setup-project`](.claude/commands/setup-project.md)** → brand the scaffold (company block
-  first: logo, name, admin/gate fonts; then client/project name, type, menu), then hands off
-  directly into →
+- **[`/setup-project`](.claude/commands/setup-project.md)** → set the **client/project details**
+  in `.env` (client name, project type, tablet, project name, menu style), then hands off directly
+  into →. Scope is client-only: the app scaffolds + runs the preview (no preflight) and the
+  **Company Profile panel** owns the agency identity (name, admin/gate fonts, logo), so this
+  command no longer touches Node/npm or the company block.
 - **[`/setup-styleguide`](.claude/commands/setup-styleguide.md)** → Phase II: create the working
   variation (`v01`, so base stays pristine), set the client fonts/colors in its
   `tokens.css` + `brand.ts`.
@@ -222,6 +226,6 @@ Invoke the skill the moment its phase begins, don't re-derive its rules from thi
   keep the designer's work, walk the sidecars + git diff). Same engine as the dashboard button.
 - **[`/export-company`](.claude/commands/export-company.md)** /
   **[`/import-company`](.claude/commands/import-company.md)** → save & reuse the agency layer
-  across fresh copies (also runs inside `/setup-project`).
+  across fresh copies (also available in the app's Company Profile panel).
 - **[`/guide`](.claude/commands/guide.md)** → print this project's command list (setup, design,
   guide, preview controls) for the designer; introduced at setup sign-off, re-offered by `/design`.
