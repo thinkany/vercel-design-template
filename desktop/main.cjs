@@ -60,6 +60,18 @@ const ingestRefs = require("./intake/ingest.cjs");
 
 const appRoot = path.resolve(__dirname, ".."); // the Electron app / template source (git worktree in dev; Resources/app when packaged)
 
+// The app code is packed into an asar archive, but anything that must exist as a
+// REAL file on disk is listed in build.asarUnpack and lands in a sibling
+// `app.asar.unpacked/` tree. Paths derived from __dirname still say `app.asar`,
+// so route them through this: spawned executables (desktop/bin), files we copy
+// out (desktop/template), scripts the agent runs (scripts/), and node_modules.
+// In dev (no asar in the path) it's an identity function.
+function unpacked(p) {
+  return p.includes(`${path.sep}app.asar${path.sep}`)
+    ? p.replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`)
+    : p;
+}
+
 // Put desktop/bin on PATH so the agent's Bash finds `ta-export` — the stable
 // CLI for the app-owned export tooling, which the exporters resolve from the
 // app bundle (appRoot/scripts) and run against the current project. The agent
@@ -75,7 +87,7 @@ const appRoot = path.resolve(__dirname, ".."); // the Electron app / template so
 process.env.TA_NODE_BIN = process.execPath; // the Electron binary (run as Node via the shim)
 if (!process.env.TA_ORIG_PATH) process.env.TA_ORIG_PATH = process.env.PATH || "";
 
-const BIN_DIR = path.join(__dirname, "bin");
+const BIN_DIR = unpacked(path.join(__dirname, "bin"));
 if (!(process.env.PATH || "").split(path.delimiter).includes(BIN_DIR)) {
   process.env.PATH = `${BIN_DIR}${path.delimiter}${process.env.PATH || ""}`;
 }
@@ -726,7 +738,7 @@ function detectDesign(projectDir) {
 let _modulesRoot = null;
 function modulesRoot() {
   if (_modulesRoot) return _modulesRoot;
-  const bundled = path.join(appRoot, "node_modules");
+  const bundled = unpacked(path.join(appRoot, "node_modules"));
   if (!app.isPackaged) { _modulesRoot = bundled; return bundled; }
   const runtimeDir = path.join(app.getPath("userData"), "runtime");
   const dest = path.join(runtimeDir, "node_modules");
@@ -781,7 +793,7 @@ function linkNodeModules(projectDir) {
 // TEMPLATE_EXCLUDE (app-internal IP) is stripped in dev via tar --exclude and,
 // in both modes, re-stripped as belt-and-suspenders after materializing.
 function scaffoldProject(targetDir) {
-  const bundledTemplate = path.join(appRoot, "desktop", "template");
+  const bundledTemplate = unpacked(path.join(appRoot, "desktop", "template"));
   if (app.isPackaged || fs.existsSync(bundledTemplate)) {
     // Copy from the bundled snapshot (packaged, or dev after a `predist` build).
     fs.cpSync(bundledTemplate, targetDir, { recursive: true });
@@ -819,7 +831,7 @@ async function refreshFrameworkFiles(projectDir) {
     // Only our template projects — the version marker gates it so we never overlay
     // template files onto an unrelated folder someone opened by mistake.
     if (!fs.existsSync(path.join(projectDir, "public", "version.json"))) return null;
-    const snapshot = path.join(appRoot, "desktop", "template");
+    const snapshot = unpacked(path.join(appRoot, "desktop", "template"));
     if (!fs.existsSync(snapshot)) return null; // dev without a built snapshot → skip
     const enginePath = path.join(snapshot, "scripts", "upgrade.mjs");
     const { runRefresh } = await import(pathToFileURL(enginePath).href);
@@ -2129,7 +2141,7 @@ function hasDefaultCompanyProfile() {
 }
 // Load the pack/unpack engine from the app's bundled scripts (ESM → dynamic import).
 function companyProfileEngine() {
-  return import(pathToFileURL(path.join(appRoot, "scripts", "company-profile.mjs")).href);
+  return import(pathToFileURL(unpacked(path.join(appRoot, "scripts", "company-profile.mjs"))).href);
 }
 
 // Copy an attached file into the project (cwd = project) so the agent can act
@@ -2201,7 +2213,7 @@ function axeSource() {
   if (_axeSrc == null) {
     let p;
     try { p = require.resolve("axe-core/axe.min.js"); }
-    catch { p = path.join(appRoot, "node_modules", "axe-core", "axe.min.js"); }
+    catch { p = unpacked(path.join(appRoot, "node_modules", "axe-core", "axe.min.js")); }
     _axeSrc = fs.readFileSync(p, "utf8");
   }
   return _axeSrc;

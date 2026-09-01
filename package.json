@@ -14,7 +14,7 @@
     "dev": "vite",
     "desktop": "electron desktop/main.cjs",
     "predist": "node desktop/build/ensure-arch-deps.cjs && npm version patch --no-git-tag-version && node desktop/build/make-template.cjs",
-    "dist": "electron-builder --mac"
+    "dist": "node desktop/build/strip-comments.cjs && electron-builder --mac; node desktop/build/restore-source.cjs"
   },
   "engines": {
     "node": ">=20.19.0"
@@ -107,7 +107,13 @@
     "appId": "design.thinkany.app",
     "productName": "thinkany design",
     "copyright": "Copyright © 2026 thinkany",
-    "asar": false,
+    "asar": true,
+    "asarUnpack": [
+      "desktop/bin/**",
+      "desktop/template/**",
+      "scripts/**",
+      "node_modules/**"
+    ],
     "directories": {
       "output": "dist-app"
     },

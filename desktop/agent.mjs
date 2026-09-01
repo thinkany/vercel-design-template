@@ -47,7 +47,8 @@ function resolveClaudeExecutable() {
     const pkg = `@anthropic-ai/claude-agent-sdk-${os.platform()}-${os.arch()}`;
     const binName = os.platform() === "win32" ? "claude.exe" : "claude";
     const candidates = [
-      path.resolve(dir, "..", "node_modules", pkg, binName), // dev / bundled node_modules
+      // dev / bundled node_modules (asarUnpack puts the real file in app.asar.unpacked)
+      path.resolve(dir, "..", "node_modules", pkg, binName).replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`),
       process.resourcesPath && path.join(process.resourcesPath, "claude-bin", binName), // packaged extraResources
     ];
     for (const c of candidates) {
