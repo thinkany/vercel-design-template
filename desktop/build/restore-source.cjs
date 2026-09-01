@@ -19,15 +19,19 @@ const path = require("node:path");
 
 const appRoot = path.resolve(__dirname, "..", "..");
 
-// The exact pathspecs strip-comments.cjs can modify. Kept in lockstep with its
-// STRIP_ROOTS / SKIP_DIRS.
+// The exact pathspec set strip-comments.cjs can modify, as git pathspecs.
+// `:(glob)` makes `*` match within a directory only, and the leading `:!` lines
+// re-state the stripper's skip list so the two can't drift apart. One combined
+// spec (rather than one per directory) also avoids `git checkout` erroring on a
+// pathspec that happens to match nothing.
 const PATHSPECS = [
-  "desktop/*.js",
-  "desktop/*.cjs",
-  "desktop/*.mjs",
-  "desktop/intake/*.js",
-  "desktop/intake/*.cjs",
-  "desktop/intake/*.mjs",
+  ":(glob)desktop/**/*.js",
+  ":(glob)desktop/**/*.cjs",
+  ":(glob)desktop/**/*.mjs",
+  ":(exclude,glob)desktop/template/**",
+  ":(exclude,glob)desktop/bin/**",
+  ":(exclude,glob)desktop/dev/**",
+  ":(exclude,glob)desktop/build/**",
 ];
 
 function run() {
