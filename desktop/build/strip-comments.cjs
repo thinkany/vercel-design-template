@@ -17,24 +17,23 @@
 // scripts spawned as executables, not modules we should rewrite) and the two
 // bundle-excluded IP files, which never ship at all.
 //
-// esbuild (already present as a Vite dependency) does the transform. Two modes,
-// because they trade off differently:
+// esbuild (already present as a Vite dependency) does the transform: full minify
+// with keepNames. That combination is the point —
 //
-//   • Default (LOGIC files): comments out, nothing else touched. No minify, no
-//     mangling, no bundling — one source line stays one output line, so a stack
-//     trace from a user still points at a real place. esbuild does leave a
-//     residue here: comments sitting INSIDE object literals survive, so this
-//     mode is "most comments gone", not "all".
+//   • minify removes EVERY comment (a comments-only transform leaves the ones
+//     nested inside object literals behind — 223 of them across these files),
+//     collapses whitespace, and shortens local identifiers. ~44% smaller.
 //
-//   • COLLAPSE (data/catalog files): adds minifyWhitespace, which removes the
-//     object-literal residue too. It costs line numbers (a file becomes a few
-//     very long lines), so it is reserved for files that are essentially data —
-//     where a stack trace was never going to tell you much anyway, and where the
-//     residue is worst (copy.js is one giant object literal: plain mode strips
-//     barely 1% of it, collapse mode gets ~25%).
+//   • keepNames pins function and class names through the mangle, so a crash
+//     report still reads `at innerValidate (…)` rather than `at t (…)`. Without
+//     it the same trace degrades to single letters. Verified by throwing from
+//     inside a transformed module and comparing stacks.
 //
-// keepNames is set in collapse mode so function/class names survive for the
-// traces that do still matter.
+// So a stack trace keeps the frame NAMES and loses precise line numbers (a file
+// becomes a few long lines; the column offset still localizes it). Day-to-day
+// development is unaffected either way: `npm run desktop` runs the unpacked
+// source, comments and line numbers fully intact. This only shapes the copy that
+// ships in the .dmg.
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -59,9 +58,6 @@ function skipped(relPosix) {
   return SKIP_DIRS.some((d) => relPosix === d || relPosix.startsWith(`${d}/`));
 }
 
-// Files that are catalogs/data rather than logic — safe to collapse, and the
-// only way to clear comments nested inside their object literals.
-const COLLAPSE = new Set(["desktop/copy.js"]);
 
 // Must stay in lockstep with restore-source.cjs PATHSPECS — the set of files
 // this step may rewrite, and therefore the set the restore puts back.
@@ -84,16 +80,14 @@ function stripFile(abs, relPosix = path.relative(appRoot, abs).split(path.sep).j
   // module syntax from one into the other.
   const ext = path.extname(abs);
   const format = ext === ".mjs" ? "esm" : ext === ".cjs" ? "cjs" : undefined;
-  const collapse = COLLAPSE.has(relPosix);
   const out = esbuild.transformSync(src, {
     loader: "js",
     format,
     platform: "node",
     target: "node20",
     legalComments: "none", // drop @license / @preserve blocks too
-    minify: false,
-    minifyWhitespace: collapse,
-    keepNames: collapse,
+    minify: true,
+    keepNames: true, // function/class names survive → crash reports stay readable
     sourcemap: false,
   });
   fs.writeFileSync(abs, out.code, "utf8");
