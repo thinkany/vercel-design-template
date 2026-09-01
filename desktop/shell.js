@@ -641,6 +641,17 @@ async function revealPreviewAfterEdit() {
     if (!reloaded) { reloaded = true; tabs.forEach((t) => navigate(t, t.url)); } // clear a wedged overlay once
   }
   if (guardSeq !== myGen) return;
+  // Force one reload of EVERY tab before revealing. Vite's HMR doesn't hot-apply CSS-variable
+  // edits (a --ta-font-* / --ta-* swap, a new Google-Fonts @import), and it never refreshes a
+  // non-active tab like the Styleguide — so without this a token change shows only after a
+  // manual refresh. It runs behind the guard placeholder, so there's no flash, just the fresh
+  // result. (Skip the extra reload if the wedged-overlay path above already reloaded.)
+  if (activeTab && !reloaded) {
+    tabs.forEach((t) => navigate(t, t.url));
+    await new Promise((res) => onceWebviewLoaded(activeTab.wv, res));
+    if (guardSeq !== myGen) return;
+    await new Promise((r) => setTimeout(r, 120)); // brief settle so the reloaded paint is in
+  }
   guarding = false;
   stopWorking();
   previewph.hidden = true;
