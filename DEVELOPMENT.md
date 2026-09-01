@@ -39,7 +39,30 @@ The old `project/` worktree (scaffold-only on `main`) is retired.
   the bundled `desktop/template/` snapshot from committed `main`. Run it after committing
   scaffold changes so `npm run desktop` (and refresh-on-open) pick them up — no DMG needed.
 - `source notarize.env.local && npm run dist` — build + notarize the release DMGs. `predist`
-  bumps the version, runs `make-template`, and ensures arch deps.
+  bumps the version, runs `make-template`, and ensures arch deps. **Build from a committed
+  tree**: `dist` strips comments out of `desktop/*.{js,cjs,mjs}` in place, then restores them
+  with `git checkout` once electron-builder is done (see below), so uncommitted edits to
+  those files would be lost. The stripper refuses to start on a dirty tree for that reason.
+
+## What ships in the bundle
+
+The app code is packed into `app.asar`, so `Show Package Contents` no longer exposes a
+readable `app/` directory. Four things must stay real files on disk and are listed in
+`build.asarUnpack`: `desktop/bin/**` (spawned as executables, on the agent's PATH),
+`desktop/template/**` (copied out to scaffold projects), `scripts/**` (resolved and spawned
+by `ta-export`), and `node_modules/**` (cloned to userData; Vite's bin is spawned directly).
+
+Paths derived from `__dirname` still read `app.asar`, so anything pointing at those four
+must go through `unpacked()` in `main.cjs`. **If you add a spawn, an ESM `import()`, or a
+file copied out of the bundle, route its path through that helper** or it will resolve to a
+path inside the archive and fail only in the packaged app.
+
+`strip-comments.cjs` removes comments from the shipped copy (~190KB), since they otherwise
+name the cloud endpoints, the license gates, and where the design-variety moat lives. Logic
+files keep their line numbering so stack traces stay meaningful; `copy.js` (a data catalog)
+is additionally whitespace-collapsed, which is the only way to clear comments nested inside
+its object literals. `desktop/template/` is deliberately left commented — it ships into the
+designer's project, where the comments guide the designer and the agent.
 
 ## How the snapshot stays clean
 
