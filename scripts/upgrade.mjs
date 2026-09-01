@@ -187,6 +187,70 @@ export async function runUpgrade(opts = {}) {
 
 async function fileExists(p) { try { await stat(p); return true; } catch { return false; } }
 
+/**
+ * Silent, diff-only CORE refresh — the app runs this on project OPEN so a newer app
+ * build carries new framework behavior (commands, CLAUDE.md, base chrome, build config)
+ * into projects scaffolded by an older build. Unlike runUpgrade this:
+ *   • writes ONLY the CORE files whose bytes actually differ (nothing churns when the
+ *     project is already current, so it won't trigger a Vite rebuild for no reason),
+ *   • never touches KEEP (the designer's work) and SKIPS REVIEW entirely (hybrid files
+ *     like package.json stay a manual `/upgrade` concern, so deps are never clobbered),
+ *   • has no git gate (framework files aren't designer-reviewed) but still snapshots a
+ *     one-shot revert backup (only when it actually changes something).
+ * @param {{targetDir: string, source: string}} opts  source = an extracted template dir
+ * @returns {Promise<{changed: string[], fromVersion: any, toVersion: any, backupDir?: string, message: string}>}
+ */
+export async function runRefresh({ targetDir, source } = {}) {
+  targetDir = path.resolve(targetDir);
+  const files = await loadSource({ source });
+  const manifestBuf = files.get("upgrade.manifest.json");
+  if (!manifestBuf) throw new Error("Source has no upgrade.manifest.json");
+  const manifest = JSON.parse(manifestBuf);
+
+  // Plan only CORE files whose content differs from what's on disk.
+  const toWrite = [];
+  for (const [rel, data] of files) {
+    if (classify(rel, manifest) !== "core") continue; // keep + review untouched
+    const abs = path.join(targetDir, rel);
+    let cur = null;
+    try { cur = await readFile(abs); } catch {}
+    if (cur && cur.equals(data)) continue; // identical → skip (no churn)
+    toWrite.push({ abs, rel, data, existed: !!cur });
+  }
+
+  let fromVersion = null, toVersion = null;
+  try { fromVersion = JSON.parse(await readFile(path.join(targetDir, "public/version.json"), "utf8")).version ?? null; } catch {}
+  try { const v = files.get("public/version.json"); if (v) toVersion = JSON.parse(v).version ?? null; } catch {}
+
+  if (!toWrite.length) return { changed: [], fromVersion, toVersion, message: "Framework already current." };
+
+  // Backup pass — only overwritten files, into the same store runRevert reads.
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupDir = path.join(targetDir, ".upgrade-backup", ts);
+  const filesOverwritten = [], filesAdded = [];
+  for (const it of toWrite) {
+    if (it.existed) {
+      const bAbs = path.join(backupDir, it.rel);
+      await mkdir(path.dirname(bAbs), { recursive: true });
+      await cp(it.abs, bAbs);
+      filesOverwritten.push(it.rel);
+    } else filesAdded.push(it.rel);
+  }
+  await mkdir(backupDir, { recursive: true });
+  await writeFile(path.join(backupDir, "manifest.json"),
+    JSON.stringify({ fromVersion, toVersion, date: ts, filesOverwritten, filesAdded }, null, 2));
+
+  // Apply pass.
+  for (const it of toWrite) {
+    await mkdir(path.dirname(it.abs), { recursive: true });
+    await writeFile(it.abs, it.data);
+  }
+
+  const changed = toWrite.map((it) => it.rel);
+  return { changed, fromVersion, toVersion, backupDir: path.relative(targetDir, backupDir),
+    message: `Refreshed ${changed.length} framework file(s).` };
+}
+
 /** Newest backup stamp dir (sortable ISO name), or null. */
 async function latestBackup(targetDir) {
   const root = path.join(targetDir, ".upgrade-backup");
