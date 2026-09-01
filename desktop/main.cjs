@@ -798,6 +798,36 @@ function scaffoldProject(targetDir) {
   linkNodeModules(targetDir);
 }
 
+// Refresh the app-owned FRAMEWORK files (the CORE tier) in an EXISTING project from
+// the bundled template snapshot — run on every project open. This is what makes a new
+// .dmg carry new command/onboarding/chrome behavior into projects that were scaffolded
+// by an older build, WITHOUT the designer running `/upgrade`: the app owns framework
+// files, the designer owns their work. Diff-only (writes just what changed → no Vite
+// churn when already current); the manifest's KEEP tier (their `.env`, `src/variations/**`,
+// pages/menu, palette) is never touched, and REVIEW files (package.json) are left to
+// manual `/upgrade`. Best-effort + silent: it must never block or fail opening a project.
+async function refreshFrameworkFiles(projectDir) {
+  try {
+    if (!projectDir) return null;
+    // Only our template projects — the version marker gates it so we never overlay
+    // template files onto an unrelated folder someone opened by mistake.
+    if (!fs.existsSync(path.join(projectDir, "public", "version.json"))) return null;
+    const snapshot = path.join(appRoot, "desktop", "template");
+    if (!fs.existsSync(snapshot)) return null; // dev without a built snapshot → skip
+    const enginePath = path.join(snapshot, "scripts", "upgrade.mjs");
+    const { runRefresh } = await import(pathToFileURL(enginePath).href);
+    if (typeof runRefresh !== "function") return null; // older snapshot engine
+    const report = await runRefresh({ targetDir: projectDir, source: snapshot });
+    if (report && report.changed && report.changed.length) {
+      console.log(`[main] framework refresh: ${report.changed.length} file(s) updated in ${path.basename(projectDir)} (v${report.fromVersion ?? "?"} → v${report.toVersion ?? "?"})`);
+    }
+    return report;
+  } catch (e) {
+    console.error("[main] framework refresh failed:", e.message);
+    return null;
+  }
+}
+
 let currentProject = null;
 let currentModel = null; // agent model override; null = SDK default
 let viteProc = null;
@@ -2431,6 +2461,7 @@ ipcMain.handle("project:open", async () => {
   } catch {
     /* has its own node_modules or symlink failed; Vite will report if unusable */
   }
+  await refreshFrameworkFiles(dir); // carry this app build's framework files in, before Vite boots
   if (currentProject && currentSessionId) { try { archiveSession(currentProject, currentSessionId); } catch {} }
   currentSessionId = null;
   currentProject = dir;
@@ -2463,6 +2494,7 @@ ipcMain.handle("project:openPath", async (_e, { path: dir } = {}) => {
   if (currentProject && currentSessionId) { try { archiveSession(currentProject, currentSessionId); } catch {} }
   currentSessionId = null;
   try { linkNodeModules(dir); } catch { /* has its own deps or symlink failed */ }
+  await refreshFrameworkFiles(dir); // carry this app build's framework files in, before Vite boots
   currentProject = dir;
   saveProjectPath(dir);
   try {
@@ -2666,7 +2698,13 @@ app.whenReady().then(async () => {
   createWindow(); // show the UI first — nothing below may block it becoming responsive
   reapStaleVite(); // kill a Vite orphaned by a previous force-quit before starting fresh
   if (currentProject) {
-    startViteFor(currentProject).catch((e) => console.error("[main] Vite failed:", e.message));
+    // Refresh the framework files from this app build first (best-effort), THEN start
+    // Vite — so a project reopened under a newer .dmg boots with the new files. The
+    // window is already up (created above), so this never blocks the UI.
+    (async () => {
+      await refreshFrameworkFiles(currentProject);
+      startViteFor(currentProject).catch((e) => console.error("[main] Vite failed:", e.message));
+    })();
   }
   // Native capture bridge: a hidden BrowserWindow the app-owned export scripts drive
   // over loopback (see capture-bridge.cjs). Its env makes `ta-export reconstruct`

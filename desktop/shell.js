@@ -1447,6 +1447,10 @@ async function switchToExisting() {
 // every new project. Create or Update reveals the fields (name, admin/gate fonts, logo);
 // "Save profile" writes them straight to the default. An open project with a company name
 // can also push its identity up as the default. When active, an unplug delete clears it. ---
+// One-shot: a caller (Publish's "set up project") can ask the company drawer to jump
+// straight into the create/edit profile form on open. Cleared as soon as it's honored.
+let companyAutoCreate = false;
+
 async function renderCompany(body) {
   const def = await window.desktop.getDefaultCompany(); // { has, companyName, headingFont, bodyFont, logoName }
   const proj = await window.desktop.getProjectStatus();
@@ -1585,6 +1589,9 @@ async function renderCompany(body) {
     exportBtn.addEventListener("click", () => exportCompany(exportBtn));
     body.appendChild(exportBtn);
   }
+
+  // Honor a requested jump into the create/edit form (e.g. from Publish's "set up project").
+  if (companyAutoCreate) { companyAutoCreate = false; editBtn.click(); }
 }
 
 // --- Figma export panel: status + note; the license input now lives in Licenses ---
@@ -2141,7 +2148,7 @@ async function renderPublish(body) {
     const setup = document.createElement("button");
     setup.className = "panelbtn";
     setup.textContent = COPY.publish.companyNudge.setup;
-    setup.addEventListener("click", () => { closeModal(); sendText("/setup-project"); });
+    setup.addEventListener("click", () => { companyAutoCreate = true; openModal("company"); });
     btns.append(upload, setup);
     wrap.append(rule, title, desc, btns);
     body.appendChild(wrap);

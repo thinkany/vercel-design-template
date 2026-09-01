@@ -337,7 +337,7 @@ window.COPY = {
     run: "▸ run",
     runTitle: (cmd) => `Run: ${cmd}`,
     list: [
-      ["/setup-project", "Brand the template: client/company name, project type, fonts, logo, menu style."],
+      ["/setup-project", "Set the client/project name, project type, tablet preview, and menu style."],
       ["/setup-styleguide", "Set the client’s fonts, colors, and example styleguide sections."],
       ["/design", "Build or edit a page (hero, sections, landing) in the design phase."],
       ["/guide", "Show the list of commands."],
@@ -538,7 +538,7 @@ window.COPY = {
       title: "Your Company Information",
       desc: "The private link you share opens on a sign-in screen branded with YOUR company name and logo, that’s what your client sees first. It isn’t set for this project yet. Add it so the preview looks like yours (you can still publish without it).",
       upload: "Upload a profile",
-      setup: "Set up project",
+      setup: "Create profile",
     },
     connectIntro: "Publish your design straight to a private, password-gated URL you can send a client. Connect your Vercel account to start.",
     connect: "Connect with Vercel",
