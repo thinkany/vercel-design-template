@@ -56,12 +56,25 @@ img {
 }
 
 /* Full-screen hero utility — use this (not raw `min-h-full`) for a hero meant to fill
-   the screen. `dvh` is self-contained: it reads the actual screen with no reliance on a
-   definite-height parent chain, so it Just Works with normal page scroll (the footer
-   stays reachable) and needs no special surface plumbing. On desktop it fills the live
-   window; in a Figma capture it fills the fixed export viewport — same result, both
-   places. (Reserved for full-screen sections only; every other section is content-height,
-   so this is the one spot a viewport unit is the right tool.) */
+   the screen. In the DEVICE-FRAME preview it fills the frame's actual pixel height:
+   PhoneFrame / TabletFrame publish that as `--ta-frame-h` on the scrolling screen, so the
+   hero matches the device viewport (NOT the surrounding browser window). Everywhere there
+   is no frame — desktop and the Figma capture — the variable is unset and it falls back to
+   `dvh`, which fills the live window / the fixed export viewport. `dvh`/the var are both
+   self-contained (no reliance on a definite-height parent chain), so this Just Works with
+   normal page scroll (the footer stays reachable). (Reserved for full-screen sections only;
+   every other section is content-height, so this is the one spot a viewport-ish unit fits.) */
 .fill-screen {
-  min-height: 100dvh;
+  min-height: var(--ta-frame-h, 100dvh);
+}
+
+/* Device-frame previews (PhoneFrame / TabletFrame) present a "touch" surface: the arrow
+   pointer becomes a Figma-style opaque circle so the designer reads the frame as a
+   touchscreen, and a mouse drag pans it (useDragScroll) alongside the normal wheel. The
+   cursor is forced onto descendants too, so it stays the circle over buttons/links the
+   way a real touch device has no pointer swap. Only present in framed preview mode (the
+   `?capture=` export renders no frames, so it never affects the Figma output). */
+.ta-touch-surface,
+.ta-touch-surface * {
+  cursor: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='32'%20height='32'%3E%3Ccircle%20cx='16'%20cy='16'%20r='12'%20fill='rgba(30,30,30,0.30)'%20stroke='rgba(255,255,255,0.9)'%20stroke-width='1.5'/%3E%3C/svg%3E") 16 16, auto !important;
 }

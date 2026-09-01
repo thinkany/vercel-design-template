@@ -1,5 +1,6 @@
 // ©2026 thinkany llc. All rights reserved.
 import { ReactNode } from "react";
+import { useDragScroll } from "./useDragScroll";
 
 type Orientation = "portrait" | "landscape";
 
@@ -15,6 +16,8 @@ export function PhoneFrame({
   const landscape = orientation === "landscape";
   const screenW = landscape ? 780 : 370;
   const screenH = landscape ? 370 : 780;
+  // Drag-to-scroll (mouse "touch") + the circle touch cursor (via .ta-touch-surface).
+  const { ref: screenRef, handlers } = useDragScroll<HTMLDivElement>();
   return (
     <div style={{ display: "flex", justifyContent: "center", padding: "40px 24px 60px", minHeight: "calc(100vh - 49px)", alignItems: "flex-start" }}>
       <div style={{ position: "relative", width: landscape ? "auto" : 390, flexShrink: 0 }}>
@@ -36,6 +39,9 @@ export function PhoneFrame({
           </div>
           {/* Screen */}
           <div
+            ref={screenRef}
+            {...handlers}
+            className="ta-touch-surface"
             style={{
               borderRadius: 36,
               overflow: "hidden",
@@ -46,6 +52,8 @@ export function PhoneFrame({
               background: bg,
               position: "relative",
               flexShrink: 0,
+              // Frame's own pixel height → `.fill-screen` fills the DEVICE viewport, not the browser.
+              ["--ta-frame-h" as string]: `${screenH}px`,
             }}
           >
             {children}
