@@ -31,6 +31,32 @@ if (!fs.existsSync(designStyles)) {
   throw new Error(`content/site.json pins design "${design}", but ${designStyles} does not exist.`);
 }
 
+// URLs of entries flagged `noindex` (pages: seo.noindex in content/pages/*.json;
+// posts: `noindex: true` under seo in the frontmatter), so the sitemap agrees with
+// the pages' own robots meta. Read at config time; the content loaders don't
+// reach the sitemap integration.
+function noindexPaths() {
+  const out = new Set();
+  const pagesDir = path.join(repoRoot, "content", "pages");
+  const postsDir = path.join(repoRoot, "content", "posts");
+  try {
+    for (const f of fs.readdirSync(pagesDir)) {
+      if (!f.endsWith(".json")) continue;
+      const d = JSON.parse(fs.readFileSync(path.join(pagesDir, f), "utf8"));
+      if (d && d.seo && d.seo.noindex) { const id = f.replace(/\.json$/, ""); out.add("/" + (d.slug ?? (id === "home" ? "" : id))); }
+    }
+  } catch { /* no pages dir */ }
+  try {
+    for (const f of fs.readdirSync(postsDir)) {
+      if (!/\.mdx?$/.test(f)) continue;
+      const fm = (fs.readFileSync(path.join(postsDir, f), "utf8").match(/^---\n([\s\S]*?)\n---/) || [])[1] || "";
+      if (/^seo:\n(?:[ \t]+.*\n)*?[ \t]+noindex:[ \t]*true/m.test(fm) || /^draft:[ \t]*true/m.test(fm)) out.add("/blog/" + f.replace(/\.mdx?$/, ""));
+    }
+  } catch { /* no posts dir */ }
+  return out;
+}
+const NOINDEX = noindexPaths();
+
 export default defineConfig({
   // The canonical public URL. Feeds the sitemap, canonical links and og:url.
   // SITE_URL in the environment wins (a Vercel env), then content/site.json's
@@ -45,7 +71,10 @@ export default defineConfig({
   output: "static",
   trailingSlash: "never",
   build: { format: "file" },
-  integrations: [react(), sitemap()],
+  integrations: [
+    react(),
+    sitemap({ filter: (page) => { try { return !NOINDEX.has(new URL(page).pathname.replace(/\/$/, "") || "/"); } catch { return true; } } }),
+  ],
   // No dev toolbar: it's a developer's island/audit inspector, and inside the app's
   // Site tab it's a floating pill the designer can't use for anything.
   devToolbar: { enabled: false },
