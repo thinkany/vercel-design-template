@@ -583,6 +583,21 @@ window.COPY = {
     publishing: "Publishing…",
     publishFailed: "Publish failed.",
     previewPasswordLabel: "Preview password (share with your client)",
+    // ── The public website (its own Vercel project, no password, indexable) ──
+    site: {
+      title: "Live site",
+      lead: "Publish the website built from your approved design to a public address. No password, search engines welcome.",
+      notReady: {
+        "no-site": "This project doesn’t have a site yet.",
+        "not-promoted": "Approve a design and run /promote-blocks in the chat to turn it into a site. Then you can publish it here.",
+        "no-home": "The site has no home page yet.",
+      },
+      domainLabel: "Site domain",
+      publishSite: "Publish the site",
+      publishSiteChanges: "Publish site changes",
+      liveLabel: "Live at",
+      lastPublishedPrefix: "Site published ",
+    },
     // The two-tab "Help with publishing" overlay (formerly PUBHELP).
     help: {
       start: {

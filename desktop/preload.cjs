@@ -105,7 +105,7 @@ contextBridge.exposeInMainWorld("desktop", {
   saveVercelToken: (token) => ipcRenderer.invoke("vercel:save", { token }),
   getVercelTeams: () => ipcRenderer.invoke("vercel:teams"),
   getVercelDomains: () => ipcRenderer.invoke("vercel:domains"),
-  setPublishDomain: (domain) => ipcRenderer.invoke("publish:setDomain", { domain }),
+  setPublishDomain: (domain, target) => ipcRenderer.invoke("publish:setDomain", { domain, target: target || "preview" }),
   selectVercelScope: (teamId, teamName) => ipcRenderer.invoke("vercel:selectScope", { teamId, teamName }),
   clearVercel: () => ipcRenderer.invoke("vercel:clear"),
   getPublishStatus: () => ipcRenderer.invoke("publish:status"),

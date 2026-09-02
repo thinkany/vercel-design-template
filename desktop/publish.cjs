@@ -121,7 +121,7 @@ async function listTeams(token) {
 // The set the template's .gitignore excludes, applied here so the upload mirrors
 // what a git deploy would carry (source + pnpm-lock.yaml + vercel.json, never
 // node_modules / secrets / throwaway output).
-const IGNORE_SEG = new Set(["node_modules", ".git", ".thinkany", "dist", "dist-app", ".vercel", ".upgrade-backup", "figma-export"]);
+const IGNORE_SEG = new Set(["node_modules", ".git", ".thinkany", "dist", "dist-site", "dist-app", ".vercel", ".upgrade-backup", "figma-export"]);
 const IGNORE_BASE = new Set([".DS_Store", "package-lock.json", "company-profile.json"]);
 function isIgnored(rel, name) {
   if (rel.split(path.sep).some((s) => IGNORE_SEG.has(s))) return true;
@@ -167,7 +167,11 @@ async function pMap(items, fn, concurrency = 10) {
 // Upload one file by its sha1 digest. Vercel dedupes: an already-present blob
 // returns fast, so re-deploys only transfer what changed.
 async function uploadFile(token, teamId, abs) {
-  const buf = fs.readFileSync(abs);
+  return uploadBuffer(token, teamId, fs.readFileSync(abs));
+}
+// Same, for a file we synthesize for the deploy (the site's vercel.json) rather
+// than read from the project.
+async function uploadBuffer(token, teamId, buf) {
   const digest = sha1(buf);
   const res = await vercelFetch(token, "/v2/files", { method: "POST", teamId, raw: buf, digest });
   if (!res.ok && res.status !== 409) {
@@ -206,7 +210,32 @@ async function setEnv(token, teamId, projectId, key, value) {
 // ---- Project + deployment ----------------------------------------------------
 // Reuse an existing project by name, else create one. Build settings mirror the
 // template's vercel.json (vercel.json in the uploaded files still wins at build).
-async function ensureProject(token, teamId, name) {
+// ---- The two deploy targets --------------------------------------------------
+// preview: the gated design preview (middleware.js gate, noindex), the default.
+// site:    the public website built from site/ (no gate, indexable). Its own Vercel
+//          project, so a client can have both URLs at once.
+const TARGETS = {
+  preview: {
+    settings: { framework: "vite", buildCommand: "pnpm run build", installCommand: "pnpm install --no-frozen-lockfile", outputDirectory: "dist" },
+  },
+  site: {
+    // `npx astro build --root site`, not an npm script: a project that predates the
+    // site target has no site:* scripts (package.json is designer-owned).
+    settings: { framework: null, buildCommand: "npx astro build --root site", installCommand: "pnpm install --no-frozen-lockfile", outputDirectory: "dist-site" },
+    // The project's vercel.json is the PREVIEW's (X-Robots-Tag noindex, gate-exempt
+    // routes). The site deploy uploads this one in its place: same build settings as
+    // above, nothing else. middleware.js (the gate) is left out of the upload entirely.
+    vercelJson: JSON.stringify({
+      buildCommand: "npx astro build --root site",
+      outputDirectory: "dist-site",
+      installCommand: "pnpm install --no-frozen-lockfile",
+      framework: null,
+    }, null, 2) + "\n",
+    omit: new Set(["middleware.js", "vercel.json"]),
+  },
+};
+
+async function ensureProject(token, teamId, name, settings) {
   const existing = await vercelFetch(token, `/v9/projects/${encodeURIComponent(name)}`, { teamId });
   if (existing.ok) {
     const j = await readJson(existing);
@@ -214,27 +243,21 @@ async function ensureProject(token, teamId, name) {
   }
   const res = await vercelFetch(token, "/v11/projects", {
     method: "POST", teamId,
-    body: {
-      name,
-      framework: "vite",
-      buildCommand: "pnpm run build",
-      installCommand: "pnpm install --no-frozen-lockfile",
-      outputDirectory: "dist",
-    },
+    body: { name, ...settings },
   });
   if (!res.ok) throw new Error(await errMessage(res, "Couldn't create the Vercel project"));
   const j = await readJson(res);
   return { id: j.id, name: j.name };
 }
 
-async function createDeployment(token, teamId, name, files) {
+async function createDeployment(token, teamId, name, files, settings) {
   const res = await vercelFetch(token, "/v13/deployments", {
     method: "POST", teamId,
     body: {
       name,
       target: "production",
       files, // [{ file, sha, size }]
-      projectSettings: { framework: "vite" },
+      projectSettings: settings,
     },
   });
   if (!res.ok) throw new Error(await errMessage(res, "Couldn't start the deployment"));
@@ -335,24 +358,60 @@ function generatePassword() {
 // status, detail). Returns { url, projectName, projectId, password } — password is
 // only present when this run generated a fresh one (first publish, or a reset).
 //
-//   opts: { token, teamId, projectDir, projectName, env, password, onProgress }
-//     env      = { CLIENT_NAME, PROJECT_TITLE }
-//     password = a value to (re)set as ADMIN_PASS, or null to leave the gate as-is
-async function publishProject({ token, teamId, projectDir, projectName, env, password, customDomain, onProgress }) {
+//   opts: { token, teamId, projectDir, projectName, env, password, customDomain, target, onProgress }
+//     target   = "preview" (default: the gated design preview) | "site" (the public website)
+//     env      = { CLIENT_NAME, PROJECT_TITLE }   (preview only)
+//     password = a value to (re)set as ADMIN_PASS, or null to leave the gate as-is (preview only)
+//
+// The SITE target differs in three ways, all here: its own build settings + vercel.json
+// (Astro, dist-site, no noindex header), no gate (middleware.js is not uploaded, no
+// gate env), and SITE_URL set BEFORE the build (Astro bakes it into canonical links,
+// og:url, sitemap and robots), which means the domain is attached before the deploy.
+async function publishProject({ token, teamId, projectDir, projectName, env, password, customDomain, target = "preview", onProgress }) {
   const emit = (step, status, detail) => onProgress && onProgress({ step, status, detail });
+  const t = TARGETS[target] || TARGETS.preview;
+  const isSite = target === "site";
 
   emit("project", "run", "Creating the Vercel project");
-  const project = await ensureProject(token, teamId, projectName);
+  const project = await ensureProject(token, teamId, projectName, t.settings);
   emit("project", "done", project.name);
 
-  emit("env", "run", "Setting the preview gate");
-  await setEnv(token, teamId, project.id, "CLIENT_NAME", env.CLIENT_NAME || "Preview");
-  await setEnv(token, teamId, project.id, "PROJECT_TITLE", env.PROJECT_TITLE || "");
-  if (password) await setEnv(token, teamId, project.id, "ADMIN_PASS", password);
-  emit("env", "done", password ? "Gate password set" : "Config synced");
+  // Domain: the site needs its final URL before the build (SITE_URL); the preview
+  // only needs it for the result, so the preview attaches after deploying (below).
+  let url;
+  let domainPending = false;
+  let domainError = null;
+  const attachDomain = async () => {
+    if (customDomain) {
+      emit("domain", "run", `Attaching ${customDomain}`);
+      const dr = await addProjectDomain(token, teamId, project.id, customDomain);
+      if (dr.ok) {
+        url = `https://${customDomain}`;
+        domainPending = !dr.verified;
+        emit("domain", "done", dr.verified ? customDomain : `${customDomain} (DNS verifying)`);
+        return;
+      }
+      domainError = dr.error;
+      emit("domain", "error", dr.error);
+    }
+    url = await resolveProductionUrl(token, teamId, project.id, project.name);
+  };
+  if (isSite) await attachDomain();
 
-  emit("upload", "run", "Gathering the design files");
-  const rels = collectFiles(projectDir);
+  if (isSite) {
+    emit("env", "run", "Setting the site address");
+    await setEnv(token, teamId, project.id, "SITE_URL", url);
+    emit("env", "done", url.replace(/^https?:\/\//, ""));
+  } else {
+    emit("env", "run", "Setting the preview gate");
+    await setEnv(token, teamId, project.id, "CLIENT_NAME", env.CLIENT_NAME || "Preview");
+    await setEnv(token, teamId, project.id, "PROJECT_TITLE", env.PROJECT_TITLE || "");
+    if (password) await setEnv(token, teamId, project.id, "ADMIN_PASS", password);
+    emit("env", "done", password ? "Gate password set" : "Config synced");
+  }
+
+  emit("upload", "run", isSite ? "Gathering the site files" : "Gathering the design files");
+  const rels = collectFiles(projectDir).filter((rel) => !(t.omit && t.omit.has(rel.split(path.sep).join("/"))));
   let uploaded = 0;
   const files = await pMap(rels, async (rel) => {
     const meta = await uploadFile(token, teamId, path.join(projectDir, rel));
@@ -360,37 +419,22 @@ async function publishProject({ token, teamId, projectDir, projectName, env, pas
     if (uploaded % 25 === 0 || uploaded === rels.length) emit("upload", "run", `Uploaded ${uploaded}/${rels.length} files`);
     return { file: rel.split(path.sep).join("/"), sha: meta.sha, size: meta.size };
   });
+  if (t.vercelJson) {
+    const meta = await uploadBuffer(token, teamId, Buffer.from(t.vercelJson, "utf8"));
+    files.push({ file: "vercel.json", sha: meta.sha, size: meta.size });
+  }
   emit("upload", "done", `${files.length} files`);
 
-  emit("deploy", "run", "Vercel is building your design");
-  const dep = await createDeployment(token, teamId, projectName, files);
+  emit("deploy", "run", isSite ? "Vercel is building your site" : "Vercel is building your design");
+  const dep = await createDeployment(token, teamId, projectName, files, t.settings);
   await pollDeployment(token, teamId, dep.id, (state) => {
     const nice = { QUEUED: "Queued", INITIALIZING: "Starting the build", BUILDING: "Building", READY: "Ready" }[state] || state;
     emit("deploy", "run", nice);
   });
 
-  // If a custom domain was chosen, attach it to production and use it as the URL.
-  // Otherwise ask Vercel for the actual production alias (don't guess {name}.vercel.app).
-  let url;
-  let domainPending = false;
-  let domainError = null;
-  if (customDomain) {
-    emit("domain", "run", `Attaching ${customDomain}`);
-    const dr = await addProjectDomain(token, teamId, project.id, customDomain);
-    if (dr.ok) {
-      url = `https://${customDomain}`;
-      domainPending = !dr.verified;
-      emit("domain", "done", dr.verified ? customDomain : `${customDomain} (DNS verifying)`);
-    } else {
-      domainError = dr.error;
-      url = await resolveProductionUrl(token, teamId, project.id, project.name);
-      emit("domain", "error", dr.error);
-    }
-  } else {
-    url = await resolveProductionUrl(token, teamId, project.id, project.name);
-  }
+  if (!isSite) await attachDomain();
   emit("ready", "done", url.replace(/^https?:\/\//, ""));
-  return { url, projectName: project.name, projectId: project.id, password: password || null, domainPending, domainError };
+  return { url, projectName: project.name, projectId: project.id, password: password || null, domainPending, domainError, target };
 }
 
-module.exports = { validateToken, listTeams, listDomains, publishProject, generatePassword, collectFiles, exchangeOAuthCode, refreshOAuthToken };
+module.exports = { validateToken, listTeams, listDomains, publishProject, generatePassword, collectFiles, exchangeOAuthCode, refreshOAuthToken, TARGETS };

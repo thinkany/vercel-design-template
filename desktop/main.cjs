@@ -478,6 +478,58 @@ function gateEnvFor(dir) {
   };
 }
 
+// ---- Site build (the public website) -----------------------------------------
+// A project is site-ready once a design has been PROMOTED (/promote-blocks): the
+// site target exists, content/site.json pins a real variation, and there's a home
+// page to render. Before that the Site publish stays off with a plain reason.
+function siteReady(dir) {
+  try {
+    if (!fs.existsSync(path.join(dir, "site", "astro.config.mjs"))) return { ready: false, reason: "no-site" };
+    const sj = JSON.parse(fs.readFileSync(path.join(dir, "content", "site.json"), "utf8"));
+    if (!sj.design || sj.design === "v00") return { ready: false, reason: "not-promoted" };
+    if (!fs.existsSync(path.join(dir, "content", "pages", "home.json"))) return { ready: false, reason: "no-home" };
+    return { ready: true, design: sj.design };
+  } catch {
+    return { ready: false, reason: "not-promoted" };
+  }
+}
+// The deps the site build needs, guaranteed in the PROJECT's package.json (Vercel
+// installs from it). Locally they come from the app's node_modules regardless, but
+// package.json is designer-owned (REVIEW tier) so a project scaffolded before the
+// site target never received them. Versions come from the bundled scaffold
+// package.json (the same ones a fresh scaffold gets); scripts too. Idempotent.
+const SITE_DEP_KEYS = ["astro", "@astrojs/react", "@astrojs/sitemap", "vite"];
+const SITE_SCRIPTS = { "site:dev": "astro dev --root site", "site:build": "astro build --root site", "site:preview": "astro preview --root site" };
+function ensureSiteDeps(dir) {
+  const pkgPath = path.join(dir, "package.json");
+  let pkg, scaffold;
+  try { pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8")); } catch { return { changed: false }; }
+  try { scaffold = JSON.parse(fs.readFileSync(path.join(__dirname, "build", "scaffold-package.json"), "utf8")); } catch { return { changed: false }; }
+  let changed = false;
+  pkg.dependencies = pkg.dependencies || {};
+  for (const k of SITE_DEP_KEYS) {
+    const want = scaffold.dependencies && scaffold.dependencies[k];
+    if (want && pkg.dependencies[k] !== want) { pkg.dependencies[k] = want; changed = true; }
+  }
+  pkg.scripts = pkg.scripts || {};
+  for (const [k, v] of Object.entries(SITE_SCRIPTS)) {
+    if (!pkg.scripts[k]) { pkg.scripts[k] = v; changed = true; }
+  }
+  if (changed) fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+  return { changed };
+}
+// After a site publish, the canonical URL in content/site.json follows the live
+// address so local builds (and llms.txt / sitemap) agree with production.
+function setSiteUrl(dir, url) {
+  try {
+    const p = path.join(dir, "content", "site.json");
+    const sj = JSON.parse(fs.readFileSync(p, "utf8"));
+    if (sj.url === url) return;
+    sj.url = url;
+    fs.writeFileSync(p, JSON.stringify(sj, null, 2) + "\n");
+  } catch { /* no site.json → nothing to pin */ }
+}
+
 // ---- Project (workspace) storage --------------------------------------------
 function projectConfigPath() {
   return path.join(app.getPath("userData"), "project.json");
@@ -1233,6 +1285,42 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode, mo
   if (!reviewMode && result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it
   return result;
 });
+
+// The SITE publish: the public website, its own Vercel project ("<name>-site"), no
+// gate, SITE_URL baked in. Guarantees the site deps in package.json first (Vercel
+// installs from it), and pins content/site.json's url to the live address after.
+async function publishSite(event, token) {
+  const r = siteReady(currentProject);
+  if (!r.ready) {
+    const why = { "no-site": "This project has no site target yet.", "not-promoted": "Promote the approved design first (/promote-blocks), then publish the site.", "no-home": "The site has no home page yet." }[r.reason] || "The site isn't ready to publish.";
+    return { ok: false, error: why };
+  }
+  const scope = loadVercelScope();
+  const rec = loadPublish(currentProject);
+  const site = rec.site || {};
+  const projectName = site.projectName || `${deriveProjectName(currentProject)}-site`;
+  const onProgress = (evt) => { if (!event.sender.isDestroyed()) event.sender.send("publish:progress", evt); };
+  try {
+    ensureSiteDeps(currentProject);
+    const res = await vercel.publishProject({
+      token,
+      teamId: scope.teamId || null,
+      projectDir: currentProject,
+      projectName,
+      target: "site",
+      customDomain: site.customDomain || null,
+      onProgress,
+    });
+    savePublish(currentProject, {
+      ...rec,
+      site: { ...site, projectName: res.projectName, projectId: res.projectId, url: res.url, lastDeployAt: new Date().toISOString() },
+    });
+    setSiteUrl(currentProject, res.url);
+    return { ok: true, target: "site", url: res.url, projectName: res.projectName, domainPending: res.domainPending, domainError: res.domainError };
+  } catch (e) {
+    return { ok: false, target: "site", error: e.message || String(e) };
+  }
+}
 
 // Stop the in-flight agent turn (the designer hit Back mid-intake). interrupt() ends
 // the SDK turn so no further output streams and its completion can't hijack a fresh
@@ -2027,13 +2115,15 @@ ipcMain.handle("vercel:domains", async () => {
   return { domains: await vercel.listDomains(t, scope.teamId || null) };
 });
 // Save (or clear) the custom preview domain for the current project.
-ipcMain.handle("publish:setDomain", (_event, { domain }) => {
+ipcMain.handle("publish:setDomain", (_event, { domain, target }) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   const rec = loadPublish(currentProject);
   const d = (domain || "").trim().toLowerCase();
-  if (d) rec.customDomain = d; else delete rec.customDomain;
+  // The site keeps its own domain under rec.site (its own Vercel project).
+  const slot = target === "site" ? (rec.site = rec.site || {}) : rec;
+  if (d) slot.customDomain = d; else delete slot.customDomain;
   savePublish(currentProject, rec);
-  return { ok: true, customDomain: rec.customDomain || null };
+  return { ok: true, customDomain: slot.customDomain || null };
 });
 ipcMain.handle("vercel:selectScope", (_event, { teamId, teamName }) => {
   const scope = loadVercelScope();
@@ -2067,6 +2157,19 @@ ipcMain.handle("publish:status", () => {
     gatePasswordSet: !!rec.gatePasswordSet,
     gatePassword: rec.gatePassword || null,
     customDomain: rec.customDomain || null,
+    // The public website: its own Vercel project + URL, live once /promote-blocks ran.
+    site: (() => {
+      const r = siteReady(currentProject);
+      const sr = rec.site || {};
+      return {
+        ready: r.ready,
+        reason: r.ready ? null : r.reason,
+        url: sr.url || null,
+        projectName: sr.projectName || `${deriveProjectName(currentProject)}-site`,
+        lastDeployAt: sr.lastDeployAt || null,
+        customDomain: sr.customDomain || null,
+      };
+    })(),
   };
 });
 
@@ -2078,6 +2181,7 @@ ipcMain.handle("publish:run", async (event, args) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   const token = await vercelAccessToken();
   if (!token) return { ok: false, error: "Connect Vercel first." };
+  if (args && args.target === "site") return publishSite(event, token);
   const design = detectDesign(currentProject);
   if (!design.active || !design.previewReady) {
     return { ok: false, error: "There's nothing to publish yet — finish a design first." };
