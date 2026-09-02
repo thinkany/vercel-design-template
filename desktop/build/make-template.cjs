@@ -18,6 +18,10 @@ const { TEMPLATE_EXCLUDE } = require("../template-exclude.cjs");
 
 const appRoot = path.resolve(__dirname, "..", ".."); // the git worktree root
 const outDir = path.join(appRoot, "desktop", "template");
+// Which commit to snapshot. Production is always `main`; TEMPLATE_REF lets a dev
+// build the snapshot from a feature branch (e.g. TEMPLATE_REF=feature/cms) so
+// `npm run desktop` scaffolds + refresh-on-open exercise that branch's scaffold.
+const ref = process.env.TEMPLATE_REF || "main";
 
 function run() {
   // Fresh each build — never ship a stale snapshot.
@@ -27,7 +31,7 @@ function run() {
   const excludes = TEMPLATE_EXCLUDE
     .map((p) => `--exclude="${p}" --exclude="${p}/*"`)
     .join(" ");
-  execSync(`git -C "${appRoot}" archive main | tar -x ${excludes} -C "${outDir}"`, {
+  execSync(`git -C "${appRoot}" archive ${ref} | tar -x ${excludes} -C "${outDir}"`, {
     stdio: "pipe",
   });
   // Belt-and-suspenders: guarantee nothing on the exclude list survived,

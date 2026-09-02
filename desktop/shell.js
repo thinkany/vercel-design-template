@@ -130,6 +130,7 @@ let assistantEl = null;
 
 // Preview state
 let viteUrl = null;
+let siteUrl = null; // the site (public website) dev server, once the design is promoted
 let design = { active: false, variationId: null, previewReady: false };
 let agentBusy = false;
 // Serialization gate: a re-picked deliverable can't start a new turn until the prior
@@ -784,6 +785,7 @@ async function showBrowser(landOn) {
   const home = openTab(quickUrl("home"), "Home");
   // Default to the styleguide (swatches); the quiet-build finished reveal lands on Home (the design).
   setActiveTab(landOn === "home" ? home : style);
+  ensureSiteTab(); // a promoted project also gets its Site tab (stays in the background)
   // Only when the styleguide was just created this session: reload once so its
   // fresh swatches show without a manual refresh (avoids churn on reopen).
   if (designJustActivated) {
@@ -791,6 +793,25 @@ async function showBrowser(landOn) {
     setTimeout(() => { if (tabs.includes(style)) navigate(style, quickUrl("styleguide")); }, 1200);
   }
 }
+
+// The "Site" tab: the public website's live preview (its own Astro server), shown
+// next to Home + Style guide once the design has been promoted. Idempotent: opens
+// the tab if the site server is up and no Site tab exists yet; never steals focus.
+function ensureSiteTab() {
+  if (!siteUrl || !tabsOpened) return;
+  if (tabs.some((t) => t.site)) return;
+  const keep = activeTab;
+  const tab = openTab(siteUrl + "/", COPY.preview.siteTab);
+  tab.site = true;
+  if (keep && tabs.includes(keep)) setActiveTab(keep);
+}
+window.desktop.onSiteReady((url) => {
+  siteUrl = url;
+  if (currentStage !== "workspace") return;
+  const existing = tabs.find((t) => t.site);
+  if (existing) navigate(existing, url + "/"); // restarted on a new port → follow it
+  else ensureSiteTab();
+});
 
 function refreshPreview() {
   // The intake host owns the pane while an onboarding conversation is live — don't
@@ -926,6 +947,7 @@ function showStage(stage) {
 
 function noProjectPlaceholder() {
   viteUrl = null;
+  siteUrl = null;
   design = { active: false, variationId: null, previewReady: false };
   agentBusy = false;
   conversationStarted = false; // a new/blank project greets fresh again
@@ -980,6 +1002,7 @@ async function boot() {
   // pane; agent actions are disabled), but the designer can still view + switch projects.
   setProjTitle(proj);
   viteUrl = proj.viteUrl || null;
+  siteUrl = proj.siteUrl || null;
   design = proj.design || { active: false, variationId: null, previewReady: false };
   showStage("workspace");
   refreshPreview();
@@ -999,6 +1022,7 @@ window.desktop.onViteReady((url) => {
   if (currentStage !== "workspace") return;
   if (tabs.length && prev) {
     tabs.forEach((t) => {
+      if (t.site) return; // the Site tab points at the Astro server, not Vite
       const fresh = /https?:\/\/localhost:\d+/.test(t.url || "")
         ? t.url.replace(/https?:\/\/localhost:\d+/, url)
         : (t.url || url);
@@ -1059,6 +1083,7 @@ async function chooseProject(kind) {
       closeAllTabs(); // fresh browser tabs for the new project
       setProjTitle(res);
       viteUrl = res.viteUrl || null;
+  siteUrl = res.siteUrl || null;
       design = await window.desktop.getDesignState();
       showStage("workspace");
       refreshPreview();
@@ -1433,6 +1458,7 @@ async function enterProjectFromResult(res) {
   closeAllTabs();  // fresh preview tabs + reset build reveal
   setProjTitle(res);
   viteUrl = res.viteUrl || null;
+  siteUrl = res.siteUrl || null;
   design = await window.desktop.getDesignState();
   showStage("workspace");
   refreshPreview();
@@ -1902,8 +1928,12 @@ function copyBtn(getText) {
 function publishProgressList(container) {
   const rows = {};
   const LABELS = { project: "Vercel project", env: "Preview gate", upload: "Uploading files", deploy: "Building on Vercel", domain: "Custom domain", ready: "Live", error: "Problem" };
+  // The site publish shares the steps but not the gate: its env step sets the site
+  // address, and it runs a local build check first.
+  const SITE_LABELS = { ...LABELS, env: "Site address", check: "Build check" };
   return (evt) => {
     const { step, status, detail } = evt;
+    const labels = evt.target === "site" ? SITE_LABELS : LABELS;
     let r = rows[step];
     if (!r) {
       const row = document.createElement("div");
@@ -1912,7 +1942,7 @@ function publishProgressList(container) {
       icon.style.cssText = "flex:0 0 14px;";
       const label = document.createElement("span");
       label.style.cssText = "flex:0 0 120px;color:var(--muted,#9a9aa2);";
-      label.textContent = LABELS[step] || step;
+      label.textContent = labels[step] || step;
       const det = document.createElement("span");
       det.style.cssText = "flex:1;";
       row.append(icon, label, det);
@@ -1970,7 +2000,7 @@ function paintPublishResult(host, res) {
   } else {
     const err = document.createElement("div");
     err.className = "muted";
-    err.style.cssText = "margin-top:10px;color:#e5484d;";
+    err.style.cssText = "margin-top:10px;color:#e5484d;white-space:pre-wrap;word-break:break-word;font-size:12.5px;";
     err.textContent = res.error || COPY.publish.publishFailed;
     host.appendChild(err);
   }
@@ -2022,7 +2052,10 @@ async function runPublishFlow(btn, host, opts) {
       ap.btn.disabled = false;
       // Only the primary publish button becomes "Publish changes"; the reset button
       // keeps its own label (don't create a duplicate).
-      ap.btn.textContent = res.ok ? (label === "Publish this design" ? "Publish changes" : label) : label;
+      ap.btn.textContent = !res.ok ? label
+        : label === COPY.publish.publishDesign ? COPY.publish.publishChanges
+        : label === COPY.publish.site.publishSite ? COPY.publish.site.publishSiteChanges
+        : label;
     }
   } catch (e) {
     ap.result = { ok: false, error: String(e) };
@@ -2100,6 +2133,75 @@ pubhelp.addEventListener("click", (e) => { if (e.target === pubhelp) closePubHel
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !pubhelp.hidden) { closePubHelp(); e.stopPropagation(); }
 }, true);
+
+// The "domain" control: default *.vercel.app, or a subdomain of a domain the account
+// owns. Mounted once per deploy target (the preview and the site each keep their own
+// domain). Returns a refresh() that (re)loads the owned domains for the current scope;
+// the picker saves through setPublishDomain(domain, target).
+function mountDomainPicker(domBody, domNote, { customDomain, baseSlug, target }) {
+  // The SITE may sit on the domain itself (an empty subdomain = the apex); the gated
+  // preview always takes a subdomain, so a password page never lands on a client's apex.
+  const allowApex = target === "site";
+  const slugifyLabel = (s) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+  return () => {
+    domBody.innerHTML = "";
+    domBody.appendChild(loadingDots());
+    domNote.textContent = "";
+    window.desktop.getVercelDomains().then(({ domains }) => {
+      domBody.innerHTML = "";
+      let curBase = "", curLabel = "";
+      if (customDomain && domains && domains.length) {
+        const match = domains.find((d) => customDomain === d.name || customDomain.endsWith("." + d.name));
+        if (match) { curBase = match.name; curLabel = customDomain === match.name ? "" : customDomain.slice(0, -(match.name.length + 1)); }
+      }
+      const domSel = document.createElement("select");
+      domSel.className = "field";
+      const optDefault = document.createElement("option");
+      optDefault.value = ""; optDefault.textContent = COPY.publish.domainDefault;
+      domSel.appendChild(optDefault);
+      (domains || []).forEach((d) => { const o = document.createElement("option"); o.value = d.name; o.textContent = d.name; domSel.appendChild(o); });
+      domSel.value = curBase;
+
+      const subWrap = document.createElement("div");
+      subWrap.style.cssText = "display:flex;align-items:center;gap:6px;margin-top:6px;";
+      const subInput = document.createElement("input");
+      subInput.className = "field"; subInput.placeholder = allowApex ? COPY.publish.site.subdomainOptional : COPY.publish.subdomain; subInput.style.cssText = "flex:0 1 140px;";
+      // Preview: prefill a subdomain. Site: keep whatever was chosen (empty = the apex).
+      subInput.value = curLabel || (curBase && !allowApex ? baseSlug : "");
+      const domPreview = document.createElement("span");
+      domPreview.className = "muted"; domPreview.style.cssText = "font-size:12px;word-break:break-all;";
+      subWrap.append(subInput, domPreview);
+
+      const updateDomPreview = () => {
+        const base = domSel.value;
+        subWrap.style.display = base ? "flex" : "none";
+        if (!base) return;
+        const label = slugifyLabel(subInput.value.trim());
+        domPreview.textContent = label ? `→ ${label}.${base}` : (allowApex ? `→ ${base}` : `→ name.${base}`);
+      };
+      const saveDom = () => {
+        const base = domSel.value;
+        if (!base) { window.desktop.setPublishDomain(null, target); return; }
+        const label = slugifyLabel(subInput.value.trim());
+        if (label) window.desktop.setPublishDomain(`${label}.${base}`, target);
+        else if (allowApex) window.desktop.setPublishDomain(base, target);
+      };
+      domSel.addEventListener("change", () => { if (domSel.value && !subInput.value.trim() && !allowApex) subInput.value = baseSlug; updateDomPreview(); saveDom(); });
+      subInput.addEventListener("input", updateDomPreview);
+      subInput.addEventListener("change", saveDom);
+      subInput.addEventListener("blur", saveDom);
+
+      domBody.append(domSel, subWrap);
+      updateDomPreview();
+      domNote.textContent = (domains && domains.length)
+        ? (allowApex ? COPY.publish.site.ownedDomainNote : COPY.publish.ownedDomainNote)
+        : COPY.publish.noDomainsNote;
+    }).catch(() => {
+      domBody.innerHTML = "";
+      domNote.textContent = COPY.publish.domainsError;
+    });
+  };
+}
 
 async function renderPublish(body) {
   const st = await window.desktop.getVercelStatus();
@@ -2252,7 +2354,8 @@ async function renderPublish(body) {
 
   // Reloads the Preview domain list for the current scope (set once the domain
   // control exists); called on a scope change so we don't re-render the whole panel.
-  let refreshDomains = null;
+  const domainRefreshers = [];
+  const refreshDomains = () => domainRefreshers.forEach((f) => f());
 
   // Deploy-to scope (grouped with This project, below the divider).
   const { teams } = await window.desktop.getVercelTeams();
@@ -2278,7 +2381,7 @@ async function renderPublish(body) {
     sel.addEventListener("change", async () => {
       const name = sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : null;
       await window.desktop.selectVercelScope(sel.value || null, sel.value ? name : null);
-      if (refreshDomains) refreshDomains(); // reload the Preview domain list for the new scope
+      refreshDomains(); // reload every domain list (preview + site) for the new scope
     });
     scopeRow.append(sk, sel);
     body.appendChild(scopeRow);
@@ -2351,65 +2454,9 @@ async function renderPublish(body) {
     body.appendChild(domNote);
 
     const baseSlug = pub.projectName || "preview";
-    const slugifyLabel = (s) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
     // Load (and reload, on a scope change) the owned domains WITHOUT blocking the
     // rest of the panel — show the pulsing dots so the wait never reads as a glitch.
-    refreshDomains = () => {
-      domBody.innerHTML = "";
-      domBody.appendChild(loadingDots());
-      domNote.textContent = "";
-      window.desktop.getVercelDomains().then(({ domains }) => {
-        domBody.innerHTML = "";
-        let curBase = "", curLabel = "";
-        if (pub.customDomain && domains && domains.length) {
-          const match = domains.find((d) => pub.customDomain === d.name || pub.customDomain.endsWith("." + d.name));
-          if (match) { curBase = match.name; curLabel = pub.customDomain === match.name ? "" : pub.customDomain.slice(0, -(match.name.length + 1)); }
-        }
-        const domSel = document.createElement("select");
-        domSel.className = "field";
-        const optDefault = document.createElement("option");
-        optDefault.value = ""; optDefault.textContent = COPY.publish.domainDefault;
-        domSel.appendChild(optDefault);
-        (domains || []).forEach((d) => { const o = document.createElement("option"); o.value = d.name; o.textContent = d.name; domSel.appendChild(o); });
-        domSel.value = curBase;
-
-        const subWrap = document.createElement("div");
-        subWrap.style.cssText = "display:flex;align-items:center;gap:6px;margin-top:6px;";
-        const subInput = document.createElement("input");
-        subInput.className = "field"; subInput.placeholder = COPY.publish.subdomain; subInput.style.cssText = "flex:0 1 140px;";
-        subInput.value = curLabel || (curBase ? baseSlug : "");
-        const domPreview = document.createElement("span");
-        domPreview.className = "muted"; domPreview.style.cssText = "font-size:12px;word-break:break-all;";
-        subWrap.append(subInput, domPreview);
-
-        const updateDomPreview = () => {
-          const base = domSel.value;
-          subWrap.style.display = base ? "flex" : "none";
-          if (!base) return;
-          const label = slugifyLabel(subInput.value.trim());
-          domPreview.textContent = label ? `→ ${label}.${base}` : `→ name.${base}`;
-        };
-        const saveDom = () => {
-          const base = domSel.value;
-          if (!base) { window.desktop.setPublishDomain(null); return; }
-          const label = slugifyLabel(subInput.value.trim());
-          if (label) window.desktop.setPublishDomain(`${label}.${base}`);
-        };
-        domSel.addEventListener("change", () => { if (domSel.value && !subInput.value.trim()) subInput.value = baseSlug; updateDomPreview(); saveDom(); });
-        subInput.addEventListener("input", updateDomPreview);
-        subInput.addEventListener("change", saveDom);
-        subInput.addEventListener("blur", saveDom);
-
-        domBody.append(domSel, subWrap);
-        updateDomPreview();
-        domNote.textContent = (domains && domains.length)
-          ? COPY.publish.ownedDomainNote
-          : COPY.publish.noDomainsNote;
-      }).catch(() => {
-        domBody.innerHTML = "";
-        domNote.textContent = COPY.publish.domainsError;
-      });
-    };
+    domainRefreshers.push(mountDomainPicker(domBody, domNote, { customDomain: pub.customDomain, baseSlug, target: "preview" }));
     refreshDomains();
 
     const host = document.createElement("div"); // progress + result target
@@ -2461,9 +2508,85 @@ async function renderPublish(body) {
       try { last.textContent = COPY.publish.lastPublishedPrefix + new Date(pub.lastDeployAt).toLocaleString(); } catch { last.textContent = ""; }
       body.appendChild(last);
     }
+
+    // ── Live site: the public website (its own Vercel project, no gate) ──
+    renderSitePublish(body, pub.site || {}, domainRefreshers);
   }
 
   addHelp();
+}
+
+// The site half of the Publish drawer. Mirrors the preview's shape (domain picker,
+// live URL box, one primary button, progress host) with no password anywhere.
+// Off, with the reason, until the design has been promoted (/promote-blocks).
+function renderSitePublish(body, site, domainRefreshers) {
+  const S = COPY.publish.site;
+  const sec = document.createElement("div");
+  sec.style.cssText = "margin:18px 0 10px;";
+  const rule = document.createElement("div");
+  rule.style.cssText = "height:1px;background:#ececf1;margin-bottom:10px;";
+  const title = document.createElement("div");
+  title.style.cssText = "font-size:13px;font-weight:600;color:#1a1a1a;";
+  title.textContent = S.title;
+  sec.append(rule, title);
+  body.appendChild(sec);
+
+  const lead = document.createElement("p");
+  lead.className = "muted";
+  lead.style.margin = "0 0 12px";
+  lead.textContent = site.ready ? S.lead : (S.notReady[site.reason] || S.notReady["not-promoted"]);
+  body.appendChild(lead);
+  if (!site.ready) return;
+
+  let liveBox = null;
+  if (site.url) {
+    liveBox = document.createElement("div");
+    liveBox.style.cssText = "border:1px solid #e2e2e8;border-radius:10px;padding:10px 12px 6px;margin:4px 8px 0 0;background:#fafafb;";
+    const liveRow = document.createElement("div");
+    liveRow.style.cssText = "display:flex;gap:8px;align-items:center;min-height:34px;margin-bottom:2px;";
+    const live = document.createElement("a");
+    live.href = site.url;
+    live.textContent = site.url.replace(/^https?:\/\//, "");
+    live.style.cssText = "flex:1;color:#1a1a1a;text-decoration:underline;font-size:13px;word-break:break-all;";
+    live.addEventListener("click", (e) => { e.preventDefault(); window.desktop.openExternal(site.url); });
+    liveRow.append(live, copyBtn(() => site.url));
+    liveBox.appendChild(liveRow);
+  }
+
+  const domSec = document.createElement("div");
+  domSec.style.cssText = "margin: 2px 0 4px;";
+  const domLabel = document.createElement("div");
+  domLabel.className = "k";
+  domLabel.style.marginBottom = "10px";
+  domLabel.textContent = S.domainLabel;
+  const domBody = document.createElement("div");
+  domSec.append(domLabel, domBody);
+  body.appendChild(domSec);
+  const domNote = document.createElement("div");
+  domNote.className = "muted";
+  domNote.style.cssText = "font-size:11.5px;margin:2px 0 12px;";
+  body.appendChild(domNote);
+  const refresh = mountDomainPicker(domBody, domNote, { customDomain: site.customDomain, baseSlug: (site.projectName || "site").replace(/-site$/, ""), target: "site" });
+  domainRefreshers.push(refresh);
+  refresh();
+
+  const host = document.createElement("div");
+  host.hidden = true;
+  const btn = document.createElement("button");
+  btn.className = "panelbtn primary";
+  btn.textContent = site.url ? S.publishSiteChanges : S.publishSite;
+  btn.addEventListener("click", () => runPublishFlow(btn, host, { target: "site" }));
+
+  if (liveBox) body.appendChild(liveBox);
+  body.appendChild(btn);
+  body.appendChild(host);
+  if (site.lastDeployAt) {
+    const last = document.createElement("div");
+    last.className = "muted";
+    last.style.marginTop = "8px";
+    try { last.textContent = S.lastPublishedPrefix + new Date(site.lastDeployAt).toLocaleString(); } catch { last.textContent = ""; }
+    body.appendChild(last);
+  }
 }
 
 // --- Copy voice: per-project tone + rules, plus global rules ---

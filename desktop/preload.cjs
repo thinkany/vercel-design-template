@@ -105,10 +105,19 @@ contextBridge.exposeInMainWorld("desktop", {
   saveVercelToken: (token) => ipcRenderer.invoke("vercel:save", { token }),
   getVercelTeams: () => ipcRenderer.invoke("vercel:teams"),
   getVercelDomains: () => ipcRenderer.invoke("vercel:domains"),
-  setPublishDomain: (domain) => ipcRenderer.invoke("publish:setDomain", { domain }),
+  setPublishDomain: (domain, target) => ipcRenderer.invoke("publish:setDomain", { domain, target: target || "preview" }),
   selectVercelScope: (teamId, teamName) => ipcRenderer.invoke("vercel:selectScope", { teamId, teamName }),
   clearVercel: () => ipcRenderer.invoke("vercel:clear"),
   getPublishStatus: () => ipcRenderer.invoke("publish:status"),
+  // The site (public website) preview server + build check.
+  getSiteStatus: () => ipcRenderer.invoke("site:status"),
+  startSite: () => ipcRenderer.invoke("site:start"),
+  buildSite: () => ipcRenderer.invoke("site:build"),
+  onSiteReady: (cb) => {
+    const listener = (_e, url) => cb(url);
+    ipcRenderer.on("site:ready", listener);
+    return () => ipcRenderer.removeListener("site:ready", listener);
+  },
   runPublish: (opts) => ipcRenderer.invoke("publish:run", opts || {}),
   onPublishProgress: (cb) => {
     const listener = (_e, evt) => cb(evt);

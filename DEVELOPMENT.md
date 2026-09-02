@@ -64,6 +64,28 @@ is additionally whitespace-collapsed, which is the only way to clear comments ne
 its object literals. `desktop/template/` is deliberately left commented — it ships into the
 designer's project, where the comments guide the designer and the agent.
 
+## Licensed skills (the process IP)
+
+The design-process playbooks, `/design`, `/design-brief`, `/promote-blocks`,
+`/setup-styleguide`, are **not in the scaffold**. Their canonical sources live in
+`desktop/skills/*.md` (excluded from the packaged app and, being under `desktop/`, from the
+snapshot). The scaffold's `.claude/commands/<name>.md` are one-paragraph **stubs** (same
+frontmatter, so autocomplete and `/guide` work) that tell the model the skill needs the app
+when expanded without it.
+
+Delivery: `node desktop/build/sync-skills.cjs` writes `../derive/skills/bundle.json`; the
+derive repo serves it at `GET /api/skills` behind `DESIGN_LICENSE_KEY` (`skills.mjs`, with
+ETag/304). The app (`desktop/skills-client.cjs`) fetches it on boot and on license save,
+caches it encrypted in userData (offline grace), and `agent:prompt` expands a protected slash
+command from the cache before the SDK sees it. No license → no cache → the stub speaks.
+
+- **Edit a skill:** change `desktop/skills/<name>.md`, run `sync-skills`, commit both repos,
+  deploy derive. `SKILLS_LOCAL=1 npm run desktop` reads the sources live, no sync needed.
+- **Add a protected skill:** drop the `.md` in `desktop/skills/`, add a stub to
+  `.claude/commands/`, sync. Nothing else to register; the client expands whatever the
+  bundle holds.
+- The Claude Code session in this worktree sees the stubs too; read `desktop/skills/` directly.
+
 ## How the snapshot stays clean
 
 `make-template.cjs` runs `git archive main`, strips `TEMPLATE_EXCLUDE`

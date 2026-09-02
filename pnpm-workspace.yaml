@@ -1,5 +1,6 @@
 packages:
   - '.'
 allowBuilds:
+  sharp: true # Astro's image service (site build)
   '@tailwindcss/oxide': true
   esbuild: true

@@ -57,6 +57,11 @@ const { createEmptyBrief, applyAnswers } = require("./intake/brief.cjs");
 const { sampleDirection, directionMeta, recordDirection, resetMetaCache } = require("./direction-client.cjs");
 const references = require("./intake/references.cjs");
 const ingestRefs = require("./intake/ingest.cjs");
+// Licensed design-process skills (/design, /design-brief, /promote-blocks, …): fetched
+// from derive with the Design license, cached encrypted, and spliced into a turn in
+// agent:prompt so the model gets the playbook while the scaffold only carries stubs.
+const { createSkillsClient } = require("./skills-client.cjs");
+let skillsClient = null; // built once userData is pinned + the app is ready (safeStorage)
 
 const appRoot = path.resolve(__dirname, ".."); // the Electron app / template source (git worktree in dev; Resources/app when packaged)
 
@@ -485,6 +490,93 @@ function gateEnvFor(dir) {
   };
 }
 
+// ---- Site build (the public website) -----------------------------------------
+// A project is site-ready once a design has been PROMOTED (/promote-blocks): the
+// site target exists, content/site.json pins a real variation, and there's a home
+// page to render. Before that the Site publish stays off with a plain reason.
+function siteReady(dir) {
+  try {
+    if (!fs.existsSync(path.join(dir, "site", "astro.config.mjs"))) return { ready: false, reason: "no-site" };
+    const sj = JSON.parse(fs.readFileSync(path.join(dir, "content", "site.json"), "utf8"));
+    if (!sj.design || sj.design === "v00") return { ready: false, reason: "not-promoted" };
+    if (!fs.existsSync(path.join(dir, "content", "pages", "home.json"))) return { ready: false, reason: "no-home" };
+    return { ready: true, design: sj.design };
+  } catch {
+    return { ready: false, reason: "not-promoted" };
+  }
+}
+// The deps the site build needs, guaranteed in the PROJECT's package.json (Vercel
+// installs from it). Locally they come from the app's node_modules regardless, but
+// package.json is designer-owned (REVIEW tier) so a project scaffolded before the
+// site target never received them. Versions come from the bundled scaffold
+// package.json (the same ones a fresh scaffold gets); scripts too. Idempotent.
+const SITE_DEP_KEYS = ["astro", "@astrojs/react", "@astrojs/sitemap", "vite"];
+const SITE_SCRIPTS = { "site:dev": "astro dev --root site", "site:build": "astro build --root site", "site:preview": "astro preview --root site" };
+const SITE_BUILD_SCRIPT_DEPS = ["sharp"];
+function ensureSiteDeps(dir) {
+  const pkgPath = path.join(dir, "package.json");
+  let pkg, scaffold;
+  try { pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8")); } catch { return { changed: false }; }
+  try { scaffold = JSON.parse(fs.readFileSync(path.join(__dirname, "build", "scaffold-package.json"), "utf8")); } catch { return { changed: false }; }
+  let changed = false;
+  pkg.dependencies = pkg.dependencies || {};
+  for (const k of SITE_DEP_KEYS) {
+    const want = scaffold.dependencies && scaffold.dependencies[k];
+    if (want && pkg.dependencies[k] !== want) { pkg.dependencies[k] = want; changed = true; }
+  }
+  pkg.scripts = pkg.scripts || {};
+  for (const [k, v] of Object.entries(SITE_SCRIPTS)) {
+    if (!pkg.scripts[k]) { pkg.scripts[k] = v; changed = true; }
+  }
+  // pnpm 10 (Vercel's default) refuses to run a dependency's install script unless
+  // the package approves it, and fails the install outright (ERR_PNPM_IGNORED_BUILDS).
+  // Astro pulls in sharp for its image service; approve it here so the site builds.
+  pkg.pnpm = pkg.pnpm || {};
+  const approved = new Set(pkg.pnpm.onlyBuiltDependencies || []);
+  for (const dep of SITE_BUILD_SCRIPT_DEPS) {
+    if (!approved.has(dep)) { approved.add(dep); changed = true; }
+  }
+  pkg.pnpm.onlyBuiltDependencies = [...approved];
+  if (changed) fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+  // pnpm 11 (the scaffold's packageManager, honored by Vercel) reads build approvals
+  // from pnpm-workspace.yaml only; the package.json field above serves older pnpm.
+  if (ensurePnpmWorkspaceApprovals(dir, SITE_BUILD_SCRIPT_DEPS)) changed = true;
+  return { changed };
+}
+// Allow `deps` to run install scripts in the project's pnpm-workspace.yaml, which
+// is where pnpm 10+ reads settings (the scaffold pins pnpm 11; Vercel honors it).
+// pnpm 11 syntax: an `allowBuilds:` map of `name: true`. Minimal, line-based: the
+// file is the scaffold's and holds settings only. Created when absent.
+function ensurePnpmWorkspaceApprovals(dir, deps) {
+  const p = path.join(dir, "pnpm-workspace.yaml");
+  let text = "";
+  try { text = fs.readFileSync(p, "utf8"); } catch { /* absent */ }
+  const before = text;
+  const keyRe = /^allowBuilds:[ \t]*$/m;
+  if (!keyRe.test(text)) {
+    text = text.replace(/\s*$/, "") + (text.trim() ? "\n" : "") + "allowBuilds:\n";
+  }
+  for (const dep of deps) {
+    const esc = dep.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`^[ \\t]+'?${esc}'?:[ \\t]*true`, "m").test(text)) continue;
+    text = text.replace(keyRe, (m) => `${m}\n  ${dep}: true`);
+  }
+  if (!text.endsWith("\n")) text += "\n";
+  if (text !== before) { fs.writeFileSync(p, text); return true; }
+  return false;
+}
+// After a site publish, the canonical URL in content/site.json follows the live
+// address so local builds (and llms.txt / sitemap) agree with production.
+function setSiteUrl(dir, url) {
+  try {
+    const p = path.join(dir, "content", "site.json");
+    const sj = JSON.parse(fs.readFileSync(p, "utf8"));
+    if (sj.url === url) return;
+    sj.url = url;
+    fs.writeFileSync(p, JSON.stringify(sj, null, 2) + "\n");
+  } catch { /* no site.json → nothing to pin */ }
+}
+
 // ---- Project (workspace) storage --------------------------------------------
 function projectConfigPath() {
   return path.join(app.getPath("userData"), "project.json");
@@ -899,6 +991,88 @@ function stopVite() {
   viteUrl = null;
 }
 
+// ---- Site dev server (the public website's live preview) --------------------
+// The site target (site/, Astro) gets its own dev server beside Vite, on its own
+// port, so the browser can show a "Site" tab next to Home + Style guide. Astro's
+// CLI runs under the app's Electron-as-Node (same as the packaged Vite launch) from
+// the app's node_modules, so neither dev nor a Finder-launched .app needs a system
+// node. Started only when the project is site-ready (see siteReady), and again the
+// moment a promotion lands mid-session. Stopped with Vite.
+let siteProc = null;
+let siteUrl = null;
+function astroCli() { return path.join(modulesRoot(), "astro", "astro.js"); }
+function stopSite() {
+  if (siteProc) { killTree(siteProc); siteProc = null; }
+  siteUrl = null;
+}
+function startSiteFor(projectDir) {
+  stopSite();
+  return new Promise((resolve, reject) => {
+    siteProc = spawn(process.execPath, [astroCli(), "dev", "--root", "site"], {
+      cwd: projectDir,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", FORCE_COLOR: "0" },
+      detached: process.platform !== "win32",
+    });
+    let settled = false;
+    const onLine = (text) => {
+      // "┃ Local    http://localhost:4321/" (Astro picks the next port when 4321 is busy)
+      const m = text.match(/https?:\/\/localhost:\d+/);
+      if (m && !settled) {
+        settled = true;
+        siteUrl = m[0];
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("site:ready", siteUrl);
+        resolve(siteUrl);
+      }
+    };
+    siteProc.stdout.on("data", (b) => { const t = b.toString(); process.stdout.write(`[site] ${t}`); onLine(t); });
+    siteProc.stderr.on("data", (b) => { const t = b.toString(); process.stderr.write(`[site] ${t}`); onLine(t); });
+    siteProc.on("exit", (code) => { if (!settled) reject(new Error(`Astro exited before it was ready (code ${code})`)); siteProc = null; });
+    setTimeout(() => { if (!settled) reject(new Error("Timed out waiting for the site server (60s)")); }, 60000);
+  });
+}
+// Start the site server when (and only when) the project is site-ready and it isn't
+// already up. Safe to call often (project open, after every agent turn).
+function maybeStartSite(projectDir) {
+  if (!projectDir || projectDir !== currentProject) return;
+  if (siteProc || !siteReady(projectDir).ready) return;
+  startSiteFor(projectDir).catch((e) => console.error("[main] site server failed:", e.message));
+}
+// A one-shot production build of the site (what Vercel will run), so a broken
+// block or content fails HERE with the real message, not on Vercel five minutes
+// later. Returns { ok, log } — log is the tail of the build output.
+function buildSite(projectDir) {
+  return new Promise((resolve) => {
+    let out = "";
+    const p = spawn(process.execPath, [astroCli(), "build", "--root", "site"], {
+      cwd: projectDir,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", NO_COLOR: "1", FORCE_COLOR: "0" },
+    });
+    p.stdout.on("data", (b) => { out += b.toString(); });
+    p.stderr.on("data", (b) => { out += b.toString(); });
+    p.on("exit", (code) => {
+      // Strip ANSI (Astro colors even with NO_COLOR in places) and the route-tree
+      // glyphs, then pull the readable error block: the first line that names the
+      // problem plus its indented detail lines (the field issues), up to the stack.
+      const clean = out.replace(/\x1b\[[0-9;]*m/g, "").replace(/[\u2502\u2514\u251c\u2500\u2503]+/g, " ");
+      const lines = clean.split("\n").map((l) => l.replace(/\s+$/, "")).filter((l) => l.trim());
+      let error = null;
+      if (code !== 0) {
+        const i = lines.findIndex((l) => /invalid props|unknown block|\[[A-Za-z]+Error\]|Error:|is invalid|Cannot|failed/.test(l) && !/^\s*at /.test(l));
+        if (i >= 0) {
+          let head = lines[i];
+          // "22:16:14   /about.html content/pages/about.json blocks[0]: …" → from the content path on
+          const j = head.search(/(content\/|site\/|\[[A-Za-z]+Error\]|Error:)/);
+          if (j > 0) head = head.slice(j);
+          const detail = [];
+          for (let k = i + 1; k < lines.length && /^\s{2,}/.test(lines[k]) && !/^\s*(at |Stack trace)/.test(lines[k]); k++) detail.push(lines[k].trim());
+          error = [head.trim(), ...detail].join("\n");
+        } else error = "The site build failed.";
+      }
+      resolve({ ok: code === 0, log: lines.slice(-40).join("\n"), error });
+    });
+  });
+}
+
 // A normal quit runs stopVite(), but a FORCE-QUIT (or crash) skips it, orphaning the
 // Vite process group — it keeps holding its port + the project's .vite dep-optimize
 // cache, so the NEXT launch's fresh Vite contends with it and can stall before it ever
@@ -1186,6 +1360,11 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode, mo
     event.sender.send("agent:event", { type: "error", message: "No project is open." });
     return { sessionId };
   }
+  // A licensed skill command ("/design-brief …") becomes its playbook here, so the
+  // SDK never expands the scaffold's stub. Unlicensed (no cache) → falls through
+  // and the stub does its job: it tells the designer the skill needs the app.
+  const expanded = skillsClient && skillsClient.expandPrompt(prompt);
+  if (expanded) prompt = expanded.prompt;
   const { runPrompt } = await import(pathToFileURL(path.join(__dirname, "agent.mjs")).href);
   const onEvent = (evt) => {
     if (!event.sender.isDestroyed()) event.sender.send("agent:event", evt);
@@ -1233,8 +1412,75 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode, mo
   // A review turn is an isolated, fresh session (its own Art Director persona); it must
   // not become the tracked chat session, or the next chat turn would resume the critique.
   if (!reviewMode && result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it
+  maybeStartSite(currentProject); // a /promote-blocks turn makes the project site-ready mid-session
   return result;
 });
+
+// ---- Site IPC ----------------------------------------------------------------
+ipcMain.handle("site:status", () => {
+  if (!currentProject) return { ready: false, reason: "no-project", url: null };
+  const r = siteReady(currentProject);
+  return { ready: r.ready, reason: r.ready ? null : r.reason, url: siteUrl, running: !!siteProc };
+});
+ipcMain.handle("site:start", async () => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const r = siteReady(currentProject);
+  if (!r.ready) return { ok: false, error: r.reason };
+  if (siteProc && siteUrl) return { ok: true, url: siteUrl };
+  try { return { ok: true, url: await startSiteFor(currentProject) }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle("site:build", async () => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const r = siteReady(currentProject);
+  if (!r.ready) return { ok: false, error: r.reason };
+  return buildSite(currentProject);
+});
+
+// The SITE publish: the public website, its own Vercel project ("<name>-site"), no
+// gate, SITE_URL baked in. Guarantees the site deps in package.json first (Vercel
+// installs from it), and pins content/site.json's url to the live address after.
+async function publishSite(event, token) {
+  const r = siteReady(currentProject);
+  if (!r.ready) {
+    const why = { "no-site": "This project has no site target yet.", "not-promoted": "Promote the approved design first (/promote-blocks), then publish the site.", "no-home": "The site has no home page yet." }[r.reason] || "The site isn't ready to publish.";
+    return { ok: false, error: why };
+  }
+  const scope = loadVercelScope();
+  const rec = loadPublish(currentProject);
+  const site = rec.site || {};
+  const projectName = site.projectName || `${deriveProjectName(currentProject)}-site`;
+  const onProgress = (evt) => { if (!event.sender.isDestroyed()) event.sender.send("publish:progress", { ...evt, target: "site" }); };
+  try {
+    ensureSiteDeps(currentProject);
+    // Build locally first: a bad block or content fails here with the real message
+    // instead of on Vercel minutes later.
+    onProgress({ step: "check", status: "run", detail: "Checking the site builds" });
+    const check = await buildSite(currentProject);
+    if (!check.ok) {
+      onProgress({ step: "check", status: "error", detail: check.error });
+      return { ok: false, target: "site", error: `The site didn't build: ${check.error}` };
+    }
+    onProgress({ step: "check", status: "done", detail: "Site builds cleanly" });
+    const res = await vercel.publishProject({
+      token,
+      teamId: scope.teamId || null,
+      projectDir: currentProject,
+      projectName,
+      target: "site",
+      customDomain: site.customDomain || null,
+      onProgress,
+    });
+    savePublish(currentProject, {
+      ...rec,
+      site: { ...site, projectName: res.projectName, projectId: res.projectId, url: res.url, lastDeployAt: new Date().toISOString() },
+    });
+    setSiteUrl(currentProject, res.url);
+    return { ok: true, target: "site", url: res.url, projectName: res.projectName, domainPending: res.domainPending, domainError: res.domainError };
+  } catch (e) {
+    return { ok: false, target: "site", error: e.message || String(e) };
+  }
+}
 
 // Stop the in-flight agent turn (the designer hit Back mid-intake). interrupt() ends
 // the SDK turn so no further output streams and its completion can't hijack a fresh
@@ -1968,12 +2214,14 @@ ipcMain.handle("license:designSave", async (_event, { key }) => {
   try { storeDesignLicense(k); } catch (e) { return { ok: false, error: `Could not save the license: ${e.message}` }; }
   process.env.DESIGN_LICENSE_KEY = k;
   resetMetaCache(); // license changed → next directionMeta() must re-fetch, not read stale
+  if (skillsClient) skillsClient.refresh(k).catch(() => {}); // pull the playbooks for this key
   return { ok: true };
 });
 ipcMain.handle("license:designClear", () => {
   removeStoredDesignLicense();
   delete process.env.DESIGN_LICENSE_KEY;
   resetMetaCache();
+  if (skillsClient) skillsClient.clear(); // no license, no playbooks
   return { ok: true };
 });
 
@@ -2027,13 +2275,15 @@ ipcMain.handle("vercel:domains", async () => {
   return { domains: await vercel.listDomains(t, scope.teamId || null) };
 });
 // Save (or clear) the custom preview domain for the current project.
-ipcMain.handle("publish:setDomain", (_event, { domain }) => {
+ipcMain.handle("publish:setDomain", (_event, { domain, target }) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   const rec = loadPublish(currentProject);
   const d = (domain || "").trim().toLowerCase();
-  if (d) rec.customDomain = d; else delete rec.customDomain;
+  // The site keeps its own domain under rec.site (its own Vercel project).
+  const slot = target === "site" ? (rec.site = rec.site || {}) : rec;
+  if (d) slot.customDomain = d; else delete slot.customDomain;
   savePublish(currentProject, rec);
-  return { ok: true, customDomain: rec.customDomain || null };
+  return { ok: true, customDomain: slot.customDomain || null };
 });
 ipcMain.handle("vercel:selectScope", (_event, { teamId, teamName }) => {
   const scope = loadVercelScope();
@@ -2067,6 +2317,19 @@ ipcMain.handle("publish:status", () => {
     gatePasswordSet: !!rec.gatePasswordSet,
     gatePassword: rec.gatePassword || null,
     customDomain: rec.customDomain || null,
+    // The public website: its own Vercel project + URL, live once /promote-blocks ran.
+    site: (() => {
+      const r = siteReady(currentProject);
+      const sr = rec.site || {};
+      return {
+        ready: r.ready,
+        reason: r.ready ? null : r.reason,
+        url: sr.url || null,
+        projectName: sr.projectName || `${deriveProjectName(currentProject)}-site`,
+        lastDeployAt: sr.lastDeployAt || null,
+        customDomain: sr.customDomain || null,
+      };
+    })(),
   };
 });
 
@@ -2078,6 +2341,7 @@ ipcMain.handle("publish:run", async (event, args) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   const token = await vercelAccessToken();
   if (!token) return { ok: false, error: "Connect Vercel first." };
+  if (args && args.target === "site") return publishSite(event, token);
   const design = detectDesign(currentProject);
   if (!design.active || !design.previewReady) {
     return { ok: false, error: "There's nothing to publish yet — finish a design first." };
@@ -2456,10 +2720,11 @@ ipcMain.handle("project:create", async () => {
   saveProjectPath(dir);
   try {
     await startViteFor(dir);
+    maybeStartSite(dir);
   } catch (e) {
     return { ok: false, error: `Project created, but Vite failed to start: ${e.message}` };
   }
-  return { ok: true, path: dir, name: path.basename(dir), ...readProjectMeta(dir), viteUrl };
+  return { ok: true, path: dir, name: path.basename(dir), ...readProjectMeta(dir), viteUrl, siteUrl };
 });
 
 ipcMain.handle("project:open", async () => {
@@ -2487,10 +2752,11 @@ ipcMain.handle("project:open", async () => {
   saveProjectPath(dir);
   try {
     await startViteFor(dir);
+    maybeStartSite(dir);
   } catch (e) {
     return { ok: false, error: `Vite failed to start: ${e.message}` };
   }
-  return { ok: true, path: dir, name: path.basename(dir), ...readProjectMeta(dir), viteUrl };
+  return { ok: true, path: dir, name: path.basename(dir), ...readProjectMeta(dir), viteUrl, siteUrl };
 });
 
 // The last few opened projects, excluding the current one, pruned to those that
@@ -2509,7 +2775,7 @@ ipcMain.handle("project:openPath", async (_e, { path: dir } = {}) => {
   if (!fs.existsSync(path.join(dir, "package.json"))) {
     return { ok: false, error: "That folder has no package.json — it doesn't look like a project." };
   }
-  if (dir === currentProject) return { ok: true, path: dir, name: path.basename(dir), viteUrl };
+  if (dir === currentProject) return { ok: true, path: dir, name: path.basename(dir), viteUrl, siteUrl };
   if (currentProject && currentSessionId) { try { archiveSession(currentProject, currentSessionId); } catch {} }
   currentSessionId = null;
   try { linkNodeModules(dir); } catch { /* has its own deps or symlink failed */ }
@@ -2518,10 +2784,11 @@ ipcMain.handle("project:openPath", async (_e, { path: dir } = {}) => {
   saveProjectPath(dir);
   try {
     await startViteFor(dir);
+    maybeStartSite(dir);
   } catch (e) {
     return { ok: false, error: `Vite failed to start: ${e.message}` };
   }
-  return { ok: true, path: dir, name: path.basename(dir), ...readProjectMeta(dir), viteUrl };
+  return { ok: true, path: dir, name: path.basename(dir), ...readProjectMeta(dir), viteUrl, siteUrl };
 });
 
 ipcMain.handle("project:reset", () => {
@@ -2531,6 +2798,7 @@ ipcMain.handle("project:reset", () => {
   clearProjectPath();
   currentProject = null;
   stopVite();
+  stopSite();
   return { ok: true };
 });
 
@@ -2711,6 +2979,17 @@ app.whenReady().then(async () => {
   if (storedLicense) process.env.DERIVE_LICENSE_KEY = storedLicense;
   const storedDesignLicense = loadStoredDesignLicense(); // in-app design license wins over .env.local
   if (storedDesignLicense) process.env.DESIGN_LICENSE_KEY = storedDesignLicense;
+  // Licensed skills: the last cache is usable at once (offline grace); a refresh
+  // runs in the background whenever a Design license is present. SKILLS_LOCAL=1
+  // (dev) reads desktop/skills/*.md instead, live.
+  skillsClient = createSkillsClient({
+    safeStorage,
+    userDataDir: app.getPath("userData"),
+    localDir: path.join(__dirname, "skills"),
+    log: (m) => console.log(`[skills] ${m}`),
+  });
+  skillsClient.load();
+  if (process.env.DESIGN_LICENSE_KEY) skillsClient.refresh(process.env.DESIGN_LICENSE_KEY).catch(() => {});
   vercelAuth = loadVercelAuth(); // in-app Publish: pasted token or Sign in with Vercel
   currentProject = loadProjectPath();
   currentModel = loadUiState().model || null;
@@ -2722,7 +3001,7 @@ app.whenReady().then(async () => {
     // window is already up (created above), so this never blocks the UI.
     (async () => {
       await refreshFrameworkFiles(currentProject);
-      startViteFor(currentProject).catch((e) => console.error("[main] Vite failed:", e.message));
+      startViteFor(currentProject).then(() => maybeStartSite(currentProject)).catch((e) => console.error("[main] Vite failed:", e.message));
     })();
   }
   // Native capture bridge: a hidden BrowserWindow the app-owned export scripts drive
@@ -2744,10 +3023,12 @@ app.on("before-quit", () => {
   // Closing the app → archive the live session so it lands in the drawer next launch.
   if (currentProject && currentSessionId) archiveSession(currentProject, currentSessionId);
   stopVite();
+  stopSite();
   stopCaptureBridge();
 });
 app.on("window-all-closed", () => {
   stopVite();
+  stopSite();
   stopCaptureBridge();
   app.quit();
 });

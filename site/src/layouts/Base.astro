@@ -1,0 +1,79 @@
+---
+// ©2026 thinkany llc. All rights reserved.
+// The site's HTML shell: SEO head (title, description, canonical, Open Graph,
+// robots) resolved from the entry's SEO fields with site-level fallbacks, then
+// the chrome (Header/Footer from site/blocks/chrome.ts, when the designer
+// registered them; imported by NAME so the header can hydrate) around the page. The `@container` wrapper is what the design's `@lg:` container
+// variants measure against, exactly as DesignSurface provides in the design
+// surface, so promoted blocks keep their responsive classes unchanged.
+import "../styles/site.css";
+import { siteConfig } from "@/config/site";
+import { resolveSeo, type Seo } from "../lib/seo";
+import { site } from "../lib/site";
+import { Header, Footer, chrome } from "../../blocks/chrome";
+
+interface Props {
+  title: string;
+  description?: string;
+  seo?: Partial<Seo>;
+}
+const { title, description, seo } = Astro.props;
+const meta = resolveSeo(seo, { title, description, siteName: siteConfig.clientName });
+const canonical = meta.canonical || new URL(Astro.url.pathname, Astro.site).href;
+const image = meta.image ? new URL(meta.image, Astro.site).href : undefined;
+
+const chromeProps = { siteName: siteConfig.clientName, logo: siteConfig.logo, nav: site.nav, footerLinks: site.footerLinks };
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{meta.title}</title>
+    {meta.description && <meta name="description" content={meta.description} />}
+    <link rel="canonical" href={canonical} />
+    {meta.noindex && <meta name="robots" content="noindex, nofollow" />}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={siteConfig.clientName} />
+    <meta property="og:title" content={meta.title} />
+    {meta.description && <meta property="og:description" content={meta.description} />}
+    <meta property="og:url" content={canonical} />
+    {image && <meta property="og:image" content={image} />}
+    <meta name="twitter:card" content={image ? "summary_large_image" : "summary"} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <!-- Marks JS as available BEFORE first paint, so data-reveal elements only
+         start hidden when the observer below will actually reveal them. -->
+    <script is:inline>document.documentElement.classList.add("js");</script>
+  </head>
+  <body class="bg-ta-surface text-ta-body font-ta-sans">
+    <div class="@container relative flex min-h-screen w-full flex-col">
+      {Header && (chrome.header?.hydrate ? <Header client:load {...chromeProps} /> : <Header {...chromeProps} />)}
+      <main class="flex-1">
+        <slot />
+      </main>
+      {Footer && (chrome.footer?.hydrate ? <Footer client:load {...chromeProps} /> : <Footer {...chromeProps} />)}
+    </div>
+    <script>
+      // Scroll reveal: pairs with .js [data-reveal] in site.css. Once, at 30%
+      // visibility, matching the design surface's motion whileInView settings.
+      const els = document.querySelectorAll<HTMLElement>("[data-reveal]");
+      if ("IntersectionObserver" in window && els.length) {
+        const io = new IntersectionObserver(
+          (entries) => {
+            for (const e of entries) {
+              if (e.isIntersecting) {
+                e.target.classList.add("is-revealed");
+                io.unobserve(e.target);
+              }
+            }
+          },
+          { threshold: 0.3 },
+        );
+        els.forEach((el) => io.observe(el));
+      } else {
+        els.forEach((el) => el.classList.add("is-revealed"));
+      }
+    </script>
+  </body>
+</html>

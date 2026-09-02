@@ -6,12 +6,17 @@
   "packageManager": "pnpm@11.9.0",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "site:dev": "astro dev --root site",
+    "site:build": "astro build --root site",
+    "site:preview": "astro preview --root site"
   },
   "engines": {
     "node": ">=20.19.0"
   },
   "dependencies": {
+    "@astrojs/react": "4.4.2",
+    "@astrojs/sitemap": "3.7.4",
     "@popperjs/core": "2.11.8",
     "@radix-ui/react-accordion": "1.2.3",
     "@radix-ui/react-alert-dialog": "1.1.6",
@@ -36,9 +41,10 @@
     "@radix-ui/react-slot": "1.1.2",
     "@radix-ui/react-switch": "1.1.3",
     "@radix-ui/react-tabs": "1.1.3",
-    "@radix-ui/react-toggle-group": "1.1.2",
     "@radix-ui/react-toggle": "1.1.2",
+    "@radix-ui/react-toggle-group": "1.1.2",
     "@radix-ui/react-tooltip": "1.1.8",
+    "astro": "5.18.2",
     "canvas-confetti": "1.9.4",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
@@ -62,7 +68,8 @@
     "sonner": "2.0.3",
     "tailwind-merge": "3.2.0",
     "tw-animate-css": "1.3.8",
-    "vaul": "1.1.2"
+    "vaul": "1.1.2",
+    "vite": "6.4.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.1.12",
@@ -84,7 +91,10 @@
   },
   "pnpm": {
     "overrides": {
-      "vite": "6.3.5"
-    }
+      "vite": "6.4.3"
+    },
+    "onlyBuiltDependencies": [
+      "sharp"
+    ]
   }
 }

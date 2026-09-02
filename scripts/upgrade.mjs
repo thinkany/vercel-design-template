@@ -132,7 +132,9 @@ export async function runUpgrade(opts = {}) {
   if (opts.dryRun) {
     for (const [rel] of files) {
       const tier = classify(rel, manifest);
-      if (tier === "keep") report.kept.push(rel);
+      // A KEEP file the project lacks would be seeded (see the plan below), so
+      // report it under applied, not kept.
+      if (tier === "keep" && ((await fileExists(path.join(targetDir, rel))) || !(await shouldSeed(rel, manifest, targetDir)))) report.kept.push(rel);
       else (tier === "review" ? report.review : report.applied).push(rel);
     }
     report.message = `Dry run: ${report.applied.length} core file(s) would update, ${report.review.length} need review, ${report.kept.length} kept.`;
@@ -144,7 +146,17 @@ export async function runUpgrade(opts = {}) {
   const plan = [];
   for (const [rel, data] of files) {
     const tier = classify(rel, manifest);
-    if (tier === "keep") { report.kept.push(rel); continue; }
+    if (tier === "keep") {
+      // KEEP = designer-owned: never overwrite. But a KEEP file the project doesn't
+      // have yet (a template that grew a new designer-owned starter, e.g.
+      // content/site.json) is SEEDED, so the CORE files that import it don't
+      // arrive broken. The designer owns it from then on.
+      const abs = path.join(targetDir, rel);
+      if ((await fileExists(abs)) || !(await shouldSeed(rel, manifest, targetDir))) { report.kept.push(rel); continue; }
+      plan.push({ data, dest: rel, abs, tier: "seed", existed: false });
+      report.applied.push(rel);
+      continue;
+    }
     const dest = tier === "review" ? rel + ".upgrade-new" : rel;
     const abs = path.join(targetDir, dest);
     plan.push({ data, dest, abs, tier, existed: await fileExists(abs) });
@@ -210,10 +222,18 @@ export async function runRefresh({ targetDir, source } = {}) {
   // Plan only CORE files whose content differs from what's on disk.
   const toWrite = [];
   for (const [rel, data] of files) {
-    if (classify(rel, manifest) !== "core") continue; // keep + review untouched
+    const tier = classify(rel, manifest);
+    if (tier === "review") continue; // review sidecars are /upgrade's job, not a refresh
     const abs = path.join(targetDir, rel);
     let cur = null;
     try { cur = await readFile(abs); } catch {}
+    if (tier === "keep") {
+      // Designer-owned: never overwritten. Seeded when absent only per shouldSeed:
+      // machinery always, starters only into a project that has none of that tree.
+      if (cur || !(await shouldSeed(rel, manifest, targetDir))) continue;
+      toWrite.push({ abs, rel, data, existed: false });
+      continue;
+    }
     if (cur && cur.equals(data)) continue; // identical → skip (no churn)
     toWrite.push({ abs, rel, data, existed: !!cur });
   }
@@ -259,6 +279,25 @@ async function latestBackup(targetDir) {
       .filter((e) => e.isDirectory()).map((e) => e.name).sort();
     return stamps.length ? path.join(root, stamps[stamps.length - 1]) : null;
   } catch { return null; }
+}
+
+/**
+ * Whether a KEEP file the project doesn't have should be SEEDED. Two kinds of
+ * designer-owned file arrive with a template:
+ *   - machinery the CORE files import (content/site.json, site/blocks/chrome.ts…):
+ *     listed in manifest.seedAlways, seeded whenever missing so nothing lands broken;
+ *   - starters (a sample page, a sample post, a starter block): seeded only when the
+ *     project has NONE of that tree yet (the keep glob's literal root is absent), so a
+ *     project with its own content never gains a stray example page.
+ */
+async function shouldSeed(rel, manifest, targetDir) {
+  const matches = (g) => globToRegExp(g).test(rel);
+  if ((manifest.seedAlways || []).some(matches)) return true;
+  const pattern = (manifest.keep || []).find(matches);
+  if (!pattern) return false;
+  const root = pattern.split("*")[0].replace(/\/$/, "");
+  if (!root || root === rel) return true; // an exact-path keep entry (.env, pages.ts): seed it
+  return !(await fileExists(path.join(targetDir, root)));
 }
 
 /** Whether a revert is available (a backup exists), + a summary for the UI. */
