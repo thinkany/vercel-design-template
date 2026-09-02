@@ -139,6 +139,27 @@ one-click-revert backup before writing and refuses a dirty tree unless forced. T
 one engine: the dashboard button (`/api/upgrade`) and [`/upgrade`](.claude/commands/upgrade.md).
 The CORE/KEEP split is clean **because** the designer's work is siloed in `src/variations/**`.
 
+### Site build (after design approval)
+
+A second build target lives beside the design surface: `site/` (Astro, `npm run
+site:build`) renders **blocks** + **content** to static HTML, importing the pinned
+variation's fonts/tokens/globals (`content/site.json` → `design`). The design surface
+is untouched by it; the site is built FROM the design, never the other way.
+
+- `site/blocks/*.tsx` (KEEP): one block per section, `defineBlock({ name, props: zod,
+  component })`, registered by key in `site/blocks/index.ts`; header/footer in
+  `site/blocks/chrome.ts` (named exports, the header hydrates, everything else is static).
+- `content/site.json` (KEEP): pinned design, public URL, nav. `content/pages/*.json`: a
+  page = ordered `{ type, props }` block instances + SEO fields. `content/posts/*.md`: the
+  blog. `content/collections.ts`: designer-defined content types (products, landing pages).
+- `site/src/**` (CORE): layout, routes, block validation, sitemap/robots/llms.txt. Don't
+  edit it in a project; it upgrades with the template.
+
+Block props are the CONTENT (headings, copy, images, card lists); markup is the DESIGN
+(classes verbatim, `@lg:`/`cqi` included, the site wraps pages in the same `@container`).
+Invalid content fails `site:build` naming the page, block and field. `/promote-blocks` is
+the only way a design becomes blocks; `/design` keeps editing the design itself.
+
 ### Company profile
 
 The **agency layer**, the things the same for every project a designer does (company name
@@ -213,6 +234,14 @@ Invoke the skill the moment its phase begins, don't re-derive its rules from thi
   Read→Edit in the variation's component, don't load `/design` for it. Escalate to `/design` only
   when the scope is a whole section, a new section/page, a layout/responsive rework, or a change
   spanning multiple sections (the prompt's `Scope: section` hint, or the note asks for it).
+- **[`/promote-blocks`](.claude/commands/promote-blocks.md)** → the design is **approved**
+  and the designer wants the **site**: each section of the approved variation becomes a block
+  in `site/blocks/` with a props schema, its copy/images move into `content/`, the
+  header/footer become `site/blocks/chrome.ts`, then `npm run site:build` proves it. Invoke on
+  "approved / final / start the site build / turn this into a site / promote to blocks".
+  Carries the design→site translation table (motion → data-reveal, onNavigate → hrefs, menu
+  state → local state, frame heights → 100dvh). Once promoted, page copy is edited as content,
+  not by `/design`.
 - **[`/diagnose`](.claude/commands/diagnose.md)** → a **reported visual bug** (something not
   showing, cut off, mispositioned, overlapping, hidden behind another element). Headlessly
   screenshot the `?capture=` route and look; carries the symptom→cause→fix table for this

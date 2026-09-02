@@ -4,13 +4,10 @@
 // approved design's sections are promoted to blocks.
 import { z } from "astro/zod";
 import { defineBlock } from "../src/lib/blocks";
+import { link } from "./lib/schema";
 
-const cta = z.object({
-  label: z.string(),
-  href: z.string(),
-  /** "primary" = filled brand button; "secondary" = outlined. */
-  style: z.enum(["primary", "secondary"]).default("primary"),
-});
+/** "primary" = filled brand button; "secondary" = outlined. */
+const cta = link.extend({ style: z.enum(["primary", "secondary"]).default("primary") });
 
 const props = z.object({
   eyebrow: z.string().optional(),

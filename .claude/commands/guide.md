@@ -22,6 +22,9 @@ the preview/stop note. Use roughly this content, lightly adapted to the moment:
   styleguide. `/setup-project` hands off into this automatically.
 - **/design:** build or edit a design page (a hero, sections, a full landing).
   The everyday design command once setup is done.
+- **/promote-blocks:** the design is approved, start the site build. Each section
+  becomes a reusable block, its copy and images become content you can edit, and
+  the header and footer become the site's chrome. Run it once per approved design.
 - **/upgrade:** pull the latest template version into this project. Overlays the
   framework files, keeps your work (`.env`, your designs, your palette) untouched,
   and walks you through the diff. The dashboard's "Update available" button does the

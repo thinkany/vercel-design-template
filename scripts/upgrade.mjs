@@ -132,7 +132,9 @@ export async function runUpgrade(opts = {}) {
   if (opts.dryRun) {
     for (const [rel] of files) {
       const tier = classify(rel, manifest);
-      if (tier === "keep") report.kept.push(rel);
+      // A KEEP file the project lacks would be seeded (see the plan below), so
+      // report it under applied, not kept.
+      if (tier === "keep" && (await fileExists(path.join(targetDir, rel)))) report.kept.push(rel);
       else (tier === "review" ? report.review : report.applied).push(rel);
     }
     report.message = `Dry run: ${report.applied.length} core file(s) would update, ${report.review.length} need review, ${report.kept.length} kept.`;
@@ -144,7 +146,17 @@ export async function runUpgrade(opts = {}) {
   const plan = [];
   for (const [rel, data] of files) {
     const tier = classify(rel, manifest);
-    if (tier === "keep") { report.kept.push(rel); continue; }
+    if (tier === "keep") {
+      // KEEP = designer-owned: never overwrite. But a KEEP file the project doesn't
+      // have yet (a template that grew a new designer-owned starter, e.g.
+      // content/site.json) is SEEDED, so the CORE files that import it don't
+      // arrive broken. The designer owns it from then on.
+      const abs = path.join(targetDir, rel);
+      if (await fileExists(abs)) { report.kept.push(rel); continue; }
+      plan.push({ data, dest: rel, abs, tier: "seed", existed: false });
+      report.applied.push(rel);
+      continue;
+    }
     const dest = tier === "review" ? rel + ".upgrade-new" : rel;
     const abs = path.join(targetDir, dest);
     plan.push({ data, dest, abs, tier, existed: await fileExists(abs) });
@@ -210,10 +222,18 @@ export async function runRefresh({ targetDir, source } = {}) {
   // Plan only CORE files whose content differs from what's on disk.
   const toWrite = [];
   for (const [rel, data] of files) {
-    if (classify(rel, manifest) !== "core") continue; // keep + review untouched
+    const tier = classify(rel, manifest);
+    if (tier === "review") continue; // review sidecars are /upgrade's job, not a refresh
     const abs = path.join(targetDir, rel);
     let cur = null;
     try { cur = await readFile(abs); } catch {}
+    if (tier === "keep") {
+      // Designer-owned: never overwritten, but SEEDED when absent (a new
+      // designer-owned starter the CORE files import, e.g. content/site.json).
+      if (cur) continue;
+      toWrite.push({ abs, rel, data, existed: false });
+      continue;
+    }
     if (cur && cur.equals(data)) continue; // identical → skip (no churn)
     toWrite.push({ abs, rel, data, existed: !!cur });
   }
