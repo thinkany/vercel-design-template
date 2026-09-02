@@ -2789,11 +2789,54 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
     actions.appendChild(siteMini(COPY.site.deletePage, async () => {
       if (!confirm(COPY.site.deleteConfirm(page.title))) return;
       const res = await window.desktop.deleteSitePage(page.id);
-      if (res && res.ok) { if (siteRailState.selected === page.id) siteRailState.selected = null; refresh(); }
+      if (res && res.ok) { siteRailState.selected = null; refresh(); }
     }, { danger: true }));
   }
   body.appendChild(actions);
   card.appendChild(body);
+  return card;
+}
+
+function renderSitePost(post, refresh) {
+  const S = COPY.site;
+  const card = siteEl("div");
+  const h = siteEl("div"); h.style.cssText = "display:flex;align-items:baseline;gap:10px;margin-bottom:10px;";
+  h.append(siteEl("div", "site-page-title", post.title), siteEl("div", "site-page-slug", "/blog/" + post.id));
+  h.querySelector(".site-page-title").style.fontSize = "15px";
+  card.appendChild(h);
+  const draft = JSON.parse(JSON.stringify({ title: post.title, date: post.date, description: post.description, image: post.image, tags: post.tags || [], draft: !!post.draft, seo: post.seo || {}, body: post.body || "" }));
+  let saveBtn;
+  const dirty = () => { saveBtn.disabled = false; };
+  const t = siteField(S.pageTitle, draft.title); t.input.addEventListener("input", () => { draft.title = t.input.value; dirty(); }); card.appendChild(t.wrap);
+  const d = siteField(S.postDate, draft.date, { type: "date" }); d.input.addEventListener("input", () => { draft.date = d.input.value; dirty(); }); card.appendChild(d.wrap);
+  const ds = siteField(S.postDescription, draft.description, { textarea: true, hint: S.postDescriptionHint }); ds.input.addEventListener("input", () => { draft.description = ds.input.value; dirty(); }); card.appendChild(ds.wrap);
+  const im = siteField(S.postImage, draft.image, { hint: S.seoImageHint }); im.input.addEventListener("input", () => { draft.image = im.input.value; dirty(); }); card.appendChild(im.wrap);
+  const tg = siteField(S.postTags, draft.tags.join(", "), { hint: S.postTagsHint }); tg.input.addEventListener("input", () => { draft.tags = tg.input.value.split(",").map((x) => x.trim()).filter(Boolean); dirty(); }); card.appendChild(tg.wrap);
+  const dr = siteEl("label", "toggle-row"); const drCb = document.createElement("input"); drCb.type = "checkbox"; drCb.checked = draft.draft;
+  drCb.addEventListener("change", () => { draft.draft = drCb.checked; dirty(); }); dr.append(drCb, siteEl("span", "", S.postDraft)); card.appendChild(dr);
+  const body = siteField(S.postBody, draft.body, { textarea: true, hint: S.postBodyHint }); body.input.style.minHeight = "260px"; body.input.style.fontFamily = "ui-monospace, Menlo, monospace"; body.input.style.fontSize = "12.5px";
+  body.input.addEventListener("input", () => { draft.body = body.input.value; dirty(); }); card.appendChild(body.wrap);
+  card.appendChild(siteEl("div", "sess-label", S.seoHeading)).style.marginTop = "12px";
+  const st = siteField(S.seoTitle, draft.seo.title, { hint: S.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; dirty(); }); card.appendChild(st.wrap);
+  const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!draft.seo.noindex;
+  nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; dirty(); }); nx.append(nxCb, siteEl("span", "", S.seoNoindex)); card.appendChild(nx);
+
+  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
+  saveBtn = siteEl("button", "panelbtn primary", S.savePost); saveBtn.disabled = true; saveBtn.style.margin = "0";
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true; saveBtn.textContent = S.saving;
+    const res = await window.desktop.saveSitePost(post.id, draft);
+    saveBtn.textContent = S.savePost;
+    if (res && res.ok) { siteFlash(actions, S.saved); refresh(); }
+    else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
+  });
+  actions.appendChild(saveBtn);
+  actions.appendChild(siteMini(S.deletePost, async () => {
+    if (!confirm(S.deletePostConfirm(post.title))) return;
+    const res = await window.desktop.deleteSitePost(post.id);
+    if (res && res.ok) { siteRailState.selected = null; refresh(); }
+  }, { danger: true }));
+  card.appendChild(actions);
   return card;
 }
 
@@ -2867,31 +2910,56 @@ async function renderSite(body) {
   const cols = siteEl("div", "site-cols");
   const left = siteEl("div"); const right = siteEl("div", "site-detail");
   cols.append(left, right); body.appendChild(cols);
-  if (!data.pages.some((p) => p.id === siteRailState.selected)) siteRailState.selected = data.pages[0] ? data.pages[0].id : null;
+  const posts = await window.desktop.getSitePosts().catch(() => []);
+  const sel = siteRailState.selected && typeof siteRailState.selected === "object" ? siteRailState.selected : null;
+  const isSel = (kind, id) => !!sel && sel.kind === kind && sel.id === id;
+  const valid = sel && ((sel.kind === "page" && data.pages.some((p) => p.id === sel.id)) || (sel.kind === "post" && posts.some((p) => p.id === sel.id)));
+  if (!valid) siteRailState.selected = data.pages[0] ? { kind: "page", id: data.pages[0].id } : null;
   left.appendChild(siteEl("div", "sess-label", COPY.site.pagesHeading));
   data.pages.forEach((p) => {
-    const row = siteEl("div", "site-list-row" + (p.id === siteRailState.selected ? " active" : ""));
+    const row = siteEl("div", "site-list-row" + (isSel("page", p.id) ? " active" : ""));
     row.append(siteEl("div", "site-page-title", p.title), siteEl("div", "site-page-slug", p.id === "home" ? COPY.site.homeSlug : "/" + (p.slug || p.id)));
-    row.addEventListener("click", () => { siteRailState.selected = p.id; refresh(); });
+    row.addEventListener("click", () => { siteRailState.selected = { kind: "page", id: p.id }; refresh(); });
     left.appendChild(row);
   });
-  const selected = data.pages.find((p) => p.id === siteRailState.selected);
-  if (selected) right.appendChild(renderSitePage(selected, data.blocks, refresh, true));
+  const cur = siteRailState.selected;
+  if (cur && cur.kind === "page") right.appendChild(renderSitePage(data.pages.find((p) => p.id === cur.id), data.blocks, refresh, true));
+  else if (cur && cur.kind === "post") right.appendChild(renderSitePost(posts.find((p) => p.id === cur.id), refresh));
   else right.appendChild(siteEl("div", "sess-desc", COPY.site.noBlocks));
-  body = left; // the rest of the master column (add page, posts note, navigation)
+  body = left; // the rest of the master column (add page, posts, navigation)
   const addRow = siteEl("div"); addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:4px 0 14px;";
   const titleIn = document.createElement("input"); titleIn.className = "field"; titleIn.placeholder = COPY.site.newPagePlaceholder; titleIn.style.marginBottom = "0";
   const createBtn = siteEl("button", "panelbtn", COPY.site.create); createBtn.style.margin = "0"; createBtn.style.width = "auto";
   const create = async () => {
     const t = titleIn.value.trim(); if (!t) return;
     const res = await window.desktop.createSitePage(t);
-    if (res && res.ok) { siteRailState.selected = res.page.id; refresh(); }
+    if (res && res.ok) { siteRailState.selected = { kind: "page", id: res.page.id }; refresh(); }
   };
   createBtn.addEventListener("click", create);
   titleIn.addEventListener("keydown", (e) => { if (e.key === "Enter") create(); });
   addRow.append(titleIn, createBtn);
   body.appendChild(addRow);
-  if (data.posts) { const pn = siteEl("div", "sess-desc", COPY.site.posts(data.posts) + ". " + COPY.site.postsNote); body.appendChild(pn); }
+  // Blog posts: newest first, drafts tagged; the editor opens on the right.
+  body.appendChild(siteEl("div", "sess-label", COPY.site.postsHeading)).style.marginTop = "12px";
+  if (!posts.length) body.appendChild(siteEl("div", "sess-desc", COPY.site.noPosts));
+  posts.forEach((p) => {
+    const row = siteEl("div", "site-list-row" + (isSel("post", p.id) ? " active" : ""));
+    row.append(siteEl("div", "site-page-title", p.title), siteEl("div", "site-page-slug", p.draft ? COPY.site.draftTag : (p.date || "")));
+    row.addEventListener("click", () => { siteRailState.selected = { kind: "post", id: p.id }; refresh(); });
+    body.appendChild(row);
+  });
+  const addPostRow = siteEl("div"); addPostRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:4px 0 14px;";
+  const postIn = document.createElement("input"); postIn.className = "field"; postIn.placeholder = COPY.site.newPostPlaceholder; postIn.style.marginBottom = "0";
+  const postBtn = siteEl("button", "panelbtn", COPY.site.create); postBtn.style.margin = "0"; postBtn.style.width = "auto";
+  const createPost = async () => {
+    const t = postIn.value.trim(); if (!t) return;
+    const res = await window.desktop.createSitePost(t);
+    if (res && res.ok) { siteRailState.selected = { kind: "post", id: res.post.id }; refresh(); }
+  };
+  postBtn.addEventListener("click", createPost);
+  postIn.addEventListener("keydown", (e) => { if (e.key === "Enter") createPost(); });
+  addPostRow.append(postIn, postBtn);
+  body.appendChild(addPostRow);
 
   body.appendChild(siteEl("div", "drawer-sep"));
   body.appendChild(renderSiteNav(data.site, refresh));

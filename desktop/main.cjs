@@ -1544,6 +1544,121 @@ ipcMain.handle("site:saveSite", (_e, { nav, footerLinks } = {}) => {
   catch (e) { return { ok: false, error: e.message }; }
 });
 
+// ---- Posts (content/posts/*.md) ----------------------------------------------
+// Markdown with a small, fixed frontmatter (title, date, description, image, tags,
+// draft, seo.*). Read and written here without a YAML dependency: scalars, quoted
+// strings, `[a, b]` lists, `key.sub` for the seo group. Anything else in an
+// existing file's frontmatter is preserved as-is (unknown lines round-trip).
+function postsDir(dir) { return path.join(siteContentDir(dir), "posts"); }
+function postFile(dir, id) { return path.join(postsDir(dir), `${id}.md`); }
+function fmUnquote(v) {
+  const t = v.trim();
+  if ((t.startsWith('"') && t.endsWith('"'))) { try { return JSON.parse(t); } catch { return t.slice(1, -1); } }
+  if (t.startsWith("'") && t.endsWith("'")) return t.slice(1, -1).replace(/''/g, "'");
+  return t;
+}
+// One scalar: booleans, else an (un)quoted string. Numbers stay strings (dates,
+// zip codes) since every field here is text or a date the schema coerces.
+function fmScalar(v) {
+  const t = v.trim();
+  if (t === "true" || t === "false") return t === "true";
+  return fmUnquote(t);
+}
+function parseFrontmatter(md) {
+  const m = md.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!m) return { data: {}, body: md, unknown: [] };
+  const data = {}; const unknown = [];
+  let group = null;
+  for (const raw of m[1].split(/\r?\n/)) {
+    if (!raw.trim() || raw.trim().startsWith("#")) continue;
+    const nested = raw.match(/^\s+([A-Za-z_][\w-]*):\s*(.*)$/);
+    if (group && nested) { data[group][nested[1]] = fmScalar(nested[2]); continue; }
+    group = null;
+    const kv = raw.match(/^([A-Za-z_][\w-]*):\s*(.*)$/);
+    if (!kv) { unknown.push(raw); continue; }
+    const [, key, val] = kv;
+    if (val === "") { group = key; data[key] = {}; continue; }
+    const list = val.match(/^\[(.*)\]$/);
+    if (list) data[key] = list[1].split(",").map((x) => fmUnquote(x)).filter((x) => x !== "");
+    else data[key] = fmScalar(val);
+  }
+  return { data, body: m[2], unknown };
+}
+function fmQuote(v) {
+  const s = String(v);
+  return /^[A-Za-z0-9 .,!?()'&/-]*$/.test(s) && !/^(true|false|null|~|\d.*)$/.test(s) && !/^\s|\s$|:/.test(s) ? s : JSON.stringify(s);
+}
+function serializeFrontmatter(data, unknown = []) {
+  const lines = [];
+  const ORDER = ["title", "date", "description", "image", "tags", "draft"];
+  for (const k of ORDER) {
+    const v = data[k];
+    if (v === undefined || v === null || v === "") continue;
+    if (Array.isArray(v)) { if (v.length) lines.push(`${k}: [${v.map(fmQuote).join(", ")}]`); }
+    else if (typeof v === "boolean") { if (v) lines.push(`${k}: true`); }
+    else lines.push(`${k}: ${fmQuote(v)}`);
+  }
+  const seo = data.seo && typeof data.seo === "object" ? Object.entries(data.seo).filter(([, v]) => v !== "" && v != null && v !== false) : [];
+  if (seo.length) { lines.push("seo:"); for (const [k, v] of seo) lines.push(`  ${k}: ${typeof v === "boolean" ? v : fmQuote(v)}`); }
+  for (const u of unknown) lines.push(u);
+  return `---\n${lines.join("\n")}\n---\n`;
+}
+function readPosts(dir) {
+  let files = [];
+  try { files = fs.readdirSync(postsDir(dir)).filter((f) => /\.mdx?$/.test(f)); } catch { return []; }
+  const posts = files.map((f) => {
+    const id = f.replace(/\.mdx?$/, "");
+    const { data, body } = parseFrontmatter(readTextSafe(path.join(postsDir(dir), f)));
+    return { id, file: f, title: data.title || id, date: data.date || "", description: data.description || "", image: data.image || "", tags: Array.isArray(data.tags) ? data.tags : [], draft: !!data.draft, seo: data.seo || {}, body };
+  });
+  posts.sort((a, b) => String(b.date).localeCompare(String(a.date)) || a.title.localeCompare(b.title));
+  return posts;
+}
+function todayIso() { return new Date().toISOString().slice(0, 10); }
+
+ipcMain.handle("site:posts", () => (currentProject ? readPosts(currentProject) : []));
+ipcMain.handle("site:savePost", (_e, { id, data } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!validPageId(id)) return { ok: false, error: "Bad post id." };
+  if (!data || typeof data.title !== "string" || !data.title.trim()) return { ok: false, error: "A post needs a title." };
+  const p = postFile(currentProject, id);
+  const existing = fs.existsSync(p) ? parseFrontmatter(readTextSafe(p)) : { unknown: [] };
+  const fm = {
+    title: data.title.trim(),
+    date: /^\d{4}-\d{2}-\d{2}$/.test(String(data.date || "")) ? data.date : todayIso(),
+    description: typeof data.description === "string" ? data.description.trim() : "",
+    image: typeof data.image === "string" ? data.image.trim() : "",
+    tags: Array.isArray(data.tags) ? data.tags.map((t) => String(t).trim()).filter(Boolean) : [],
+    draft: !!data.draft,
+    seo: data.seo && typeof data.seo === "object" ? data.seo : {},
+  };
+  const body = typeof data.body === "string" ? data.body.replace(/^\s*\n/, "").replace(/\s*$/, "") + "\n" : "\n";
+  try {
+    fs.mkdirSync(postsDir(currentProject), { recursive: true });
+    fs.writeFileSync(p, serializeFrontmatter(fm, existing.unknown) + "\n" + body);
+    return { ok: true, post: { id, ...fm, body } };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle("site:createPost", (_e, { title } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const t = String(title || "").trim();
+  if (!t) return { ok: false, error: "Give the post a title." };
+  let id = slugifyId(t) || "post"; const base = id; let n = 2;
+  while (fs.existsSync(postFile(currentProject, id))) id = `${base}-${n++}`;
+  const fm = { title: t, date: todayIso(), description: "", image: "", tags: [], draft: true, seo: {} };
+  try {
+    fs.mkdirSync(postsDir(currentProject), { recursive: true });
+    fs.writeFileSync(postFile(currentProject, id), serializeFrontmatter(fm) + "\n\n");
+    return { ok: true, post: { id, ...fm, body: "" } };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle("site:deletePost", (_e, { id } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!validPageId(id)) return { ok: false, error: "Bad post id." };
+  try { fs.rmSync(postFile(currentProject, id), { force: true }); return { ok: true }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
 // ---- Site IPC ----------------------------------------------------------------
 ipcMain.handle("site:status", () => {
   if (!currentProject) return { ready: false, reason: "no-project", url: null };
