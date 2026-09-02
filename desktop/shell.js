@@ -3200,13 +3200,13 @@ function siteImageControl(value, onChange, { label } = {}) {
   const thumb = document.createElement("img"); thumb.className = "site-img-thumb";
   const empty = siteEl("div", "site-img-thumb empty", M.noImage);
   const side = siteEl("div", "site-img-side");
-  const pathEl = siteEl("div", "site-img-path");
-  const alt = document.createElement("input"); alt.className = "field"; alt.placeholder = M.altLabel; alt.value = cur.alt;
+  const altLabel = siteEl("div", "k", M.altLabel);
+  const alt = document.createElement("input"); alt.className = "field"; alt.value = cur.alt;
   const btns = siteEl("div"); btns.style.cssText = "display:flex;gap:6px;";
   const choose = siteMini(M.choose, async () => { const it = await openMediaPicker(cur.src || null); if (it && it.url) { cur = { src: it.url, alt: cur.alt }; paint(); emit(); } });
   const clear = siteMini(M.clear, () => { cur = { src: "", alt: cur.alt }; paint(); emit(); }, { danger: true });
   btns.append(choose, clear);
-  side.append(pathEl, alt, btns);
+  side.append(altLabel, alt, btns);
   const emit = () => onChange(cur.src ? { src: cur.src, alt: alt.value.trim() } : "");
   alt.addEventListener("input", () => { cur.alt = alt.value; emit(); });
   const paint = () => {
@@ -3215,7 +3215,6 @@ function siteImageControl(value, onChange, { label } = {}) {
     if (cur.src && file) { thumb.src = file; row.append(thumb, side); }
     else { empty.textContent = cur.src ? cur.src.split("/").pop() : M.noImage; row.append(empty, side); }
     choose.textContent = cur.src ? M.change : M.choose; clear.hidden = !cur.src;
-    pathEl.textContent = cur.src;
   };
   paint();
   wrap.appendChild(row);

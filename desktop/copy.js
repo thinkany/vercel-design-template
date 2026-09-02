@@ -518,7 +518,7 @@ window.COPY = {
       deleteConfirm: (n) => `Delete ${n} from the project? Pages using it will show a broken image.`,
       dims: (w, h) => `${w} × ${h}`,
       noImage: "No image",
-      altLabel: "Alt text",
+      altLabel: "Alt Text",
     },
   },
   a11y: {
