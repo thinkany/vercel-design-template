@@ -1659,6 +1659,120 @@ ipcMain.handle("site:deletePost", (_e, { id } = {}) => {
   catch (e) { return { ok: false, error: e.message }; }
 });
 
+// ---- Content types (content/types.json + content/<key>/*.json) ---------------
+// Designer-defined types, declared as data and rendered by the site's generic
+// routes (site/src/pages/[type]). The CMS edits the declarations and the entries;
+// the site build validates entries against the fields.
+const TYPE_FIELD_KINDS = ["text", "textarea", "richtext", "number", "boolean", "date", "image", "select", "list", "link", "reference"];
+function typesFile(dir) { return path.join(siteContentDir(dir), "types.json"); }
+function readTypes(dir) {
+  const j = readJsonFile(typesFile(dir));
+  return j && Array.isArray(j.types) ? j.types : [];
+}
+function entryDir(dir, key) { return path.join(siteContentDir(dir), key); }
+function entryFile(dir, key, id) { return path.join(entryDir(dir, key), `${id}.json`); }
+function validTypeKey(k) { return typeof k === "string" && /^[a-z][a-z0-9-]*$/.test(k) && !["pages", "posts", "site", "types", "collections"].includes(k); }
+// Shape-check a type declaration (mirrors site/src/lib/types.ts typeDef).
+function cleanType(t) {
+  if (!t || typeof t !== "object") return { error: "Bad type." };
+  const key = String(t.key || "").trim();
+  if (!validTypeKey(key)) return { error: `"${key}" isn't a usable type key (lowercase letters, digits, dashes; not a built-in).` };
+  const label = String(t.label || "").trim(); if (!label) return { error: "A type needs a label." };
+  const pathv = String(t.path || `/${key}`).trim();
+  if (!/^\/[a-z0-9-]*$/.test(pathv)) return { error: `"${pathv}" isn't a usable path (like /products).` };
+  const fields = [];
+  const seen = new Set();
+  for (const f of Array.isArray(t.fields) ? t.fields : []) {
+    const fk = String(f.key || "").trim();
+    if (!/^[a-z][a-zA-Z0-9]*$/.test(fk)) return { error: `Field key "${fk}" must be camelCase (like priceLabel).` };
+    if (["title", "slug", "seo", "blocks"].includes(fk)) return { error: `"${fk}" is reserved on every entry.` };
+    if (seen.has(fk)) return { error: `Field "${fk}" is listed twice.` }; seen.add(fk);
+    if (!TYPE_FIELD_KINDS.includes(f.kind)) return { error: `Field "${fk}" has an unknown kind.` };
+    const out = { key: fk, label: String(f.label || fk).trim(), kind: f.kind, required: !!f.required };
+    if (f.kind === "select") out.options = (Array.isArray(f.options) ? f.options : []).map((o) => String(o).trim()).filter(Boolean);
+    if (f.kind === "reference" && f.reference) out.reference = String(f.reference).trim();
+    if (f.hint) out.hint = String(f.hint).trim();
+    fields.push(out);
+  }
+  const template = (Array.isArray(t.template) ? t.template : []).filter((b) => b && typeof b.type === "string").map((b) => ({ type: b.type, props: b.props && typeof b.props === "object" ? b.props : {} }));
+  const out = { key, label, ...(t.singular ? { singular: String(t.singular).trim() } : {}), path: pathv, fields, template };
+  if (t.index) out.index = { ...(t.index.title ? { title: String(t.index.title).trim() } : {}), ...(t.index.description ? { description: String(t.index.description).trim() } : {}) };
+  return { type: out };
+}
+function writeTypes(dir, types) {
+  fs.mkdirSync(siteContentDir(dir), { recursive: true });
+  fs.writeFileSync(typesFile(dir), JSON.stringify({ types }, null, 2) + "\n");
+}
+function readEntries(dir, key) {
+  let files = [];
+  try { files = fs.readdirSync(entryDir(dir, key)).filter((f) => f.endsWith(".json")).sort(); } catch { return []; }
+  return files.map((f) => { const id = f.replace(/\.json$/, ""); const data = readJsonFile(path.join(entryDir(dir, key), f)) || {}; return { id, ...data, title: data.title || id }; });
+}
+
+ipcMain.handle("site:types", () => {
+  if (!currentProject) return { types: [], entries: {} };
+  const types = readTypes(currentProject);
+  const entries = {};
+  for (const t of types) entries[t.key] = readEntries(currentProject, t.key);
+  return { types, entries };
+});
+// Save one type (create or replace by key). The folder is created so the
+// collection loader has something to read.
+ipcMain.handle("site:saveType", (_e, { type } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const r = cleanType(type); if (r.error) return { ok: false, error: r.error };
+  const types = readTypes(currentProject);
+  const i = types.findIndex((t) => t.key === r.type.key);
+  if (i >= 0) types[i] = r.type; else types.push(r.type);
+  try { writeTypes(currentProject, types); fs.mkdirSync(entryDir(currentProject, r.type.key), { recursive: true }); return { ok: true, type: r.type }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+// Remove a type declaration. Its entries stay on disk (never destructive here);
+// they are simply no longer built.
+ipcMain.handle("site:deleteType", (_e, { key } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const types = readTypes(currentProject).filter((t) => t.key !== key);
+  try { writeTypes(currentProject, types); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle("site:saveEntry", (_e, { key, id, data } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!validTypeKey(key) || !validPageId(id)) return { ok: false, error: "Bad type or entry id." };
+  if (!data || typeof data.title !== "string" || !data.title.trim()) return { ok: false, error: "An entry needs a title." };
+  const t = readTypes(currentProject).find((x) => x.key === key);
+  if (!t) return { ok: false, error: "Unknown type." };
+  const doc = { title: data.title.trim(), slug: slugifyId(data.slug || id) || id };
+  if (data.seo && typeof data.seo === "object") { doc.seo = {}; for (const [k, v] of Object.entries(data.seo)) if (v !== "" && v != null && v !== false) doc.seo[k] = v; if (!Object.keys(doc.seo).length) delete doc.seo; }
+  for (const f of t.fields) {
+    let v = data[f.key];
+    if (v === "" || v == null) continue;
+    if (f.kind === "number") { v = Number(v); if (Number.isNaN(v)) continue; }
+    else if (f.kind === "boolean") v = !!v;
+    else if (f.kind === "list") v = (Array.isArray(v) ? v : String(v).split("\n")).map((x) => String(x).trim()).filter(Boolean);
+    else if (f.kind === "image") { if (!v.src) continue; v = { src: String(v.src).trim(), alt: String(v.alt || "").trim() }; }
+    else if (f.kind === "link") { if (!v.href) continue; v = { label: String(v.label || "").trim(), href: String(v.href).trim() }; }
+    else v = String(v);
+    doc[f.key] = v;
+  }
+  if (Array.isArray(data.blocks) && data.blocks.length) doc.blocks = data.blocks.filter((b) => b && typeof b.type === "string").map((b) => ({ type: b.type, props: b.props && typeof b.props === "object" ? b.props : {} }));
+  try { fs.mkdirSync(entryDir(currentProject, key), { recursive: true }); fs.writeFileSync(entryFile(currentProject, key, id), JSON.stringify(doc, null, 2) + "\n"); return { ok: true, entry: { id, ...doc } }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle("site:createEntry", (_e, { key, title } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!validTypeKey(key)) return { ok: false, error: "Bad type." };
+  const t = String(title || "").trim(); if (!t) return { ok: false, error: "Give it a title." };
+  let id = slugifyId(t) || "entry"; const base = id; let n = 2;
+  while (fs.existsSync(entryFile(currentProject, key, id))) id = `${base}-${n++}`;
+  const doc = { title: t, slug: id };
+  try { fs.mkdirSync(entryDir(currentProject, key), { recursive: true }); fs.writeFileSync(entryFile(currentProject, key, id), JSON.stringify(doc, null, 2) + "\n"); return { ok: true, entry: { id, ...doc } }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle("site:deleteEntry", (_e, { key, id } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!validTypeKey(key) || !validPageId(id)) return { ok: false, error: "Bad type or entry id." };
+  try { fs.rmSync(entryFile(currentProject, key, id), { force: true }); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
+});
+
 // ---- Site IPC ----------------------------------------------------------------
 ipcMain.handle("site:status", () => {
   if (!currentProject) return { ready: false, reason: "no-project", url: null };

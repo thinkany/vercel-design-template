@@ -151,7 +151,11 @@ is untouched by it; the site is built FROM the design, never the other way.
   `site/blocks/chrome.ts` (named exports, the header hydrates, everything else is static).
 - `content/site.json` (KEEP): pinned design, public URL, nav. `content/pages/*.json`: a
   page = ordered `{ type, props }` block instances + SEO fields. `content/posts/*.md`: the
-  blog. `content/collections.ts`: designer-defined content types (products, landing pages).
+  blog. `content/types.json`: designer-defined content types (products, landing pages) as
+  DATA: key, label, path, fields, and a template of blocks whose string props bind entry
+  fields with `{{field}}`; entries are `content/<key>/*.json`, rendered by the generic
+  routes in `site/src/pages/[type]/`. The app's Pages panel edits all of this; a type can
+  also be written by hand. `content/collections.ts` stays for code-defined collections.
 - `site/src/**` (CORE): layout, routes, block validation, sitemap/robots/llms.txt. Don't
   edit it in a project; it upgrades with the template.
 

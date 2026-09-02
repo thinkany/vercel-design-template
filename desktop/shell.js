@@ -2840,6 +2840,280 @@ function renderSitePost(post, refresh) {
   return card;
 }
 
+// --- Content types in the Pages drawer -----------------------------------------
+// A type = fields + a page template (blocks with {{field}} bindings) + an address.
+// Entry forms are rendered FROM the field definitions (a real form per kind), so
+// a designer's type gets a proper editor without any code.
+
+// One field's control, by kind. Returns { wrap, get } where get() reads the value.
+function siteTypeFieldControl(f, value, onChange, ctx) {
+  const S = COPY.site;
+  const wrap = siteEl("div", "site-kv");
+  wrap.appendChild(siteEl("div", "k", f.label + (f.required ? " *" : "")));
+  let get;
+  const change = () => onChange();
+  if (f.kind === "boolean") {
+    wrap.className = "";
+    const row = siteEl("label", "toggle-row"); const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!value;
+    cb.addEventListener("change", change); row.append(cb, siteEl("span", "", f.label)); wrap.innerHTML = ""; wrap.appendChild(row);
+    get = () => cb.checked;
+  } else if (f.kind === "select") {
+    const sel = document.createElement("select"); sel.className = "field";
+    const o0 = document.createElement("option"); o0.value = ""; o0.textContent = S.noneOption; sel.appendChild(o0);
+    (f.options || []).forEach((o) => { const opt = document.createElement("option"); opt.value = o; opt.textContent = o; sel.appendChild(opt); });
+    sel.value = value || ""; sel.addEventListener("change", change); wrap.appendChild(sel);
+    get = () => sel.value;
+  } else if (f.kind === "reference") {
+    const sel = document.createElement("select"); sel.className = "field";
+    const o0 = document.createElement("option"); o0.value = ""; o0.textContent = S.noneOption; sel.appendChild(o0);
+    ((ctx.entries && ctx.entries[f.reference]) || []).forEach((e) => { const opt = document.createElement("option"); opt.value = e.id; opt.textContent = e.title; sel.appendChild(opt); });
+    sel.value = value || ""; sel.addEventListener("change", change); wrap.appendChild(sel);
+    get = () => sel.value;
+  } else if (f.kind === "image") {
+    const src = document.createElement("input"); src.className = "field"; src.placeholder = S.imageSrc; src.value = (value && value.src) || "";
+    const alt = document.createElement("input"); alt.className = "field"; alt.placeholder = S.imageAlt; alt.value = (value && value.alt) || "";
+    src.addEventListener("input", change); alt.addEventListener("input", change); wrap.append(src, alt);
+    get = () => (src.value.trim() ? { src: src.value.trim(), alt: alt.value.trim() } : "");
+  } else if (f.kind === "link") {
+    const lab = document.createElement("input"); lab.className = "field"; lab.placeholder = S.linkLabel; lab.value = (value && value.label) || "";
+    const href = document.createElement("input"); href.className = "field"; href.placeholder = S.linkHref; href.value = (value && value.href) || "";
+    lab.addEventListener("input", change); href.addEventListener("input", change); wrap.append(lab, href);
+    get = () => (href.value.trim() ? { label: lab.value.trim(), href: href.value.trim() } : "");
+  } else if (f.kind === "list") {
+    const ta = document.createElement("textarea"); ta.className = "field"; ta.value = Array.isArray(value) ? value.join("\n") : ""; ta.placeholder = S.listHint;
+    ta.addEventListener("input", change); wrap.appendChild(ta);
+    get = () => ta.value.split("\n").map((x) => x.trim()).filter(Boolean);
+  } else {
+    const multi = f.kind === "textarea" || f.kind === "richtext";
+    const input = document.createElement(multi ? "textarea" : "input"); input.className = "field";
+    if (!multi) input.type = f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text";
+    if (f.kind === "richtext") { input.style.minHeight = "180px"; input.style.fontFamily = "ui-monospace, Menlo, monospace"; input.style.fontSize = "12.5px"; }
+    input.value = value == null ? "" : String(value);
+    input.addEventListener("input", change); wrap.appendChild(input);
+    get = () => (f.kind === "number" ? (input.value === "" ? "" : Number(input.value)) : input.value);
+  }
+  if (f.hint) wrap.appendChild(siteEl("div", "sess-desc", f.hint));
+  return { wrap, get };
+}
+
+function renderSiteEntry(type, entry, ctx, refresh) {
+  const S = COPY.site;
+  const card = siteEl("div");
+  const h = siteEl("div"); h.style.cssText = "display:flex;align-items:baseline;gap:10px;margin-bottom:10px;";
+  h.append(siteEl("div", "site-page-title", entry.title), siteEl("div", "site-page-slug", `${type.path}/${entry.slug || entry.id}`));
+  h.querySelector(".site-page-title").style.fontSize = "15px";
+  card.appendChild(h);
+  let saveBtn; const dirty = () => { saveBtn.disabled = false; };
+  const t = siteField(S.pageTitle, entry.title); t.input.addEventListener("input", dirty); card.appendChild(t.wrap);
+  const sl = siteField(S.pageSlug, entry.slug || entry.id); sl.input.addEventListener("input", dirty); card.appendChild(sl.wrap);
+  const controls = type.fields.map((f) => { const c = siteTypeFieldControl(f, entry[f.key], dirty, ctx); card.appendChild(c.wrap); return [f.key, c.get]; });
+  // Own blocks (a landing page) instead of the template.
+  const blocksDraft = Array.isArray(entry.blocks) ? JSON.parse(JSON.stringify(entry.blocks)) : null;
+  const own = siteEl("label", "toggle-row"); const ownCb = document.createElement("input"); ownCb.type = "checkbox"; ownCb.checked = !!blocksDraft;
+  own.append(ownCb, siteEl("span", "", S.entryOwnBlocks)); card.appendChild(own);
+  const ownHost = siteEl("div"); card.appendChild(ownHost);
+  let ownBlocks = blocksDraft || [];
+  const paintOwn = () => {
+    ownHost.innerHTML = "";
+    if (!ownCb.checked) return;
+    ownHost.appendChild(siteBlocksEditor(ownBlocks, ctx.blocks, dirty, type.key + ":" + entry.id));
+  };
+  ownCb.addEventListener("change", () => { dirty(); paintOwn(); });
+  paintOwn();
+  card.appendChild(siteEl("div", "sess-label", S.seoHeading)).style.marginTop = "12px";
+  const seo = entry.seo || {};
+  const st = siteField(S.seoTitle, seo.title, { hint: S.seoTitleHint }); st.input.addEventListener("input", dirty); card.appendChild(st.wrap);
+  const sd = siteField(S.seoDescription, seo.description, { textarea: true, hint: S.seoDescriptionHint }); sd.input.addEventListener("input", dirty); card.appendChild(sd.wrap);
+  const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!seo.noindex; nxCb.addEventListener("change", dirty);
+  nx.append(nxCb, siteEl("span", "", S.seoNoindex)); card.appendChild(nx);
+
+  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
+  saveBtn = siteEl("button", "panelbtn primary", S.saveEntry); saveBtn.disabled = true; saveBtn.style.margin = "0";
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true; saveBtn.textContent = S.saving;
+    const data = { title: t.input.value, slug: sl.input.value, seo: { title: st.input.value, description: sd.input.value, noindex: nxCb.checked } };
+    for (const [k, get] of controls) data[k] = get();
+    if (ownCb.checked) data.blocks = ownBlocks;
+    const res = await window.desktop.saveSiteEntry(type.key, entry.id, data);
+    saveBtn.textContent = S.saveEntry;
+    if (res && res.ok) { siteFlash(actions, S.saved); refresh(); }
+    else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
+  });
+  actions.appendChild(saveBtn);
+  actions.appendChild(siteMini(S.deleteEntry, async () => {
+    if (!confirm(S.deleteEntryConfirm(entry.title))) return;
+    const res = await window.desktop.deleteSiteEntry(type.key, entry.id);
+    if (res && res.ok) { siteRailState.selected = null; refresh(); }
+  }, { danger: true }));
+  card.appendChild(actions);
+  return card;
+}
+
+// A reorderable block list with add-from-registry and the props editor. Shared by
+// an entry's own blocks and a type's template (where props may hold {{field}}).
+function siteBlocksEditor(list, blocks, onChange, stateKey) {
+  const S = COPY.site;
+  const host = siteEl("div");
+  const byKey = Object.fromEntries(blocks.map((b) => [b.key, b]));
+  const paint = () => {
+    host.innerHTML = "";
+    if (!list.length) host.appendChild(siteEl("div", "sess-desc", S.noBlocks));
+    list.forEach((b, i) => {
+      const row = siteEl("div", "site-block");
+      const def = byKey[b.type];
+      row.appendChild(siteEl("div", "site-block-name", def ? def.name : b.type));
+      const ek = stateKey + ":" + i;
+      row.append(
+        siteMini("↑", () => { [list[i - 1], list[i]] = [list[i], list[i - 1]]; onChange(); paint(); }, { disabled: i === 0, title: S.moveUp }),
+        siteMini("↓", () => { [list[i + 1], list[i]] = [list[i], list[i + 1]]; onChange(); paint(); }, { disabled: i === list.length - 1, title: S.moveDown }),
+        siteMini(siteRailState.expanded[ek] ? S.hideContent : S.editContent, () => { siteRailState.expanded[ek] = !siteRailState.expanded[ek]; paint(); }),
+        siteMini("×", () => { list.splice(i, 1); onChange(); paint(); }, { danger: true, title: S.removeBlock }),
+      );
+      host.appendChild(row);
+      if (siteRailState.expanded[ek]) host.appendChild(sitePropsEditor(b.props || (b.props = {}), onChange));
+    });
+    if (blocks.length) {
+      const sel = document.createElement("select"); sel.className = "field"; sel.style.margin = "6px 0 4px";
+      const o0 = document.createElement("option"); o0.value = ""; o0.textContent = S.addBlock; sel.appendChild(o0);
+      blocks.forEach((bd) => { const o = document.createElement("option"); o.value = bd.key; o.textContent = bd.name; sel.appendChild(o); });
+      sel.addEventListener("change", () => { if (!sel.value) return; list.push({ type: sel.value, props: {} }); sel.value = ""; onChange(); paint(); });
+      host.appendChild(sel);
+    }
+  };
+  paint();
+  return host;
+}
+
+function renderSiteTypeEditor(type, ctx, refresh) {
+  const S = COPY.site;
+  const isNew = !type.key;
+  const draft = JSON.parse(JSON.stringify({ key: type.key || "", label: type.label || "", singular: type.singular || "", path: type.path || "", fields: type.fields || [], template: type.template || [], index: type.index || null }));
+  const card = siteEl("div");
+  card.appendChild(siteEl("div", "site-page-title", isNew ? S.addType : S.editType + ": " + type.label)).style.cssText = "font-size:15px;margin-bottom:10px;";
+  let saveBtn; const dirty = () => { saveBtn.disabled = false; };
+  const lab = siteField(S.typeLabel, draft.label); card.appendChild(lab.wrap);
+  const sing = siteField(S.typeSingular, draft.singular); card.appendChild(sing.wrap);
+  const pth = siteField(S.typePath, draft.path, { hint: S.typePathHint }); card.appendChild(pth.wrap);
+  const slug = (s) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  lab.input.addEventListener("input", () => { dirty(); if (isNew) { draft.key = slug(lab.input.value); if (!pth.input.dataset.touched) pth.input.value = "/" + draft.key; } });
+  pth.input.addEventListener("input", () => { pth.input.dataset.touched = "1"; dirty(); });
+  sing.input.addEventListener("input", dirty);
+  if (isNew && !pth.input.value) pth.input.value = "/";
+  // index page
+  const ix = siteEl("label", "toggle-row"); const ixCb = document.createElement("input"); ixCb.type = "checkbox"; ixCb.checked = !!draft.index;
+  ix.append(ixCb, siteEl("span", "", S.typeIndexToggle)); card.appendChild(ix);
+  const ixHost = siteEl("div"); card.appendChild(ixHost);
+  const ixT = siteField(S.typeIndexTitle, draft.index && draft.index.title); const ixD = siteField(S.typeIndexDescription, draft.index && draft.index.description, { textarea: true });
+  ixT.input.addEventListener("input", dirty); ixD.input.addEventListener("input", dirty);
+  const paintIx = () => { ixHost.innerHTML = ""; if (ixCb.checked) ixHost.append(ixT.wrap, ixD.wrap); };
+  ixCb.addEventListener("change", () => { dirty(); paintIx(); }); paintIx();
+
+  // fields
+  card.appendChild(siteEl("div", "sess-label", S.fieldsHeading)).style.marginTop = "12px";
+  card.appendChild(siteEl("div", "sess-desc", S.fieldsDesc));
+  const fieldsHost = siteEl("div");
+  const paintFields = () => {
+    fieldsHost.innerHTML = "";
+    draft.fields.forEach((f, i) => {
+      const item = siteEl("div", "site-item");
+      const head = siteEl("div", "site-item-head");
+      head.appendChild(siteEl("span", "", f.key || COPY.site.listItem(i + 1)));
+      const acts = siteEl("span");
+      acts.append(siteMini("↑", () => { if (i > 0) { [draft.fields[i - 1], draft.fields[i]] = [draft.fields[i], draft.fields[i - 1]]; dirty(); paintFields(); } }, { disabled: i === 0 }), " ",
+        siteMini(S.removeItem, () => { draft.fields.splice(i, 1); dirty(); paintFields(); }, { danger: true }));
+      head.appendChild(acts); item.appendChild(head);
+      const grid = siteEl("div"); grid.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:6px;";
+      const fl = document.createElement("input"); fl.className = "field"; fl.placeholder = S.fieldLabel; fl.value = f.label || "";
+      const fk = document.createElement("input"); fk.className = "field"; fk.placeholder = S.fieldKey; fk.value = f.key || "";
+      fl.addEventListener("input", () => { f.label = fl.value; if (!fk.dataset.touched) { f.key = slug(fl.value).replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase()); fk.value = f.key; } dirty(); });
+      fk.addEventListener("input", () => { fk.dataset.touched = "1"; f.key = fk.value.trim(); dirty(); });
+      const kind = document.createElement("select"); kind.className = "field";
+      Object.entries(S.kinds).forEach(([k, v]) => { const o = document.createElement("option"); o.value = k; o.textContent = v; kind.appendChild(o); });
+      kind.value = f.kind || "text";
+      const req = siteEl("label", "toggle-row"); const reqCb = document.createElement("input"); reqCb.type = "checkbox"; reqCb.checked = !!f.required;
+      reqCb.addEventListener("change", () => { f.required = reqCb.checked; dirty(); }); req.append(reqCb, siteEl("span", "", S.fieldRequired)); req.style.marginBottom = "0";
+      grid.append(fl, fk, kind, req); item.appendChild(grid);
+      const extra = siteEl("div"); item.appendChild(extra);
+      const paintExtra = () => {
+        extra.innerHTML = "";
+        if (kind.value === "select") { const op = document.createElement("input"); op.className = "field"; op.placeholder = S.fieldOptions; op.value = (f.options || []).join(", "); op.style.marginTop = "6px"; op.addEventListener("input", () => { f.options = op.value.split(",").map((x) => x.trim()).filter(Boolean); dirty(); }); extra.appendChild(op); }
+        if (kind.value === "reference") { const rf = document.createElement("select"); rf.className = "field"; rf.style.marginTop = "6px"; const o0 = document.createElement("option"); o0.value = ""; o0.textContent = S.fieldReference; rf.appendChild(o0); ctx.types.forEach((t) => { if (t.key !== draft.key) { const o = document.createElement("option"); o.value = t.key; o.textContent = t.label; rf.appendChild(o); } }); rf.value = f.reference || ""; rf.addEventListener("change", () => { f.reference = rf.value; dirty(); }); extra.appendChild(rf); }
+      };
+      kind.addEventListener("change", () => { f.kind = kind.value; dirty(); paintExtra(); });
+      paintExtra();
+      fieldsHost.appendChild(item);
+    });
+    fieldsHost.appendChild(siteMini(S.addField, () => { draft.fields.push({ key: "", label: "", kind: "text", required: false }); dirty(); paintFields(); }));
+  };
+  paintFields(); card.appendChild(fieldsHost);
+
+  // template
+  card.appendChild(siteEl("div", "sess-label", S.templateHeading)).style.marginTop = "12px";
+  card.appendChild(siteEl("div", "sess-desc", S.templateDesc));
+  card.appendChild(siteBlocksEditor(draft.template, ctx.blocks, dirty, "type:" + (draft.key || "new")));
+
+  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
+  saveBtn = siteEl("button", "panelbtn primary", S.saveType); saveBtn.disabled = !isNew; saveBtn.style.margin = "0";
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true;
+    const out = { key: draft.key || slug(lab.input.value), label: lab.input.value, singular: sing.input.value, path: pth.input.value || ("/" + (draft.key || slug(lab.input.value))), fields: draft.fields, template: draft.template };
+    if (ixCb.checked) out.index = { title: ixT.input.value, description: ixD.input.value };
+    const res = await window.desktop.saveSiteType(out);
+    if (res && res.ok) { siteRailState.selected = { kind: "type", id: res.type.key }; siteFlash(actions, S.saved); refresh(); }
+    else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
+  });
+  actions.appendChild(saveBtn);
+  if (!isNew) actions.appendChild(siteMini(S.deleteType, async () => {
+    if (!confirm(S.deleteTypeConfirm(type.label))) return;
+    const res = await window.desktop.deleteSiteType(type.key);
+    if (res && res.ok) { siteRailState.selected = null; refresh(); }
+  }, { danger: true }));
+  card.appendChild(actions);
+  return card;
+}
+
+// The Content types section of the left column: each type with its entries and an
+// "Add <singular>" row; "Add a content type" at the end. Selection kinds:
+// "type" (editing the declaration), "entry" (editing one entry), "newtype".
+function renderSiteTypesList(left, right, ctx, refresh) {
+  const S = COPY.site;
+  const sel = siteRailState.selected && typeof siteRailState.selected === "object" ? siteRailState.selected : null;
+  left.appendChild(siteEl("div", "sess-label", S.typesHeading)).style.marginTop = "12px";
+  left.appendChild(siteEl("div", "sess-desc", S.typesDesc));
+  ctx.types.forEach((t) => {
+    const row = siteEl("div", "site-list-row" + (sel && sel.kind === "type" && sel.id === t.key ? " active" : ""));
+    row.append(siteEl("div", "site-page-title", t.label), siteEl("div", "site-page-slug", S.entries((ctx.entries[t.key] || []).length)));
+    row.addEventListener("click", () => { siteRailState.selected = { kind: "type", id: t.key }; refresh(); });
+    left.appendChild(row);
+    const list = siteEl("div"); list.style.cssText = "margin:0 0 6px 14px;";
+    (ctx.entries[t.key] || []).forEach((e) => {
+      const er = siteEl("div", "site-list-row" + (sel && sel.kind === "entry" && sel.id === t.key + "/" + e.id ? " active" : ""));
+      er.style.padding = "6px 10px";
+      er.append(siteEl("div", "site-page-title", e.title), siteEl("div", "site-page-slug", "/" + (e.slug || e.id)));
+      er.addEventListener("click", () => { siteRailState.selected = { kind: "entry", id: t.key + "/" + e.id }; refresh(); });
+      list.appendChild(er);
+    });
+    const addRow = siteEl("div"); addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:2px 0 6px;";
+    const inp = document.createElement("input"); inp.className = "field"; inp.placeholder = S.newEntryPlaceholder; inp.style.marginBottom = "0";
+    const btn = siteEl("button", "panelbtn", S.addEntry(t.singular || t.label)); btn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+    const create = async () => { const v = inp.value.trim(); if (!v) return; const res = await window.desktop.createSiteEntry(t.key, v); if (res && res.ok) { siteRailState.selected = { kind: "entry", id: t.key + "/" + res.entry.id }; refresh(); } };
+    btn.addEventListener("click", create); inp.addEventListener("keydown", (e) => { if (e.key === "Enter") create(); });
+    addRow.append(inp, btn); list.appendChild(addRow);
+    left.appendChild(list);
+  });
+  const addType = siteEl("button", "panelbtn", S.addType); addType.style.margin = "4px 0 0";
+  addType.addEventListener("click", () => { siteRailState.selected = { kind: "newtype", id: "" }; refresh(); });
+  left.appendChild(addType);
+
+  if (sel && sel.kind === "type") { const t = ctx.types.find((x) => x.key === sel.id); if (t) right.appendChild(renderSiteTypeEditor(t, ctx, refresh)); }
+  else if (sel && sel.kind === "newtype") right.appendChild(renderSiteTypeEditor({}, ctx, refresh));
+  else if (sel && sel.kind === "entry") {
+    const [key, id] = sel.id.split("/");
+    const t = ctx.types.find((x) => x.key === key); const e = t && (ctx.entries[key] || []).find((x) => x.id === id);
+    if (t && e) right.appendChild(renderSiteEntry(t, e, ctx, refresh));
+  }
+}
+
 function renderSiteNav(site, refresh) {
   const wrap = siteEl("div");
   wrap.appendChild(siteEl("div", "sess-label", COPY.site.navHeading));
@@ -2911,9 +3185,16 @@ async function renderSite(body) {
   const left = siteEl("div"); const right = siteEl("div", "site-detail");
   cols.append(left, right); body.appendChild(cols);
   const posts = await window.desktop.getSitePosts().catch(() => []);
+  const typesData = await window.desktop.getSiteTypes().catch(() => ({ types: [], entries: {} }));
+  const ctx = { types: typesData.types || [], entries: typesData.entries || {}, blocks: data.blocks };
   const sel = siteRailState.selected && typeof siteRailState.selected === "object" ? siteRailState.selected : null;
   const isSel = (kind, id) => !!sel && sel.kind === kind && sel.id === id;
-  const valid = sel && ((sel.kind === "page" && data.pages.some((p) => p.id === sel.id)) || (sel.kind === "post" && posts.some((p) => p.id === sel.id)));
+  const valid = sel && (
+    (sel.kind === "page" && data.pages.some((p) => p.id === sel.id)) ||
+    (sel.kind === "post" && posts.some((p) => p.id === sel.id)) ||
+    (sel.kind === "type" && ctx.types.some((t) => t.key === sel.id)) ||
+    (sel.kind === "entry" && (() => { const [k, id] = sel.id.split("/"); return (ctx.entries[k] || []).some((e) => e.id === id); })()) ||
+    sel.kind === "newtype");
   if (!valid) siteRailState.selected = data.pages[0] ? { kind: "page", id: data.pages[0].id } : null;
   left.appendChild(siteEl("div", "sess-label", COPY.site.pagesHeading));
   data.pages.forEach((p) => {
@@ -2960,6 +3241,9 @@ async function renderSite(body) {
   postIn.addEventListener("keydown", (e) => { if (e.key === "Enter") createPost(); });
   addPostRow.append(postIn, postBtn);
   body.appendChild(addPostRow);
+
+  // Content types: the list on the left; a selected type/entry renders on the right.
+  renderSiteTypesList(left, right, ctx, refresh);
 
   body.appendChild(siteEl("div", "drawer-sep"));
   body.appendChild(renderSiteNav(data.site, refresh));

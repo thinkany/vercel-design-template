@@ -123,6 +123,12 @@ contextBridge.exposeInMainWorld("desktop", {
   saveSitePost: (id, data) => ipcRenderer.invoke("site:savePost", { id, data }),
   createSitePost: (title) => ipcRenderer.invoke("site:createPost", { title }),
   deleteSitePost: (id) => ipcRenderer.invoke("site:deletePost", { id }),
+  getSiteTypes: () => ipcRenderer.invoke("site:types"),
+  saveSiteType: (type) => ipcRenderer.invoke("site:saveType", { type }),
+  deleteSiteType: (key) => ipcRenderer.invoke("site:deleteType", { key }),
+  saveSiteEntry: (key, id, data) => ipcRenderer.invoke("site:saveEntry", { key, id, data }),
+  createSiteEntry: (key, title) => ipcRenderer.invoke("site:createEntry", { key, title }),
+  deleteSiteEntry: (key, id) => ipcRenderer.invoke("site:deleteEntry", { key, id }),
   onSiteReady: (cb) => {
     const listener = (_e, url) => cb(url);
     ipcRenderer.on("site:ready", listener);

@@ -13,7 +13,9 @@ import { glob } from "astro/loaders";
 import { z } from "astro/zod";
 import { blockInstance } from "./lib/blocks";
 import { seoFields } from "./lib/seo";
+import { entrySchema, typesFile } from "./lib/types";
 import { collections as designerCollections } from "../../content/collections";
+import rawTypes from "../../content/types.json";
 
 const pages = defineCollection({
   loader: glob({ pattern: "**/*.json", base: "../content/pages" }),
@@ -41,4 +43,20 @@ const posts = defineCollection({
   }),
 });
 
-export const collections = { pages, posts, ...designerCollections };
+// Designer-defined types (content/types.json): one collection per type, entries
+// under content/<key>/*.json, validated against the type's fields.
+const parsedTypes = typesFile.safeParse(rawTypes);
+if (!parsedTypes.success) {
+  const issues = parsedTypes.error.issues.map((i) => `  ${i.path.join(".") || "(root)"}: ${i.message}`).join("\n");
+  throw new Error(`content/types.json is invalid:\n${issues}`);
+}
+const typed: Record<string, ReturnType<typeof defineCollection>> = {};
+for (const t of parsedTypes.data.types) {
+  if (t.key === "pages" || t.key === "posts") throw new Error(`content/types.json: "${t.key}" is a built-in type`);
+  typed[t.key] = defineCollection({
+    loader: glob({ pattern: "**/*.json", base: `../content/${t.key}` }),
+    schema: entrySchema(t),
+  });
+}
+
+export const collections = { pages, posts, ...typed, ...designerCollections };

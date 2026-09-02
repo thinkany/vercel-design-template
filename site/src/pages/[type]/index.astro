@@ -1,0 +1,48 @@
+---
+// ©2026 thinkany llc. All rights reserved.
+// TYPE INDEX → /<path>: a heading and a card per entry, when the type declares
+// an `index`. Cards use the design tokens; a type that wants its own index page
+// composes one in content/pages at that path instead (pages win: this route
+// only claims paths no page uses).
+import { getCollection } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import { typesFile } from "../../lib/types";
+import rawTypes from "../../../../content/types.json";
+
+export async function getStaticPaths() {
+  const { types } = typesFile.parse(rawTypes);
+  const pages = await getCollection("pages");
+  const taken = new Set(pages.map((p) => "/" + (p.data.slug ?? (p.id === "home" ? "" : p.id))));
+  return types
+    .filter((t) => t.index && !taken.has(t.path))
+    .map((t) => ({ params: { type: t.path.replace(/^\//, "") }, props: { type: t } }));
+}
+
+const { type } = Astro.props;
+const entries = (await getCollection(type.key as never)) as { id: string; data: Record<string, unknown> & { title: string; slug?: string; seo?: { description?: string; noindex?: boolean } } }[];
+entries.sort((a, b) => a.data.title.localeCompare(b.data.title));
+const imageField = type.fields.find((f) => f.kind === "image");
+const summaryField = type.fields.find((f) => f.kind === "textarea" || f.kind === "text");
+const href = (e: (typeof entries)[number]) => `${type.path}/${e.data.slug ?? e.id}`;
+---
+<Base title={type.index?.title || type.label} description={type.index?.description}>
+  <main class="mx-auto max-w-[1160px] px-6 py-20">
+    <h1 class="font-ta-display text-[clamp(32px,5vw,48px)] text-ta-ink leading-[1.05] tracking-[-0.02em] mb-4">{type.index?.title || type.label}</h1>
+    {type.index?.description && <p class="font-ta-serif text-[17px] text-ta-body leading-[1.6] max-w-[60ch] mb-12">{type.index.description}</p>}
+    <ul class="list-none p-0 m-0 grid gap-8 @lg:grid-cols-3">
+      {entries.map((e) => {
+        const img = imageField ? (e.data[imageField.key] as { src: string; alt?: string } | undefined) : undefined;
+        const summary = summaryField ? (e.data[summaryField.key] as string | undefined) : undefined;
+        return (
+          <li>
+            <a href={href(e)} class="no-underline block">
+              {img?.src && <img src={img.src} alt={img.alt || ""} class="w-full aspect-[4/3] object-cover rounded-[3px] mb-4" />}
+              <h2 class="font-ta-display text-[22px] text-ta-ink leading-[1.15] mb-2">{e.data.title}</h2>
+              {summary && <p class="font-ta-sans text-[15px] text-ta-body leading-[1.6] m-0">{summary}</p>}
+            </a>
+          </li>
+        );
+      })}
+    </ul>
+  </main>
+</Base>

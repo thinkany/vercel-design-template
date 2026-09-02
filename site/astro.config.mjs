@@ -53,6 +53,19 @@ function noindexPaths() {
       if (/^seo:\n(?:[ \t]+.*\n)*?[ \t]+noindex:[ \t]*true/m.test(fm) || /^draft:[ \t]*true/m.test(fm)) out.add("/blog/" + f.replace(/\.mdx?$/, ""));
     }
   } catch { /* no posts dir */ }
+  // designer-defined types: entries flagged noindex, under the type's path
+  try {
+    const { types } = JSON.parse(fs.readFileSync(path.join(repoRoot, "content", "types.json"), "utf8"));
+    for (const t of types || []) {
+      const dir = path.join(repoRoot, "content", t.key);
+      let files = []; try { files = fs.readdirSync(dir); } catch { continue; }
+      for (const f of files) {
+        if (!f.endsWith(".json")) continue;
+        const d = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+        if (d && d.seo && d.seo.noindex) out.add(`${t.path}/${d.slug ?? f.replace(/\.json$/, "")}`);
+      }
+    }
+  } catch { /* no types */ }
   return out;
 }
 const NOINDEX = noindexPaths();

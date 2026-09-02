@@ -41,7 +41,8 @@
     "site/blocks/index.ts",
     "site/blocks/chrome.ts",
     "site/blocks/blocks.css",
-    "site/blocks/lib/**"
+    "site/blocks/lib/**",
+    "content/types.json"
   ],
   "seedNotes": "A KEEP file the project lacks is seeded when it matches seedAlways (machinery the CORE site files import, so a refresh never lands broken). Any OTHER missing KEEP file (a starter page/post/block) is seeded only when the project has none of that tree yet, never into an existing content/ or site/blocks/."
 }

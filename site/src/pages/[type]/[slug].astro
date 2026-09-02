@@ -1,0 +1,41 @@
+---
+// ©2026 thinkany llc. All rights reserved.
+// TYPE ENTRY → /<path>/<slug>: the entry rendered through its type's template
+// (blocks with {{field}} bindings), or its own `blocks` when it carries them (a
+// landing page). richtext fields are markdown, rendered to HTML for a binding
+// whose target prop name ends in Html; elsewhere they bind as text.
+import { getCollection } from "astro:content";
+import { createMarkdownProcessor } from "@astrojs/markdown-remark";
+import Base from "../../layouts/Base.astro";
+import { resolveBlock } from "../../lib/blocks";
+import { bindTemplate, typesFile } from "../../lib/types";
+import { blocks } from "../../../blocks";
+import rawTypes from "../../../../content/types.json";
+
+export async function getStaticPaths() {
+  const { types } = typesFile.parse(rawTypes);
+  const out = [];
+  for (const t of types) {
+    const entries = await getCollection(t.key as never);
+    for (const e of entries as { id: string; data: { slug?: string } }[]) {
+      out.push({ params: { type: t.path.replace(/^\//, ""), slug: e.data.slug ?? e.id }, props: { type: t, entry: e } });
+    }
+  }
+  return out;
+}
+
+const { type, entry } = Astro.props;
+const data = entry.data as Record<string, unknown> & { title: string; seo?: Record<string, unknown>; blocks?: { type: string; props: Record<string, unknown> }[] };
+
+// richtext → also provide `<key>Html` so a template can bind rendered markdown.
+const md = await createMarkdownProcessor();
+const bound: Record<string, unknown> = { ...data };
+for (const f of type.fields) {
+  if (f.kind === "richtext" && typeof data[f.key] === "string") bound[f.key + "Html"] = (await md.render(data[f.key] as string)).code;
+}
+const instances = data.blocks && data.blocks.length ? data.blocks : bindTemplate(type.template, bound);
+const rendered = instances.map((b, i) => resolveBlock(blocks, b, `content/${type.key}/${entry.id}.json blocks[${i}]`));
+---
+<Base title={data.title} seo={data.seo}>
+  {rendered.map(({ component: Block, props }) => <Block {...props} />)}
+</Base>
