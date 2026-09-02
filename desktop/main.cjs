@@ -944,6 +944,73 @@ function stopVite() {
   viteUrl = null;
 }
 
+// ---- Site dev server (the public website's live preview) --------------------
+// The site target (site/, Astro) gets its own dev server beside Vite, on its own
+// port, so the browser can show a "Site" tab next to Home + Style guide. Astro's
+// CLI runs under the app's Electron-as-Node (same as the packaged Vite launch) from
+// the app's node_modules, so neither dev nor a Finder-launched .app needs a system
+// node. Started only when the project is site-ready (see siteReady), and again the
+// moment a promotion lands mid-session. Stopped with Vite.
+let siteProc = null;
+let siteUrl = null;
+function astroCli() { return path.join(modulesRoot(), "astro", "astro.js"); }
+function stopSite() {
+  if (siteProc) { killTree(siteProc); siteProc = null; }
+  siteUrl = null;
+}
+function startSiteFor(projectDir) {
+  stopSite();
+  return new Promise((resolve, reject) => {
+    siteProc = spawn(process.execPath, [astroCli(), "dev", "--root", "site"], {
+      cwd: projectDir,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", FORCE_COLOR: "0" },
+      detached: process.platform !== "win32",
+    });
+    let settled = false;
+    const onLine = (text) => {
+      // "┃ Local    http://localhost:4321/" (Astro picks the next port when 4321 is busy)
+      const m = text.match(/https?:\/\/localhost:\d+/);
+      if (m && !settled) {
+        settled = true;
+        siteUrl = m[0];
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("site:ready", siteUrl);
+        resolve(siteUrl);
+      }
+    };
+    siteProc.stdout.on("data", (b) => { const t = b.toString(); process.stdout.write(`[site] ${t}`); onLine(t); });
+    siteProc.stderr.on("data", (b) => { const t = b.toString(); process.stderr.write(`[site] ${t}`); onLine(t); });
+    siteProc.on("exit", (code) => { if (!settled) reject(new Error(`Astro exited before it was ready (code ${code})`)); siteProc = null; });
+    setTimeout(() => { if (!settled) reject(new Error("Timed out waiting for the site server (60s)")); }, 60000);
+  });
+}
+// Start the site server when (and only when) the project is site-ready and it isn't
+// already up. Safe to call often (project open, after every agent turn).
+function maybeStartSite(projectDir) {
+  if (!projectDir || projectDir !== currentProject) return;
+  if (siteProc || !siteReady(projectDir).ready) return;
+  startSiteFor(projectDir).catch((e) => console.error("[main] site server failed:", e.message));
+}
+// A one-shot production build of the site (what Vercel will run), so a broken
+// block or content fails HERE with the real message, not on Vercel five minutes
+// later. Returns { ok, log } — log is the tail of the build output.
+function buildSite(projectDir) {
+  return new Promise((resolve) => {
+    let out = "";
+    const p = spawn(process.execPath, [astroCli(), "build", "--root", "site"], {
+      cwd: projectDir,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", FORCE_COLOR: "0" },
+    });
+    p.stdout.on("data", (b) => { out += b.toString(); });
+    p.stderr.on("data", (b) => { out += b.toString(); });
+    p.on("exit", (code) => {
+      const lines = out.split("\n").filter((l) => l.trim()).slice(-40);
+      // The readable part of an Astro failure is the [Error]/message lines; surface those.
+      const errLine = lines.find((l) => /error|invalid|unknown block|cannot|failed/i.test(l) && !/^\s*at /.test(l));
+      resolve({ ok: code === 0, log: lines.join("\n"), error: code === 0 ? null : (errLine || "The site build failed.").trim() });
+    });
+  });
+}
+
 // A normal quit runs stopVite(), but a FORCE-QUIT (or crash) skips it, orphaning the
 // Vite process group — it keeps holding its port + the project's .vite dep-optimize
 // cache, so the NEXT launch's fresh Vite contends with it and can stall before it ever
@@ -1283,7 +1350,29 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode, mo
   // A review turn is an isolated, fresh session (its own Art Director persona); it must
   // not become the tracked chat session, or the next chat turn would resume the critique.
   if (!reviewMode && result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it
+  maybeStartSite(currentProject); // a /promote-blocks turn makes the project site-ready mid-session
   return result;
+});
+
+// ---- Site IPC ----------------------------------------------------------------
+ipcMain.handle("site:status", () => {
+  if (!currentProject) return { ready: false, reason: "no-project", url: null };
+  const r = siteReady(currentProject);
+  return { ready: r.ready, reason: r.ready ? null : r.reason, url: siteUrl, running: !!siteProc };
+});
+ipcMain.handle("site:start", async () => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const r = siteReady(currentProject);
+  if (!r.ready) return { ok: false, error: r.reason };
+  if (siteProc && siteUrl) return { ok: true, url: siteUrl };
+  try { return { ok: true, url: await startSiteFor(currentProject) }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle("site:build", async () => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const r = siteReady(currentProject);
+  if (!r.ready) return { ok: false, error: r.reason };
+  return buildSite(currentProject);
 });
 
 // The SITE publish: the public website, its own Vercel project ("<name>-site"), no
@@ -1302,6 +1391,15 @@ async function publishSite(event, token) {
   const onProgress = (evt) => { if (!event.sender.isDestroyed()) event.sender.send("publish:progress", evt); };
   try {
     ensureSiteDeps(currentProject);
+    // Build locally first: a bad block or content fails here with the real message
+    // instead of on Vercel minutes later.
+    onProgress({ step: "check", status: "run", detail: "Checking the site builds" });
+    const check = await buildSite(currentProject);
+    if (!check.ok) {
+      onProgress({ step: "check", status: "error", detail: check.error });
+      return { ok: false, target: "site", error: `The site didn't build: ${check.error}` };
+    }
+    onProgress({ step: "check", status: "done", detail: "Site builds cleanly" });
     const res = await vercel.publishProject({
       token,
       teamId: scope.teamId || null,
@@ -2560,10 +2658,11 @@ ipcMain.handle("project:create", async () => {
   saveProjectPath(dir);
   try {
     await startViteFor(dir);
+    maybeStartSite(dir);
   } catch (e) {
     return { ok: false, error: `Project created, but Vite failed to start: ${e.message}` };
   }
-  return { ok: true, path: dir, name: path.basename(dir), ...readProjectMeta(dir), viteUrl };
+  return { ok: true, path: dir, name: path.basename(dir), ...readProjectMeta(dir), viteUrl, siteUrl };
 });
 
 ipcMain.handle("project:open", async () => {
@@ -2591,10 +2690,11 @@ ipcMain.handle("project:open", async () => {
   saveProjectPath(dir);
   try {
     await startViteFor(dir);
+    maybeStartSite(dir);
   } catch (e) {
     return { ok: false, error: `Vite failed to start: ${e.message}` };
   }
-  return { ok: true, path: dir, name: path.basename(dir), ...readProjectMeta(dir), viteUrl };
+  return { ok: true, path: dir, name: path.basename(dir), ...readProjectMeta(dir), viteUrl, siteUrl };
 });
 
 // The last few opened projects, excluding the current one, pruned to those that
@@ -2613,7 +2713,7 @@ ipcMain.handle("project:openPath", async (_e, { path: dir } = {}) => {
   if (!fs.existsSync(path.join(dir, "package.json"))) {
     return { ok: false, error: "That folder has no package.json — it doesn't look like a project." };
   }
-  if (dir === currentProject) return { ok: true, path: dir, name: path.basename(dir), viteUrl };
+  if (dir === currentProject) return { ok: true, path: dir, name: path.basename(dir), viteUrl, siteUrl };
   if (currentProject && currentSessionId) { try { archiveSession(currentProject, currentSessionId); } catch {} }
   currentSessionId = null;
   try { linkNodeModules(dir); } catch { /* has its own deps or symlink failed */ }
@@ -2622,10 +2722,11 @@ ipcMain.handle("project:openPath", async (_e, { path: dir } = {}) => {
   saveProjectPath(dir);
   try {
     await startViteFor(dir);
+    maybeStartSite(dir);
   } catch (e) {
     return { ok: false, error: `Vite failed to start: ${e.message}` };
   }
-  return { ok: true, path: dir, name: path.basename(dir), ...readProjectMeta(dir), viteUrl };
+  return { ok: true, path: dir, name: path.basename(dir), ...readProjectMeta(dir), viteUrl, siteUrl };
 });
 
 ipcMain.handle("project:reset", () => {
@@ -2635,6 +2736,7 @@ ipcMain.handle("project:reset", () => {
   clearProjectPath();
   currentProject = null;
   stopVite();
+  stopSite();
   return { ok: true };
 });
 
@@ -2837,7 +2939,7 @@ app.whenReady().then(async () => {
     // window is already up (created above), so this never blocks the UI.
     (async () => {
       await refreshFrameworkFiles(currentProject);
-      startViteFor(currentProject).catch((e) => console.error("[main] Vite failed:", e.message));
+      startViteFor(currentProject).then(() => maybeStartSite(currentProject)).catch((e) => console.error("[main] Vite failed:", e.message));
     })();
   }
   // Native capture bridge: a hidden BrowserWindow the app-owned export scripts drive
@@ -2859,10 +2961,12 @@ app.on("before-quit", () => {
   // Closing the app → archive the live session so it lands in the drawer next launch.
   if (currentProject && currentSessionId) archiveSession(currentProject, currentSessionId);
   stopVite();
+  stopSite();
   stopCaptureBridge();
 });
 app.on("window-all-closed", () => {
   stopVite();
+  stopSite();
   stopCaptureBridge();
   app.quit();
 });

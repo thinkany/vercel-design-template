@@ -130,6 +130,7 @@ let assistantEl = null;
 
 // Preview state
 let viteUrl = null;
+let siteUrl = null; // the site (public website) dev server, once the design is promoted
 let design = { active: false, variationId: null, previewReady: false };
 let agentBusy = false;
 // Serialization gate: a re-picked deliverable can't start a new turn until the prior
@@ -784,6 +785,7 @@ async function showBrowser(landOn) {
   const home = openTab(quickUrl("home"), "Home");
   // Default to the styleguide (swatches); the quiet-build finished reveal lands on Home (the design).
   setActiveTab(landOn === "home" ? home : style);
+  ensureSiteTab(); // a promoted project also gets its Site tab (stays in the background)
   // Only when the styleguide was just created this session: reload once so its
   // fresh swatches show without a manual refresh (avoids churn on reopen).
   if (designJustActivated) {
@@ -791,6 +793,25 @@ async function showBrowser(landOn) {
     setTimeout(() => { if (tabs.includes(style)) navigate(style, quickUrl("styleguide")); }, 1200);
   }
 }
+
+// The "Site" tab: the public website's live preview (its own Astro server), shown
+// next to Home + Style guide once the design has been promoted. Idempotent: opens
+// the tab if the site server is up and no Site tab exists yet; never steals focus.
+function ensureSiteTab() {
+  if (!siteUrl || !tabsOpened) return;
+  if (tabs.some((t) => t.site)) return;
+  const keep = activeTab;
+  const tab = openTab(siteUrl + "/", COPY.preview.siteTab);
+  tab.site = true;
+  if (keep && tabs.includes(keep)) setActiveTab(keep);
+}
+window.desktop.onSiteReady((url) => {
+  siteUrl = url;
+  if (currentStage !== "workspace") return;
+  const existing = tabs.find((t) => t.site);
+  if (existing) navigate(existing, url + "/"); // restarted on a new port → follow it
+  else ensureSiteTab();
+});
 
 function refreshPreview() {
   // The intake host owns the pane while an onboarding conversation is live — don't
@@ -926,6 +947,7 @@ function showStage(stage) {
 
 function noProjectPlaceholder() {
   viteUrl = null;
+  siteUrl = null;
   design = { active: false, variationId: null, previewReady: false };
   agentBusy = false;
   conversationStarted = false; // a new/blank project greets fresh again
@@ -980,6 +1002,7 @@ async function boot() {
   // pane; agent actions are disabled), but the designer can still view + switch projects.
   setProjTitle(proj);
   viteUrl = proj.viteUrl || null;
+  siteUrl = proj.siteUrl || null;
   design = proj.design || { active: false, variationId: null, previewReady: false };
   showStage("workspace");
   refreshPreview();
@@ -999,6 +1022,7 @@ window.desktop.onViteReady((url) => {
   if (currentStage !== "workspace") return;
   if (tabs.length && prev) {
     tabs.forEach((t) => {
+      if (t.site) return; // the Site tab points at the Astro server, not Vite
       const fresh = /https?:\/\/localhost:\d+/.test(t.url || "")
         ? t.url.replace(/https?:\/\/localhost:\d+/, url)
         : (t.url || url);
@@ -1059,6 +1083,7 @@ async function chooseProject(kind) {
       closeAllTabs(); // fresh browser tabs for the new project
       setProjTitle(res);
       viteUrl = res.viteUrl || null;
+  siteUrl = res.siteUrl || null;
       design = await window.desktop.getDesignState();
       showStage("workspace");
       refreshPreview();
@@ -1433,6 +1458,7 @@ async function enterProjectFromResult(res) {
   closeAllTabs();  // fresh preview tabs + reset build reveal
   setProjTitle(res);
   viteUrl = res.viteUrl || null;
+  siteUrl = res.siteUrl || null;
   design = await window.desktop.getDesignState();
   showStage("workspace");
   refreshPreview();

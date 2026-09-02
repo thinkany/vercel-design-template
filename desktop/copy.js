@@ -29,6 +29,7 @@ window.COPY = {
 
   // ── Preview pane: placeholder states + the rotating "working" messages ──────
   preview: {
+    siteTab: "Site", // the browser tab for the public website's live preview
     spinningUp: {
       emoji: "⏳",
       title: "We’re spinning up your preview…",
