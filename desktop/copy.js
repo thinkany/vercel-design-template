@@ -594,6 +594,8 @@ window.COPY = {
         "no-home": "The site has no home page yet.",
       },
       domainLabel: "Site domain",
+      subdomainOptional: "subdomain (optional)",
+      ownedDomainNote: "A domain you own on Vercel, or a subdomain of one. Leave the subdomain empty to use the domain itself. Applied on the next publish.",
       publishSite: "Publish the site",
       publishSiteChanges: "Publish site changes",
       liveLabel: "Live at",

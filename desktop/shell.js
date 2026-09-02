@@ -2139,6 +2139,9 @@ document.addEventListener("keydown", (e) => {
 // domain). Returns a refresh() that (re)loads the owned domains for the current scope;
 // the picker saves through setPublishDomain(domain, target).
 function mountDomainPicker(domBody, domNote, { customDomain, baseSlug, target }) {
+  // The SITE may sit on the domain itself (an empty subdomain = the apex); the gated
+  // preview always takes a subdomain, so a password page never lands on a client's apex.
+  const allowApex = target === "site";
   const slugifyLabel = (s) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
   return () => {
     domBody.innerHTML = "";
@@ -2162,8 +2165,9 @@ function mountDomainPicker(domBody, domNote, { customDomain, baseSlug, target })
       const subWrap = document.createElement("div");
       subWrap.style.cssText = "display:flex;align-items:center;gap:6px;margin-top:6px;";
       const subInput = document.createElement("input");
-      subInput.className = "field"; subInput.placeholder = COPY.publish.subdomain; subInput.style.cssText = "flex:0 1 140px;";
-      subInput.value = curLabel || (curBase ? baseSlug : "");
+      subInput.className = "field"; subInput.placeholder = allowApex ? COPY.publish.site.subdomainOptional : COPY.publish.subdomain; subInput.style.cssText = "flex:0 1 140px;";
+      // Preview: prefill a subdomain. Site: keep whatever was chosen (empty = the apex).
+      subInput.value = curLabel || (curBase && !allowApex ? baseSlug : "");
       const domPreview = document.createElement("span");
       domPreview.className = "muted"; domPreview.style.cssText = "font-size:12px;word-break:break-all;";
       subWrap.append(subInput, domPreview);
@@ -2173,15 +2177,16 @@ function mountDomainPicker(domBody, domNote, { customDomain, baseSlug, target })
         subWrap.style.display = base ? "flex" : "none";
         if (!base) return;
         const label = slugifyLabel(subInput.value.trim());
-        domPreview.textContent = label ? `→ ${label}.${base}` : `→ name.${base}`;
+        domPreview.textContent = label ? `→ ${label}.${base}` : (allowApex ? `→ ${base}` : `→ name.${base}`);
       };
       const saveDom = () => {
         const base = domSel.value;
         if (!base) { window.desktop.setPublishDomain(null, target); return; }
         const label = slugifyLabel(subInput.value.trim());
         if (label) window.desktop.setPublishDomain(`${label}.${base}`, target);
+        else if (allowApex) window.desktop.setPublishDomain(base, target);
       };
-      domSel.addEventListener("change", () => { if (domSel.value && !subInput.value.trim()) subInput.value = baseSlug; updateDomPreview(); saveDom(); });
+      domSel.addEventListener("change", () => { if (domSel.value && !subInput.value.trim() && !allowApex) subInput.value = baseSlug; updateDomPreview(); saveDom(); });
       subInput.addEventListener("input", updateDomPreview);
       subInput.addEventListener("change", saveDom);
       subInput.addEventListener("blur", saveDom);
@@ -2189,7 +2194,7 @@ function mountDomainPicker(domBody, domNote, { customDomain, baseSlug, target })
       domBody.append(domSel, subWrap);
       updateDomPreview();
       domNote.textContent = (domains && domains.length)
-        ? COPY.publish.ownedDomainNote
+        ? (allowApex ? COPY.publish.site.ownedDomainNote : COPY.publish.ownedDomainNote)
         : COPY.publish.noDomainsNote;
     }).catch(() => {
       domBody.innerHTML = "";
