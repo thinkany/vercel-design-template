@@ -186,8 +186,10 @@ Write, in the same turn as the last block:
 
 ## 5. Build, and make it pass
 
-`npm run site:build`. A block that references an unknown key, or content whose
-shape doesn't match a schema, fails with the page, block and field named. Fix it
+`npx astro build --root site` (not `npm run site:build`: a project that predates
+the site target has no such script, since `package.json` is designer-owned and
+never rewritten by a refresh). A block that references an unknown key, or content
+whose shape doesn't match a schema, fails with the page, block and field named. Fix it
 and rebuild; don't loosen a schema to make an error go away unless the schema was
 wrong. Two things the build won't catch, so check them by reading your own files
 once: every section's `data-reveal` staggers (delays) match the design's, and
