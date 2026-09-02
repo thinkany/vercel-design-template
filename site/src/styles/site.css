@@ -1,9 +1,10 @@
 /* ©2026 thinkany llc. All rights reserved. */
-/* The SITE's stylesheet. Shares the design's tokens, theme wiring and base styles
-   with the design surface (imported from src/styles), but owns its own Tailwind
-   entry so utility scanning covers the site's blocks and templates too. Edit the
-   design in src/styles/tokens.css (or the variation's copy), never here. */
-@import "@/styles/fonts.css";
+/* The SITE's stylesheet. It loads the PINNED design variation's fonts, tokens and
+   globals (`@design` = src/variations/<id>/styles, set from content/site.json in
+   astro.config.mjs) plus the shared theme wiring, and owns its own Tailwind entry
+   so utility scanning covers the site's blocks and templates too. Edit the design
+   in the variation's tokens.css, never here. */
+@import "@design/fonts.css";
 
 @import "tailwindcss" source(none);
 @source "../../../src/**/*.{js,ts,jsx,tsx}";
@@ -11,6 +12,39 @@
 @source "../**/*.{astro,js,ts,jsx,tsx}";
 @import "tw-animate-css";
 
-@import "@/styles/tokens.css";
+@import "@design/tokens.css";
 @import "@/styles/theme.css";
-@import "@/styles/globals.css";
+@import "@design/globals.css";
+
+/* Block-owned CSS (keyframes, textures) lives with the blocks. */
+@import "../../blocks/blocks.css";
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Scroll reveal, no framework needed. Elements marked data-reveal start hidden
+   ONLY once JS has confirmed itself (html.js, set inline in <head> before first
+   paint), so a no-JS visitor and crawlers see everything. Base.astro's observer
+   adds .is-revealed as each one scrolls into view. Stagger with
+   style="--reveal-delay: .15s". */
+.js [data-reveal] {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 0.7s ease-out,
+    transform 0.7s ease-out;
+  transition-delay: var(--reveal-delay, 0s);
+}
+.js [data-reveal].is-revealed {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .js [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

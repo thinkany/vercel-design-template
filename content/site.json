@@ -1,0 +1,10 @@
+{
+  "design": "v00",
+  "url": "https://example.com",
+  "nav": [
+    { "label": "Home", "href": "/" },
+    { "label": "About", "href": "/about" },
+    { "label": "Blog", "href": "/blog" }
+  ],
+  "footerLinks": []
+}

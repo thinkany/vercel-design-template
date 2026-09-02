@@ -11,18 +11,35 @@ import { defineConfig } from "astro/config";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import tailwindcss from "@tailwindcss/vite";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..");
 
+// content/site.json (designer-owned) pins the site to ONE design variation and
+// carries the public URL + nav. The pinned variation's styles (fonts, tokens,
+// globals) are exposed as the `@design` alias so site.css never hardcodes an id.
+const siteJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "content", "site.json"), "utf8"));
+const design = siteJson.design || "v00";
+const designStyles =
+  design === "v00"
+    ? path.resolve(repoRoot, "src", "styles")
+    : path.resolve(repoRoot, "src", "variations", design, "styles");
+if (!fs.existsSync(designStyles)) {
+  throw new Error(`content/site.json pins design "${design}", but ${designStyles} does not exist.`);
+}
+
 export default defineConfig({
   // The canonical public URL. Feeds the sitemap, canonical links and og:url.
-  // Set SITE_URL in the project's .env once the domain is known; the fallback
-  // keeps local builds working and is obviously wrong in output.
-  site: process.env.SITE_URL || "https://example.com",
+  // SITE_URL in the environment wins (a Vercel env), then content/site.json's
+  // `url`; the fallback keeps local builds working and is obviously wrong in output.
+  site: process.env.SITE_URL || siteJson.url || "https://example.com",
   outDir: "../dist-site",
+  // The project's public/ (images, brand, favicon) is the site's too, so a photo
+  // the design references as /images/hero.jpg resolves identically here.
+  publicDir: "../public",
   // Static output: every route is prerendered at build. Forms and other dynamic
   // pieces arrive later as Vercel functions, not as server rendering.
   output: "static",
@@ -34,7 +51,12 @@ export default defineConfig({
     // Read the scaffold's committed .env (VITE_CLIENT_NAME etc.) so `@/config/site`
     // resolves the same brand values the design surface uses.
     envDir: repoRoot,
-    resolve: { alias: { "@": path.resolve(repoRoot, "src") } },
+    resolve: {
+      alias: {
+        "@": path.resolve(repoRoot, "src"),
+        "@design": designStyles,
+      },
+    },
     server: { fs: { allow: [repoRoot] } },
   },
 });

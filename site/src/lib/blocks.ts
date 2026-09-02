@@ -8,6 +8,20 @@
 import type { ComponentType } from "react";
 import { z, type ZodTypeAny } from "astro/zod";
 
+/**
+ * When a block needs to run in the browser (state, listeners, animation that
+ * can't be CSS). Default is NONE: the block renders to static HTML and ships no
+ * JS. "load" hydrates immediately (site chrome), "visible" when scrolled into
+ * view, "idle" after the page settles. Each hydrated block ships the React
+ * runtime once per page, so prefer CSS (see data-reveal in site.css) for effects.
+ *
+ * Today only the CHROME hydrates (site/blocks/chrome.ts exports Header/Footer by
+ * name, which is how the layout can put a `client:*` directive on them). Page
+ * blocks reached through the registry render static; setting hydrate on one
+ * fails the build with a message saying so.
+ */
+export type Hydrate = "load" | "visible" | "idle";
+
 export interface BlockDef<S extends ZodTypeAny = ZodTypeAny> {
   /** Human label (shown in the app's block picker). */
   name: string;
@@ -17,6 +31,14 @@ export interface BlockDef<S extends ZodTypeAny = ZodTypeAny> {
   props: S;
   /** The React component that renders a validated props object. */
   component: ComponentType<z.infer<S>>;
+  /** Browser hydration, when the block needs it. Omit for static HTML. */
+  hydrate?: Hydrate;
+}
+
+/** Site chrome: the header/footer rendered around every page by the layout. */
+export interface Chrome {
+  header?: BlockDef;
+  footer?: BlockDef;
 }
 
 export function defineBlock<S extends ZodTypeAny>(def: BlockDef<S>): BlockDef<S> {
@@ -51,5 +73,5 @@ export function resolveBlock(
       .join("\n");
     throw new Error(`${where}: block "${instance.type}" has invalid props:\n${issues}`);
   }
-  return { component: def.component, props: parsed.data };
+  return { component: def.component, props: parsed.data, hydrate: def.hydrate };
 }

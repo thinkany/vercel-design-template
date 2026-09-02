@@ -6,6 +6,8 @@
 //
 // Blocks are promoted from an approved design: each section becomes a component
 // in this folder with a props schema, and a row here. Add one per block.
+//
+// The header/footer chrome is registered separately in ./chrome.ts.
 import type { BlockDef } from "../src/lib/blocks";
 import { hero } from "./Hero";
 
