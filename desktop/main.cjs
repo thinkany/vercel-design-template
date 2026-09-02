@@ -11,7 +11,7 @@
 // app itself. desktop/ lives only on the `electron` branch; the scaffolded
 // project comes from the clean `main` branch.
 
-const { app, BrowserWindow, ipcMain, safeStorage, shell, dialog, Menu } = require("electron");
+const { app, BrowserWindow, ipcMain, safeStorage, shell, dialog, Menu, nativeImage } = require("electron");
 
 // The package name is "@figma/my-make-file"; force the product name so the macOS
 // app menu (About / Hide / Quit …) and the About panel read "thinkany design".
@@ -1771,6 +1771,67 @@ ipcMain.handle("site:deleteEntry", (_e, { key, id } = {}) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (!validTypeKey(key) || !validPageId(id)) return { ok: false, error: "Bad type or entry id." };
   try { fs.rmSync(entryFile(currentProject, key, id), { force: true }); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// ---- Media (public/images) ---------------------------------------------------
+// The project's images, as the CMS image picker sees them: every file under
+// public/images (the folder the design's assets already live in), with size and
+// dimensions, addressed by the same "/images/…" path the site serves. Uploads
+// copy a chosen file in under a safe, unique name; no external service (the Blob
+// adapter is a later phase).
+const MEDIA_EXT = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".svg"]);
+function mediaDir(dir) { return path.join(dir, "public", "images"); }
+function listMedia(dir) {
+  const root = mediaDir(dir);
+  const out = [];
+  const walk = (d, rel) => {
+    let entries = [];
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.name.startsWith(".")) continue;
+      const abs = path.join(d, e.name); const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) { walk(abs, r); continue; }
+      if (!MEDIA_EXT.has(path.extname(e.name).toLowerCase())) continue;
+      let size = 0, width = 0, height = 0, mtime = 0;
+      try { const st = fs.statSync(abs); size = st.size; mtime = st.mtimeMs; } catch {}
+      if (!/\.svg$/i.test(e.name)) { try { const sz = nativeImage.createFromPath(abs).getSize(); width = sz.width; height = sz.height; } catch {} }
+      out.push({ rel: r, name: e.name, url: `/images/${r}`, file: pathToFileURL(abs).href, size, width, height, mtime });
+    }
+  };
+  walk(root, "");
+  out.sort((a, b) => b.mtime - a.mtime);
+  return out;
+}
+// A file name safe for a URL and unique in the folder ("My Photo (1).JPG" → my-photo-1.jpg).
+function mediaName(dir, original) {
+  const ext = path.extname(original).toLowerCase();
+  const base = slugifyId(path.basename(original, path.extname(original))) || "image";
+  let name = base + ext; let n = 2;
+  while (fs.existsSync(path.join(mediaDir(dir), name))) name = `${base}-${n++}${ext}`;
+  return name;
+}
+ipcMain.handle("media:list", () => (currentProject ? listMedia(currentProject) : []));
+ipcMain.handle("media:upload", async () => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: "Add images",
+    properties: ["openFile", "multiSelections"],
+    filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "gif", "webp", "avif", "svg"] }],
+  });
+  if (res.canceled || !res.filePaths.length) return { ok: true, added: [] };
+  fs.mkdirSync(mediaDir(currentProject), { recursive: true });
+  const added = [];
+  for (const src of res.filePaths) {
+    if (!MEDIA_EXT.has(path.extname(src).toLowerCase())) continue;
+    const name = mediaName(currentProject, path.basename(src));
+    try { fs.copyFileSync(src, path.join(mediaDir(currentProject), name)); added.push(name); } catch (e) { return { ok: false, error: e.message, added }; }
+  }
+  return { ok: true, added: added.map((n) => `/images/${n}`) };
+});
+ipcMain.handle("media:delete", (_e, { rel } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (typeof rel !== "string" || rel.includes("..") || path.isAbsolute(rel)) return { ok: false, error: "Bad path." };
+  try { fs.rmSync(path.join(mediaDir(currentProject), rel), { force: true }); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
 });
 
 // ---- Site IPC ----------------------------------------------------------------

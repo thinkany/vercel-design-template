@@ -2699,6 +2699,9 @@ function sitePropsEditor(value, onChange, depth = 0) {
         }));
       }
       box.appendChild(wrap);
+    } else if (v && typeof v === "object" && "src" in v) {
+      // An image-shaped prop ({ src, alt }): the picker, never a typed path.
+      box.appendChild(siteImageControl(v, (next) => { if (next) { value[key].src = next.src; value[key].alt = next.alt; } else { value[key].src = ""; } onChange(); }, { label }));
     } else if (v && typeof v === "object") {
       const wrap = siteEl("div", "site-kv");
       wrap.appendChild(siteEl("div", "k", label));
@@ -2739,7 +2742,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
   body.appendChild(siteEl("div", "sess-label", COPY.site.seoHeading)).style.marginTop = "12px";
   const st = siteField(COPY.site.seoTitle, draft.seo.title, { hint: COPY.site.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; markDirty(); }); body.appendChild(st.wrap);
   const sd = siteField(COPY.site.seoDescription, draft.seo.description, { textarea: true, hint: COPY.site.seoDescriptionHint }); sd.input.addEventListener("input", () => { draft.seo.description = sd.input.value; markDirty(); }); body.appendChild(sd.wrap);
-  const si = siteField(COPY.site.seoImage, draft.seo.image, { hint: COPY.site.seoImageHint }); si.input.addEventListener("input", () => { draft.seo.image = si.input.value; markDirty(); }); body.appendChild(si.wrap);
+  body.appendChild(siteImageControl(draft.seo.image, (next) => { draft.seo.image = next ? next.src : ""; markDirty(); }, { label: COPY.site.seoImage }));
   const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!draft.seo.noindex;
   nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; markDirty(); }); nx.append(nxCb, siteEl("span", "", COPY.site.seoNoindex)); body.appendChild(nx);
 
@@ -2810,7 +2813,7 @@ function renderSitePost(post, refresh) {
   const t = siteField(S.pageTitle, draft.title); t.input.addEventListener("input", () => { draft.title = t.input.value; dirty(); }); card.appendChild(t.wrap);
   const d = siteField(S.postDate, draft.date, { type: "date" }); d.input.addEventListener("input", () => { draft.date = d.input.value; dirty(); }); card.appendChild(d.wrap);
   const ds = siteField(S.postDescription, draft.description, { textarea: true, hint: S.postDescriptionHint }); ds.input.addEventListener("input", () => { draft.description = ds.input.value; dirty(); }); card.appendChild(ds.wrap);
-  const im = siteField(S.postImage, draft.image, { hint: S.seoImageHint }); im.input.addEventListener("input", () => { draft.image = im.input.value; dirty(); }); card.appendChild(im.wrap);
+  card.appendChild(siteImageControl(draft.image, (next) => { draft.image = next ? next.src : ""; dirty(); }, { label: S.postImage }));
   const tg = siteField(S.postTags, draft.tags.join(", "), { hint: S.postTagsHint }); tg.input.addEventListener("input", () => { draft.tags = tg.input.value.split(",").map((x) => x.trim()).filter(Boolean); dirty(); }); card.appendChild(tg.wrap);
   const dr = siteEl("label", "toggle-row"); const drCb = document.createElement("input"); drCb.type = "checkbox"; drCb.checked = draft.draft;
   drCb.addEventListener("change", () => { draft.draft = drCb.checked; dirty(); }); dr.append(drCb, siteEl("span", "", S.postDraft)); card.appendChild(dr);
@@ -2870,10 +2873,9 @@ function siteTypeFieldControl(f, value, onChange, ctx) {
     sel.value = value || ""; sel.addEventListener("change", change); wrap.appendChild(sel);
     get = () => sel.value;
   } else if (f.kind === "image") {
-    const src = document.createElement("input"); src.className = "field"; src.placeholder = S.imageSrc; src.value = (value && value.src) || "";
-    const alt = document.createElement("input"); alt.className = "field"; alt.placeholder = S.imageAlt; alt.value = (value && value.alt) || "";
-    src.addEventListener("input", change); alt.addEventListener("input", change); wrap.append(src, alt);
-    get = () => (src.value.trim() ? { src: src.value.trim(), alt: alt.value.trim() } : "");
+    let cur = value && value.src ? { src: value.src, alt: value.alt || "" } : "";
+    wrap.appendChild(siteImageControl(cur, (next) => { cur = next; change(); }));
+    get = () => cur;
   } else if (f.kind === "link") {
     const lab = document.createElement("input"); lab.className = "field"; lab.placeholder = S.linkLabel; lab.value = (value && value.label) || "";
     const href = document.createElement("input"); href.className = "field"; href.placeholder = S.linkHref; href.value = (value && value.href) || "";
@@ -3114,6 +3116,117 @@ function renderSiteTypesList(left, right, ctx, refresh) {
   }
 }
 
+// --- Media picker + the image control -------------------------------------------
+// Every image field in the CMS is this control: a thumbnail with Choose / Change /
+// Remove and an alt-text input. Choose opens the picker over the project's
+// public/images (thumbnails, filter, add from disk); the path is written for the
+// designer, never typed.
+const mediapick = el("mediapick");
+const mediapickBody = el("mediapick-body");
+const mediapickBar = el("mediapick-bar");
+let mediaPickResolve = null;
+
+function closeMediaPicker(result) {
+  mediapick.hidden = true;
+  const r = mediaPickResolve; mediaPickResolve = null;
+  if (r) r(result || null);
+}
+el("mediapick-close").addEventListener("click", () => closeMediaPicker(null));
+mediapick.addEventListener("click", (e) => { if (e.target === mediapick) closeMediaPicker(null); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !mediapick.hidden) { closeMediaPicker(null); e.stopPropagation(); } }, true);
+
+/** Open the picker; resolves with { url, name, width, height } or null. */
+function openMediaPicker(current) {
+  const M = COPY.site.media;
+  el("mediapick-title").textContent = M.title;
+  mediapick.hidden = false;
+  return new Promise((resolve) => {
+    mediaPickResolve = resolve;
+    let items = []; let filter = ""; let selected = current || null;
+    mediapickBar.innerHTML = ""; mediapickBody.innerHTML = "";
+    const filterIn = document.createElement("input"); filterIn.className = "field"; filterIn.placeholder = M.filter;
+    const upBtn = siteEl("button", "panelbtn", M.upload); upBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+    const useBtn = siteEl("button", "panelbtn primary", M.use); useBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;"; useBtn.disabled = true;
+    mediapickBar.append(filterIn, upBtn, useBtn);
+    const paint = () => {
+      mediapickBody.innerHTML = "";
+      const shown = items.filter((it) => !filter || it.name.toLowerCase().includes(filter));
+      if (!items.length) { mediapickBody.appendChild(siteEl("div", "muted", M.empty)); return; }
+      const grid = siteEl("div", "media-grid");
+      shown.forEach((it) => {
+        const tile = siteEl("button", "media-tile" + (selected === it.url ? " active" : "")); tile.type = "button";
+        const img = document.createElement("img"); img.src = it.file; img.alt = it.name; img.loading = "lazy";
+        const meta = siteEl("div", "media-meta");
+        meta.appendChild(siteEl("div", "", it.name));
+        meta.appendChild(siteEl("div", "muted", (it.width ? M.dims(it.width, it.height) + " · " : "") + Math.max(1, Math.round(it.size / 1024)) + " KB"));
+        tile.append(img, meta);
+        tile.addEventListener("click", () => { selected = it.url; useBtn.disabled = false; paint(); });
+        tile.addEventListener("dblclick", () => { closeMediaPicker(it); });
+        tile.addEventListener("contextmenu", async (e) => {
+          e.preventDefault();
+          if (!confirm(M.deleteConfirm(it.name))) return;
+          const r = await window.desktop.deleteMedia(it.rel);
+          if (r && r.ok) { items = items.filter((x) => x !== it); if (selected === it.url) { selected = null; useBtn.disabled = true; } paint(); }
+        });
+        grid.appendChild(tile);
+      });
+      mediapickBody.appendChild(grid);
+    };
+    const load = async () => { items = await window.desktop.listMedia().catch(() => []); if (selected && !items.some((i) => i.url === selected)) { /* keep: may be a subfolder path */ } useBtn.disabled = !selected; paint(); };
+    filterIn.addEventListener("input", () => { filter = filterIn.value.trim().toLowerCase(); paint(); });
+    upBtn.addEventListener("click", async () => {
+      upBtn.disabled = true; upBtn.textContent = M.uploading;
+      const r = await window.desktop.uploadMedia();
+      upBtn.disabled = false; upBtn.textContent = M.upload;
+      if (r && r.ok && r.added && r.added.length) { selected = r.added[0]; await load(); }
+    });
+    useBtn.addEventListener("click", () => { const it = items.find((i) => i.url === selected); closeMediaPicker(it || (selected ? { url: selected } : null)); });
+    load();
+  });
+}
+
+/**
+ * The image control. `value` is { src, alt } (or a string path for legacy props);
+ * onChange(next) receives { src, alt } or "" when cleared. Returns the element.
+ */
+function siteImageControl(value, onChange, { label } = {}) {
+  const M = COPY.site.media;
+  let cur = typeof value === "string" ? { src: value, alt: "" } : (value && typeof value === "object" ? { src: value.src || "", alt: value.alt || "" } : { src: "", alt: "" });
+  const wrap = siteEl("div", "site-kv");
+  if (label) wrap.appendChild(siteEl("div", "k", label));
+  const row = siteEl("div", "site-img");
+  const thumb = document.createElement("img"); thumb.className = "site-img-thumb";
+  const empty = siteEl("div", "site-img-thumb empty", M.noImage);
+  const side = siteEl("div", "site-img-side");
+  const pathEl = siteEl("div", "site-img-path");
+  const alt = document.createElement("input"); alt.className = "field"; alt.placeholder = M.altLabel; alt.value = cur.alt;
+  const btns = siteEl("div"); btns.style.cssText = "display:flex;gap:6px;";
+  const choose = siteMini(M.choose, async () => { const it = await openMediaPicker(cur.src || null); if (it && it.url) { cur = { src: it.url, alt: cur.alt }; paint(); emit(); } });
+  const clear = siteMini(M.clear, () => { cur = { src: "", alt: cur.alt }; paint(); emit(); }, { danger: true });
+  btns.append(choose, clear);
+  side.append(pathEl, alt, btns);
+  const emit = () => onChange(cur.src ? { src: cur.src, alt: alt.value.trim() } : "");
+  alt.addEventListener("input", () => { cur.alt = alt.value; emit(); });
+  const paint = () => {
+    row.innerHTML = "";
+    const file = cur.src ? (/^https?:/.test(cur.src) ? cur.src : siteMediaFileUrl(cur.src)) : null;
+    if (cur.src && file) { thumb.src = file; row.append(thumb, side); }
+    else { empty.textContent = cur.src ? cur.src.split("/").pop() : M.noImage; row.append(empty, side); }
+    choose.textContent = cur.src ? M.change : M.choose; clear.hidden = !cur.src;
+    pathEl.textContent = cur.src;
+  };
+  paint();
+  wrap.appendChild(row);
+  return wrap;
+}
+// Thumbnails for existing values need the file URL behind a "/images/…" path. The
+// listing is preloaded when the Pages drawer renders (mediaIndex), so this is sync.
+let mediaIndex = [];
+function siteMediaFileUrl(url) {
+  const hit = mediaIndex.find((i) => i.url === url);
+  return hit ? hit.file : null;
+}
+
 function renderSiteNav(site, refresh) {
   const wrap = siteEl("div");
   wrap.appendChild(siteEl("div", "sess-label", COPY.site.navHeading));
@@ -3186,6 +3299,7 @@ async function renderSite(body) {
   cols.append(left, right); body.appendChild(cols);
   const posts = await window.desktop.getSitePosts().catch(() => []);
   const typesData = await window.desktop.getSiteTypes().catch(() => ({ types: [], entries: {} }));
+  mediaIndex = await window.desktop.listMedia().catch(() => []); // thumbnails for image fields
   const ctx = { types: typesData.types || [], entries: typesData.entries || {}, blocks: data.blocks };
   const sel = siteRailState.selected && typeof siteRailState.selected === "object" ? siteRailState.selected : null;
   const isSel = (kind, id) => !!sel && sel.kind === kind && sel.id === id;
