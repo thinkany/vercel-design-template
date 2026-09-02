@@ -58,5 +58,12 @@ export default defineConfig({
       },
     },
     server: { fs: { allow: [repoRoot] } },
+    // App-scaffolded projects SYMLINK node_modules to the app's own copy. With
+    // that layout Vite's SSR build leaves the React renderer external
+    // (`import '@astrojs/react/server.js'`), so Node loads it natively at route
+    // generation and dies on its `astro:react:opts` virtual import ("Only URLs
+    // with a scheme in: file, data, and node are supported"). Bundling the
+    // renderer is correct for every layout, so it's unconditional.
+    ssr: { noExternal: ["@astrojs/react"] },
   },
 });
