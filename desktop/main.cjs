@@ -998,15 +998,30 @@ function buildSite(projectDir) {
     let out = "";
     const p = spawn(process.execPath, [astroCli(), "build", "--root", "site"], {
       cwd: projectDir,
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", FORCE_COLOR: "0" },
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", NO_COLOR: "1", FORCE_COLOR: "0" },
     });
     p.stdout.on("data", (b) => { out += b.toString(); });
     p.stderr.on("data", (b) => { out += b.toString(); });
     p.on("exit", (code) => {
-      const lines = out.split("\n").filter((l) => l.trim()).slice(-40);
-      // The readable part of an Astro failure is the [Error]/message lines; surface those.
-      const errLine = lines.find((l) => /error|invalid|unknown block|cannot|failed/i.test(l) && !/^\s*at /.test(l));
-      resolve({ ok: code === 0, log: lines.join("\n"), error: code === 0 ? null : (errLine || "The site build failed.").trim() });
+      // Strip ANSI (Astro colors even with NO_COLOR in places) and the route-tree
+      // glyphs, then pull the readable error block: the first line that names the
+      // problem plus its indented detail lines (the field issues), up to the stack.
+      const clean = out.replace(/\x1b\[[0-9;]*m/g, "").replace(/[\u2502\u2514\u251c\u2500\u2503]+/g, " ");
+      const lines = clean.split("\n").map((l) => l.replace(/\s+$/, "")).filter((l) => l.trim());
+      let error = null;
+      if (code !== 0) {
+        const i = lines.findIndex((l) => /invalid props|unknown block|\[[A-Za-z]+Error\]|Error:|is invalid|Cannot|failed/.test(l) && !/^\s*at /.test(l));
+        if (i >= 0) {
+          let head = lines[i];
+          // "22:16:14   /about.html content/pages/about.json blocks[0]: …" → from the content path on
+          const j = head.search(/(content\/|site\/|\[[A-Za-z]+Error\]|Error:)/);
+          if (j > 0) head = head.slice(j);
+          const detail = [];
+          for (let k = i + 1; k < lines.length && /^\s{2,}/.test(lines[k]) && !/^\s*(at |Stack trace)/.test(lines[k]); k++) detail.push(lines[k].trim());
+          error = [head.trim(), ...detail].join("\n");
+        } else error = "The site build failed.";
+      }
+      resolve({ ok: code === 0, log: lines.slice(-40).join("\n"), error });
     });
   });
 }

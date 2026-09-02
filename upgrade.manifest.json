@@ -34,5 +34,14 @@
     ".claude/settings.json": "Hybrid: template allowlist + any permissions the designer added."
   },
   "coreNotes": "Everything else is CORE and overwritten: build config (vite.config.ts, vercel.json, middleware.js, index.html, postcss.config.*), scripts/**, .claude/commands/**, .claude/launch.json, .claude/hooks/**, CLAUDE.md, README.md, the app machinery + base chrome + tooling under src/app/** (except the two KEEP data files), src/config/**, src/data/**, src/styles/** (base tokens.css/brand.ts are template DEFAULTS under Option A — the designer's palette lives in their variation), src/version.ts, and public/version.json (so the local version marker advances and the update pill clears).",
-  "excludedNotes": "cloud-export/ is app-internal IP and is NOT distributed at all — the template ZIP plugin (vite.config.ts) filters it out of `git ls-files`, so it never enters template-latest.zip and the overlay never has it to write. Also .gitattributes export-ignore keeps it out of `git archive`."
+  "excludedNotes": "cloud-export/ is app-internal IP and is NOT distributed at all — the template ZIP plugin (vite.config.ts) filters it out of `git ls-files`, so it never enters template-latest.zip and the overlay never has it to write. Also .gitattributes export-ignore keeps it out of `git archive`.",
+  "seedAlways": [
+    "content/site.json",
+    "content/collections.ts",
+    "site/blocks/index.ts",
+    "site/blocks/chrome.ts",
+    "site/blocks/blocks.css",
+    "site/blocks/lib/**"
+  ],
+  "seedNotes": "A KEEP file the project lacks is seeded when it matches seedAlways (machinery the CORE site files import, so a refresh never lands broken). Any OTHER missing KEEP file (a starter page/post/block) is seeded only when the project has none of that tree yet, never into an existing content/ or site/blocks/."
 }
