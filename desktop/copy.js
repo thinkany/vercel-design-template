@@ -386,6 +386,7 @@ window.COPY = {
       "no-home": "The site has no home page yet.",
       "no-project": "Open a project to edit its site.",
     },
+    tabs: { pages: "Pages", posts: "Posts", types: "Types", nav: "Navigation", settings: "Settings" },
     liveAt: "Live at",
     previewNote: "Previewing in the Site tab. Publish from the Publish panel when it’s ready.",
     pagesHeading: "Pages",
@@ -487,6 +488,19 @@ window.COPY = {
     linkHref: "Address",
     listHint: "One per line.",
     noneOption: "(none)",
+    // settings tab
+    settings: {
+      mediaHeading: "Images",
+      mediaDesc: "How added images are optimized. Applies to new uploads; existing images are left as they are.",
+      quality: "Quality",
+      qualityHint: "AVIF quality, 20 to 95. Lower is smaller; 55 is a good default for photos, 70 or more for illustrations and screenshots.",
+      maxWidth: "Maximum width",
+      maxWidthHint: "Pixels. Larger images are scaled down to this on upload; smaller ones are never scaled up.",
+      reset: "Reset to defaults",
+      saved: "Saved",
+      siteHeading: "Site",
+      designPinned: (v) => `Built from design ${v}`,
+    },
     // media picker
     media: {
       title: "Images",

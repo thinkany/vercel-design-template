@@ -269,7 +269,17 @@
       /* A WIDE drawer (the Pages/CMS panel): most of the window, so a page list and its
          editor sit side by side and the preview stays visible at the edge. */
       #modal-card.wide { width: min(1040px, calc(100vw - var(--rail-w) - 48px)); }
+      /* CMS tabs: the same look as the publish help tabs, inside the drawer body. */
+      .site-tabs { display: flex; gap: 2px; margin: -4px 0 14px; border-bottom: 1px solid #ececf1; }
+      .site-tab { border: none; background: none; cursor: pointer; padding: 10px 12px; font-size: 13px; font-weight: 600; color: #8a8a92; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .2s linear; }
+      .site-tab:hover { color: #333; }
+      .site-tab.active { color: #17171b; border-bottom-color: #17171b; }
+      .site-tab .count { font-weight: 500; color: #b0b0b8; margin-left: 4px; font-size: 11px; }
       .site-cols { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 20px; align-items: start; min-height: 100%; }
+      .site-single { max-width: 720px; }
+      .site-range { display: flex; align-items: center; gap: 10px; }
+      .site-range input[type="range"] { flex: 1; }
+      .site-range .val { font-size: 13px; min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
       .site-list-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #e2e2e8; border-radius: 8px; margin-bottom: 6px; cursor: pointer; background: #fff; }
       .site-list-row:hover { border-color: #bcbcc6; }
       .site-list-row.active { border-color: #111; background: #f4f4f7; }

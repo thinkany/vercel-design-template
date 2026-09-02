@@ -1816,14 +1816,43 @@ ipcMain.handle("media:list", () => (currentProject ? listMedia(currentProject) :
 // what a file format is. sharp's shipped libvips encodes AVIF (and decodes HEIC),
 // so no extra library. Files already AVIF pass through, SVG (a vector) and GIF
 // (animation) too. A failed conversion falls back to copying the original.
+// Defaults; a project can adjust them in the CMS Settings tab (.thinkany/cms.json).
 const MEDIA_MAX_WIDTH = 2400;
 const MEDIA_QUALITY = 55; // AVIF: ~55% smaller than WebP q82 on photos at this setting
 const MEDIA_OUT_EXT = ".avif";
+// ---- CMS settings (per project) ----------------------------------------------
+function cmsSettingsPath(dir) { return path.join(dir, ".thinkany", "cms.json"); }
+function cmsDefaults() { return { media: { quality: MEDIA_QUALITY, maxWidth: MEDIA_MAX_WIDTH } }; }
+function loadCmsSettings(dir) {
+  const d = cmsDefaults();
+  const j = dir ? readJsonFile(cmsSettingsPath(dir)) : null;
+  if (j && j.media) {
+    const q = Number(j.media.quality), w = Number(j.media.maxWidth);
+    if (q >= 20 && q <= 95) d.media.quality = Math.round(q);
+    if (w >= 800 && w <= 6000) d.media.maxWidth = Math.round(w);
+  }
+  return d;
+}
+function saveCmsSettings(dir, patch) {
+  const cur = loadCmsSettings(dir);
+  const next = { ...cur, media: { ...cur.media, ...(patch && patch.media ? patch.media : {}) } };
+  const q = Number(next.media.quality), w = Number(next.media.maxWidth);
+  next.media.quality = Math.min(95, Math.max(20, Math.round(Number.isFinite(q) ? q : MEDIA_QUALITY)));
+  next.media.maxWidth = Math.min(6000, Math.max(800, Math.round(Number.isFinite(w) ? w : MEDIA_MAX_WIDTH)));
+  fs.mkdirSync(path.dirname(cmsSettingsPath(dir)), { recursive: true });
+  fs.writeFileSync(cmsSettingsPath(dir), JSON.stringify(next, null, 2) + "\n");
+  return next;
+}
+ipcMain.handle("cms:getSettings", () => ({ ...loadCmsSettings(currentProject), defaults: cmsDefaults() }));
+ipcMain.handle("cms:setSettings", (_e, patch) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  try { return { ok: true, ...saveCmsSettings(currentProject, patch || {}) }; } catch (e) { return { ok: false, error: e.message }; }
+});
 const MEDIA_CONVERT = new Set([".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".heic", ".heif"]);
-function convertImage(inPath, outPath) {
+function convertImage(inPath, outPath, { maxWidth = MEDIA_MAX_WIDTH, quality = MEDIA_QUALITY } = {}) {
   return new Promise((resolve) => {
     // The worker is a real file (asarUnpack) since a child process reads it from disk.
-    const p = spawn(process.execPath, [unpacked(path.join(__dirname, "media-convert.cjs")), inPath, outPath, String(MEDIA_MAX_WIDTH), String(MEDIA_QUALITY)], {
+    const p = spawn(process.execPath, [unpacked(path.join(__dirname, "media-convert.cjs")), inPath, outPath, String(maxWidth), String(quality)], {
       env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", NODE_PATH: unpacked(path.join(appRoot, "node_modules")) },
     });
     let out = ""; p.stdout.on("data", (b) => { out += b.toString(); });
@@ -1840,6 +1869,7 @@ ipcMain.handle("media:upload", async () => {
   });
   if (res.canceled || !res.filePaths.length) return { ok: true, added: [] };
   fs.mkdirSync(mediaDir(currentProject), { recursive: true });
+  const settings = loadCmsSettings(currentProject).media;
   const added = [];
   for (const src of res.filePaths) {
     const ext = path.extname(src).toLowerCase();
@@ -1847,7 +1877,7 @@ ipcMain.handle("media:upload", async () => {
     try {
       if (MEDIA_CONVERT.has(ext)) {
         const name = mediaName(currentProject, base + MEDIA_OUT_EXT);
-        const r = await convertImage(src, path.join(mediaDir(currentProject), name));
+        const r = await convertImage(src, path.join(mediaDir(currentProject), name), settings);
         if (r.ok) { added.push(name); continue; }
         console.warn(`[media] conversion failed for ${path.basename(src)}: ${r.error}; copying the original`);
         if (!MEDIA_EXT.has(ext)) continue; // a format the site can't serve anyway

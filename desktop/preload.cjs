@@ -133,6 +133,8 @@ contextBridge.exposeInMainWorld("desktop", {
   listMedia: () => ipcRenderer.invoke("media:list"),
   uploadMedia: () => ipcRenderer.invoke("media:upload"),
   deleteMedia: (rel) => ipcRenderer.invoke("media:delete", { rel }),
+  getCmsSettings: () => ipcRenderer.invoke("cms:getSettings"),
+  setCmsSettings: (patch) => ipcRenderer.invoke("cms:setSettings", patch),
   onSiteReady: (cb) => {
     const listener = (_e, url) => cb(url);
     ipcRenderer.on("site:ready", listener);

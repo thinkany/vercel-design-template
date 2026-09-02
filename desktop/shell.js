@@ -2602,7 +2602,7 @@ function renderSitePublish(body, site, domainRefreshers) {
 // Everything here is a file edit through main (site:*), never a model turn. Astro's
 // dev server watches content/, so a save shows in the Site tab at once; the build
 // check on publish is the validator of last resort for block props.
-let siteRailState = { open: {}, expanded: {}, selected: null }; // selected page (wide layout), open cards, open block editors
+let siteRailState = { tab: "pages", open: {}, expanded: {}, selected: null }; // active tab, selection, open block editors
 
 function siteEl(tag, cls, text) {
   const n = document.createElement(tag);
@@ -3278,91 +3278,121 @@ function renderSiteNav(site, refresh) {
   return wrap;
 }
 
-async function renderSite(body) {
-  const data = await window.desktop.getSiteContent().catch(() => ({ ready: false, reason: "no-project", pages: [], blocks: [], site: { nav: [], footerLinks: [] } }));
-  const refresh = () => { if (RAILS.site.classList.contains("active")) openModal("site"); };
-  body.appendChild(siteEl("div", "muted", COPY.site.lead)).style.cssText = "font-size:12.5px;margin-bottom:12px;";
-  if (!data.ready) {
-    body.appendChild(siteEl("div", "muted", COPY.site.notReady[data.reason] || COPY.site.notReady["not-promoted"]));
-    return;
-  }
+// The Settings tab: image optimization (per project, .thinkany/cms.json) + site facts.
+async function renderSiteSettings(host, data) {
+  const S = COPY.site.settings;
+  const st = await window.desktop.getCmsSettings().catch(() => ({ media: { quality: 55, maxWidth: 2400 }, defaults: { media: { quality: 55, maxWidth: 2400 } } }));
+  const wrap = siteEl("div", "site-single");
+  host.appendChild(wrap);
+
+  wrap.appendChild(siteEl("div", "sess-label", S.mediaHeading));
+  wrap.appendChild(siteEl("div", "sess-desc", S.mediaDesc));
+  const rangeRow = (label, hint, min, max, value, fmt, onCommit) => {
+    const kv = siteEl("div", "site-kv");
+    kv.appendChild(siteEl("div", "k", label));
+    const row = siteEl("div", "site-range");
+    const r = document.createElement("input"); r.type = "range"; r.min = String(min); r.max = String(max); r.value = String(value);
+    const v = siteEl("span", "val", fmt(value));
+    r.addEventListener("input", () => { v.textContent = fmt(Number(r.value)); });
+    r.addEventListener("change", () => onCommit(Number(r.value)));
+    row.append(r, v); kv.appendChild(row);
+    kv.appendChild(siteEl("div", "sess-desc", hint));
+    return { kv, r, v };
+  };
+  const status = siteEl("div"); status.style.cssText = "min-height:18px;";
+  const save = async (patch) => {
+    const res = await window.desktop.setCmsSettings({ media: patch });
+    status.innerHTML = "";
+    if (res && res.ok) siteFlash(status, S.saved);
+  };
+  const q = rangeRow(S.quality, S.qualityHint, 20, 95, st.media.quality, (x) => String(x), (x) => save({ quality: x, maxWidth: Number(w.r.value) }));
+  const w = rangeRow(S.maxWidth, S.maxWidthHint, 800, 6000, st.media.maxWidth, (x) => x + "px", (x) => save({ quality: Number(q.r.value), maxWidth: x }));
+  w.r.step = "100";
+  wrap.append(q.kv, w.kv);
+  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:4px;";
+  actions.appendChild(siteMini(S.reset, async () => {
+    const d = st.defaults.media;
+    q.r.value = String(d.quality); q.v.textContent = String(d.quality);
+    w.r.value = String(d.maxWidth); w.v.textContent = d.maxWidth + "px";
+    await save({ quality: d.quality, maxWidth: d.maxWidth });
+  }));
+  actions.appendChild(status);
+  wrap.appendChild(actions);
+
+  wrap.appendChild(siteEl("div", "drawer-sep"));
+  wrap.appendChild(siteEl("div", "sess-label", S.siteHeading));
+  if (data.design) wrap.appendChild(siteEl("div", "sess-desc", S.designPinned(data.design)));
   if (data.liveUrl) {
-    const row = siteEl("div"); row.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:12px;font-size:12.5px;";
+    const row = siteEl("div"); row.style.cssText = "display:flex;gap:8px;align-items:center;font-size:12.5px;";
     row.appendChild(siteEl("span", "muted", COPY.site.liveAt));
     const a = siteEl("a", "", data.liveUrl.replace(/^https?:\/\//, "")); a.href = data.liveUrl; a.style.cssText = "color:#1a1a1a;text-decoration:underline;";
     a.addEventListener("click", (e) => { e.preventDefault(); window.desktop.openExternal(data.liveUrl); });
-    row.appendChild(a); body.appendChild(row);
-  } else body.appendChild(siteEl("div", "sess-desc", COPY.site.previewNote));
+    row.appendChild(a); wrap.appendChild(row);
+  } else wrap.appendChild(siteEl("div", "sess-desc", COPY.site.previewNote));
+}
 
-  // Two columns: the page list (+ add, + navigation) on the left, the selected
-  // page's editor on the right. Selection persists across re-renders.
-  const cols = siteEl("div", "site-cols");
-  const left = siteEl("div"); const right = siteEl("div", "site-detail");
-  cols.append(left, right); body.appendChild(cols);
+async function renderSite(body) {
+  const data = await window.desktop.getSiteContent().catch(() => ({ ready: false, reason: "no-project", pages: [], blocks: [], site: { nav: [], footerLinks: [] } }));
+  const refresh = () => { if (RAILS.site.classList.contains("active")) openModal("site"); };
+  if (!data.ready) {
+    body.appendChild(siteEl("div", "muted", COPY.site.lead)).style.cssText = "font-size:12.5px;margin-bottom:12px;";
+    body.appendChild(siteEl("div", "muted", COPY.site.notReady[data.reason] || COPY.site.notReady["not-promoted"]));
+    return;
+  }
   const posts = await window.desktop.getSitePosts().catch(() => []);
   const typesData = await window.desktop.getSiteTypes().catch(() => ({ types: [], entries: {} }));
-  mediaIndex = await window.desktop.listMedia().catch(() => []); // thumbnails for image fields
   const ctx = { types: typesData.types || [], entries: typesData.entries || {}, blocks: data.blocks };
+  mediaIndex = await window.desktop.listMedia().catch(() => []); // thumbnails for image fields
+
+  // ── Tabs: Pages · Posts · Types · Navigation · Settings ──
+  const TABS = ["pages", "posts", "types", "nav", "settings"];
+  if (!TABS.includes(siteRailState.tab)) siteRailState.tab = "pages";
+  const counts = { pages: data.pages.length, posts: posts.length, types: ctx.types.length };
+  const tabs = siteEl("div", "site-tabs");
+  TABS.forEach((t) => {
+    const b = siteEl("button", "site-tab" + (siteRailState.tab === t ? " active" : ""), COPY.site.tabs[t]); b.type = "button";
+    if (counts[t] != null) b.appendChild(siteEl("span", "count", String(counts[t])));
+    b.addEventListener("click", () => { siteRailState.tab = t; refresh(); });
+    tabs.appendChild(b);
+  });
+  body.appendChild(tabs);
+
+  // Selection is per tab: a kind that belongs to another tab is ignored here.
   const sel = siteRailState.selected && typeof siteRailState.selected === "object" ? siteRailState.selected : null;
   const isSel = (kind, id) => !!sel && sel.kind === kind && sel.id === id;
-  const valid = sel && (
-    (sel.kind === "page" && data.pages.some((p) => p.id === sel.id)) ||
-    (sel.kind === "post" && posts.some((p) => p.id === sel.id)) ||
-    (sel.kind === "type" && ctx.types.some((t) => t.key === sel.id)) ||
-    (sel.kind === "entry" && (() => { const [k, id] = sel.id.split("/"); return (ctx.entries[k] || []).some((e) => e.id === id); })()) ||
-    sel.kind === "newtype");
-  if (!valid) siteRailState.selected = data.pages[0] ? { kind: "page", id: data.pages[0].id } : null;
-  left.appendChild(siteEl("div", "sess-label", COPY.site.pagesHeading));
-  data.pages.forEach((p) => {
-    const row = siteEl("div", "site-list-row" + (isSel("page", p.id) ? " active" : ""));
-    row.append(siteEl("div", "site-page-title", p.title), siteEl("div", "site-page-slug", p.id === "home" ? COPY.site.homeSlug : "/" + (p.slug || p.id)));
-    row.addEventListener("click", () => { siteRailState.selected = { kind: "page", id: p.id }; refresh(); });
-    left.appendChild(row);
-  });
-  const cur = siteRailState.selected;
-  if (cur && cur.kind === "page") right.appendChild(renderSitePage(data.pages.find((p) => p.id === cur.id), data.blocks, refresh, true));
-  else if (cur && cur.kind === "post") right.appendChild(renderSitePost(posts.find((p) => p.id === cur.id), refresh));
-  else right.appendChild(siteEl("div", "sess-desc", COPY.site.noBlocks));
-  body = left; // the rest of the master column (add page, posts, navigation)
-  const addRow = siteEl("div"); addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:4px 0 14px;";
-  const titleIn = document.createElement("input"); titleIn.className = "field"; titleIn.placeholder = COPY.site.newPagePlaceholder; titleIn.style.marginBottom = "0";
-  const createBtn = siteEl("button", "panelbtn", COPY.site.create); createBtn.style.margin = "0"; createBtn.style.width = "auto";
-  const create = async () => {
-    const t = titleIn.value.trim(); if (!t) return;
-    const res = await window.desktop.createSitePage(t);
-    if (res && res.ok) { siteRailState.selected = { kind: "page", id: res.page.id }; refresh(); }
+  const two = () => { const cols = siteEl("div", "site-cols"); const left = siteEl("div"); const right = siteEl("div", "site-detail"); cols.append(left, right); body.appendChild(cols); return { left, right }; };
+  const listRow = (title, sub, active, onClick) => { const row = siteEl("div", "site-list-row" + (active ? " active" : "")); row.append(siteEl("div", "site-page-title", title), siteEl("div", "site-page-slug", sub)); row.addEventListener("click", onClick); return row; };
+  const addRow = (placeholder, label, onCreate) => {
+    const row = siteEl("div"); row.style.cssText = "display:flex;gap:6px;align-items:center;margin:4px 0 14px;";
+    const inp = document.createElement("input"); inp.className = "field"; inp.placeholder = placeholder; inp.style.marginBottom = "0";
+    const btn = siteEl("button", "panelbtn", label); btn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+    const go = () => { const v = inp.value.trim(); if (v) onCreate(v); };
+    btn.addEventListener("click", go); inp.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    row.append(inp, btn); return row;
   };
-  createBtn.addEventListener("click", create);
-  titleIn.addEventListener("keydown", (e) => { if (e.key === "Enter") create(); });
-  addRow.append(titleIn, createBtn);
-  body.appendChild(addRow);
-  // Blog posts: newest first, drafts tagged; the editor opens on the right.
-  body.appendChild(siteEl("div", "sess-label", COPY.site.postsHeading)).style.marginTop = "12px";
-  if (!posts.length) body.appendChild(siteEl("div", "sess-desc", COPY.site.noPosts));
-  posts.forEach((p) => {
-    const row = siteEl("div", "site-list-row" + (isSel("post", p.id) ? " active" : ""));
-    row.append(siteEl("div", "site-page-title", p.title), siteEl("div", "site-page-slug", p.draft ? COPY.site.draftTag : (p.date || "")));
-    row.addEventListener("click", () => { siteRailState.selected = { kind: "post", id: p.id }; refresh(); });
-    body.appendChild(row);
-  });
-  const addPostRow = siteEl("div"); addPostRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:4px 0 14px;";
-  const postIn = document.createElement("input"); postIn.className = "field"; postIn.placeholder = COPY.site.newPostPlaceholder; postIn.style.marginBottom = "0";
-  const postBtn = siteEl("button", "panelbtn", COPY.site.create); postBtn.style.margin = "0"; postBtn.style.width = "auto";
-  const createPost = async () => {
-    const t = postIn.value.trim(); if (!t) return;
-    const res = await window.desktop.createSitePost(t);
-    if (res && res.ok) { siteRailState.selected = { kind: "post", id: res.post.id }; refresh(); }
-  };
-  postBtn.addEventListener("click", createPost);
-  postIn.addEventListener("keydown", (e) => { if (e.key === "Enter") createPost(); });
-  addPostRow.append(postIn, postBtn);
-  body.appendChild(addPostRow);
 
-  // Content types: the list on the left; a selected type/entry renders on the right.
-  renderSiteTypesList(left, right, ctx, refresh);
-
-  body.appendChild(siteEl("div", "drawer-sep"));
-  body.appendChild(renderSiteNav(data.site, refresh));
+  if (siteRailState.tab === "pages") {
+    const { left, right } = two();
+    const cur = sel && sel.kind === "page" && data.pages.some((p) => p.id === sel.id) ? sel : (data.pages[0] ? { kind: "page", id: data.pages[0].id } : null);
+    data.pages.forEach((p) => left.appendChild(listRow(p.title, p.id === "home" ? COPY.site.homeSlug : "/" + (p.slug || p.id), cur && cur.id === p.id, () => { siteRailState.selected = { kind: "page", id: p.id }; refresh(); })));
+    left.appendChild(addRow(COPY.site.newPagePlaceholder, COPY.site.create, async (t) => { const res = await window.desktop.createSitePage(t); if (res && res.ok) { siteRailState.selected = { kind: "page", id: res.page.id }; refresh(); } }));
+    if (cur) right.appendChild(renderSitePage(data.pages.find((p) => p.id === cur.id), data.blocks, refresh, true));
+  } else if (siteRailState.tab === "posts") {
+    const { left, right } = two();
+    const cur = sel && sel.kind === "post" && posts.some((p) => p.id === sel.id) ? sel : (posts[0] ? { kind: "post", id: posts[0].id } : null);
+    if (!posts.length) left.appendChild(siteEl("div", "sess-desc", COPY.site.noPosts));
+    posts.forEach((p) => left.appendChild(listRow(p.title, p.draft ? COPY.site.draftTag : (p.date || ""), cur && cur.id === p.id, () => { siteRailState.selected = { kind: "post", id: p.id }; refresh(); })));
+    left.appendChild(addRow(COPY.site.newPostPlaceholder, COPY.site.create, async (t) => { const res = await window.desktop.createSitePost(t); if (res && res.ok) { siteRailState.selected = { kind: "post", id: res.post.id }; refresh(); } }));
+    if (cur) right.appendChild(renderSitePost(posts.find((p) => p.id === cur.id), refresh));
+  } else if (siteRailState.tab === "types") {
+    const { left, right } = two();
+    renderSiteTypesList(left, right, ctx, refresh);
+  } else if (siteRailState.tab === "nav") {
+    const wrap = siteEl("div", "site-single"); body.appendChild(wrap);
+    wrap.appendChild(renderSiteNav(data.site, refresh));
+  } else {
+    await renderSiteSettings(body, data);
+  }
 }
 
 // --- Copy voice: per-project tone + rules, plus global rules ---
