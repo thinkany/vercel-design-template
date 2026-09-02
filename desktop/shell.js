@@ -1111,7 +1111,7 @@ const RAILS = { help: railHelp, projects: railProjects, site: railSite, publish:
 const PANELS = {
   help: { title: COPY.panels.help, render: renderHelp },
   projects: { title: COPY.panels.projects, render: renderProjects },
-  site: { title: COPY.panels.site, render: renderSite },
+  site: { title: COPY.panels.site, render: renderSite, wide: true },
   publish: { title: COPY.panels.publish, render: renderPublish },
   company: { title: COPY.panels.company, render: renderCompany },
   figma: { title: COPY.panels.figma, render: renderFigma },
@@ -1130,9 +1130,12 @@ function closeModal() {
   setTimeout(() => { if (!modal.classList.contains("open")) modal.hidden = true; }, 240);
 }
 async function openModal(kind) {
-  const { title, render } = PANELS[kind];
+  const { title, render, wide } = PANELS[kind];
   modalTitle.textContent = title;
   modalBody.innerHTML = "";
+  // Wide panels (the CMS) take most of the window; the rest keep the narrow drawer.
+  // The width switches before the slide so a fresh open animates at its final size.
+  el("modal-card").classList.toggle("wide", !!wide);
   Object.values(RAILS).forEach((b) => b.classList.remove("active"));
   RAILS[kind].classList.add("active");
   // Slide in on a fresh open (or if interrupted mid-close). When a drawer is
@@ -2599,7 +2602,7 @@ function renderSitePublish(body, site, domainRefreshers) {
 // Everything here is a file edit through main (site:*), never a model turn. Astro's
 // dev server watches content/, so a save shows in the Site tab at once; the build
 // check on publish is the validator of last resort for block props.
-let siteRailState = { open: {}, expanded: {} }; // which page cards / block editors are open
+let siteRailState = { open: {}, expanded: {}, selected: null }; // selected page (wide layout), open cards, open block editors
 
 function siteEl(tag, cls, text) {
   const n = document.createElement(tag);
@@ -2706,16 +2709,23 @@ function sitePropsEditor(value, onChange, depth = 0) {
   return box;
 }
 
-function renderSitePage(page, blocks, refresh) {
-  const card = siteEl("div", "site-page");
-  const head = siteEl("div", "site-page-head");
-  const chevron = siteEl("span", "muted", siteRailState.open[page.id] ? "▾" : "▸");
-  const title = siteEl("div", "site-page-title", page.title);
-  const slug = siteEl("div", "site-page-slug", page.id === "home" ? COPY.site.homeSlug : "/" + (page.slug || page.id));
-  head.append(chevron, title, slug);
-  head.addEventListener("click", () => { siteRailState.open[page.id] = !siteRailState.open[page.id]; refresh(); });
-  card.appendChild(head);
-  if (!siteRailState.open[page.id]) return card;
+function renderSitePage(page, blocks, refresh, forceOpen) {
+  const card = siteEl("div", forceOpen ? "" : "site-page");
+  if (!forceOpen) {
+    const head = siteEl("div", "site-page-head");
+    const chevron = siteEl("span", "muted", siteRailState.open[page.id] ? "▾" : "▸");
+    const title = siteEl("div", "site-page-title", page.title);
+    const slug = siteEl("div", "site-page-slug", page.id === "home" ? COPY.site.homeSlug : "/" + (page.slug || page.id));
+    head.append(chevron, title, slug);
+    head.addEventListener("click", () => { siteRailState.open[page.id] = !siteRailState.open[page.id]; refresh(); });
+    card.appendChild(head);
+    if (!siteRailState.open[page.id]) return card;
+  } else {
+    const h = siteEl("div"); h.style.cssText = "display:flex;align-items:baseline;gap:10px;margin-bottom:10px;";
+    h.append(siteEl("div", "site-page-title", page.title), siteEl("div", "site-page-slug", page.id === "home" ? COPY.site.homeSlug : "/" + (page.slug || page.id)));
+    h.querySelector(".site-page-title").style.fontSize = "15px";
+    card.appendChild(h);
+  }
 
   // Working copy; Save writes it. Deep-cloned so a cancelled edit changes nothing.
   const draft = JSON.parse(JSON.stringify({ title: page.title, slug: page.slug, seo: page.seo || {}, blocks: page.blocks || [] }));
@@ -2779,7 +2789,7 @@ function renderSitePage(page, blocks, refresh) {
     actions.appendChild(siteMini(COPY.site.deletePage, async () => {
       if (!confirm(COPY.site.deleteConfirm(page.title))) return;
       const res = await window.desktop.deleteSitePage(page.id);
-      if (res && res.ok) { delete siteRailState.open[page.id]; refresh(); }
+      if (res && res.ok) { if (siteRailState.selected === page.id) siteRailState.selected = null; refresh(); }
     }, { danger: true }));
   }
   body.appendChild(actions);
@@ -2852,15 +2862,30 @@ async function renderSite(body) {
     row.appendChild(a); body.appendChild(row);
   } else body.appendChild(siteEl("div", "sess-desc", COPY.site.previewNote));
 
-  body.appendChild(siteEl("div", "sess-label", COPY.site.pagesHeading));
-  data.pages.forEach((p) => body.appendChild(renderSitePage(p, data.blocks, refresh)));
+  // Two columns: the page list (+ add, + navigation) on the left, the selected
+  // page's editor on the right. Selection persists across re-renders.
+  const cols = siteEl("div", "site-cols");
+  const left = siteEl("div"); const right = siteEl("div", "site-detail");
+  cols.append(left, right); body.appendChild(cols);
+  if (!data.pages.some((p) => p.id === siteRailState.selected)) siteRailState.selected = data.pages[0] ? data.pages[0].id : null;
+  left.appendChild(siteEl("div", "sess-label", COPY.site.pagesHeading));
+  data.pages.forEach((p) => {
+    const row = siteEl("div", "site-list-row" + (p.id === siteRailState.selected ? " active" : ""));
+    row.append(siteEl("div", "site-page-title", p.title), siteEl("div", "site-page-slug", p.id === "home" ? COPY.site.homeSlug : "/" + (p.slug || p.id)));
+    row.addEventListener("click", () => { siteRailState.selected = p.id; refresh(); });
+    left.appendChild(row);
+  });
+  const selected = data.pages.find((p) => p.id === siteRailState.selected);
+  if (selected) right.appendChild(renderSitePage(selected, data.blocks, refresh, true));
+  else right.appendChild(siteEl("div", "sess-desc", COPY.site.noBlocks));
+  body = left; // the rest of the master column (add page, posts note, navigation)
   const addRow = siteEl("div"); addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:4px 0 14px;";
   const titleIn = document.createElement("input"); titleIn.className = "field"; titleIn.placeholder = COPY.site.newPagePlaceholder; titleIn.style.marginBottom = "0";
   const createBtn = siteEl("button", "panelbtn", COPY.site.create); createBtn.style.margin = "0"; createBtn.style.width = "auto";
   const create = async () => {
     const t = titleIn.value.trim(); if (!t) return;
     const res = await window.desktop.createSitePage(t);
-    if (res && res.ok) { siteRailState.open[res.page.id] = true; refresh(); }
+    if (res && res.ok) { siteRailState.selected = res.page.id; refresh(); }
   };
   createBtn.addEventListener("click", create);
   titleIn.addEventListener("keydown", (e) => { if (e.key === "Enter") create(); });

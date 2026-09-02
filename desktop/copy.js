@@ -209,7 +209,7 @@ window.COPY = {
   rail: {
     help: "Help with Commands",
     projects: "Switch Projects",
-    site: "Site Pages & Navigation",
+    site: "CMS",
     publish: "Publish",
     company: "Company Profile",
     voice: "Copy Voice",
@@ -363,7 +363,7 @@ window.COPY = {
 
   // ── Sidebar drawer titles (the PANELS map) ──────────────────────────────────
   panels: {
-    site: "Site",
+    site: "Pages",
     help: "Commands",
     projects: "Switch Project",
     publish: "Publish",
