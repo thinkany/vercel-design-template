@@ -113,7 +113,7 @@
       /* Collapse pull-tab: pinned to the bottom, stays when the rail is collapsed. */
       body.rail-collapsed .railbtn { display: none; }
       .pulltab {
-        order: 10; margin-top: auto;   /* after all icons, pinned to the bottom */
+        order: 99; margin-top: auto;   /* after ALL icons (the rail's order rules stop at 11), pinned to the bottom */
         width: 100%; border: none; background: transparent; color: #fff; opacity: .4;
         cursor: pointer; display: flex; align-items: center; justify-content: center;
         padding: 9px 0; transition: opacity .25s linear;
@@ -130,6 +130,7 @@
          The viewBox is 1:1 with px so the stroke widths render true. Hidden until
          the first turn reports usage, and while the rail is collapsed. */
       #gauge {
+        order: 50;   /* after the icons, before the pull-tab */
         position: absolute; left: 50%; bottom: 46px; transform: translateX(-50%); z-index: 4;
         width: 28px; height: 28px; opacity: 1; transition: opacity .2s ease; cursor: pointer;
       }
