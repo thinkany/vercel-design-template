@@ -107,7 +107,10 @@
   "pnpm": {
     "overrides": {
       "vite": "6.4.3"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "sharp"
+    ]
   },
   "build": {
     "appId": "design.thinkany.app",

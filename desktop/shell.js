@@ -1928,8 +1928,12 @@ function copyBtn(getText) {
 function publishProgressList(container) {
   const rows = {};
   const LABELS = { project: "Vercel project", env: "Preview gate", upload: "Uploading files", deploy: "Building on Vercel", domain: "Custom domain", ready: "Live", error: "Problem" };
+  // The site publish shares the steps but not the gate: its env step sets the site
+  // address, and it runs a local build check first.
+  const SITE_LABELS = { ...LABELS, env: "Site address", check: "Build check" };
   return (evt) => {
     const { step, status, detail } = evt;
+    const labels = evt.target === "site" ? SITE_LABELS : LABELS;
     let r = rows[step];
     if (!r) {
       const row = document.createElement("div");
@@ -1938,7 +1942,7 @@ function publishProgressList(container) {
       icon.style.cssText = "flex:0 0 14px;";
       const label = document.createElement("span");
       label.style.cssText = "flex:0 0 120px;color:var(--muted,#9a9aa2);";
-      label.textContent = LABELS[step] || step;
+      label.textContent = labels[step] || step;
       const det = document.createElement("span");
       det.style.cssText = "flex:1;";
       row.append(icon, label, det);
@@ -1996,7 +2000,7 @@ function paintPublishResult(host, res) {
   } else {
     const err = document.createElement("div");
     err.className = "muted";
-    err.style.cssText = "margin-top:10px;color:#e5484d;";
+    err.style.cssText = "margin-top:10px;color:#e5484d;white-space:pre-wrap;word-break:break-word;font-size:12.5px;";
     err.textContent = res.error || COPY.publish.publishFailed;
     host.appendChild(err);
   }

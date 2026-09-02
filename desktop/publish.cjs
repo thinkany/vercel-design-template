@@ -276,10 +276,32 @@ async function pollDeployment(token, teamId, id, onState) {
     if (state !== last) { last = state; onState && onState(state); }
     if (state === "READY") return j;
     if (state === "ERROR" || state === "CANCELED") {
-      throw new Error(`The build ${state === "ERROR" ? "failed" : "was canceled"} on Vercel.`);
+      const why = state === "ERROR" ? await buildFailureLines(token, teamId, id) : "";
+      throw new Error(`The build ${state === "ERROR" ? "failed" : "was canceled"} on Vercel.${why ? "\n" + why : ""}`);
     }
     if (Date.now() - started > TIMEOUT) throw new Error("The deployment took too long (5 min).");
     await new Promise((r) => setTimeout(r, 3000));
+  }
+}
+
+// On a failed build, pull the deployment's build log and keep the lines that explain
+// it (the ones around the first error), so the app can show the reason instead of
+// "open Vercel and look". Best-effort: any problem here just yields "".
+async function buildFailureLines(token, teamId, id) {
+  try {
+    const res = await vercelFetch(token, `/v3/deployments/${id}/events?builds=1&limit=400`, { teamId });
+    if (!res.ok) return "";
+    const events = await readJson(res);
+    const lines = (Array.isArray(events) ? events : [])
+      .map((e) => (e && e.payload && (e.payload.text || (e.payload.info && e.payload.info.text))) || e.text || "")
+      .map((t) => String(t).replace(/\x1b\[[0-9;]*m/g, "").trimEnd())
+      .filter((t) => t.trim());
+    if (!lines.length) return "";
+    let i = lines.findIndex((l) => /ERR_|Error:|error /.test(l));
+    if (i < 0) i = Math.max(0, lines.length - 6);
+    return lines.slice(Math.max(0, i - 1), i + 5).join("\n");
+  } catch {
+    return "";
   }
 }
 

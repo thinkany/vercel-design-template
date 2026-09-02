@@ -500,6 +500,7 @@ function siteReady(dir) {
 // package.json (the same ones a fresh scaffold gets); scripts too. Idempotent.
 const SITE_DEP_KEYS = ["astro", "@astrojs/react", "@astrojs/sitemap", "vite"];
 const SITE_SCRIPTS = { "site:dev": "astro dev --root site", "site:build": "astro build --root site", "site:preview": "astro preview --root site" };
+const SITE_BUILD_SCRIPT_DEPS = ["sharp"];
 function ensureSiteDeps(dir) {
   const pkgPath = path.join(dir, "package.json");
   let pkg, scaffold;
@@ -515,6 +516,15 @@ function ensureSiteDeps(dir) {
   for (const [k, v] of Object.entries(SITE_SCRIPTS)) {
     if (!pkg.scripts[k]) { pkg.scripts[k] = v; changed = true; }
   }
+  // pnpm 10 (Vercel's default) refuses to run a dependency's install script unless
+  // the package approves it, and fails the install outright (ERR_PNPM_IGNORED_BUILDS).
+  // Astro pulls in sharp for its image service; approve it here so the site builds.
+  pkg.pnpm = pkg.pnpm || {};
+  const approved = new Set(pkg.pnpm.onlyBuiltDependencies || []);
+  for (const dep of SITE_BUILD_SCRIPT_DEPS) {
+    if (!approved.has(dep)) { approved.add(dep); changed = true; }
+  }
+  pkg.pnpm.onlyBuiltDependencies = [...approved];
   if (changed) fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
   return { changed };
 }
@@ -1403,7 +1413,7 @@ async function publishSite(event, token) {
   const rec = loadPublish(currentProject);
   const site = rec.site || {};
   const projectName = site.projectName || `${deriveProjectName(currentProject)}-site`;
-  const onProgress = (evt) => { if (!event.sender.isDestroyed()) event.sender.send("publish:progress", evt); };
+  const onProgress = (evt) => { if (!event.sender.isDestroyed()) event.sender.send("publish:progress", { ...evt, target: "site" }); };
   try {
     ensureSiteDeps(currentProject);
     // Build locally first: a bad block or content fails here with the real message
