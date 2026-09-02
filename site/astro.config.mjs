@@ -46,6 +46,9 @@ export default defineConfig({
   trailingSlash: "never",
   build: { format: "file" },
   integrations: [react(), sitemap()],
+  // No dev toolbar: it's a developer's island/audit inspector, and inside the app's
+  // Site tab it's a floating pill the designer can't use for anything.
+  devToolbar: { enabled: false },
   vite: {
     plugins: [tailwindcss()],
     // Read the scaffold's committed .env (VITE_CLIENT_NAME etc.) so `@/config/site`

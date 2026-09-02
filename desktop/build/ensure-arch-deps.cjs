@@ -21,6 +21,8 @@ const BASES = [
   "lightningcss-darwin", // Tailwind v4 / Vite CSS
   "@tailwindcss/oxide-darwin", // Tailwind v4 engine
   "@rollup/rollup-darwin", // Vite production bundler
+  "@img/sharp-darwin", // Astro's image service (site build) — sharp's native binding
+  "@img/sharp-libvips-darwin", // the libvips library sharp binds to
 ];
 
 function versionOf(name) {
