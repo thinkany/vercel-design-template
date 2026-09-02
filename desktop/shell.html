@@ -68,9 +68,10 @@
       /* Publish uses a stroke icon; it goes full-opacity (white, like the rest of the
          rail) once Vercel is connected. .activated is toggled in shell.js from vercel-status. */
       #rail-publish.activated { opacity: 1; }
-      /* Rail order (visual, top→bottom): Switch Project · Claude · Figma · Publish ·
-         Art Director · Accessibility · Voice · Company · Licenses · Help.
-         --i is the visual index, used to stagger the open/close animation top→bottom. */
+      /* Rail order (visual, top→bottom): Switch Projects · Pages (CMS) · Publish ·
+         Art Director · Accessibility · Voice · Company · Claude · Figma · Licenses · Help.
+         The ORDER rules here decide the on-screen order, not the markup. --i is the
+         visual index, used to stagger the open/close animation top→bottom. */
       #rail-projects    { order: 1; --i: 0; }
       #rail-site        { order: 2; --i: 1; }
       #rail-publish     { order: 3; --i: 2; }
