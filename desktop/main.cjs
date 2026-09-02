@@ -526,7 +526,32 @@ function ensureSiteDeps(dir) {
   }
   pkg.pnpm.onlyBuiltDependencies = [...approved];
   if (changed) fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+  // pnpm 11 (the scaffold's packageManager, honored by Vercel) reads build approvals
+  // from pnpm-workspace.yaml only; the package.json field above serves older pnpm.
+  if (ensurePnpmWorkspaceApprovals(dir, SITE_BUILD_SCRIPT_DEPS)) changed = true;
   return { changed };
+}
+// Allow `deps` to run install scripts in the project's pnpm-workspace.yaml, which
+// is where pnpm 10+ reads settings (the scaffold pins pnpm 11; Vercel honors it).
+// pnpm 11 syntax: an `allowBuilds:` map of `name: true`. Minimal, line-based: the
+// file is the scaffold's and holds settings only. Created when absent.
+function ensurePnpmWorkspaceApprovals(dir, deps) {
+  const p = path.join(dir, "pnpm-workspace.yaml");
+  let text = "";
+  try { text = fs.readFileSync(p, "utf8"); } catch { /* absent */ }
+  const before = text;
+  const keyRe = /^allowBuilds:[ \t]*$/m;
+  if (!keyRe.test(text)) {
+    text = text.replace(/\s*$/, "") + (text.trim() ? "\n" : "") + "allowBuilds:\n";
+  }
+  for (const dep of deps) {
+    const esc = dep.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`^[ \\t]+'?${esc}'?:[ \\t]*true`, "m").test(text)) continue;
+    text = text.replace(keyRe, (m) => `${m}\n  ${dep}: true`);
+  }
+  if (!text.endsWith("\n")) text += "\n";
+  if (text !== before) { fs.writeFileSync(p, text); return true; }
+  return false;
 }
 // After a site publish, the canonical URL in content/site.json follows the live
 // address so local builds (and llms.txt / sitemap) agree with production.
