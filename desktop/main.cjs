@@ -1811,17 +1811,19 @@ function mediaName(dir, original) {
   return name;
 }
 ipcMain.handle("media:list", () => (currentProject ? listMedia(currentProject) : []));
-// Uploads become WebP (auto-oriented, metadata stripped, at most MEDIA_MAX_WIDTH
+// Uploads become AVIF (auto-oriented, metadata stripped, at most MEDIA_MAX_WIDTH
 // wide, never upscaled) via the conversion worker; a designer never has to know
-// what a file format is. SVG passes through (a vector), GIF too (animation would
-// be lost). A failed conversion falls back to copying the original.
+// what a file format is. sharp's shipped libvips encodes AVIF (and decodes HEIC),
+// so no extra library. Files already AVIF pass through, SVG (a vector) and GIF
+// (animation) too. A failed conversion falls back to copying the original.
 const MEDIA_MAX_WIDTH = 2400;
-const MEDIA_WEBP_QUALITY = 82;
-const MEDIA_CONVERT = new Set([".jpg", ".jpeg", ".png", ".webp", ".avif", ".tif", ".tiff", ".heic", ".heif"]);
-function convertToWebp(inPath, outPath) {
+const MEDIA_QUALITY = 55; // AVIF: ~55% smaller than WebP q82 on photos at this setting
+const MEDIA_OUT_EXT = ".avif";
+const MEDIA_CONVERT = new Set([".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".heic", ".heif"]);
+function convertImage(inPath, outPath) {
   return new Promise((resolve) => {
     // The worker is a real file (asarUnpack) since a child process reads it from disk.
-    const p = spawn(process.execPath, [unpacked(path.join(__dirname, "media-convert.cjs")), inPath, outPath, String(MEDIA_MAX_WIDTH), String(MEDIA_WEBP_QUALITY)], {
+    const p = spawn(process.execPath, [unpacked(path.join(__dirname, "media-convert.cjs")), inPath, outPath, String(MEDIA_MAX_WIDTH), String(MEDIA_QUALITY)], {
       env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", NODE_PATH: unpacked(path.join(appRoot, "node_modules")) },
     });
     let out = ""; p.stdout.on("data", (b) => { out += b.toString(); });
@@ -1844,10 +1846,10 @@ ipcMain.handle("media:upload", async () => {
     const base = path.basename(src, path.extname(src));
     try {
       if (MEDIA_CONVERT.has(ext)) {
-        const name = mediaName(currentProject, base + ".webp");
-        const r = await convertToWebp(src, path.join(mediaDir(currentProject), name));
+        const name = mediaName(currentProject, base + MEDIA_OUT_EXT);
+        const r = await convertImage(src, path.join(mediaDir(currentProject), name));
         if (r.ok) { added.push(name); continue; }
-        console.warn(`[media] webp conversion failed for ${path.basename(src)}: ${r.error}; copying the original`);
+        console.warn(`[media] conversion failed for ${path.basename(src)}: ${r.error}; copying the original`);
         if (!MEDIA_EXT.has(ext)) continue; // a format the site can't serve anyway
       }
       if (!MEDIA_EXT.has(ext)) continue;
