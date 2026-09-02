@@ -1811,20 +1811,49 @@ function mediaName(dir, original) {
   return name;
 }
 ipcMain.handle("media:list", () => (currentProject ? listMedia(currentProject) : []));
+// Uploads become WebP (auto-oriented, metadata stripped, at most MEDIA_MAX_WIDTH
+// wide, never upscaled) via the conversion worker; a designer never has to know
+// what a file format is. SVG passes through (a vector), GIF too (animation would
+// be lost). A failed conversion falls back to copying the original.
+const MEDIA_MAX_WIDTH = 2400;
+const MEDIA_WEBP_QUALITY = 82;
+const MEDIA_CONVERT = new Set([".jpg", ".jpeg", ".png", ".webp", ".avif", ".tif", ".tiff", ".heic", ".heif"]);
+function convertToWebp(inPath, outPath) {
+  return new Promise((resolve) => {
+    // The worker is a real file (asarUnpack) since a child process reads it from disk.
+    const p = spawn(process.execPath, [unpacked(path.join(__dirname, "media-convert.cjs")), inPath, outPath, String(MEDIA_MAX_WIDTH), String(MEDIA_WEBP_QUALITY)], {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", NODE_PATH: unpacked(path.join(appRoot, "node_modules")) },
+    });
+    let out = ""; p.stdout.on("data", (b) => { out += b.toString(); });
+    p.on("exit", () => { try { resolve(JSON.parse(out)); } catch { resolve({ ok: false, error: "conversion failed" }); } });
+    p.on("error", (e) => resolve({ ok: false, error: e.message }));
+  });
+}
 ipcMain.handle("media:upload", async () => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   const res = await dialog.showOpenDialog(mainWindow, {
     title: "Add images",
     properties: ["openFile", "multiSelections"],
-    filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "gif", "webp", "avif", "svg"] }],
+    filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "gif", "webp", "avif", "svg", "tif", "tiff", "heic", "heif"] }],
   });
   if (res.canceled || !res.filePaths.length) return { ok: true, added: [] };
   fs.mkdirSync(mediaDir(currentProject), { recursive: true });
   const added = [];
   for (const src of res.filePaths) {
-    if (!MEDIA_EXT.has(path.extname(src).toLowerCase())) continue;
-    const name = mediaName(currentProject, path.basename(src));
-    try { fs.copyFileSync(src, path.join(mediaDir(currentProject), name)); added.push(name); } catch (e) { return { ok: false, error: e.message, added }; }
+    const ext = path.extname(src).toLowerCase();
+    const base = path.basename(src, path.extname(src));
+    try {
+      if (MEDIA_CONVERT.has(ext)) {
+        const name = mediaName(currentProject, base + ".webp");
+        const r = await convertToWebp(src, path.join(mediaDir(currentProject), name));
+        if (r.ok) { added.push(name); continue; }
+        console.warn(`[media] webp conversion failed for ${path.basename(src)}: ${r.error}; copying the original`);
+        if (!MEDIA_EXT.has(ext)) continue; // a format the site can't serve anyway
+      }
+      if (!MEDIA_EXT.has(ext)) continue;
+      const name = mediaName(currentProject, path.basename(src));
+      fs.copyFileSync(src, path.join(mediaDir(currentProject), name)); added.push(name);
+    } catch (e) { return { ok: false, error: e.message, added: added.map((n) => `/images/${n}`) }; }
   }
   return { ok: true, added: added.map((n) => `/images/${n}`) };
 });

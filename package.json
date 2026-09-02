@@ -119,6 +119,7 @@
     "asar": true,
     "asarUnpack": [
       "desktop/bin/**",
+      "desktop/media-convert.cjs",
       "desktop/template/**",
       "scripts/**",
       "node_modules/**"

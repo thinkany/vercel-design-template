@@ -492,6 +492,7 @@ window.COPY = {
       title: "Images",
       lead: "Images in this project. Pick one, or add files from your computer.",
       upload: "Add images…",
+      uploadNote: "Added images are optimized for the web automatically (WebP, up to 2400px wide). SVG and GIF files are kept as they are.",
       uploading: "Adding…",
       choose: "Choose",
       change: "Change",

@@ -3148,9 +3148,11 @@ function openMediaPicker(current) {
     const upBtn = siteEl("button", "panelbtn", M.upload); upBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
     const useBtn = siteEl("button", "panelbtn primary", M.use); useBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;"; useBtn.disabled = true;
     mediapickBar.append(filterIn, upBtn, useBtn);
+    upBtn.title = M.uploadNote;
     const paint = () => {
       mediapickBody.innerHTML = "";
       const shown = items.filter((it) => !filter || it.name.toLowerCase().includes(filter));
+      mediapickBody.appendChild(siteEl("div", "sess-desc", M.uploadNote));
       if (!items.length) { mediapickBody.appendChild(siteEl("div", "muted", M.empty)); return; }
       const grid = siteEl("div", "media-grid");
       shown.forEach((it) => {
