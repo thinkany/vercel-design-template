@@ -3202,7 +3202,7 @@ function siteImageControl(value, onChange, { label } = {}) {
   const side = siteEl("div", "site-img-side");
   const altLabel = siteEl("div", "k", M.altLabel);
   const alt = document.createElement("input"); alt.className = "field"; alt.value = cur.alt;
-  const btns = siteEl("div"); btns.style.cssText = "display:flex;gap:6px;";
+  const btns = siteEl("div", "site-img-btns");
   const choose = siteMini(M.choose, async () => { const it = await openMediaPicker(cur.src || null); if (it && it.url) { cur = { src: it.url, alt: cur.alt }; paint(); emit(); } });
   const clear = siteMini(M.clear, () => { cur = { src: "", alt: cur.alt }; paint(); emit(); }, { danger: true });
   btns.append(choose, clear);
