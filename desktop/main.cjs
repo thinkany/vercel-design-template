@@ -1416,6 +1416,134 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode, mo
   return result;
 });
 
+// ---- Site content (the Site rail) --------------------------------------------
+// The rail edits the site as FILES, no model turn: content/site.json (nav, url),
+// content/pages/*.json (title, slug, SEO, the ordered block instances and their
+// props). Astro's dev server watches content/, so a save shows in the Site tab at
+// once; the build check on publish is the validator of last resort.
+function siteContentDir(dir) { return path.join(dir, "content"); }
+function pageFile(dir, id) { return path.join(siteContentDir(dir), "pages", `${id}.json`); }
+function readJsonFile(p) { try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; } }
+
+// The block registry, read from site/blocks/index.ts without executing it: the
+// keys content refers to, plus each block's name/description from its file.
+function readBlockRegistry(dir) {
+  const idx = path.join(dir, "site", "blocks", "index.ts");
+  let src = "";
+  try { src = fs.readFileSync(idx, "utf8"); } catch { return []; }
+  const imports = {};
+  for (const m of src.matchAll(/import\s*\{\s*([A-Za-z0-9_]+)\s*\}\s*from\s*["']\.\/([^"']+)["']/g)) imports[m[1]] = m[2];
+  const body = (src.match(/export const blocks[^=]*=\s*\{([\s\S]*?)\n\};/) || [])[1] || "";
+  const out = [];
+  for (const line of body.split("\n")) {
+    const t = line.trim().replace(/,$/, "");
+    if (!t || t.startsWith("//")) continue;
+    let key, ident;
+    const m = t.match(/^(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9_-]+))\s*:\s*([A-Za-z0-9_]+)$/);
+    if (m) { key = m[1] || m[2] || m[3]; ident = m[4]; }
+    else if (/^[A-Za-z0-9_]+$/.test(t)) { key = t; ident = t; }
+    else continue;
+    const entry = { key, name: key, description: "" };
+    const file = imports[ident];
+    if (file) {
+      const fsrc = readTextSafe(path.join(dir, "site", "blocks", file + (file.endsWith(".tsx") ? "" : ".tsx")));
+      const nm = fsrc.match(/name:\s*"([^"]+)"/); const ds = fsrc.match(/description:\s*"([^"]+)"/);
+      if (nm) entry.name = nm[1];
+      if (ds) entry.description = ds[1];
+    }
+    out.push(entry);
+  }
+  return out;
+}
+function readTextSafe(p) { try { return fs.readFileSync(p, "utf8"); } catch { return ""; } }
+
+function readSiteContent(dir) {
+  const r = siteReady(dir);
+  const site = readJsonFile(path.join(siteContentDir(dir), "site.json")) || {};
+  const pagesDir = path.join(siteContentDir(dir), "pages");
+  let pages = [];
+  try {
+    pages = fs.readdirSync(pagesDir).filter((f) => f.endsWith(".json")).sort().map((f) => {
+      const id = f.replace(/\.json$/, "");
+      const data = readJsonFile(path.join(pagesDir, f)) || {};
+      return { id, title: data.title || id, slug: data.slug ?? (id === "home" ? "" : id), seo: data.seo || {}, blocks: Array.isArray(data.blocks) ? data.blocks : [] };
+    });
+  } catch { /* no pages dir */ }
+  // Home first, then alphabetical.
+  pages.sort((a, b) => (a.id === "home" ? -1 : b.id === "home" ? 1 : a.title.localeCompare(b.title)));
+  let posts = 0;
+  try { posts = fs.readdirSync(path.join(siteContentDir(dir), "posts")).filter((f) => /\.mdx?$/.test(f)).length; } catch {}
+  const pub = loadPublish(dir);
+  return {
+    ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
+    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [] },
+    pages, posts, blocks: readBlockRegistry(dir), liveUrl: (pub.site && pub.site.url) || null, previewUrl: siteUrl,
+  };
+}
+function slugifyId(s) {
+  return String(s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+}
+function validPageId(id) { return typeof id === "string" && /^[a-z0-9][a-z0-9-]*$/.test(id); }
+
+ipcMain.handle("site:content", () => {
+  if (!currentProject) return { ready: false, reason: "no-project", pages: [], blocks: [], site: { nav: [], footerLinks: [] } };
+  return readSiteContent(currentProject);
+});
+// Save a page. `data` is the whole page document ({ title, slug, seo, blocks });
+// the block props are written as given, the build validates them.
+ipcMain.handle("site:savePage", (_e, { id, data } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!validPageId(id)) return { ok: false, error: "Bad page id." };
+  if (!data || typeof data !== "object" || typeof data.title !== "string" || !data.title.trim()) return { ok: false, error: "A page needs a title." };
+  const doc = {
+    title: data.title.trim(),
+    slug: id === "home" ? "" : slugifyId(data.slug ?? id),
+    seo: data.seo && typeof data.seo === "object" ? data.seo : {},
+    blocks: Array.isArray(data.blocks) ? data.blocks.filter((b) => b && typeof b.type === "string").map((b) => ({ type: b.type, props: b.props && typeof b.props === "object" ? b.props : {} })) : [],
+  };
+  // Drop empty SEO strings so defaults apply.
+  for (const k of Object.keys(doc.seo)) if (doc.seo[k] === "" || doc.seo[k] == null) delete doc.seo[k];
+  try {
+    fs.mkdirSync(path.dirname(pageFile(currentProject, id)), { recursive: true });
+    fs.writeFileSync(pageFile(currentProject, id), JSON.stringify(doc, null, 2) + "\n");
+    return { ok: true, page: { id, ...doc } };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle("site:createPage", (_e, { title } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const t = String(title || "").trim();
+  if (!t) return { ok: false, error: "Give the page a title." };
+  let id = slugifyId(t) || "page";
+  if (id === "blog") id = "blog-page"; // /blog is the posts index
+  let n = 2; const base = id;
+  while (fs.existsSync(pageFile(currentProject, id))) id = `${base}-${n++}`;
+  const doc = { title: t, slug: id, seo: {}, blocks: [] };
+  try {
+    fs.mkdirSync(path.dirname(pageFile(currentProject, id)), { recursive: true });
+    fs.writeFileSync(pageFile(currentProject, id), JSON.stringify(doc, null, 2) + "\n");
+    return { ok: true, page: { id, ...doc } };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle("site:deletePage", (_e, { id } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!validPageId(id) || id === "home") return { ok: false, error: "The home page can't be deleted." };
+  try { fs.rmSync(pageFile(currentProject, id), { force: true }); return { ok: true }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+// Site-level settings: nav + footer links (the pinned design + url are managed by
+// promotion and publishing, so they're preserved, never edited here).
+ipcMain.handle("site:saveSite", (_e, { nav, footerLinks } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const p = path.join(siteContentDir(currentProject), "site.json");
+  const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
+  const clean = (arr, sub) => (Array.isArray(arr) ? arr : [])
+    .filter((l) => l && typeof l.label === "string" && l.label.trim() && typeof l.href === "string" && l.href.trim())
+    .map((l) => ({ label: l.label.trim(), href: l.href.trim(), ...(sub && Array.isArray(l.links) && l.links.length ? { links: clean(l.links, false) } : {}) }));
+  const next = { ...cur, nav: clean(nav, true), footerLinks: clean(footerLinks, false) };
+  try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, site: next }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
 // ---- Site IPC ----------------------------------------------------------------
 ipcMain.handle("site:status", () => {
   if (!currentProject) return { ready: false, reason: "no-project", url: null };

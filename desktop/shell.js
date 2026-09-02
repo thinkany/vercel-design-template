@@ -24,6 +24,7 @@ function setProjTitle(m) {
 // Sidebar + modal
 const railHelp = el("rail-help");
 const railProjects = el("rail-projects");
+const railSite = el("rail-site");
 const railPublish = el("rail-publish");
 const railCompany = el("rail-company");
 const railFigma = el("rail-figma");
@@ -1106,10 +1107,11 @@ createproject.addEventListener("click", () => chooseProject("create"));
 openproject.addEventListener("click", () => chooseProject("open"));
 
 // ---- Sidebar panels ----------------------------------------------------------
-const RAILS = { help: railHelp, projects: railProjects, publish: railPublish, company: railCompany, figma: railFigma, voice: railVoice, claude: railClaude, director: railDirector, a11y: railA11y, licenses: railLicenses };
+const RAILS = { help: railHelp, projects: railProjects, site: railSite, publish: railPublish, company: railCompany, figma: railFigma, voice: railVoice, claude: railClaude, director: railDirector, a11y: railA11y, licenses: railLicenses };
 const PANELS = {
   help: { title: COPY.panels.help, render: renderHelp },
   projects: { title: COPY.panels.projects, render: renderProjects },
+  site: { title: COPY.panels.site, render: renderSite },
   publish: { title: COPY.panels.publish, render: renderPublish },
   company: { title: COPY.panels.company, render: renderCompany },
   figma: { title: COPY.panels.figma, render: renderFigma },
@@ -1151,6 +1153,7 @@ function toggleModal(kind) {
 
 railHelp.addEventListener("click", () => toggleModal("help"));
 railProjects.addEventListener("click", () => toggleModal("projects"));
+railSite.addEventListener("click", () => toggleModal("site"));
 railPublish.addEventListener("click", () => toggleModal("publish"));
 railCompany.addEventListener("click", () => toggleModal("company"));
 railFigma.addEventListener("click", () => toggleModal("figma"));
@@ -2590,6 +2593,283 @@ function renderSitePublish(body, site, domainRefreshers) {
     try { last.textContent = S.lastPublishedPrefix + new Date(site.lastDeployAt).toLocaleString(); } catch { last.textContent = ""; }
     body.appendChild(last);
   }
+}
+
+// --- Site rail: pages, SEO, blocks and navigation, edited as content ------------
+// Everything here is a file edit through main (site:*), never a model turn. Astro's
+// dev server watches content/, so a save shows in the Site tab at once; the build
+// check on publish is the validator of last resort for block props.
+let siteRailState = { open: {}, expanded: {} }; // which page cards / block editors are open
+
+function siteEl(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+function siteField(labelText, value, { textarea, placeholder, hint, type } = {}) {
+  const wrap = siteEl("div", "site-kv");
+  wrap.appendChild(siteEl("div", "k", labelText));
+  const input = document.createElement(textarea ? "textarea" : "input");
+  input.className = "field";
+  if (!textarea) input.type = type || "text";
+  if (placeholder) input.placeholder = placeholder;
+  input.value = value == null ? "" : String(value);
+  wrap.appendChild(input);
+  if (hint) wrap.appendChild(siteEl("div", "sess-desc", hint));
+  return { wrap, input };
+}
+function siteMini(label, onClick, { danger, title, disabled } = {}) {
+  const b = siteEl("button", "site-mini" + (danger ? " danger" : ""), label);
+  b.type = "button";
+  if (title) b.title = title;
+  if (disabled) b.disabled = true;
+  b.addEventListener("click", onClick);
+  return b;
+}
+function siteFlash(host, text) {
+  const s = siteEl("span", "site-saved", text);
+  host.appendChild(s);
+  setTimeout(() => s.remove(), 1800);
+}
+
+// Generic editor for a block's props: strings → input/textarea, numbers, booleans,
+// arrays of strings, and nested objects / arrays of objects (add/remove, a new item
+// cloned from the last one's shape). No schema needed; the build validates.
+function sitePropsEditor(value, onChange, depth = 0) {
+  const box = siteEl("div", depth ? "" : "site-props");
+  const keys = Object.keys(value || {});
+  for (const key of keys) {
+    const v = value[key];
+    const label = key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
+    if (typeof v === "boolean") {
+      const row = siteEl("label", "toggle-row");
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = v;
+      cb.addEventListener("change", () => { value[key] = cb.checked; onChange(); });
+      row.append(cb, siteEl("span", "", label));
+      box.appendChild(row);
+    } else if (typeof v === "number") {
+      const { wrap, input } = siteField(label, v, { type: "number" });
+      input.addEventListener("input", () => { value[key] = Number(input.value); onChange(); });
+      box.appendChild(wrap);
+    } else if (typeof v === "string") {
+      const { wrap, input } = siteField(label, v, { textarea: v.length > 60 || /\n/.test(v) });
+      input.addEventListener("input", () => { value[key] = input.value; onChange(); });
+      box.appendChild(wrap);
+    } else if (Array.isArray(v)) {
+      const wrap = siteEl("div", "site-kv");
+      wrap.appendChild(siteEl("div", "k", label));
+      const allStrings = v.every((x) => typeof x === "string");
+      if (allStrings) {
+        const ta = document.createElement("textarea"); ta.className = "field"; ta.value = v.join("\n");
+        ta.placeholder = "One per line";
+        ta.addEventListener("input", () => { value[key] = ta.value.split("\n").map((x) => x.trim()).filter(Boolean); onChange(); });
+        wrap.appendChild(ta);
+      } else {
+        const list = siteEl("div");
+        const paint = () => {
+          list.innerHTML = "";
+          v.forEach((item, i) => {
+            const card = siteEl("div", "site-item");
+            const head = siteEl("div", "site-item-head");
+            head.appendChild(siteEl("span", "", COPY.site.listItem(i + 1)));
+            const acts = siteEl("span");
+            acts.append(
+              siteMini("↑", () => { if (i > 0) { [v[i - 1], v[i]] = [v[i], v[i - 1]]; onChange(); paint(); } }, { disabled: i === 0, title: COPY.site.moveUp }),
+              " ",
+              siteMini("↓", () => { if (i < v.length - 1) { [v[i + 1], v[i]] = [v[i], v[i + 1]]; onChange(); paint(); } }, { disabled: i === v.length - 1, title: COPY.site.moveDown }),
+              " ",
+              siteMini(COPY.site.removeItem, () => { v.splice(i, 1); onChange(); paint(); }, { danger: true }),
+            );
+            head.appendChild(acts);
+            card.appendChild(head);
+            if (item && typeof item === "object") card.appendChild(sitePropsEditor(item, onChange, depth + 1));
+            list.appendChild(card);
+          });
+        };
+        paint();
+        wrap.appendChild(list);
+        wrap.appendChild(siteMini(COPY.site.addItem, () => {
+          const last = v[v.length - 1];
+          const blank = last && typeof last === "object" ? JSON.parse(JSON.stringify(last), (k, x) => (typeof x === "string" ? "" : x)) : "";
+          v.push(blank); onChange(); paint();
+        }));
+      }
+      box.appendChild(wrap);
+    } else if (v && typeof v === "object") {
+      const wrap = siteEl("div", "site-kv");
+      wrap.appendChild(siteEl("div", "k", label));
+      wrap.appendChild(sitePropsEditor(v, onChange, depth + 1));
+      box.appendChild(wrap);
+    }
+  }
+  return box;
+}
+
+function renderSitePage(page, blocks, refresh) {
+  const card = siteEl("div", "site-page");
+  const head = siteEl("div", "site-page-head");
+  const chevron = siteEl("span", "muted", siteRailState.open[page.id] ? "▾" : "▸");
+  const title = siteEl("div", "site-page-title", page.title);
+  const slug = siteEl("div", "site-page-slug", page.id === "home" ? COPY.site.homeSlug : "/" + (page.slug || page.id));
+  head.append(chevron, title, slug);
+  head.addEventListener("click", () => { siteRailState.open[page.id] = !siteRailState.open[page.id]; refresh(); });
+  card.appendChild(head);
+  if (!siteRailState.open[page.id]) return card;
+
+  // Working copy; Save writes it. Deep-cloned so a cancelled edit changes nothing.
+  const draft = JSON.parse(JSON.stringify({ title: page.title, slug: page.slug, seo: page.seo || {}, blocks: page.blocks || [] }));
+  let dirty = false;
+  const markDirty = () => { dirty = true; saveBtn.disabled = false; };
+  const body = siteEl("div"); body.style.marginTop = "10px";
+
+  const t = siteField(COPY.site.pageTitle, draft.title); t.input.addEventListener("input", () => { draft.title = t.input.value; markDirty(); }); body.appendChild(t.wrap);
+  if (page.id !== "home") { const sl = siteField(COPY.site.pageSlug, draft.slug || page.id); sl.input.addEventListener("input", () => { draft.slug = sl.input.value; markDirty(); }); body.appendChild(sl.wrap); }
+
+  body.appendChild(siteEl("div", "sess-label", COPY.site.seoHeading)).style.marginTop = "12px";
+  const st = siteField(COPY.site.seoTitle, draft.seo.title, { hint: COPY.site.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; markDirty(); }); body.appendChild(st.wrap);
+  const sd = siteField(COPY.site.seoDescription, draft.seo.description, { textarea: true, hint: COPY.site.seoDescriptionHint }); sd.input.addEventListener("input", () => { draft.seo.description = sd.input.value; markDirty(); }); body.appendChild(sd.wrap);
+  const si = siteField(COPY.site.seoImage, draft.seo.image, { hint: COPY.site.seoImageHint }); si.input.addEventListener("input", () => { draft.seo.image = si.input.value; markDirty(); }); body.appendChild(si.wrap);
+  const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!draft.seo.noindex;
+  nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; markDirty(); }); nx.append(nxCb, siteEl("span", "", COPY.site.seoNoindex)); body.appendChild(nx);
+
+  body.appendChild(siteEl("div", "sess-label", COPY.site.blocksHeading)).style.marginTop = "12px";
+  const blockList = siteEl("div");
+  const byKey = Object.fromEntries(blocks.map((b) => [b.key, b]));
+  const paintBlocks = () => {
+    blockList.innerHTML = "";
+    if (!draft.blocks.length) blockList.appendChild(siteEl("div", "sess-desc", COPY.site.noBlocks));
+    draft.blocks.forEach((b, i) => {
+      const row = siteEl("div", "site-block");
+      const def = byKey[b.type];
+      row.appendChild(siteEl("div", "site-block-name", def ? def.name : b.type));
+      const ek = page.id + ":" + i;
+      row.append(
+        siteMini("↑", () => { [draft.blocks[i - 1], draft.blocks[i]] = [draft.blocks[i], draft.blocks[i - 1]]; markDirty(); paintBlocks(); }, { disabled: i === 0, title: COPY.site.moveUp }),
+        siteMini("↓", () => { [draft.blocks[i + 1], draft.blocks[i]] = [draft.blocks[i], draft.blocks[i + 1]]; markDirty(); paintBlocks(); }, { disabled: i === draft.blocks.length - 1, title: COPY.site.moveDown }),
+        siteMini(siteRailState.expanded[ek] ? COPY.site.hideContent : COPY.site.editContent, () => { siteRailState.expanded[ek] = !siteRailState.expanded[ek]; paintBlocks(); }),
+        siteMini("×", () => { draft.blocks.splice(i, 1); markDirty(); paintBlocks(); }, { danger: true, title: COPY.site.removeBlock }),
+      );
+      blockList.appendChild(row);
+      if (siteRailState.expanded[ek]) blockList.appendChild(sitePropsEditor(b.props || (b.props = {}), markDirty));
+    });
+  };
+  paintBlocks();
+  body.appendChild(blockList);
+  if (blocks.length) {
+    const addRow = siteEl("div"); addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:6px 0 4px;";
+    const sel = document.createElement("select"); sel.className = "field"; sel.style.marginBottom = "0";
+    const o0 = document.createElement("option"); o0.value = ""; o0.textContent = COPY.site.addBlock; sel.appendChild(o0);
+    blocks.forEach((b) => { const o = document.createElement("option"); o.value = b.key; o.textContent = b.name; if (b.description) o.title = b.description; sel.appendChild(o); });
+    sel.addEventListener("change", () => { if (!sel.value) return; draft.blocks.push({ type: sel.value, props: {} }); sel.value = ""; markDirty(); paintBlocks(); });
+    addRow.appendChild(sel); body.appendChild(addRow);
+  }
+
+  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
+  const saveBtn = siteEl("button", "panelbtn primary", COPY.site.save); saveBtn.disabled = true; saveBtn.style.margin = "0";
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true; saveBtn.textContent = COPY.site.saving;
+    const res = await window.desktop.saveSitePage(page.id, draft);
+    saveBtn.textContent = COPY.site.save;
+    if (res && res.ok) { dirty = false; siteFlash(actions, COPY.site.saved); refresh(); }
+    else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
+  });
+  actions.appendChild(saveBtn);
+  if (page.id !== "home") {
+    actions.appendChild(siteMini(COPY.site.deletePage, async () => {
+      if (!confirm(COPY.site.deleteConfirm(page.title))) return;
+      const res = await window.desktop.deleteSitePage(page.id);
+      if (res && res.ok) { delete siteRailState.open[page.id]; refresh(); }
+    }, { danger: true }));
+  }
+  body.appendChild(actions);
+  card.appendChild(body);
+  return card;
+}
+
+function renderSiteNav(site, refresh) {
+  const wrap = siteEl("div");
+  wrap.appendChild(siteEl("div", "sess-label", COPY.site.navHeading));
+  wrap.appendChild(siteEl("div", "sess-desc", COPY.site.navDesc));
+  const draft = JSON.parse(JSON.stringify({ nav: site.nav || [], footerLinks: site.footerLinks || [] }));
+  let saveBtn;
+  const dirty = () => { saveBtn.disabled = false; };
+  const linkRow = (l, arr, i, paint, withSub) => {
+    const row = siteEl("div", "site-nav-row");
+    const lab = document.createElement("input"); lab.className = "field"; lab.placeholder = COPY.site.navLabel; lab.value = l.label || "";
+    const href = document.createElement("input"); href.className = "field"; href.placeholder = COPY.site.navHref; href.value = l.href || "";
+    lab.addEventListener("input", () => { l.label = lab.value; dirty(); });
+    href.addEventListener("input", () => { l.href = href.value; dirty(); });
+    row.append(lab, href,
+      siteMini("↑", () => { if (i > 0) { [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; dirty(); paint(); } }, { disabled: i === 0, title: COPY.site.moveUp }),
+      siteMini("×", () => { arr.splice(i, 1); dirty(); paint(); }, { danger: true, title: COPY.site.removeItem }));
+    const out = siteEl("div");
+    out.appendChild(row);
+    if (withSub) {
+      l.links = Array.isArray(l.links) ? l.links : [];
+      const sub = siteEl("div"); sub.style.cssText = "margin:0 0 6px 14px;";
+      const paintSub = () => { sub.innerHTML = ""; if (l.links.length) sub.appendChild(siteEl("div", "sess-desc", COPY.site.subLinks)); l.links.forEach((s, j) => sub.appendChild(linkRow(s, l.links, j, paintSub, false))); sub.appendChild(siteMini(COPY.site.addSubLink, () => { l.links.push({ label: "", href: l.href || "" }); dirty(); paintSub(); })); };
+      paintSub();
+      out.appendChild(sub);
+    }
+    return out;
+  };
+  const navList = siteEl("div");
+  const paintNav = () => { navList.innerHTML = ""; draft.nav.forEach((l, i) => navList.appendChild(linkRow(l, draft.nav, i, paintNav, true))); navList.appendChild(siteMini(COPY.site.addLink, () => { draft.nav.push({ label: "", href: "/", links: [] }); dirty(); paintNav(); })); };
+  paintNav();
+  wrap.appendChild(navList);
+  wrap.appendChild(siteEl("div", "sess-label", COPY.site.footerHeading)).style.marginTop = "12px";
+  const footList = siteEl("div");
+  const paintFoot = () => { footList.innerHTML = ""; draft.footerLinks.forEach((l, i) => footList.appendChild(linkRow(l, draft.footerLinks, i, paintFoot, false))); footList.appendChild(siteMini(COPY.site.addLink, () => { draft.footerLinks.push({ label: "", href: "/" }); dirty(); paintFoot(); })); };
+  paintFoot();
+  wrap.appendChild(footList);
+  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
+  saveBtn = siteEl("button", "panelbtn primary", COPY.site.saveNav); saveBtn.disabled = true; saveBtn.style.margin = "0";
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true;
+    const res = await window.desktop.saveSiteSettings(draft.nav, draft.footerLinks);
+    if (res && res.ok) { siteFlash(actions, COPY.site.saved); refresh(); }
+    else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
+  });
+  actions.appendChild(saveBtn);
+  wrap.appendChild(actions);
+  return wrap;
+}
+
+async function renderSite(body) {
+  const data = await window.desktop.getSiteContent().catch(() => ({ ready: false, reason: "no-project", pages: [], blocks: [], site: { nav: [], footerLinks: [] } }));
+  const refresh = () => { if (RAILS.site.classList.contains("active")) openModal("site"); };
+  body.appendChild(siteEl("div", "muted", COPY.site.lead)).style.cssText = "font-size:12.5px;margin-bottom:12px;";
+  if (!data.ready) {
+    body.appendChild(siteEl("div", "muted", COPY.site.notReady[data.reason] || COPY.site.notReady["not-promoted"]));
+    return;
+  }
+  if (data.liveUrl) {
+    const row = siteEl("div"); row.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:12px;font-size:12.5px;";
+    row.appendChild(siteEl("span", "muted", COPY.site.liveAt));
+    const a = siteEl("a", "", data.liveUrl.replace(/^https?:\/\//, "")); a.href = data.liveUrl; a.style.cssText = "color:#1a1a1a;text-decoration:underline;";
+    a.addEventListener("click", (e) => { e.preventDefault(); window.desktop.openExternal(data.liveUrl); });
+    row.appendChild(a); body.appendChild(row);
+  } else body.appendChild(siteEl("div", "sess-desc", COPY.site.previewNote));
+
+  body.appendChild(siteEl("div", "sess-label", COPY.site.pagesHeading));
+  data.pages.forEach((p) => body.appendChild(renderSitePage(p, data.blocks, refresh)));
+  const addRow = siteEl("div"); addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:4px 0 14px;";
+  const titleIn = document.createElement("input"); titleIn.className = "field"; titleIn.placeholder = COPY.site.newPagePlaceholder; titleIn.style.marginBottom = "0";
+  const createBtn = siteEl("button", "panelbtn", COPY.site.create); createBtn.style.margin = "0"; createBtn.style.width = "auto";
+  const create = async () => {
+    const t = titleIn.value.trim(); if (!t) return;
+    const res = await window.desktop.createSitePage(t);
+    if (res && res.ok) { siteRailState.open[res.page.id] = true; refresh(); }
+  };
+  createBtn.addEventListener("click", create);
+  titleIn.addEventListener("keydown", (e) => { if (e.key === "Enter") create(); });
+  addRow.append(titleIn, createBtn);
+  body.appendChild(addRow);
+  if (data.posts) { const pn = siteEl("div", "sess-desc", COPY.site.posts(data.posts) + ". " + COPY.site.postsNote); body.appendChild(pn); }
+
+  body.appendChild(siteEl("div", "drawer-sep"));
+  body.appendChild(renderSiteNav(data.site, refresh));
 }
 
 // --- Copy voice: per-project tone + rules, plus global rules ---
