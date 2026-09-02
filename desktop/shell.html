@@ -270,10 +270,12 @@
          editor sit side by side and the preview stays visible at the edge. */
       #modal-card.wide { width: min(1040px, calc(100vw - var(--rail-w) - 48px)); }
       /* CMS tabs: the same look as the publish help tabs, inside the drawer body. */
-      .site-tabs { display: flex; gap: 2px; margin: -4px 0 14px; border-bottom: 1px solid #ececf1; }
-      .site-tab { border: none; background: none; cursor: pointer; padding: 10px 12px; font-size: 13px; font-weight: 600; color: #8a8a92; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .2s linear; }
-      .site-tab:hover { color: #333; }
-      .site-tab.active { color: #17171b; border-bottom-color: #17171b; }
+      /* Outlined tabs above a solid black rule: light gray outline at rest, black when
+         selected. (The list/editor divider below stays the subdued gray.) */
+      .site-tabs { display: flex; gap: 6px; margin: -2px 0 16px; padding-bottom: 10px; border-bottom: 1px solid #111; }
+      .site-tab { border: 1px solid #ececf1; border-radius: 6px; background: #fff; cursor: pointer; padding: 7px 12px; font-size: 13px; font-weight: 600; color: #8a8a92; transition: color .15s linear, border-color .15s linear; }
+      .site-tab:hover { color: #333; border-color: #cfcfd6; }
+      .site-tab.active { color: #17171b; border-color: #111; }
       .site-tab .count { font-weight: 500; color: #b0b0b8; margin-left: 4px; font-size: 11px; }
       .site-cols { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 20px; align-items: start; min-height: 100%; }
       .site-single { max-width: 720px; }
