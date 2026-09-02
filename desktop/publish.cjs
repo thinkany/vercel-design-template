@@ -225,11 +225,15 @@ const TARGETS = {
     // The project's vercel.json is the PREVIEW's (X-Robots-Tag noindex, gate-exempt
     // routes). The site deploy uploads this one in its place: same build settings as
     // above, nothing else. middleware.js (the gate) is left out of the upload entirely.
+    // cleanUrls: Astro writes /blog.html (build.format "file", for extension-free
+    // links); Vercel serves static files literally unless told to map /blog → it.
     vercelJson: JSON.stringify({
       buildCommand: "npx astro build --root site",
       outputDirectory: "dist-site",
       installCommand: "pnpm install --no-frozen-lockfile",
       framework: null,
+      cleanUrls: true,
+      trailingSlash: false,
     }, null, 2) + "\n",
     omit: new Set(["middleware.js", "vercel.json"]),
   },
