@@ -57,6 +57,11 @@ const { createEmptyBrief, applyAnswers } = require("./intake/brief.cjs");
 const { sampleDirection, directionMeta, recordDirection, resetMetaCache } = require("./direction-client.cjs");
 const references = require("./intake/references.cjs");
 const ingestRefs = require("./intake/ingest.cjs");
+// Licensed design-process skills (/design, /design-brief, /promote-blocks, …): fetched
+// from derive with the Design license, cached encrypted, and spliced into a turn in
+// agent:prompt so the model gets the playbook while the scaffold only carries stubs.
+const { createSkillsClient } = require("./skills-client.cjs");
+let skillsClient = null; // built once userData is pinned + the app is ready (safeStorage)
 
 const appRoot = path.resolve(__dirname, ".."); // the Electron app / template source (git worktree in dev; Resources/app when packaged)
 
@@ -1174,6 +1179,11 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode, mo
     event.sender.send("agent:event", { type: "error", message: "No project is open." });
     return { sessionId };
   }
+  // A licensed skill command ("/design-brief …") becomes its playbook here, so the
+  // SDK never expands the scaffold's stub. Unlicensed (no cache) → falls through
+  // and the stub does its job: it tells the designer the skill needs the app.
+  const expanded = skillsClient && skillsClient.expandPrompt(prompt);
+  if (expanded) prompt = expanded.prompt;
   const { runPrompt } = await import(pathToFileURL(path.join(__dirname, "agent.mjs")).href);
   const onEvent = (evt) => {
     if (!event.sender.isDestroyed()) event.sender.send("agent:event", evt);
@@ -1956,12 +1966,14 @@ ipcMain.handle("license:designSave", async (_event, { key }) => {
   try { storeDesignLicense(k); } catch (e) { return { ok: false, error: `Could not save the license: ${e.message}` }; }
   process.env.DESIGN_LICENSE_KEY = k;
   resetMetaCache(); // license changed → next directionMeta() must re-fetch, not read stale
+  if (skillsClient) skillsClient.refresh(k).catch(() => {}); // pull the playbooks for this key
   return { ok: true };
 });
 ipcMain.handle("license:designClear", () => {
   removeStoredDesignLicense();
   delete process.env.DESIGN_LICENSE_KEY;
   resetMetaCache();
+  if (skillsClient) skillsClient.clear(); // no license, no playbooks
   return { ok: true };
 });
 
@@ -2699,6 +2711,17 @@ app.whenReady().then(async () => {
   if (storedLicense) process.env.DERIVE_LICENSE_KEY = storedLicense;
   const storedDesignLicense = loadStoredDesignLicense(); // in-app design license wins over .env.local
   if (storedDesignLicense) process.env.DESIGN_LICENSE_KEY = storedDesignLicense;
+  // Licensed skills: the last cache is usable at once (offline grace); a refresh
+  // runs in the background whenever a Design license is present. SKILLS_LOCAL=1
+  // (dev) reads desktop/skills/*.md instead, live.
+  skillsClient = createSkillsClient({
+    safeStorage,
+    userDataDir: app.getPath("userData"),
+    localDir: path.join(__dirname, "skills"),
+    log: (m) => console.log(`[skills] ${m}`),
+  });
+  skillsClient.load();
+  if (process.env.DESIGN_LICENSE_KEY) skillsClient.refresh(process.env.DESIGN_LICENSE_KEY).catch(() => {});
   vercelAuth = loadVercelAuth(); // in-app Publish: pasted token or Sign in with Vercel
   currentProject = loadProjectPath();
   currentModel = loadUiState().model || null;

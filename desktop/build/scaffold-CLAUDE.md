@@ -215,6 +215,9 @@ Before hand-rolling UI, use what's installed:
 The onboarding prompt copy (P1–P17 wording: question text, headers, options) is **authored and
 locked in these command files, not here**; edit it there, don't duplicate it into this file.
 Invoke the skill the moment its phase begins, don't re-derive its rules from this file.
+Some skills are **licensed**: their command file in this project is a stub, and the thinkany
+design app supplies the playbook for the turn. If a command's content says so, it wasn't
+loaded (no app, or no Design license); say that to the designer and stop.
 
 - **[`/setup-project`](.claude/commands/setup-project.md)** → set the **client/project details**
   in `.env` (client name, project type, tablet, project name, menu style), then hands off directly
