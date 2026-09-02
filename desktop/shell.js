@@ -280,7 +280,10 @@ function setActiveTab(tab) {
   renderTabs();
   syncNav();
   setFeedbackMode(false); // don't carry feedback mode across tab switches
-  feedbackBtn.hidden = !tab; // the toggle only makes sense with a live preview
+  // The toggle only makes sense on a DESIGN preview: pointed-at feedback routes to a
+  // design edit, and on the Site tab the same element is a block + content the
+  // router doesn't reach yet. Hidden there until feedback can target content.
+  feedbackBtn.hidden = !tab || !!tab.site;
 }
 
 // Show the progress cover only when the Home tab is active AND still designing;
