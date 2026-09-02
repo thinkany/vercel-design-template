@@ -1,0 +1,21 @@
+{
+  "title": "Home",
+  "slug": "",
+  "seo": {
+    "description": "A starting point. Replace this with the site's real description."
+  },
+  "blocks": [
+    {
+      "type": "hero",
+      "props": {
+        "eyebrow": "Welcome",
+        "heading": "Your site starts here",
+        "body": "This page is composed from blocks in content/pages/home.json. Each block is a component in site/blocks with a props schema, so content stays separate from design.",
+        "ctas": [
+          { "label": "Read the blog", "href": "/blog" },
+          { "label": "About", "href": "/about", "style": "secondary" }
+        ]
+      }
+    }
+  ]
+}

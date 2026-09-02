@@ -25,3 +25,7 @@ dist-app/
 # Exported company (agency) profile — a personal, portable artifact the designer
 # moves elsewhere to reuse; not meant to be committed into a client project.
 company-profile.json
+
+# site build target (Astro)
+dist-site/
+site/.astro/

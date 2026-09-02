@@ -1,0 +1,42 @@
+---
+// ©2026 thinkany llc. All rights reserved.
+// The site's HTML shell: SEO head (title, description, canonical, Open Graph,
+// robots) resolved from the entry's SEO fields with site-level fallbacks.
+// Site chrome (header/footer) is added here once those blocks are promoted.
+import "../styles/site.css";
+import { siteConfig } from "@/config/site";
+import { resolveSeo, type Seo } from "../lib/seo";
+
+interface Props {
+  title: string;
+  description?: string;
+  seo?: Partial<Seo>;
+}
+const { title, description, seo } = Astro.props;
+const meta = resolveSeo(seo, { title, description, siteName: siteConfig.clientName });
+const canonical = meta.canonical || new URL(Astro.url.pathname, Astro.site).href;
+const image = meta.image ? new URL(meta.image, Astro.site).href : undefined;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{meta.title}</title>
+    {meta.description && <meta name="description" content={meta.description} />}
+    <link rel="canonical" href={canonical} />
+    {meta.noindex && <meta name="robots" content="noindex, nofollow" />}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={siteConfig.clientName} />
+    <meta property="og:title" content={meta.title} />
+    {meta.description && <meta property="og:description" content={meta.description} />}
+    <meta property="og:url" content={canonical} />
+    {image && <meta property="og:image" content={image} />}
+    <meta name="twitter:card" content={image ? "summary_large_image" : "summary"} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+  </head>
+  <body class="bg-ta-surface text-ta-body font-ta-sans">
+    <slot />
+  </body>
+</html>

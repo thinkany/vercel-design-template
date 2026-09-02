@@ -1,0 +1,16 @@
+/* ©2026 thinkany llc. All rights reserved. */
+/* The SITE's stylesheet. Shares the design's tokens, theme wiring and base styles
+   with the design surface (imported from src/styles), but owns its own Tailwind
+   entry so utility scanning covers the site's blocks and templates too. Edit the
+   design in src/styles/tokens.css (or the variation's copy), never here. */
+@import "@/styles/fonts.css";
+
+@import "tailwindcss" source(none);
+@source "../../../src/**/*.{js,ts,jsx,tsx}";
+@source "../../blocks/**/*.{js,ts,jsx,tsx}";
+@source "../**/*.{astro,js,ts,jsx,tsx}";
+@import "tw-animate-css";
+
+@import "@/styles/tokens.css";
+@import "@/styles/theme.css";
+@import "@/styles/globals.css";

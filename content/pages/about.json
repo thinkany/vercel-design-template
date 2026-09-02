@@ -1,0 +1,17 @@
+{
+  "title": "About",
+  "seo": {
+    "description": "About this site."
+  },
+  "blocks": [
+    {
+      "type": "hero",
+      "props": {
+        "eyebrow": "About",
+        "heading": "A second page, same blocks",
+        "body": "Pages are files. Add one under content/pages and it gets a route, a sitemap entry and its own SEO fields.",
+        "ctas": [{ "label": "Home", "href": "/", "style": "secondary" }]
+      }
+    }
+  ]
+}

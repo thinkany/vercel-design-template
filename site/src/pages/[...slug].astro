@@ -1,0 +1,26 @@
+---
+// ©2026 thinkany llc. All rights reserved.
+// PAGES → routes. Every entry in content/pages becomes a route at its slug
+// (home.json → "/", about.json → "/about"). The page is its ordered list of
+// block instances, each validated + rendered from the designer's registry.
+import { getCollection } from "astro:content";
+import Base from "../layouts/Base.astro";
+import { resolveBlock } from "../lib/blocks";
+import { blocks } from "../../blocks";
+
+export async function getStaticPaths() {
+  const pages = await getCollection("pages");
+  return pages.map((page) => {
+    const slug = page.data.slug ?? (page.id === "home" ? "" : page.id);
+    return { params: { slug: slug || undefined }, props: { page } };
+  });
+}
+
+const { page } = Astro.props;
+const rendered = page.data.blocks.map((b, i) =>
+  resolveBlock(blocks, b, `content/pages/${page.id}.json blocks[${i}]`),
+);
+---
+<Base title={page.data.title} seo={page.data.seo}>
+  {rendered.map(({ component: Block, props }) => <Block {...props} />)}
+</Base>
