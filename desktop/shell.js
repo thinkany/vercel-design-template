@@ -215,8 +215,11 @@ let quietBuildActive = false;
 // The browser stays CLOSED until a design exists AND Vite is serving — so it
 // never shows a "server not ready" error page. Webviews auto-retry failed loads
 // so they can't get wedged.
-function quickUrl(kind) {
-  const v = design.variationId;
+// `vid` pins a variation (the startup reveal wants the one setup just created); by
+// default the quick-links follow the variation the ACTIVE tab is showing, so Home
+// and Style guide reach v02+ once the designer has opened one from the dashboard.
+function quickUrl(kind, vid) {
+  const v = vid !== undefined ? vid : (currentPreviewVariation() || design.variationId);
   if (kind === "styleguide") return v ? `${viteUrl}/?v=${v}&styleguide` : `${viteUrl}/?styleguide`;
   if (kind === "dashboard") return `${viteUrl}/`;
   return v ? `${viteUrl}/?v=${v}` : `${viteUrl}/`; // home
@@ -377,7 +380,11 @@ function buildPreviewWebview(tab) {
   wv.addEventListener("page-title-updated", (e) => {
     if (!tab.fixedTitle) { tab.title = e.title; renderTabs(); }
   });
-  const onNav = () => { if (tab === activeTab) syncNav(); };
+  const onNav = () => {
+    if (tab === activeTab) syncNav();
+    // A pinned Home / Style guide label follows the variation the tab now shows.
+    if (tab.fixedTitle && tab.navKind) { const l = navLabel(tab.navKind, currentPreviewVariation(tab.wv.getURL())); if (l !== tab.title) { tab.title = l; renderTabs(); } }
+  };
   wv.addEventListener("did-navigate", onNav);
   wv.addEventListener("did-navigate-in-page", onNav);
   wv.addEventListener("did-finish-load", () => { tab.retries = 0; if (tab === activeTab) setFeedbackButton(false); });
@@ -502,20 +509,23 @@ urlbar.addEventListener("keydown", (e) => {
   if (u) { activeTab.fixedTitle = false; navigate(activeTab, u); }
 });
 const NAV_LABEL = { home: COPY.nav.home, styleguide: COPY.nav.styleguide, dashboard: COPY.nav.dashboard };
+// A pinned quick-link label carries the variation it shows ("Home · v02"), so the tab
+// says which design it is; refreshed on navigation (see onNav) when the tab moves.
+function navLabel(kind, v) { const l = NAV_LABEL[kind]; return v && kind !== "dashboard" ? COPY.nav.withVariation(l, v) : l; }
 document.querySelectorAll(".qlink").forEach((b) =>
   b.addEventListener("click", () => {
     if (!viteUrl) return;
     const kind = b.dataset.nav;
     const url = quickUrl(kind);
-    const label = NAV_LABEL[kind];
+    const label = navLabel(kind, currentPreviewVariation(url));
     if (activeTab) {
       navigate(activeTab, url);
       // Pin the tab label to the destination so the title reflects where we
       // navigated. Without this the startup Home/Style-guide tabs (fixed-title)
       // keep their original label forever when moved via the quick-links.
-      if (label) { activeTab.title = label; activeTab.fixedTitle = true; renderTabs(); }
+      if (label) { activeTab.title = label; activeTab.fixedTitle = true; activeTab.navKind = kind; renderTabs(); }
     } else {
-      openTab(url, label);
+      const t = openTab(url, label); if (t) t.navKind = kind;
     }
   })
 );
@@ -697,8 +707,8 @@ function revealDuringBuild() {
   stopWorking();
   previewph.hidden = true;
   browser.hidden = false;
-  const style = openTab(quickUrl("styleguide"), "Style guide");
-  homeTab = openTab(quickUrl("home"), "Home");
+  const style = openTab(quickUrl("styleguide", design.variationId), navLabel("styleguide", design.variationId)); if (style) style.navKind = "styleguide";
+  homeTab = openTab(quickUrl("home", design.variationId), navLabel("home", design.variationId)); if (homeTab) homeTab.navKind = "home";
   setActiveTab(style); // land on the ready brand guidelines
   startBuildRotation();
 }
@@ -709,7 +719,7 @@ function finishBuildReveal() {
   stopBuildRotation();
   buildoverlay.hidden = true;
   if (homeTab) {
-    navigate(homeTab, quickUrl("home")); // reload to the finished design
+    navigate(homeTab, quickUrl("home", design.variationId)); // reload to the finished design
     homeTab.wv.style.display = activeTab === homeTab ? "flex" : "none";
   }
   applyBuildOverlay();
@@ -776,7 +786,7 @@ async function showBrowser(landOn) {
   // styleguide (200). Vite may be up but still compiling the just-created
   // variation, so opening now would flash blank tabs. Bounded (~10s) — the
   // webview's own connection-refused retry is the backstop.
-  const styleUrl = quickUrl("styleguide");
+  const styleUrl = quickUrl("styleguide", design.variationId);
   for (let i = 0; i < 20; i++) {
     const { ok } = await window.desktop.probePreview(styleUrl);
     if (ok) break;
@@ -785,8 +795,8 @@ async function showBrowser(landOn) {
   stopWorking();
   previewph.hidden = true;
   browser.hidden = false;
-  const style = openTab(styleUrl, "Style guide");
-  const home = openTab(quickUrl("home"), "Home");
+  const style = openTab(styleUrl, navLabel("styleguide", design.variationId)); if (style) style.navKind = "styleguide";
+  const home = openTab(quickUrl("home", design.variationId), navLabel("home", design.variationId)); if (home) home.navKind = "home";
   // Default to the styleguide (swatches); the quiet-build finished reveal lands on Home (the design).
   setActiveTab(landOn === "home" ? home : style);
   ensureSiteTab(); // a promoted project also gets its Site tab (stays in the background)
@@ -794,7 +804,7 @@ async function showBrowser(landOn) {
   // fresh swatches show without a manual refresh (avoids churn on reopen).
   if (designJustActivated) {
     designJustActivated = false;
-    setTimeout(() => { if (tabs.includes(style)) navigate(style, quickUrl("styleguide")); }, 1200);
+    setTimeout(() => { if (tabs.includes(style)) navigate(style, quickUrl("styleguide", design.variationId)); }, 1200);
   }
 }
 

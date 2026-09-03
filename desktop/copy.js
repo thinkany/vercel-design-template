@@ -322,6 +322,7 @@ window.COPY = {
     home: "Home",
     styleguide: "Style guide",
     dashboard: "Dashboard",
+    withVariation: (label, v) => `${label} · ${v}`,
   },
 
   // ── Preview "looks blank?" help strip ───────────────────────────────────────
