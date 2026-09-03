@@ -1590,7 +1590,7 @@ function fmQuote(v) {
 }
 function serializeFrontmatter(data, unknown = []) {
   const lines = [];
-  const ORDER = ["title", "date", "description", "image", "tags", "draft"];
+  const ORDER = ["title", "date", "updated", "description", "image", "tags", "draft"];
   for (const k of ORDER) {
     const v = data[k];
     if (v === undefined || v === null || v === "") continue;
@@ -1609,7 +1609,7 @@ function readPosts(dir) {
   const posts = files.map((f) => {
     const id = f.replace(/\.mdx?$/, "");
     const { data, body } = parseFrontmatter(readTextSafe(path.join(postsDir(dir), f)));
-    return { id, file: f, title: data.title || id, date: data.date || "", description: data.description || "", image: data.image || "", tags: Array.isArray(data.tags) ? data.tags : [], draft: !!data.draft, seo: data.seo || {}, body };
+    return { id, file: f, title: data.title || id, date: data.date || "", updated: data.updated || "", description: data.description || "", image: data.image || "", tags: Array.isArray(data.tags) ? data.tags : [], draft: !!data.draft, seo: data.seo || {}, body };
   });
   posts.sort((a, b) => String(b.date).localeCompare(String(a.date)) || a.title.localeCompare(b.title));
   return posts;
@@ -1626,6 +1626,7 @@ ipcMain.handle("site:savePost", (_e, { id, data } = {}) => {
   const fm = {
     title: data.title.trim(),
     date: /^\d{4}-\d{2}-\d{2}$/.test(String(data.date || "")) ? data.date : todayIso(),
+    updated: new Date().toISOString(), // last edited: stamped on every save
     description: typeof data.description === "string" ? data.description.trim() : "",
     image: typeof data.image === "string" ? data.image.trim() : "",
     tags: Array.isArray(data.tags) ? data.tags.map((t) => String(t).trim()).filter(Boolean) : [],

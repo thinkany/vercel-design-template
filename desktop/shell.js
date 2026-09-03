@@ -2812,11 +2812,13 @@ function renderSitePost(post, refresh) {
   const dirty = () => { saveBtn.disabled = false; };
   const t = siteField(S.pageTitle, draft.title); t.input.addEventListener("input", () => { draft.title = t.input.value; dirty(); }); card.appendChild(t.wrap);
   const d = siteField(S.postDate, draft.date, { type: "date" }); d.input.addEventListener("input", () => { draft.date = d.input.value; dirty(); }); card.appendChild(d.wrap);
+  const upd = siteEl("div", "site-kv"); upd.appendChild(siteEl("div", "k", S.postUpdated));
+  let updText = S.postNeverSaved;
+  if (post.updated) { try { updText = new Date(post.updated).toLocaleString(); } catch { updText = String(post.updated); } }
+  upd.appendChild(siteEl("div", "sess-desc", updText)); card.appendChild(upd);
   const ds = siteField(S.postDescription, draft.description, { textarea: true, hint: S.postDescriptionHint }); ds.input.addEventListener("input", () => { draft.description = ds.input.value; dirty(); }); card.appendChild(ds.wrap);
   card.appendChild(siteImageControl(draft.image, (next) => { draft.image = next ? next.src : ""; dirty(); }, { label: S.postImage }));
   const tg = siteField(S.postTags, draft.tags.join(", "), { hint: S.postTagsHint }); tg.input.addEventListener("input", () => { draft.tags = tg.input.value.split(",").map((x) => x.trim()).filter(Boolean); dirty(); }); card.appendChild(tg.wrap);
-  const dr = siteEl("label", "toggle-row"); const drCb = document.createElement("input"); drCb.type = "checkbox"; drCb.checked = draft.draft;
-  drCb.addEventListener("change", () => { draft.draft = drCb.checked; dirty(); }); dr.append(drCb, siteEl("span", "", S.postDraft)); card.appendChild(dr);
   const body = siteField(S.postBody, draft.body, { textarea: true, hint: S.postBodyHint }); body.input.style.minHeight = "260px"; body.input.style.fontFamily = "ui-monospace, Menlo, monospace"; body.input.style.fontSize = "12.5px";
   body.input.addEventListener("input", () => { draft.body = body.input.value; dirty(); }); card.appendChild(body.wrap);
   card.appendChild(siteEl("div", "sess-label", S.seoHeading)).style.marginTop = "12px";
@@ -2824,16 +2826,21 @@ function renderSitePost(post, refresh) {
   const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!draft.seo.noindex;
   nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; dirty(); }); nx.append(nxCb, siteEl("span", "", S.seoNoindex)); card.appendChild(nx);
 
-  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
-  saveBtn = siteEl("button", "panelbtn primary", S.savePost); saveBtn.disabled = true; saveBtn.style.margin = "0";
-  saveBtn.addEventListener("click", async () => {
-    saveBtn.disabled = true; saveBtn.textContent = S.saving;
-    const res = await window.desktop.saveSitePost(post.id, draft);
-    saveBtn.textContent = S.savePost;
+  // Status + actions. A draft is never built; Publish flips it live on save.
+  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;";
+  const status = siteEl("span", "site-status" + (draft.draft ? " draft" : ""), draft.draft ? S.statusDraft : S.statusPublished);
+  const doSave = async (btn, asDraft) => {
+    const label = btn.textContent; btn.disabled = true; btn.textContent = S.saving;
+    const res = await window.desktop.saveSitePost(post.id, { ...draft, draft: asDraft });
+    btn.textContent = label;
     if (res && res.ok) { siteFlash(actions, S.saved); refresh(); }
-    else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
-  });
-  actions.appendChild(saveBtn);
+    else { btn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
+  };
+  saveBtn = siteEl("button", "panelbtn primary", draft.draft ? S.saveDraft : S.savePost); saveBtn.disabled = true; saveBtn.style.margin = "0";
+  saveBtn.addEventListener("click", () => doSave(saveBtn, draft.draft));
+  const flipBtn = siteEl("button", "panelbtn", draft.draft ? S.publish : S.unpublish); flipBtn.style.margin = "0"; flipBtn.style.width = "auto";
+  flipBtn.addEventListener("click", () => doSave(flipBtn, !draft.draft));
+  actions.append(status, saveBtn, flipBtn);
   actions.appendChild(siteMini(S.deletePost, async () => {
     if (!confirm(S.deletePostConfirm(post.title))) return;
     const res = await window.desktop.deleteSitePost(post.id);

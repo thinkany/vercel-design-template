@@ -69,6 +69,20 @@ function noindexPaths() {
   return out;
 }
 const NOINDEX = noindexPaths();
+// Posts' last-edited stamps → sitemap lastmod (the app writes `updated` on every save).
+function lastModified() {
+  const out = new Map();
+  try {
+    for (const f of fs.readdirSync(path.join(repoRoot, "content", "posts"))) {
+      if (!/\.mdx?$/.test(f)) continue;
+      const fm = (fs.readFileSync(path.join(repoRoot, "content", "posts", f), "utf8").match(/^---\n([\s\S]*?)\n---/) || [])[1] || "";
+      const m = fm.match(/^updated:[ \t]*"?([^"\n]+)"?/m);
+      if (m) { const d = new Date(m[1].trim()); if (!Number.isNaN(d.getTime())) out.set("/blog/" + f.replace(/\.mdx?$/, ""), d); }
+    }
+  } catch { /* no posts */ }
+  return out;
+}
+const LASTMOD = lastModified();
 
 export default defineConfig({
   // The canonical public URL. Feeds the sitemap, canonical links and og:url.
@@ -86,7 +100,10 @@ export default defineConfig({
   build: { format: "file" },
   integrations: [
     react(),
-    sitemap({ filter: (page) => { try { return !NOINDEX.has(new URL(page).pathname.replace(/\/$/, "") || "/"); } catch { return true; } } }),
+    sitemap({
+      filter: (page) => { try { return !NOINDEX.has(new URL(page).pathname.replace(/\/$/, "") || "/"); } catch { return true; } },
+      serialize: (item) => { try { const d = LASTMOD.get(new URL(item.url).pathname.replace(/\/$/, "")); if (d) item.lastmod = d.toISOString(); } catch {} return item; },
+    }),
   ],
   // No dev toolbar: it's a developer's island/audit inspector, and inside the app's
   // Site tab it's a floating pill the designer can't use for anything.

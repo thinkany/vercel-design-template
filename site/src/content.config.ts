@@ -32,7 +32,10 @@ const posts = defineCollection({
   loader: glob({ pattern: "**/*.md", base: "../content/posts" }),
   schema: z.object({
     title: z.string(),
+    /** Publish date. */
     date: z.coerce.date(),
+    /** Last edited (stamped by the app on every save). Feeds the sitemap's lastmod. */
+    updated: z.coerce.date().optional(),
     /** Short summary for lists + the default meta description. */
     description: z.string().optional(),
     /** Cover image, a public/ path. */
