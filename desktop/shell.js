@@ -2619,16 +2619,30 @@ function siteLooksLikeImage(key, v, meta) {
 }
 // A visual choice among the design's marks (enum over site/blocks/lib/marks.tsx).
 function siteMarkPicker(options, value, onPick, marks) {
+  const wrap = siteEl("div");
   const grid = siteEl("div", "site-marks");
   const paint = () => grid.querySelectorAll(".site-mark").forEach((b) => b.classList.toggle("on", b.dataset.key === value));
-  options.forEach((k) => {
+  const tile = (k) => {
     const b = siteEl("button", "site-mark"); b.type = "button"; b.dataset.key = k; b.title = k;
     b.innerHTML = marks[k];
     b.addEventListener("click", () => { value = k; onPick(k); paint(); });
-    grid.appendChild(b);
+    return b;
+  };
+  options.forEach((k) => grid.appendChild(tile(k)));
+  // "Add icon": an SVG file becomes one more inline mark in this design's set.
+  const add = siteEl("button", "site-mark add"); add.type = "button"; add.title = COPY.site.marks.add;
+  add.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+  const note = siteEl("div", "sess-desc"); note.hidden = true;
+  add.addEventListener("click", async () => {
+    add.disabled = true; note.hidden = true;
+    const r = await window.desktop.addMark();
+    add.disabled = false;
+    if (r && r.ok) { marks[r.key] = r.svg; options.push(r.key); grid.insertBefore(tile(r.key), add); value = r.key; onPick(r.key); paint(); }
+    else if (r && r.error) { note.textContent = r.error; note.style.color = "#c0261e"; note.hidden = false; }
   });
-  paint();
-  return grid;
+  grid.appendChild(add);
+  wrap.append(grid, note);
+  return wrap;
 }
 let siteMarks = {}; // the current project's rendered marks, from site:content
 

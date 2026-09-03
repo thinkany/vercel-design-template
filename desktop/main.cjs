@@ -1959,6 +1959,16 @@ ipcMain.handle("media:upload", async () => {
   if (res.canceled || !res.filePaths.length) return { ok: true, added: [] };
   return importMediaFiles(res.filePaths);
 });
+// Add an icon to the site's mark set from an SVG file (inline, currentColor): the
+// designer's "upload" for icons a block draws inline. marks.tsx changes → the blocks
+// folder mtime moves → the next site:content re-introspects and the picker has it.
+ipcMain.handle("marks:add", async () => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const res = await dialog.showOpenDialog(mainWindow, { title: "Add an icon", properties: ["openFile"], filters: [{ name: "SVG", extensions: ["svg"] }] });
+  if (res.canceled || !res.filePaths.length) return { ok: false, canceled: true };
+  try { return { ok: true, ...require("./marks.cjs").addMark(currentProject, res.filePaths[0]) }; }
+  catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+});
 // Dropped files (the renderer resolves their paths through webUtils in the preload).
 ipcMain.handle("media:import", (_e, { paths } = {}) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
