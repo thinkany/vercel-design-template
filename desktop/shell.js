@@ -1167,6 +1167,7 @@ async function openModal(kind) {
   // Wide panels (the CMS) take most of the window; the rest keep the narrow drawer.
   // The width switches before the slide so a fresh open animates at its final size.
   el("modal-card").classList.toggle("wide", !!wide);
+  el("modal-card").dataset.panel = kind; // lets CSS style a panel's controls (the CMS switches)
   Object.values(RAILS).forEach((b) => b.classList.remove("active"));
   RAILS[kind].classList.add("active");
   // Slide in on a fresh open (or if interrupted mid-close). When a drawer is
@@ -2639,6 +2640,20 @@ function siteMini(label, onClick, { danger, title, disabled } = {}) {
   b.addEventListener("click", onClick);
   return b;
 }
+// A foldable section (heading row + body), open state remembered per project + key.
+let siteProjectKey = "default"; // the open project's path, set when the CMS drawer renders
+function siteFold(title, key) {
+  const K = "cmsFold:" + siteProjectKey + ":" + key;
+  let isOpen = true; try { isOpen = localStorage.getItem(K) !== "0"; } catch {}
+  const sec = siteEl("div", "site-acc" + (isOpen ? " open" : ""));
+  const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(isOpen));
+  head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
+  const body = siteEl("div", "site-acc-body"); body.hidden = !isOpen;
+  head.addEventListener("click", () => { const now = body.hidden; body.hidden = !now; sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); try { localStorage.setItem(K, now ? "1" : "0"); } catch {} });
+  sec.append(head, body);
+  return { sec, body, head };
+}
+
 // Drag-and-drop reordering for a block list (the arrows stay). Each row gets a grip;
 // dragging over another row shows a line above or below it (by pointer half), and
 // dropping moves the item there. `move(from, to)` reorders the data and repaints.
@@ -2878,17 +2893,18 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
   const markDirty = () => { dirty = true; saveBtn.disabled = false; };
   const body = siteEl("div"); body.style.marginTop = "10px";
 
-  const t = siteField(COPY.site.pageTitle, draft.title); t.input.addEventListener("input", () => { draft.title = t.input.value; markDirty(); }); body.appendChild(t.wrap);
-  if (page.id !== "home") { const sl = siteField(COPY.site.pageSlug, draft.slug || page.id); sl.input.addEventListener("input", () => { draft.slug = sl.input.value; markDirty(); }); body.appendChild(sl.wrap); }
+  const ps = siteFold(COPY.site.pageSettings, "page-settings:" + page.id); body.appendChild(ps.sec);
+  const t = siteField(COPY.site.pageTitle, draft.title); t.input.addEventListener("input", () => { draft.title = t.input.value; markDirty(); }); ps.body.appendChild(t.wrap);
+  if (page.id !== "home") { const sl = siteField(COPY.site.pageSlug, draft.slug || page.id); sl.input.addEventListener("input", () => { draft.slug = sl.input.value; markDirty(); }); ps.body.appendChild(sl.wrap); }
 
-  body.appendChild(siteEl("div", "sess-label", COPY.site.seoHeading)).style.marginTop = "12px";
-  const st = siteField(COPY.site.seoTitle, draft.seo.title, { hint: COPY.site.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; markDirty(); }); body.appendChild(st.wrap);
-  const sd = siteField(COPY.site.seoDescription, draft.seo.description, { textarea: true, hint: COPY.site.seoDescriptionHint }); sd.input.addEventListener("input", () => { draft.seo.description = sd.input.value; markDirty(); }); body.appendChild(sd.wrap);
-  body.appendChild(siteImageControl(draft.seo.image, (next) => { draft.seo.image = next ? next.src : ""; markDirty(); }, { label: COPY.site.seoImage }));
+  ps.body.appendChild(siteEl("div", "sess-label", COPY.site.seoHeading)).style.marginTop = "12px";
+  const st = siteField(COPY.site.seoTitle, draft.seo.title, { hint: COPY.site.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; markDirty(); }); ps.body.appendChild(st.wrap);
+  const sd = siteField(COPY.site.seoDescription, draft.seo.description, { textarea: true, hint: COPY.site.seoDescriptionHint }); sd.input.addEventListener("input", () => { draft.seo.description = sd.input.value; markDirty(); }); ps.body.appendChild(sd.wrap);
+  ps.body.appendChild(siteImageControl(draft.seo.image, (next) => { draft.seo.image = next ? next.src : ""; markDirty(); }, { label: COPY.site.seoImage }));
   const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!draft.seo.noindex;
-  nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; markDirty(); }); nx.append(nxCb, siteEl("span", "", COPY.site.seoNoindex)); body.appendChild(nx);
+  nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; markDirty(); }); nx.append(nxCb, siteEl("span", "", COPY.site.seoNoindex)); ps.body.appendChild(nx);
 
-  body.appendChild(siteEl("div", "sess-label", COPY.site.blocksHeading)).style.marginTop = "12px";
+  const bf = siteFold(COPY.site.blocksHeading, "blocks:" + page.id); bf.body.appendChild(bf.sec);
   const blockList = siteEl("div");
   const byKey = Object.fromEntries(blocks.map((b) => [b.key, b]));
   const paintBlocks = () => {
@@ -2916,7 +2932,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
     });
   };
   paintBlocks();
-  body.appendChild(blockList);
+  bf.body.appendChild(blockList);
   if (blocks.length) {
     const addRow = siteEl("div"); addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:6px 0 4px;";
     const sel = document.createElement("select"); sel.className = "field"; sel.style.marginBottom = "0";
@@ -2951,7 +2967,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
       runAgent(COPY.site.designBlockRequest(desc, page.title), COPY.site.designBlockEcho(desc, page.title));
     });
     dz.append(dzBtn, dzForm);
-    addRow.appendChild(sel); body.appendChild(addRow); body.appendChild(dz);
+    addRow.appendChild(sel); bf.body.appendChild(addRow); bf.body.appendChild(dz);
   }
 
   const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
@@ -3864,6 +3880,7 @@ async function renderSite(body) {
   const ctx = { types: typesData.types || [], entries: typesData.entries || {}, blocks: data.blocks };
   mediaIndex = await window.desktop.listMedia().catch(() => []); // thumbnails for image fields
   siteMarks = data.marks || {};
+  siteProjectKey = (((await window.desktop.getProjectStatus().catch(() => null)) || {}).path) || "default";
 
   // ── Tabs: Pages · Posts · Types · Navigation · Settings ──
   // Off per project until the Settings switch is on: only Settings is reachable then.

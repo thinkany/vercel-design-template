@@ -453,6 +453,7 @@ window.COPY = {
     addPage: "Add a page",
     newPagePlaceholder: "Page title (e.g. About)",
     create: "Create",
+    pageSettings: "Page settings",
     pageTitle: "Title",
     pageSlug: "Address",
     homeSlug: "/ (home)",

@@ -327,6 +327,14 @@
       .site-acc.open .site-acc-chev { transform: rotate(90deg); }
       .site-acc-body { padding: 0 0 14px; }
       .site-acc + .ta-switch, .site-acc + .site-kv { margin-top: 14px; }
+      .site-acc .site-acc { border-top: 0; }
+      /* In the CMS every single checkbox is the on/off switch (label left, switch right). */
+      #modal-card[data-panel="site"] .toggle-row { display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; gap: 14px; }
+      #modal-card[data-panel="site"] .toggle-row input[type="checkbox"] { appearance: none; -webkit-appearance: none; position: relative; width: 38px; height: 22px; flex: none; margin: 0; border: 1px solid #111; border-radius: 11px; background: #fff; cursor: pointer; transition: background .15s ease; }
+      #modal-card[data-panel="site"] .toggle-row input[type="checkbox"]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #111; transition: transform .15s ease, background .15s ease; }
+      #modal-card[data-panel="site"] .toggle-row input[type="checkbox"]:checked { background: #111; }
+      #modal-card[data-panel="site"] .toggle-row input[type="checkbox"]:checked::after { background: #fff; transform: translateX(16px); }
+      #modal-card[data-panel="site"] .toggle-row input[type="checkbox"]:disabled { opacity: .4; cursor: default; }
       .site-tab:disabled .count { color: #d4d4da; }
       /* The on/off switch: 1px outline; off = white with a black knob, on = black with a white knob. */
       .ta-switch { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 4px 0; cursor: pointer; }
