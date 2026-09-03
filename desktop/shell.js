@@ -6147,7 +6147,7 @@ function buildArtDirectorCritiquePrompt(id, res) {
     : `Read only what you need: \`src/variations/${id}/components/Home.tsx\` (and any other component in that folder), its palette in \`src/variations/${id}/styles/tokens.css\`, and its brief + design direction in \`src/variations/${id}/variation.json\`.`;
   const subject = page ? `the "${page.title}" page of the site built from design variation ${id} (blocks: ${(page.blocks || []).join(", ") || "none"})` : `design variation ${id}`;
   const applyWhere = page
-    ? `give a precise \`apply\` instruction the builder can run verbatim: a DESIGN change edits the block file under \`site/blocks/\` (it changes every page using that block, say so when that matters), a COPY or IMAGE change edits \`content/pages/${res.pageId}.json\``
+    ? `give a precise \`apply\` instruction the builder can run verbatim: a DESIGN change edits the block file under \`site/blocks/\` (it changes every page using that block, say so when that matters), a COPY or IMAGE change edits \`content/pages/${res.pageId}.json\`, a PALETTE or TOKEN change edits \`src/variations/${id}/styles/tokens.css\` (the site imports the pinned design's tokens, so it recolors the whole site: say so)`
     : `give a precise \`apply\` instruction it can run verbatim on \`src/variations/${id}/\``;
   return [
     `Give your Art Director read of ${subject}. It is already built; you are reviewing, not building.`,
@@ -6504,8 +6504,8 @@ function applyRec(rec) {
   const vid = directorState.vid || id;
   const prompt = page
     ? `[Apply an Art Director recommendation to the "${page.title}" page of the site.] Make ONLY this change, ` +
-      `editing only the block file(s) under \`site/blocks/\` or the page's content in \`content/pages/${page.id}.json\`, as the instruction says. ` +
-      `Do not touch the design variation folder, do not rebuild the page. Keep to the block contract (tokens/utilities, container queries, static HTML). ` +
+      `editing only the block file(s) under \`site/blocks/\`, the page's content in \`content/pages/${page.id}.json\`, or the palette in \`src/variations/${vid}/styles/tokens.css\` (the site imports the pinned design's tokens), as the instruction says. ` +
+      `Nothing else under \`src/variations/${vid}/\`, and do not rebuild the page. Keep to the block contract (tokens/utilities, container queries, static HTML). ` +
       `Then run \`npx astro build --root site\` to check it builds.\n\n${rec.title}\n${rec.apply}`
     : `[Apply an Art Director recommendation to design variation ${vid}.] Make ONLY this change, ` +
       `editing only files under \`src/variations/${vid}/\`. Do not rebuild the page or touch anything else. ` +
