@@ -3405,7 +3405,10 @@ async function renderSiteSettings(host, data) {
     const row = siteEl("div", "site-range");
     const r = document.createElement("input"); r.type = "range"; r.min = String(min); r.max = String(max); r.value = String(value);
     const v = siteEl("span", "val", fmt(value));
-    r.addEventListener("input", () => { v.textContent = fmt(Number(r.value)); });
+    // The rail's fill follows the grabber (a CSS variable the track's gradient reads).
+    const fill = () => r.style.setProperty("--pct", ((Number(r.value) - min) / (max - min) * 100) + "%");
+    fill();
+    r.addEventListener("input", () => { v.textContent = fmt(Number(r.value)); fill(); });
     r.addEventListener("change", () => onCommit(Number(r.value)));
     row.append(r, v); kv.appendChild(row);
     kv.appendChild(siteEl("div", "sess-desc", hint));
