@@ -25,6 +25,8 @@ the preview/stop note. Use roughly this content, lightly adapted to the moment:
 - **/promote-blocks:** the design is approved, start the site build. Each section
   becomes a reusable block, its copy and images become content you can edit, and
   the header and footer become the site's chrome. Run it once per approved design.
+- **/design-block:** once the site exists, design a new section for it: it becomes a
+  block with editable content in the Pages panel, placed on the page you name.
 - **/upgrade:** pull the latest template version into this project. Overlays the
   framework files, keeps your work (`.env`, your designs, your palette) untouched,
   and walks you through the diff. The dashboard's "Update available" button does the

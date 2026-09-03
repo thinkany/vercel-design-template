@@ -161,8 +161,9 @@ is untouched by it; the site is built FROM the design, never the other way.
 
 Block props are the CONTENT (headings, copy, images, card lists); markup is the DESIGN
 (classes verbatim, `@lg:`/`cqi` included, the site wraps pages in the same `@container`).
-Invalid content fails `site:build` naming the page, block and field. `/promote-blocks` is
-the only way a design becomes blocks; `/design` keeps editing the design itself.
+Invalid content fails `site:build` naming the page, block and field. `/promote-blocks` turns
+the approved design into blocks; after that, `/design-block` designs NEW sections as blocks and
+`/design` keeps editing the reference design itself.
 
 ### Company profile
 
@@ -249,6 +250,12 @@ loaded (no app, or no Design license); say that to the designer and stop.
   Carries the design→site translation table (motion → data-reveal, onNavigate → hrefs, menu
   state → local state, frame heights → 100dvh). Once promoted, page copy is edited as content,
   not by `/design`.
+- **[`/design-block`](.claude/commands/design-block.md)** → the site is promoted and the
+  designer wants a **new section/block/component for the site** ("add a testimonials section",
+  "design a pricing block"). Authors it directly as a block in `site/blocks/` (props schema,
+  registered, placed on a page with real copy), in the promoted design's visual language, and
+  proves it with `npx astro build --root site`. After promotion this, not `/design`, is where new
+  sections come from; the design tabs are the frozen reference.
 - **[`/diagnose`](.claude/commands/diagnose.md)** → a **reported visual bug** (something not
   showing, cut off, mispositioned, overlapping, hidden behind another element). Headlessly
   screenshot the `?capture=` route and look; carries the symptom→cause→fix table for this

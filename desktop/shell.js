@@ -2763,7 +2763,25 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
       siteRailState.expanded[page.id + ":" + (draft.blocks.length - 1)] = true; // open it: the fields are the point
       sel.value = ""; markDirty(); paintBlocks();
     });
-    addRow.appendChild(sel); body.appendChild(addRow);
+    // "Design a new block…": the designer describes it, the request goes to the chat as
+    // /design-block (a licensed skill); the block appears in the list when it lands.
+    const dz = siteEl("div"); dz.style.cssText = "margin:4px 0 8px;";
+    const dzBtn = siteEl("button", "site-link", COPY.site.designBlock); dzBtn.type = "button";
+    const dzForm = siteEl("div"); dzForm.hidden = true; dzForm.style.cssText = "margin-top:8px;";
+    dzForm.appendChild(siteEl("div", "sess-desc", COPY.site.designBlockPrompt));
+    const dzIn = document.createElement("textarea"); dzIn.className = "field"; dzIn.placeholder = COPY.site.designBlockPlaceholder; dzIn.style.minHeight = "56px";
+    const dzRow = siteEl("div"); dzRow.style.cssText = "display:flex;gap:8px;align-items:center;";
+    const dzGo = siteEl("button", "panelbtn primary", COPY.site.designBlockGo); dzGo.style.cssText = "margin:0;width:auto;";
+    const dzNo = siteMini(COPY.site.designBlockCancel, () => { dzForm.hidden = true; });
+    dzRow.append(dzGo, dzNo); dzForm.append(dzIn, dzRow);
+    dzBtn.addEventListener("click", () => { dzForm.hidden = !dzForm.hidden; if (!dzForm.hidden) dzIn.focus(); });
+    dzGo.addEventListener("click", () => {
+      const desc = dzIn.value.trim(); if (!desc) return;
+      closeModal();
+      sendText(COPY.site.designBlockRequest(desc, page.title));
+    });
+    dz.append(dzBtn, dzForm);
+    addRow.appendChild(sel); body.appendChild(addRow); body.appendChild(dz);
   }
 
   const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";

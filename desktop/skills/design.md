@@ -4,7 +4,14 @@ description: Build or edit a design page (the post-setup design phase), the cond
 
 Use this the moment a designer asks to **build, design, create, lay out, or edit
 a page/section/hero/landing** after `/setup-project` + `/setup-styleguide`, the
-freeform design phase. It exists to make the FIRST design fast: it inlines the
+freeform design phase.
+
+**Carve-out, once the site exists.** If `content/site.json` pins a design other
+than `v00` (the design was promoted with `/promote-blocks`), a request for a **new
+section, block or component for the site** is `/design-block`, not this: after
+promotion new sections are designed as blocks and `content/` holds the copy. This
+skill still handles the *design itself* (a redesign to re-promote, the styleguide,
+a change to the reference design the designer explicitly wants there). It exists to make the FIRST design fast: it inlines the
 authoring contract so you don't re-read `Home.tsx`, `DesignSurface.tsx`,
 `pages.ts`, and `site.ts` every time. Read this, do the **one** live read below,
 then build.
