@@ -3612,6 +3612,42 @@ function siteLinkOptions(data, posts, ctx) {
   return out;
 }
 
+// Drag-and-drop for the navigation editor. A top-level item drags with its whole
+// group. Drop zones on a top-level row: top third = before, bottom third = after,
+// middle = INTO its group (only for an item without children, since nesting is one
+// level deep). Drop zones on a sub-link row: before / after within that group. A
+// sub-link dropped before or after a top-level row becomes top-level. Footer links
+// reorder among themselves only.
+let navDrag = null; // { item, arr, scope, hasKids }
+function siteNavDraggable(row, { item, arr, scope, parentItem, repaint, dirty }) {
+  const grip = siteEl("span", "site-grip"); grip.title = COPY.site.dragToReorder; grip.setAttribute("aria-hidden", "true");
+  grip.innerHTML = '<svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="3" cy="3" r="1.3"/><circle cx="7" cy="3" r="1.3"/><circle cx="3" cy="8" r="1.3"/><circle cx="7" cy="8" r="1.3"/><circle cx="3" cy="13" r="1.3"/><circle cx="7" cy="13" r="1.3"/></svg>';
+  row.insertBefore(grip, row.firstChild);
+  row.draggable = true;
+  const clear = () => row.classList.remove("drop-before", "drop-after", "drop-into");
+  row.addEventListener("dragstart", (e) => { navDrag = { item, arr, scope, hasKids: !!(item.links && item.links.length) }; row.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "nav"); } catch {} });
+  row.addEventListener("dragend", () => { navDrag = null; row.classList.remove("dragging"); document.querySelectorAll(".site-nav-row.drop-before,.site-nav-row.drop-after,.site-nav-row.drop-into").forEach((r) => r.classList.remove("drop-before", "drop-after", "drop-into")); });
+  const ok = () => navDrag && navDrag.scope === scope && navDrag.item !== item && navDrag.item !== parentItem;
+  const canNest = () => scope === "nav" && !parentItem && navDrag && !navDrag.hasKids;
+  const zone = (e) => { const r = row.getBoundingClientRect(); const y = (e.clientY - r.top) / r.height; if (!canNest()) return y < 0.5 ? "before" : "after"; return y < 0.3 ? "before" : y > 0.7 ? "after" : "into"; };
+  row.addEventListener("dragover", (e) => { if (!ok()) return; e.preventDefault(); try { e.dataTransfer.dropEffect = "move"; } catch {} const z = zone(e); clear(); row.classList.add("drop-" + z); });
+  row.addEventListener("dragleave", clear);
+  row.addEventListener("drop", (e) => {
+    if (!ok()) return;
+    e.preventDefault(); const z = zone(e); clear();
+    const moved = navDrag.item; const from = navDrag.arr; navDrag = null;
+    from.splice(from.indexOf(moved), 1);
+    if (z === "into") { item.links = Array.isArray(item.links) ? item.links : []; delete moved.links; item.links.push(moved); }
+    else {
+      const to = parentItem ? parentItem.links : arr;
+      if (parentItem) delete moved.links; else if (scope === "nav") moved.links = Array.isArray(moved.links) ? moved.links : [];
+      const at = to.indexOf(item) + (z === "after" ? 1 : 0);
+      to.splice(at, 0, moved);
+    }
+    dirty(); repaint();
+  });
+}
+
 function renderSiteNav(site, refresh, options = []) {
   const wrap = siteEl("div");
   wrap.appendChild(siteEl("div", "sess-label", COPY.site.navHeading));
@@ -3626,8 +3662,9 @@ function renderSiteNav(site, refresh, options = []) {
   const draft = JSON.parse(JSON.stringify({ nav: site.nav || [], footerLinks: site.footerLinks || [] }));
   let saveBtn;
   const dirty = () => { saveBtn.disabled = false; };
-  const linkRow = (l, arr, i, paint, withSub) => {
+  const linkRow = (l, arr, i, paint, withSub, dnd) => {
     const row = siteEl("div", "site-nav-row");
+    if (dnd) siteNavDraggable(row, { item: l, arr, scope: dnd.scope, parentItem: dnd.parentItem, repaint: dnd.repaint, dirty });
     const lab = document.createElement("input"); lab.className = "field"; lab.placeholder = COPY.site.navLabel; lab.value = l.label || "";
     const href = document.createElement("input"); href.className = "field"; href.placeholder = COPY.site.navHref; href.value = l.href || "";
     href.setAttribute("list", listId); href.title = COPY.site.navHrefHint;
@@ -3645,19 +3682,19 @@ function renderSiteNav(site, refresh, options = []) {
     if (withSub) {
       l.links = Array.isArray(l.links) ? l.links : [];
       const sub = siteEl("div"); sub.style.cssText = "margin:0 0 6px 14px;";
-      const paintSub = () => { sub.innerHTML = ""; if (l.links.length) sub.appendChild(siteEl("div", "sess-desc", COPY.site.subLinks)); l.links.forEach((s, j) => sub.appendChild(linkRow(s, l.links, j, paintSub, false))); sub.appendChild(siteMini(COPY.site.addSubLink, () => { l.links.push({ label: "", href: l.href || "" }); dirty(); paintSub(); })); };
+      const paintSub = () => { sub.innerHTML = ""; if (l.links.length) sub.appendChild(siteEl("div", "sess-desc", COPY.site.subLinks)); l.links.forEach((s, j) => sub.appendChild(linkRow(s, l.links, j, paintSub, false, dnd && { scope: dnd.scope, parentItem: l, repaint: dnd.repaint }))); sub.appendChild(siteMini(COPY.site.addSubLink, () => { l.links.push({ label: "", href: l.href || "" }); dirty(); paintSub(); })); };
       paintSub();
       out.appendChild(sub);
     }
     return out;
   };
   const navList = siteEl("div");
-  const paintNav = () => { navList.innerHTML = ""; draft.nav.forEach((l, i) => navList.appendChild(linkRow(l, draft.nav, i, paintNav, true))); navList.appendChild(siteMini(COPY.site.addLink, () => { draft.nav.push({ label: "", href: "/", links: [] }); dirty(); paintNav(); })); };
+  const paintNav = () => { navList.innerHTML = ""; draft.nav.forEach((l, i) => navList.appendChild(linkRow(l, draft.nav, i, paintNav, true, { scope: "nav", parentItem: null, repaint: paintNav }))); navList.appendChild(siteMini(COPY.site.addLink, () => { draft.nav.push({ label: "", href: "/", links: [] }); dirty(); paintNav(); })); };
   paintNav();
   wrap.appendChild(navList);
   wrap.appendChild(siteEl("div", "sess-label", COPY.site.footerHeading)).style.marginTop = "12px";
   const footList = siteEl("div");
-  const paintFoot = () => { footList.innerHTML = ""; draft.footerLinks.forEach((l, i) => footList.appendChild(linkRow(l, draft.footerLinks, i, paintFoot, false))); footList.appendChild(siteMini(COPY.site.addLink, () => { draft.footerLinks.push({ label: "", href: "/" }); dirty(); paintFoot(); })); };
+  const paintFoot = () => { footList.innerHTML = ""; draft.footerLinks.forEach((l, i) => footList.appendChild(linkRow(l, draft.footerLinks, i, paintFoot, false, { scope: "footer", parentItem: null, repaint: paintFoot }))); footList.appendChild(siteMini(COPY.site.addLink, () => { draft.footerLinks.push({ label: "", href: "/" }); dirty(); paintFoot(); })); };
   paintFoot();
   wrap.appendChild(footList);
   const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
