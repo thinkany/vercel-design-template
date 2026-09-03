@@ -2781,7 +2781,8 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
       const desc = dzIn.value.trim().replace(/\s*\(add it to the [^)]*page\)?\s*/gi, " ").replace(/\n?\s*Page:\s*.+$/i, "").trim();
       if (!desc) return;
       closeModal();
-      sendText(COPY.site.designBlockRequest(desc, page.title));
+      // The command goes to Claude; the chat echoes a plain sentence.
+      runAgent(COPY.site.designBlockRequest(desc, page.title), COPY.site.designBlockEcho(desc, page.title));
     });
     dz.append(dzBtn, dzForm);
     addRow.appendChild(sel); body.appendChild(addRow); body.appendChild(dz);

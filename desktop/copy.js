@@ -462,6 +462,8 @@ window.COPY = {
     designBlockGo: "Send to the designer",
     designBlockCancel: "Cancel",
     designBlockRequest: (desc, page) => `/design-block ${desc}\nPage: ${page}`,
+    // What the chat shows for that request (the command itself stays out of view).
+    designBlockEcho: (desc, page) => `Design a new block for the ${page} page: ${desc}`,
     editContent: "Edit content",
     hideContent: "Hide content",
     moveUp: "Move up",
