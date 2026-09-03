@@ -318,6 +318,15 @@
       .site-tab.active { color: #17171b; border-color: #111; }
       .site-tab .count { font-weight: 500; color: #b0b0b8; margin-left: 4px; font-size: 11px; }
       .site-tab:disabled { color: #c4c4cc; border-color: #f0f0f4; cursor: default; }
+      /* Settings sections: a heading row that folds its content; state remembered per project. */
+      .site-acc { border-top: 1px solid #ececf1; }
+      .site-acc:first-child { border-top: 0; }
+      .site-acc-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 0; border: 0; background: transparent; cursor: pointer; text-align: left; font: inherit; }
+      .site-acc-title { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #2a2a2a; font-weight: 600; }
+      .site-acc-chev { width: 0; height: 0; border-left: 5px solid #444; border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform .15s ease; }
+      .site-acc.open .site-acc-chev { transform: rotate(90deg); }
+      .site-acc-body { padding: 0 0 14px; }
+      .site-acc + .ta-switch, .site-acc + .site-kv { margin-top: 14px; }
       .site-tab:disabled .count { color: #d4d4da; }
       /* The on/off switch: 1px outline; off = white with a black knob, on = black with a white knob. */
       .ta-switch { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 4px 0; cursor: pointer; }

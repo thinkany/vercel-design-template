@@ -3743,6 +3743,42 @@ async function renderSiteSettings(host, data, st) {
 
   wrap.appendChild(siteEl("div", "drawer-sep"));
   wrap.appendChild(enableRow());
+  const ps = await window.desktop.getProjectStatus().catch(() => null);
+  siteAccordionize(wrap, (ps && ps.path) || "default");
+}
+
+// Settings sections fold. Each `.sess-label` heading starts a section (its content
+// runs to the next heading); the trailing Site builder switch stays outside. Which
+// sections are open is remembered per project.
+function siteAccordionize(wrap, projectKey) {
+  const KEY = "cmsSettingsOpen:" + (projectKey || "default");
+  let open = {};
+  try { open = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch { open = {}; }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(open)); } catch {} };
+  const nodes = Array.from(wrap.childNodes);
+  wrap.innerHTML = "";
+  let section = null;
+  const tail = []; // nodes after the last section's content that belong outside (the switch)
+  nodes.forEach((n) => {
+    const isLabel = n.nodeType === 1 && n.classList.contains("sess-label");
+    const isSep = n.nodeType === 1 && n.classList.contains("drawer-sep");
+    const isSwitch = n.nodeType === 1 && n.querySelector && n.querySelector(".ta-switch");
+    if (isLabel) {
+      const title = n.textContent;
+      const isOpen = open[title] !== false; // open unless remembered closed
+      section = siteEl("div", "site-acc" + (isOpen ? " open" : ""));
+      const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(isOpen));
+      head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
+      const body = siteEl("div", "site-acc-body"); body.hidden = !isOpen;
+      head.addEventListener("click", () => { const now = body.hidden; body.hidden = !now; section.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); open[title] = now; save(); });
+      section.append(head, body); wrap.appendChild(section);
+      return;
+    }
+    if (isSwitch) { section = null; tail.push(n); return; }
+    if (isSep) return; // section frames replace the separators
+    if (section) section.querySelector(".site-acc-body").appendChild(n); else tail.push(n);
+  });
+  tail.forEach((n) => wrap.appendChild(n));
 }
 
 async function renderSite(body) {
