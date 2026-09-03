@@ -2639,6 +2639,13 @@ function siteMini(label, onClick, { danger, title, disabled } = {}) {
   b.addEventListener("click", onClick);
   return b;
 }
+// A delete control: a red, 1px-stroke trash can (lucide trash-2), mini-button sized.
+function siteTrashBtn(onClick, title) {
+  const b = document.createElement("button"); b.type = "button"; b.className = "site-mini site-trash"; b.title = title || ""; b.setAttribute("aria-label", title || "");
+  b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+  b.addEventListener("click", onClick);
+  return b;
+}
 function siteFlash(host, text) {
   const s = siteEl("span", "site-saved", text);
   host.appendChild(s);
@@ -2870,7 +2877,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
         siteMini("↑", () => { [draft.blocks[i - 1], draft.blocks[i]] = [draft.blocks[i], draft.blocks[i - 1]]; markDirty(); paintBlocks(); }, { disabled: i === 0, title: COPY.site.moveUp }),
         siteMini("↓", () => { [draft.blocks[i + 1], draft.blocks[i]] = [draft.blocks[i], draft.blocks[i + 1]]; markDirty(); paintBlocks(); }, { disabled: i === draft.blocks.length - 1, title: COPY.site.moveDown }),
         siteMini(siteRailState.expanded[ek] ? COPY.site.hideContent : COPY.site.editContent, () => { siteRailState.expanded[ek] = !siteRailState.expanded[ek]; paintBlocks(); }),
-        siteMini("×", () => { draft.blocks.splice(i, 1); markDirty(); paintBlocks(); }, { danger: true, title: COPY.site.removeBlock }),
+        siteTrashBtn(() => { draft.blocks.splice(i, 1); markDirty(); paintBlocks(); }, COPY.site.removeBlock),
       );
       blockList.appendChild(row);
       if (siteRailState.expanded[ek]) {
@@ -3122,7 +3129,7 @@ function siteBlocksEditor(list, blocks, onChange, stateKey) {
         siteMini("↑", () => { [list[i - 1], list[i]] = [list[i], list[i - 1]]; onChange(); paint(); }, { disabled: i === 0, title: S.moveUp }),
         siteMini("↓", () => { [list[i + 1], list[i]] = [list[i], list[i + 1]]; onChange(); paint(); }, { disabled: i === list.length - 1, title: S.moveDown }),
         siteMini(siteRailState.expanded[ek] ? S.hideContent : S.editContent, () => { siteRailState.expanded[ek] = !siteRailState.expanded[ek]; paint(); }),
-        siteMini("×", () => { list.splice(i, 1); onChange(); paint(); }, { danger: true, title: S.removeBlock }),
+        siteTrashBtn(() => { list.splice(i, 1); onChange(); paint(); }, S.removeBlock),
       );
       host.appendChild(row);
       if (siteRailState.expanded[ek]) {
@@ -3588,7 +3595,7 @@ function renderSiteNav(site, refresh, options = []) {
     });
     row.append(lab, href,
       siteMini("↑", () => { if (i > 0) { [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; dirty(); paint(); } }, { disabled: i === 0, title: COPY.site.moveUp }),
-      siteMini("×", () => { arr.splice(i, 1); dirty(); paint(); }, { danger: true, title: COPY.site.removeItem }));
+      siteTrashBtn(() => { arr.splice(i, 1); dirty(); paint(); }, COPY.site.removeItem));
     const out = siteEl("div");
     out.appendChild(row);
     if (withSub) {
