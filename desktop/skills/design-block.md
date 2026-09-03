@@ -38,8 +38,9 @@ In ONE turn:
   cards request, a text+image section for a story request). Read it fully: its
   spacing rhythm, type scale, eyebrow treatment, container width, `@lg:` breaks,
   how it uses the motifs. The new block is a sibling of that one.
-- The page the block is for: `content/pages/<id>.json` (the designer named it, or
-  `home.json`; if a name doesn't match a page, ask in one line).
+- The page the block is for: `content/pages/<id>.json`. The request may carry a
+  `Page: <title>` line (the app's Pages panel sends one); otherwise the designer
+  named it, or it's `home.json`. If a name doesn't match a page, ask in one line.
 
 Do NOT read `site/src/**`; the contract is inlined below. Do not read the
 variation's `Home.tsx`: the promoted blocks ARE the design now.

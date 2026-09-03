@@ -461,7 +461,7 @@ window.COPY = {
     designBlockPlaceholder: "e.g. three customer testimonials with photos",
     designBlockGo: "Send to the designer",
     designBlockCancel: "Cancel",
-    designBlockRequest: (desc, page) => `/design-block ${desc} (add it to the "${page}" page)`,
+    designBlockRequest: (desc, page) => `/design-block ${desc}\nPage: ${page}`,
     editContent: "Edit content",
     hideContent: "Hide content",
     moveUp: "Move up",

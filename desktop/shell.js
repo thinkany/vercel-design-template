@@ -2776,7 +2776,10 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
     dzRow.append(dzGo, dzNo); dzForm.append(dzIn, dzRow);
     dzBtn.addEventListener("click", () => { dzForm.hidden = !dzForm.hidden; if (!dzForm.hidden) dzIn.focus(); });
     dzGo.addEventListener("click", () => {
-      const desc = dzIn.value.trim(); if (!desc) return;
+      // Strip a page suffix someone typed or pasted ("(add it to the … page)", "Page: …")
+      // so the request carries the page exactly once.
+      const desc = dzIn.value.trim().replace(/\s*\(add it to the [^)]*page\)?\s*/gi, " ").replace(/\n?\s*Page:\s*.+$/i, "").trim();
+      if (!desc) return;
       closeModal();
       sendText(COPY.site.designBlockRequest(desc, page.title));
     });
