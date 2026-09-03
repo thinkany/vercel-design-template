@@ -3261,10 +3261,37 @@ function siteMediaFileUrl(url) {
   return hit ? hit.file : null;
 }
 
-function renderSiteNav(site, refresh) {
+// Everything in the project a link can point at, for the URL combo in Navigation.
+function siteLinkOptions(data, posts, ctx) {
+  const out = [];
+  data.pages.forEach((p) => out.push({ group: "pages", label: p.title, href: "/" + (p.id === "home" ? "" : (p.slug || p.id)) }));
+  // Home-page sections: a block instance that sets its own id (nav anchors), plus any
+  // anchor the nav already uses (blocks whose id is a schema default don't expose it).
+  const home = data.pages.find((p) => p.id === "home");
+  const seen = new Set();
+  const addAnchor = (id, label) => { if (id && !seen.has(id)) { seen.add(id); out.push({ group: "sections", label: label || id, href: "/#" + id }); } };
+  if (home) home.blocks.forEach((b) => { const id = b.props && b.props.id; const label = b.props && (b.props.heading || b.props.title); if (id) addAnchor(id, label); });
+  (data.site.nav || []).forEach((l) => { const m = (l.href || "").match(/^\/#([a-z0-9-]+)$/); if (m) addAnchor(m[1], l.label); (l.links || []).forEach((s) => { const n = (s.href || "").match(/^\/#([a-z0-9-]+)$/); if (n) addAnchor(n[1], s.label); }); });
+  if (posts.length) out.push({ group: "posts", label: COPY.site.tabs.posts, href: "/blog" });
+  posts.filter((p) => !p.draft).forEach((p) => out.push({ group: "posts", label: p.title, href: "/blog/" + p.id }));
+  ctx.types.forEach((t) => {
+    if (t.index) out.push({ group: "indexes", label: t.label, href: t.path });
+    (ctx.entries[t.key] || []).forEach((e) => out.push({ group: "types", label: `${e.title} (${t.singular || t.label})`, href: `${t.path}/${e.slug || e.id}` }));
+  });
+  return out;
+}
+
+function renderSiteNav(site, refresh, options = []) {
   const wrap = siteEl("div");
   wrap.appendChild(siteEl("div", "sess-label", COPY.site.navHeading));
   wrap.appendChild(siteEl("div", "sess-desc", COPY.site.navDesc));
+  // One datalist shared by every URL field: the project's pages, sections, posts,
+  // content entries and indexes. Chromium renders it as a combo: type, or pick.
+  const listId = "site-nav-links";
+  const dl = document.createElement("datalist"); dl.id = listId;
+  options.forEach((o) => { const opt = document.createElement("option"); opt.value = o.href; opt.label = `${o.label} · ${COPY.site.navGroups[o.group] || o.group}`; dl.appendChild(opt); });
+  wrap.appendChild(dl);
+  const labelFor = (href) => { const o = options.find((x) => x.href === href); return o ? o.label : ""; };
   const draft = JSON.parse(JSON.stringify({ nav: site.nav || [], footerLinks: site.footerLinks || [] }));
   let saveBtn;
   const dirty = () => { saveBtn.disabled = false; };
@@ -3272,8 +3299,13 @@ function renderSiteNav(site, refresh) {
     const row = siteEl("div", "site-nav-row");
     const lab = document.createElement("input"); lab.className = "field"; lab.placeholder = COPY.site.navLabel; lab.value = l.label || "";
     const href = document.createElement("input"); href.className = "field"; href.placeholder = COPY.site.navHref; href.value = l.href || "";
+    href.setAttribute("list", listId); href.title = COPY.site.navHrefHint;
     lab.addEventListener("input", () => { l.label = lab.value; dirty(); });
-    href.addEventListener("input", () => { l.href = href.value; dirty(); });
+    href.addEventListener("input", () => {
+      l.href = href.value; dirty();
+      // Picked from the list (an exact match) with no text yet → fill the text too.
+      if (!lab.value.trim()) { const t = labelFor(href.value); if (t) { lab.value = t; l.label = t; } }
+    });
     row.append(lab, href,
       siteMini("↑", () => { if (i > 0) { [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; dirty(); paint(); } }, { disabled: i === 0, title: COPY.site.moveUp }),
       siteMini("×", () => { arr.splice(i, 1); dirty(); paint(); }, { danger: true, title: COPY.site.removeItem }));
@@ -3421,7 +3453,7 @@ async function renderSite(body) {
     renderSiteTypesList(left, right, ctx, refresh);
   } else if (siteRailState.tab === "nav") {
     const wrap = siteEl("div", "site-single"); body.appendChild(wrap);
-    wrap.appendChild(renderSiteNav(data.site, refresh));
+    wrap.appendChild(renderSiteNav(data.site, refresh, siteLinkOptions(data, posts, ctx)));
   } else {
     await renderSiteSettings(body, data);
   }
