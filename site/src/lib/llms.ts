@@ -1,12 +1,11 @@
 // ©2026 thinkany llc. All rights reserved.
-// llms.txt: a plain-text map of the site for AI crawlers (llmstxt.org). Built
-// from the same collections as the sitemap, so it never drifts from the pages.
-import type { APIRoute } from "astro";
+// The generated llms.txt (llmstxt.org): a plain-text map of the site's public
+// pages and posts, used when content/site.json carries no custom text.
 import { getCollection } from "astro:content";
 import { siteConfig } from "@/config/site";
 
-export const GET: APIRoute = async ({ site }) => {
-  const abs = (p: string) => new URL(p, site).href;
+export async function generatedLlms(siteUrl: URL | undefined) {
+  const abs = (p: string) => new URL(p, siteUrl).href;
   const pages = (await getCollection("pages")).filter((p) => !p.data.seo.noindex);
   const posts = (await getCollection("posts", ({ data }) => !data.draft && !data.seo.noindex)).sort(
     (a, b) => b.data.date.getTime() - a.data.date.getTime(),
@@ -24,5 +23,6 @@ export const GET: APIRoute = async ({ site }) => {
   if (posts.length) {
     out.push("", "## Posts", ...posts.map((p) => line(p.data.title, abs(`/blog/${p.id}`), p.data.description)));
   }
-  return new Response(out.join("\n") + "\n", { headers: { "Content-Type": "text/plain; charset=utf-8" } });
-};
+  return out.join("\n") + "\n";
+}
+

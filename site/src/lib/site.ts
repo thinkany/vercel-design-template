@@ -25,6 +25,20 @@ export const siteSchema = z.object({
   nav: z.array(navItem).default([]),
   /** Footer-only links (legal, social…). */
   footerLinks: z.array(navLink).default([]),
+  /** Search-engine settings (the CMS Settings tab). */
+  seo: z.object({
+    /** robots.txt Disallow: /, noindex on every page, no sitemap. */
+    discourage: z.boolean().default(false),
+    /** Build sitemap-index.xml (ignored while discourage is on). */
+    sitemap: z.boolean().default(true),
+    llms: z.object({
+      enabled: z.boolean().default(true),
+      /** Custom llms.txt content; null = generated from the site's content. */
+      content: z.string().nullable().default(null),
+    }).default({ enabled: true, content: null }),
+    // zod 3 returns a `.default()` value as-is (inner defaults don't apply), so
+    // the defaults are spelled out in full at both levels.
+  }).default({ discourage: false, sitemap: true, llms: { enabled: true, content: null } }),
 });
 export type SiteSettings = z.infer<typeof siteSchema>;
 

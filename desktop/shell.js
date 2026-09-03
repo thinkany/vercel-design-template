@@ -3404,6 +3404,42 @@ async function renderSiteSettings(host, data) {
   actions.appendChild(status);
   wrap.appendChild(actions);
 
+  // ── Search engines: robots.txt, the sitemap, llms.txt (content/site.json seo) ──
+  wrap.appendChild(siteEl("div", "drawer-sep"));
+  wrap.appendChild(siteEl("div", "sess-label", S.searchHeading));
+  const seo = JSON.parse(JSON.stringify((data.site && data.site.seo) || { discourage: false, sitemap: true, llms: { enabled: true, content: null } }));
+  const seoStatus = siteEl("div"); seoStatus.style.cssText = "min-height:18px;";
+  const saveSeo = async () => { const res = await window.desktop.saveSiteSeo(seo); seoStatus.innerHTML = ""; if (res && res.ok) siteFlash(seoStatus, S.saved); };
+  const toggle = (label, hint, checked, onChange) => {
+    const row = siteEl("label", "toggle-row"); const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = checked;
+    cb.addEventListener("change", () => onChange(cb.checked)); row.append(cb, siteEl("span", "", label));
+    const h = siteEl("div", "sess-desc", hint); h.style.margin = "-6px 0 12px 22px";
+    return { row, cb, hint: h };
+  };
+  const disc = toggle(S.discourage, S.discourageHint, seo.discourage, (on) => { seo.discourage = on; paintSeo(); saveSeo(); });
+  const smap = toggle(S.sitemap, S.sitemapHint, seo.sitemap, (on) => { seo.sitemap = on; saveSeo(); });
+  const llm = toggle(S.llms, S.llmsHint, seo.llms.enabled, (on) => { seo.llms.enabled = on; paintSeo(); saveSeo(); });
+  wrap.append(disc.row, disc.hint, smap.row, smap.hint, llm.row, llm.hint);
+  // llms.txt content: the saved custom text, or the generated version as a starting point.
+  const llmBox = siteEl("div", "site-kv"); llmBox.style.marginLeft = "22px";
+  llmBox.appendChild(siteEl("div", "k", S.llmsContent));
+  const llmTa = document.createElement("textarea"); llmTa.className = "field"; llmTa.style.cssText = "min-height:200px;font-family:ui-monospace,Menlo,monospace;font-size:12px;";
+  const llmActions = siteEl("div"); llmActions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:6px;";
+  const llmSave = siteEl("button", "panelbtn primary", S.llmsSave); llmSave.style.margin = "0"; llmSave.disabled = true;
+  const llmReset = siteMini(S.llmsReset, async () => { llmTa.value = await window.desktop.getLlmsDefault().catch(() => ""); seo.llms.content = null; llmSave.disabled = true; saveSeo(); });
+  llmActions.append(llmSave, llmReset, seoStatus);
+  llmBox.append(llmTa, llmActions);
+  wrap.appendChild(llmBox);
+  llmTa.addEventListener("input", () => { llmSave.disabled = false; });
+  llmSave.addEventListener("click", async () => { seo.llms.content = llmTa.value.trim() ? llmTa.value : null; llmSave.disabled = true; await saveSeo(); });
+  const paintSeo = async () => {
+    // Discouraging search engines also means no sitemap: gray the toggle out.
+    smap.cb.disabled = seo.discourage; smap.row.style.opacity = seo.discourage ? "0.45" : "1";
+    llmBox.hidden = !seo.llms.enabled;
+    if (seo.llms.enabled && !llmTa.value) llmTa.value = seo.llms.content || (await window.desktop.getLlmsDefault().catch(() => ""));
+  };
+  await paintSeo();
+
   wrap.appendChild(siteEl("div", "drawer-sep"));
   wrap.appendChild(siteEl("div", "sess-label", S.siteHeading));
   if (data.design) wrap.appendChild(siteEl("div", "sess-desc", S.designPinned(data.design)));

@@ -1476,9 +1476,35 @@ function readSiteContent(dir) {
   const pub = loadPublish(dir);
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
-    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [] },
+    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], seo: seoSettings(site.seo) },
     pages, posts, blocks: readBlockRegistry(dir), liveUrl: (pub.site && pub.site.url) || null, previewUrl: siteUrl,
   };
+}
+// Search-engine settings in content/site.json (built into robots.txt, the sitemap,
+// llms.txt and the pages' robots meta). Defaults mirror site/src/lib/site.ts.
+function seoSettings(raw) {
+  const r = raw && typeof raw === "object" ? raw : {};
+  const llms = r.llms && typeof r.llms === "object" ? r.llms : {};
+  return {
+    discourage: !!r.discourage,
+    sitemap: r.sitemap !== false,
+    llms: { enabled: llms.enabled !== false, content: typeof llms.content === "string" && llms.content.trim() ? llms.content : null },
+  };
+}
+// What the site would write to llms.txt from its content (the CMS shows this as
+// the starting point for a custom file). Mirrors site/src/pages/[llms].ts.
+function generatedLlms(dir) {
+  const site = readJsonFile(path.join(siteContentDir(dir), "site.json")) || {};
+  const base = (site.url || "https://example.com").replace(/\/$/, "");
+  const env = readProjectEnv(dir);
+  const name = env.VITE_CLIENT_NAME || path.basename(dir);
+  const line = (t, u, d) => `- [${t}](${u})${d ? `: ${d}` : ""}`;
+  const out = [`# ${name}`, "", "## Pages"];
+  const c = readSiteContent(dir);
+  for (const p of c.pages) { if (p.seo && p.seo.noindex) continue; const slug = p.id === "home" ? "" : (p.slug || p.id); out.push(line(p.title, `${base}/${slug}`, p.seo && p.seo.description)); }
+  const posts = readPosts(dir).filter((p) => !p.draft && !(p.seo && p.seo.noindex));
+  if (posts.length) { out.push("", "## Posts"); for (const p of posts) out.push(line(p.title, `${base}/blog/${p.id}`, p.description)); }
+  return out.join("\n") + "\n";
 }
 function slugifyId(s) {
   return String(s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
@@ -1541,6 +1567,16 @@ ipcMain.handle("site:saveSite", (_e, { nav, footerLinks } = {}) => {
     .map((l) => ({ label: l.label.trim(), href: l.href.trim(), ...(sub && Array.isArray(l.links) && l.links.length ? { links: clean(l.links, false) } : {}) }));
   const next = { ...cur, nav: clean(nav, true), footerLinks: clean(footerLinks, false) };
   try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, site: next }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle("site:llmsDefault", () => (currentProject ? generatedLlms(currentProject) : ""));
+ipcMain.handle("site:saveSeo", (_e, { seo } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const p = path.join(siteContentDir(currentProject), "site.json");
+  const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
+  const next = { ...cur, seo: seoSettings(seo) };
+  try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, seo: next.seo }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
 

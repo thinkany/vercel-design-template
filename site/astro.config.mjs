@@ -100,10 +100,12 @@ export default defineConfig({
   build: { format: "file" },
   integrations: [
     react(),
-    sitemap({
+    // The sitemap is a build-time choice (Settings): off, or off while search
+    // engines are discouraged, and the integration isn't loaded at all.
+    ...(siteJson.seo && (siteJson.seo.discourage || siteJson.seo.sitemap === false) ? [] : [sitemap({
       filter: (page) => { try { return !NOINDEX.has(new URL(page).pathname.replace(/\/$/, "") || "/"); } catch { return true; } },
       serialize: (item) => { try { const d = LASTMOD.get(new URL(item.url).pathname.replace(/\/$/, "")); if (d) item.lastmod = d.toISOString(); } catch {} return item; },
-    }),
+    })]),
   ],
   // No dev toolbar: it's a developer's island/audit inspector, and inside the app's
   // Site tab it's a floating pill the designer can't use for anything.

@@ -32,7 +32,7 @@ const chromeProps = { siteName: siteConfig.clientName, logo: siteConfig.logo, na
     <title>{meta.title}</title>
     {meta.description && <meta name="description" content={meta.description} />}
     <link rel="canonical" href={canonical} />
-    {meta.noindex && <meta name="robots" content="noindex, nofollow" />}
+    {(meta.noindex || site.seo.discourage) && <meta name="robots" content="noindex, nofollow" />}
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content={siteConfig.clientName} />
     <meta property="og:title" content={meta.title} />
@@ -41,7 +41,7 @@ const chromeProps = { siteName: siteConfig.clientName, logo: siteConfig.logo, na
     {image && <meta property="og:image" content={image} />}
     <meta name="twitter:card" content={image ? "summary_large_image" : "summary"} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="sitemap" href="/sitemap-index.xml" />
+    {site.seo.sitemap && !site.seo.discourage && <link rel="sitemap" href="/sitemap-index.xml" />}
     <!-- Marks JS as available BEFORE first paint, so data-reveal elements only
          start hidden when the observer below will actually reveal them. -->
     <script is:inline>document.documentElement.classList.add("js");</script>

@@ -135,6 +135,8 @@ contextBridge.exposeInMainWorld("desktop", {
   importMedia: (paths) => ipcRenderer.invoke("media:import", { paths }),
   deleteMedia: (rel) => ipcRenderer.invoke("media:delete", { rel }),
   getCmsSettings: () => ipcRenderer.invoke("cms:getSettings"),
+  saveSiteSeo: (seo) => ipcRenderer.invoke("site:saveSeo", { seo }),
+  getLlmsDefault: () => ipcRenderer.invoke("site:llmsDefault"),
   setCmsSettings: (patch) => ipcRenderer.invoke("cms:setSettings", patch),
   onSiteReady: (cb) => {
     const listener = (_e, url) => cb(url);
