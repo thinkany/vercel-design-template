@@ -1457,6 +1457,80 @@ function readBlockRegistry(dir) {
 }
 function readTextSafe(p) { try { return fs.readFileSync(p, "utf8"); } catch { return ""; } }
 
+// ---- Block schemas → default props ------------------------------------------
+// The CMS edits a block's content from its props' SHAPE, so a block must start
+// with every field present. The registry is TSX with zod schemas, so: bundle
+// site/blocks/index.ts with esbuild (shipped for Vite), load it, and walk each
+// block's zod schema into a default props object (strings "", numbers 0,
+// booleans false, enums their first option, objects recursed, arrays with one
+// example item when the schema requires one). Cached in .thinkany/blocks.json
+// against the newest mtime under site/blocks.
+function blocksMtime(dir) {
+  let latest = 0;
+  const walk = (d) => { let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; } for (const e of es) { const a = path.join(d, e.name); if (e.isDirectory()) walk(a); else { try { latest = Math.max(latest, fs.statSync(a).mtimeMs); } catch {} } } };
+  walk(path.join(dir, "site", "blocks"));
+  return latest;
+}
+function zodDefault(schema, depth = 0) {
+  if (!schema || !schema._def || depth > 8) return "";
+  const d = schema._def;
+  const t = d.typeName;
+  switch (t) {
+    case "ZodDefault": {
+      // The declared default, merged over the inner shape's defaults when both are
+      // plain objects, so optional sub-fields still appear in the editor.
+      let dv; try { dv = d.defaultValue(); } catch { dv = undefined; }
+      const inner = zodDefault(d.innerType, depth + 1);
+      if (dv && typeof dv === "object" && !Array.isArray(dv) && inner && typeof inner === "object" && !Array.isArray(inner)) return { ...inner, ...dv };
+      return dv === undefined ? inner : dv;
+    }
+    case "ZodOptional": case "ZodNullable": return zodDefault(d.innerType, depth + 1);
+    case "ZodEffects": return zodDefault(d.schema, depth + 1);
+    case "ZodObject": { const out = {}; const shape = typeof d.shape === "function" ? d.shape() : d.shape; for (const [k, v] of Object.entries(shape)) out[k] = zodDefault(v, depth + 1); return out; }
+    case "ZodArray": { const min = d.minLength && d.minLength.value; return min > 0 ? [zodDefault(d.type, depth + 1)] : []; }
+    case "ZodString": return "";
+    case "ZodNumber": return 0;
+    case "ZodBoolean": return false;
+    case "ZodEnum": return (d.values && d.values[0]) || "";
+    case "ZodNativeEnum": { const vals = Object.values(d.values || {}); return vals[0] ?? ""; }
+    case "ZodLiteral": return d.value;
+    case "ZodUnion": return zodDefault((d.options || [])[0], depth + 1);
+    case "ZodRecord": return {};
+    default: return "";
+  }
+}
+function introspectBlocks(dir) {
+  const cachePath = path.join(dir, ".thinkany", "blocks.json");
+  const mtime = blocksMtime(dir);
+  const cached = readJsonFile(cachePath);
+  if (cached && cached.mtime === mtime && cached.defaults) return cached.defaults;
+  let defaults = {};
+  try {
+    const esbuild = require(unpacked(path.join(appRoot, "node_modules", "esbuild")));
+    const result = esbuild.buildSync({
+      entryPoints: [path.join(dir, "site", "blocks", "index.ts")],
+      bundle: true, write: false, platform: "node", format: "cjs", target: "node20",
+      jsx: "automatic", tsconfig: path.join(dir, "site", "tsconfig.json"), logLevel: "silent",
+      // Components only matter for their schemas here; keep the runtime deps external.
+      external: ["react", "react-dom", "react/jsx-runtime", "lucide-react", "motion", "motion/*", "astro/zod", "astro:*"],
+    });
+    const code = result.outputFiles[0].text;
+    const { createRequire } = require("node:module");
+    const req = createRequire(path.join(dir, "package.json"));
+    const mod = { exports: {} };
+    new Function("require", "module", "exports", "__filename", "__dirname", code)(req, mod, mod.exports, path.join(dir, "site", "blocks", "index.ts"), path.join(dir, "site", "blocks"));
+    const blocks = mod.exports.blocks || {};
+    for (const [key, def] of Object.entries(blocks)) {
+      try { defaults[key] = def && def.props ? zodDefault(def.props) : {}; } catch { defaults[key] = {}; }
+    }
+  } catch (e) {
+    console.warn(`[blocks] introspection failed: ${e.message}`);
+    return cached && cached.defaults ? cached.defaults : {};
+  }
+  try { fs.mkdirSync(path.dirname(cachePath), { recursive: true }); fs.writeFileSync(cachePath, JSON.stringify({ mtime, defaults }, null, 2) + "\n"); } catch {}
+  return defaults;
+}
+
 function readSiteContent(dir) {
   const r = siteReady(dir);
   const site = readJsonFile(path.join(siteContentDir(dir), "site.json")) || {};
@@ -1477,7 +1551,8 @@ function readSiteContent(dir) {
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
     site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], seo: seoSettings(site.seo) },
-    pages, posts, blocks: readBlockRegistry(dir), liveUrl: (pub.site && pub.site.url) || null, previewUrl: siteUrl,
+    pages, posts, blocks: (() => { const defs = r.ready ? introspectBlocks(dir) : {}; return readBlockRegistry(dir).map((b) => ({ ...b, defaults: defs[b.key] || {} })); })(),
+    liveUrl: (pub.site && pub.site.url) || null, previewUrl: siteUrl,
   };
 }
 // Search-engine settings in content/site.json (built into robots.txt, the sitemap,
@@ -1509,6 +1584,20 @@ function generatedLlms(dir) {
 function slugifyId(s) {
   return String(s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
 }
+// A default-seeded block carries every field; drop the ones left empty (empty
+// strings, images without a src, links without an href, empty objects) so
+// optional props fall back to their schema defaults instead of "".
+function pruneEmptyProps(v) {
+  if (Array.isArray(v)) return v.map(pruneEmptyProps).filter((x) => x !== undefined && x !== "" && !(x && typeof x === "object" && !Array.isArray(x) && !Object.keys(x).length));
+  if (v && typeof v === "object") {
+    if ("src" in v && !(typeof v.src === "string" && v.src.trim())) return undefined;
+    if ("href" in v && !(typeof v.href === "string" && v.href.trim()) && !("src" in v)) return undefined;
+    const out = {};
+    for (const [k, x] of Object.entries(v)) { const y = pruneEmptyProps(x); if (y === undefined || y === "") continue; out[k] = y; }
+    return out;
+  }
+  return v;
+}
 function validPageId(id) { return typeof id === "string" && /^[a-z0-9][a-z0-9-]*$/.test(id); }
 
 ipcMain.handle("site:content", () => {
@@ -1525,7 +1614,7 @@ ipcMain.handle("site:savePage", (_e, { id, data } = {}) => {
     title: data.title.trim(),
     slug: id === "home" ? "" : slugifyId(data.slug ?? id),
     seo: data.seo && typeof data.seo === "object" ? data.seo : {},
-    blocks: Array.isArray(data.blocks) ? data.blocks.filter((b) => b && typeof b.type === "string").map((b) => ({ type: b.type, props: b.props && typeof b.props === "object" ? b.props : {} })) : [],
+    blocks: Array.isArray(data.blocks) ? data.blocks.filter((b) => b && typeof b.type === "string").map((b) => ({ type: b.type, props: pruneEmptyProps(b.props && typeof b.props === "object" ? b.props : {}) })) : [],
   };
   // Drop empty SEO strings so defaults apply.
   for (const k of Object.keys(doc.seo)) if (doc.seo[k] === "" || doc.seo[k] == null) delete doc.seo[k];

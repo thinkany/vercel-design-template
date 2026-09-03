@@ -2764,7 +2764,12 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
         siteMini("×", () => { draft.blocks.splice(i, 1); markDirty(); paintBlocks(); }, { danger: true, title: COPY.site.removeBlock }),
       );
       blockList.appendChild(row);
-      if (siteRailState.expanded[ek]) blockList.appendChild(sitePropsEditor(b.props || (b.props = {}), markDirty));
+      if (siteRailState.expanded[ek]) {
+        // Older content may lack fields the block accepts: fill them from the defaults.
+        const dflt = (def && def.defaults) || {};
+        b.props = { ...JSON.parse(JSON.stringify(dflt)), ...(b.props || {}) };
+        blockList.appendChild(sitePropsEditor(b.props, markDirty));
+      }
     });
   };
   paintBlocks();
@@ -2774,7 +2779,13 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
     const sel = document.createElement("select"); sel.className = "field"; sel.style.marginBottom = "0";
     const o0 = document.createElement("option"); o0.value = ""; o0.textContent = COPY.site.addBlock; sel.appendChild(o0);
     blocks.forEach((b) => { const o = document.createElement("option"); o.value = b.key; o.textContent = b.name; if (b.description) o.title = b.description; sel.appendChild(o); });
-    sel.addEventListener("change", () => { if (!sel.value) return; draft.blocks.push({ type: sel.value, props: {} }); sel.value = ""; markDirty(); paintBlocks(); });
+    sel.addEventListener("change", () => {
+      if (!sel.value) return;
+      const def = byKey[sel.value];
+      draft.blocks.push({ type: sel.value, props: JSON.parse(JSON.stringify((def && def.defaults) || {})) });
+      siteRailState.expanded[page.id + ":" + (draft.blocks.length - 1)] = true; // open it: the fields are the point
+      sel.value = ""; markDirty(); paintBlocks();
+    });
     addRow.appendChild(sel); body.appendChild(addRow);
   }
 
@@ -2979,13 +2990,23 @@ function siteBlocksEditor(list, blocks, onChange, stateKey) {
         siteMini("×", () => { list.splice(i, 1); onChange(); paint(); }, { danger: true, title: S.removeBlock }),
       );
       host.appendChild(row);
-      if (siteRailState.expanded[ek]) host.appendChild(sitePropsEditor(b.props || (b.props = {}), onChange));
+      if (siteRailState.expanded[ek]) {
+        const dflt = (def && def.defaults) || {};
+        b.props = { ...JSON.parse(JSON.stringify(dflt)), ...(b.props || {}) };
+        host.appendChild(sitePropsEditor(b.props, onChange));
+      }
     });
     if (blocks.length) {
       const sel = document.createElement("select"); sel.className = "field"; sel.style.margin = "6px 0 4px";
       const o0 = document.createElement("option"); o0.value = ""; o0.textContent = S.addBlock; sel.appendChild(o0);
       blocks.forEach((bd) => { const o = document.createElement("option"); o.value = bd.key; o.textContent = bd.name; sel.appendChild(o); });
-      sel.addEventListener("change", () => { if (!sel.value) return; list.push({ type: sel.value, props: {} }); sel.value = ""; onChange(); paint(); });
+      sel.addEventListener("change", () => {
+        if (!sel.value) return;
+        const def = byKey[sel.value];
+        list.push({ type: sel.value, props: JSON.parse(JSON.stringify((def && def.defaults) || {})) });
+        siteRailState.expanded[stateKey + ":" + (list.length - 1)] = true;
+        sel.value = ""; onChange(); paint();
+      });
       host.appendChild(sel);
     }
   };
