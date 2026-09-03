@@ -207,7 +207,7 @@ window.COPY = {
 
   // ── Icon rail tooltips (data-tip + aria-label) ──────────────────────────────
   rail: {
-    help: "Help with Commands",
+    help: "About thinkany design",
     projects: "Switch Projects",
     site: "CMS",
     publish: "Publish",
@@ -364,7 +364,7 @@ window.COPY = {
   // ── Sidebar drawer titles (the PANELS map) ──────────────────────────────────
   panels: {
     site: "Pages",
-    help: "Commands",
+    help: "About",
     projects: "Switch Project",
     publish: "Publish",
     company: "Company Profile",

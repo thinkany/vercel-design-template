@@ -1260,39 +1260,10 @@ document.addEventListener("click", (e) => { if (!cmdmenu.hidden && !e.target.clo
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !cmdmenu.hidden) closeCmdMenu(); });
 buildCommandMenu();
 
+// The About drawer: version + byline. (The command list used to live here; the
+// chat pane is where commands are found now.)
 async function renderHelp(body) {
-  const intro = document.createElement("p");
-  intro.className = "muted";
-  intro.style.margin = "0 0 12px";
-  intro.textContent = COPY.commands.helpIntro;
-  body.appendChild(intro);
-  COMMANDS.forEach(([cmd, desc]) => {
-    const row = document.createElement("div");
-    row.className = "cmd";
-    // The command itself IS the button: click → paste + run it in the chat
-    // (same as typing it and hitting enter), then reveal the chat.
-    const btn = document.createElement("button");
-    btn.className = "cmdbtn";
-    btn.title = COPY.commands.runTitle(cmd);
-    const label = document.createElement("span");
-    label.textContent = cmd;
-    const run = document.createElement("span");
-    run.className = "run";
-    run.textContent = COPY.commands.run;
-    btn.append(label, run);
-    btn.addEventListener("click", () => { closeModal(); sendText(cmd); });
-    const d = document.createElement("div");
-    d.className = "d";
-    d.textContent = desc;
-    row.append(btn, d);
-    body.appendChild(row);
-  });
-
-  // ── Footer: version + credit ──
-  const hr = document.createElement("div");
-  hr.className = "help-divider";
-  body.appendChild(hr);
-
+  // ── Version + credit ──
   const footer = document.createElement("div");
   footer.className = "help-footer";
   const ver = document.createElement("div");
