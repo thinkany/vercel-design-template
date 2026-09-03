@@ -2966,7 +2966,7 @@ ipcMain.handle("publish:run", async (event, args) => {
   if (!token) return { ok: false, error: "Connect Vercel first." };
   if (args && args.target === "site") {
     if (!siteLicensed()) return { ok: false, target: "site", error: SITE_NOT_LICENSED };
-    if (!loadCmsSettings(currentProject).enabled) return { ok: false, target: "site", error: "The site builder is off for this project. Turn it on under Pages, Settings to publish." };
+    if (!loadCmsSettings(currentProject).enabled) return { ok: false, target: "site", error: "The site builder is off for this project. Turn it on under CMS, Settings to publish." };
     return publishSite(event, token);
   }
   const design = detectDesign(currentProject);

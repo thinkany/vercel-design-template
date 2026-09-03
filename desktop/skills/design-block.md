@@ -11,7 +11,7 @@ reference the site was built from, and `content/` is the source of truth for wha
 the site says. This skill keeps it that way.
 
 Not this skill: a change to the *design* before promotion (that is `/design`), or
-editing a block's *content* (the Pages panel does that, no model turn).
+editing a block's *content* (the CMS does that, no model turn).
 
 ## 0. Communication protocol, same as `/design`
 
@@ -21,7 +21,7 @@ The designer is watching the Site tab. Suppress technical narration.
 4. **TodoWrite in designer language**: `Designing the testimonials block`,
    `Adding it to the About page`, `Checking the site builds`.
 5. **One short line per milestone.** Design terms, never code terms.
-6. **Close** (§6): where it landed and that its text is now editable in Pages.
+6. **Close** (§6): where it landed and that its text is now editable in the CMS.
 
 **No em-dashes** in anything you say or write.
 
@@ -39,7 +39,7 @@ In ONE turn:
   spacing rhythm, type scale, eyebrow treatment, container width, `@lg:` breaks,
   how it uses the motifs. The new block is a sibling of that one.
 - The page the block is for: `content/pages/<id>.json`. The request may carry a
-  `Page: <title>` line (the app's Pages panel sends one); otherwise the designer
+  `Page: <title>` line (the app's CMS sends one); otherwise the designer
   named it, or it's `home.json`. If a name doesn't match a page, ask in one line.
 
 Do NOT read `site/src/**`; the contract is inlined below. Do not read the
@@ -136,7 +136,7 @@ so the designer sees the block the moment it builds. **No screenshots.**
 ## 5. Close
 
 One short paragraph: what the block is, which page it's on (and its position),
-that its text and images are now editable in the Pages panel, that it's in the
+that its text and images are now editable in the CMS, that it's in the
 block list for other pages, and that both the Site tab and the design tabs show
 it (they render the same content). Mention anything you couldn't do (an interactive
 piece designed static, a mark you didn't have), one line each.

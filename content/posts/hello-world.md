@@ -5,7 +5,7 @@ description: The first post. Posts are markdown files under content/posts.
 tags: [news]
 ---
 
-This is a sample post. Open it in the Pages panel under Posts to edit it, or
+This is a sample post. Open it in the CMS under Posts to edit it, or
 delete it once you have written your own.
 
 ## Headings work

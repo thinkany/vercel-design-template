@@ -228,7 +228,7 @@ them, that the header and footer are the site's chrome, and that from now on the
 Home tab shows the site itself (the design surface renders the promoted blocks
 and content), so what they see there and in the Site tab is one and the same. Then the
 next step: the designer can now add pages and edit copy as content, and the app's
-Site panel is where that happens (or, until it lands, `content/pages/*.json`).
+CMS is where that happens (or, until it lands, `content/pages/*.json`).
 
 Mention anything you could not carry over (a hydrated piece, an image you
 couldn't resolve), one line each. Don't leave it unmentioned.

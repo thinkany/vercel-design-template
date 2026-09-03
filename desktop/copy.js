@@ -31,7 +31,7 @@ window.COPY = {
   preview: {
     siteTab: "Site", // the browser tab for the public website's live preview
     siteOffTitle: "The site builder is off",
-    siteOffBody: "This project's site isn't being previewed. Turn the site builder on under Pages, Settings to see it here.",
+    siteOffBody: "This project's site isn't being previewed. Turn the site builder on under CMS, Settings to see it here.",
     spinningUp: {
       emoji: "⏳",
       title: "We’re spinning up your preview…",
@@ -372,7 +372,7 @@ window.COPY = {
 
   // ── Sidebar drawer titles (the PANELS map) ──────────────────────────────────
   panels: {
-    site: "Pages",
+    site: "CMS",
     help: "About",
     projects: "Switch Project",
     publish: "Publish",
@@ -859,7 +859,7 @@ window.COPY = {
       ownedDomainNote: "A domain you own on Vercel, or a subdomain of one. Leave the subdomain empty to use the domain itself. Applied on the next publish.",
       publishSite: "Publish the site",
       publishSiteChanges: "Publish site changes",
-      cmsOff: "The site builder is off for this project, so the site can't be published. Turn it on under Pages, Settings first.",
+      cmsOff: "The site builder is off for this project, so the site can't be published. Turn it on under CMS, Settings first.",
       liveLabel: "Live at",
       lastPublishedPrefix: "Site published ",
     },
