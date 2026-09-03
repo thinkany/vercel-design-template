@@ -267,6 +267,7 @@ window.COPY = {
   // ── Art Director: the read-only confer report rendered in chat ──────────────
   artDirector: {
     reviewing: (id) => `Art Director is reviewing ${id}…`,
+    reviewingPage: (title) => `Art Director is reviewing the ${title} page…`,
     failed: (why) => `Art Director couldn’t review this design (${why}).`,
   },
   // The Director drawer (Phase 3): recommendations, the modal, and the Archive.
@@ -274,6 +275,11 @@ window.COPY = {
     needDesign: "Open a built design to review it — the Art Director reviews the design you’re previewing.",
     lead: (id) => `Reviewing ${id}. Open a recommendation to read it in full, then apply or dismiss it.`,
     review: "Review this design",
+    scopeLabel: "Review",
+    scopePage: (title) => `The ${title} page`,
+    leadPage: (title) => `Reviewing the ${title} page: its blocks, header and footer. Open a recommendation to read it in full, then apply or dismiss it.`,
+    reviewPage: "Review this page",
+    reReviewPage: "Review this page again",
     reReview: "Review again",
     none: "No recommendations yet. Run a review to get the Art Director’s read.",
     allHandled: "All caught up — nothing active. Re-review to check the latest, or reopen the Archive below.",

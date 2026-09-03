@@ -6101,12 +6101,12 @@ async function updateRerollBtn(url) {
 // The variation the last confer reviewed — so a suggestion's [Apply] can scope its edit
 // to the right variation (only one review runs at a time).
 let lastReviewedVariation = null;
-async function reviewDesign(id) {
+async function reviewDesign(id, page) {
   if (!id || !appHasKey) return; // the critique is an agent turn → needs a key
-  lastReviewedVariation = id;
-  addMsg("system", COPY.artDirector.reviewing(id));
+  lastReviewedVariation = page ? `${id}:${page.id}` : id; // the recs store key
+  addMsg("system", page ? COPY.artDirector.reviewingPage(page.title) : COPY.artDirector.reviewing(id));
   let res;
-  try { res = await window.desktop.reviewDesign(id); }
+  try { res = await window.desktop.reviewDesign(id, page ? page.id : null); }
   catch (e) { addMsg("error", COPY.artDirector.failed(String((e && e.message) || e))); return; }
   if (!res || res.error) { addMsg("error", COPY.artDirector.failed(res && res.error ? res.error : "unknown")); return; }
   // The deterministic lint (res.findings) is INVISIBLE plumbing — it grounds the critique
@@ -6140,9 +6140,18 @@ function buildArtDirectorCritiquePrompt(id, res) {
   const directionJudgment = dirLines.length
     ? `and, most importantly, how well it DELIVERS ON THE DESIGN DIRECTION above: does the page read unmistakably as ${label || "its intended direction"}? do the named motifs and the axes (energy, structure, era, etc.) actually land, or has it drifted back toward a generic centroid? Call out any drift from the direction specifically.`
     : `and whether it reads as its intended design direction.`;
+  // Page scope (a promoted site): the page's content file + the block files it uses.
+  const page = res.pageId ? res.page || { title: res.pageId } : null;
+  const reads = page
+    ? `Read only what you need: the page's content in \`content/pages/${res.pageId}.json\` (its blocks, in order, and every word on the page), the block files it uses (${(res.filesReviewed || []).map((f) => `\`${f}\``).join(", ")}), the site's navigation in \`content/site.json\`, the palette in \`src/variations/${id}/styles/tokens.css\`, and the brief + design direction in \`src/variations/${id}/variation.json\`.`
+    : `Read only what you need: \`src/variations/${id}/components/Home.tsx\` (and any other component in that folder), its palette in \`src/variations/${id}/styles/tokens.css\`, and its brief + design direction in \`src/variations/${id}/variation.json\`.`;
+  const subject = page ? `the "${page.title}" page of the site built from design variation ${id} (blocks: ${(page.blocks || []).join(", ") || "none"})` : `design variation ${id}`;
+  const applyWhere = page
+    ? `give a precise \`apply\` instruction the builder can run verbatim: a DESIGN change edits the block file under \`site/blocks/\` (it changes every page using that block, say so when that matters), a COPY or IMAGE change edits \`content/pages/${res.pageId}.json\``
+    : `give a precise \`apply\` instruction it can run verbatim on \`src/variations/${id}/\``;
   return [
-    `Give your Art Director read of design variation ${id}. It is already built; you are reviewing, not building.`,
-    `Read only what you need: \`src/variations/${id}/components/Home.tsx\` (and any other component in that folder), its palette in \`src/variations/${id}/styles/tokens.css\`, and its brief + design direction in \`src/variations/${id}/variation.json\`.`,
+    `Give your Art Director read of ${subject}. It is already built; you are reviewing, not building.`,
+    reads,
     ``,
     directionBlock,
     `An automated rule + palette pass already ran. Treat these as established fact to build on, not something to re-derive or merely repeat:`,
@@ -6150,7 +6159,7 @@ function buildArtDirectorCritiquePrompt(id, res) {
     ``,
     `Now give the judgment the lint can't: visual hierarchy, spacing rhythm and balance, type pairing and scale, palette harmony and how the palette carries the mood, imagery, ${directionJudgment} Lead with what's working, then the few highest-leverage changes, specific and grounded in the actual page. Keep it tight. Do NOT edit anything; this is advisory.`,
     ``,
-    `Then, ONCE, call the \`suggest\` tool (mcp__artdirector__suggest) with your actionable items as structured cards, most impactful first. For each: a short imperative title, a one-line why, targets (file:line), and a kind: "code" (the builder can edit it: give a precise \`apply\` instruction it can run verbatim on \`src/variations/${id}/\`), "asset" (needs a new/replacement file you can't source, e.g. a photo, no apply), or "decision" (a client/human call, no apply). Whenever a suggestion points at a specific visible section or element, also give an \`anchor\` so the designer can SEE it highlighted on the page instead of hunting: prefer \`anchor.block\` (a data-block value on the section) or \`anchor.text\` (a short exact heading/button label from that element). Fold in the code-actionable lint findings above too.`,
+    `Then, ONCE, call the \`suggest\` tool (mcp__artdirector__suggest) with your actionable items as structured cards, most impactful first. For each: a short imperative title, a one-line why, targets (file:line), and a kind: "code" (the builder can edit it: ${applyWhere}), "asset" (needs a new/replacement file you can't source, e.g. a photo, no apply), or "decision" (a client/human call, no apply). Whenever a suggestion points at a specific visible section or element, also give an \`anchor\` so the designer can SEE it highlighted on the page instead of hunting: prefer \`anchor.block\` (a data-block value on the section) or \`anchor.text\` (a short exact heading/button label from that element). Fold in the code-actionable lint findings above too.`,
   ].join("\n");
 }
 
@@ -6201,33 +6210,64 @@ async function updateDirectorIndicator(id) {
   const v = id || currentPreviewVariation();
   railDirector.classList.remove("has-code", "has-passive");
   if (!v || v === "v00") return;
-  let store = { active: [] };
-  try { store = await window.desktop.loadRecs(v); } catch {}
-  const active = (store && store.active) || [];
+  // On a promoted site recs are stored per page: any page's active recs light the rail.
+  let active = [];
+  try {
+    const siteData = await window.desktop.getSiteContent().catch(() => ({ ready: false, pages: [] }));
+    const keys = siteData.ready && siteData.pages.length ? siteData.pages.map((p) => `${v}:${p.id}`) : [v];
+    for (const k of keys) { const store = await window.desktop.loadRecs(k); active = active.concat((store && store.active) || []); }
+  } catch {}
   if (active.some((r) => r && r.kind === "code")) railDirector.classList.add("has-code");
   else if (active.length) railDirector.classList.add("has-passive");
 }
 
+// On a promoted site the Art Director reviews one PAGE at a time (its blocks + chrome):
+// the design lives in site/blocks + content/pages, and a page with new blocks is the
+// natural unit of review. Recommendations are stored per "<variation>:<page>".
+let directorPage = null; // { id, title, route } of the page being reviewed, or null (design scope)
 async function renderDirector(body) {
   const id = currentPreviewVariation();
   if (!id || id === "v00") { const n = document.createElement("div"); n.className = "muted"; n.textContent = COPY.director.needDesign; body.appendChild(n); return; }
 
+  const siteData = await window.desktop.getSiteContent().catch(() => ({ ready: false, pages: [] }));
+  const pages = siteData.ready ? siteData.pages : [];
+  if (pages.length) {
+    if (!directorPage || !pages.some((p) => p.id === directorPage.id)) {
+      // Default to the page the design surface is showing, else Home.
+      const shown = pages.find((p) => p.id !== "home" && activeTab && activeTab.url && new URLSearchParams((activeTab.url.split("?")[1] || "")).has(p.slug || p.id));
+      const p = shown || pages.find((x) => x.id === "home") || pages[0];
+      directorPage = { id: p.id, title: p.title, route: p.id === "home" ? "" : (p.slug || p.id) };
+    }
+  } else directorPage = null;
+  const key = directorPage ? `${id}:${directorPage.id}` : id;
+
   let store = { active: [], dismissed: [], completed: [] };
-  try { store = await window.desktop.loadRecs(id); } catch {}
-  directorState = { id, active: (store && store.active) || [], dismissed: (store && store.dismissed) || [], completed: (store && store.completed) || [] };
+  try { store = await window.desktop.loadRecs(key); } catch {}
+  directorState = { id: key, vid: id, page: directorPage, active: (store && store.active) || [], dismissed: (store && store.dismissed) || [], completed: (store && store.completed) || [] };
+
+  if (directorPage) {
+    const row = document.createElement("div"); row.className = "setrow";
+    const k = document.createElement("div"); k.className = "k"; k.textContent = COPY.director.scopeLabel;
+    const sel = document.createElement("select"); sel.className = "field";
+    pages.forEach((p) => { const o = document.createElement("option"); o.value = p.id; o.textContent = COPY.director.scopePage(p.title); sel.appendChild(o); });
+    sel.value = directorPage.id;
+    sel.addEventListener("change", () => { const p = pages.find((x) => x.id === sel.value); if (p) { directorPage = { id: p.id, title: p.title, route: p.id === "home" ? "" : (p.slug || p.id) }; refreshDirector(); } });
+    row.append(k, sel); body.appendChild(row);
+  }
 
   const lead = document.createElement("div");
   lead.className = "muted"; lead.style.cssText = "font-size:12.5px;margin-bottom:12px;";
-  lead.textContent = COPY.director.lead(id);
+  lead.textContent = directorPage ? COPY.director.leadPage(directorPage.title) : COPY.director.lead(id);
   body.appendChild(lead);
 
   const reviewBtn = document.createElement("button");
   reviewBtn.className = "panelbtn primary";
-  reviewBtn.textContent = (directorState.active.length || directorState.dismissed.length) ? COPY.director.reReview : COPY.director.review;
+  const reviewed = directorState.active.length || directorState.dismissed.length;
+  reviewBtn.textContent = directorPage ? (reviewed ? COPY.director.reReviewPage : COPY.director.reviewPage) : (reviewed ? COPY.director.reReview : COPY.director.review);
   // The critique is an agent turn → needs a key. Past recs (Completed/Archive) stay viewable.
   reviewBtn.disabled = agentBusy || !appHasKey;
   if (!appHasKey) reviewBtn.title = COPY.director.needKey;
-  reviewBtn.addEventListener("click", () => { reviewDesign(id); closeModal(); });
+  reviewBtn.addEventListener("click", () => { reviewDesign(id, directorPage); closeModal(); });
   body.appendChild(reviewBtn);
 
   if (!directorState.active.length) {
@@ -6460,10 +6500,16 @@ function applyRec(rec) {
   if (!directorState.completed.some((r) => r.id === rec.id)) directorState.completed.push(rec);
   persistDirector();
   closeModal(); // surface the chat where the edit streams
-  const prompt =
-    `[Apply an Art Director recommendation to design variation ${id}.] Make ONLY this change, ` +
-    `editing only files under \`src/variations/${id}/\`. Do not rebuild the page or touch anything else. ` +
-    `Keep to the design rules (tokens/utilities, container queries).\n\n${rec.title}\n${rec.apply}`;
+  const page = directorState.page;
+  const vid = directorState.vid || id;
+  const prompt = page
+    ? `[Apply an Art Director recommendation to the "${page.title}" page of the site.] Make ONLY this change, ` +
+      `editing only the block file(s) under \`site/blocks/\` or the page's content in \`content/pages/${page.id}.json\`, as the instruction says. ` +
+      `Do not touch the design variation folder, do not rebuild the page. Keep to the block contract (tokens/utilities, container queries, static HTML). ` +
+      `Then run \`npx astro build --root site\` to check it builds.\n\n${rec.title}\n${rec.apply}`
+    : `[Apply an Art Director recommendation to design variation ${vid}.] Make ONLY this change, ` +
+      `editing only files under \`src/variations/${vid}/\`. Do not rebuild the page or touch anything else. ` +
+      `Keep to the design rules (tokens/utilities, container queries).\n\n${rec.title}\n${rec.apply}`;
   runAgent(prompt, COPY.director.applyingEcho(rec.title), {});
 }
 
@@ -6992,8 +7038,10 @@ const AD_CARET_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none
 
 async function showAdOnPage(rec) {
   if (!rec || !activeTab || !viteUrl) return;
-  const id = directorState.id || currentPreviewVariation();
+  const id = directorState.vid || currentPreviewVariation();
   if (!id || id === "v00") return;
+  // Page scope: open THAT page in capture mode (its route flag), not the home page.
+  const routeFlag = directorState.page && directorState.page.route ? `&${directorState.page.route}` : "";
   closeRecModal(); closeModal();
   // Walk the whole active list from this rec, so Next steps through every item; fall back to
   // just this rec when it isn't in the active list (e.g. opened from the archive).
@@ -7003,7 +7051,7 @@ async function showAdOnPage(rec) {
   const tab = activeTab;
   adReview = { recs, idx, tab, prevUrl: tab.url, count: 0, expanded: false };
   showAdToolbar();
-  navigate(tab, `${viteUrl}/?v=${id}&capture=desktop`);
+  navigate(tab, `${viteUrl}/?v=${id}${routeFlag}&capture=desktop`);
   onceWebviewLoaded(tab.wv, async () => {
     if (!adReview) return;
     try { await tab.wv.executeJavaScript(AD_HIGHLIGHT_JS); } catch { /* injection blocked → bar still exits */ }

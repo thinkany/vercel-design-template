@@ -125,8 +125,10 @@ function lintSource(file, colorRoles) {
     if (/style=\{\{[^}]*:\s*['"]#[0-9a-fA-F]{3,8}['"]/.test(ln))
       add("review", "tokens-only", "Hardcoded hex in inline style — reference a --ta-* token instead.");
 
-    // rule 1 — container queries, not viewport
-    if (/\b(?:min-h-screen|h-screen|w-screen)\b/.test(ln) || /\[[^\]]*\d*\.?\d*(?:vh|vw|dvh|svh|lvh)\b[^\]]*\]/.test(ln))
+    // rule 1 — container queries, not viewport. Site blocks are exempt from the viewport-UNIT
+    // check: the site isn't framed, and min-h-[100dvh] is the prescribed hero translation.
+    const siteBlock = /^site\/blocks\//.test(file.name);
+    if (!siteBlock && (/\b(?:min-h-screen|h-screen|w-screen)\b/.test(ln) || /\[[^\]]*\d*\.?\d*(?:vh|vw|dvh|svh|lvh)\b[^\]]*\]/.test(ln)))
       add("review", "container-queries", "Viewport unit — reads the window, not the device frame. Use min-h-full / cqi / cqw.");
     if (/(?<!@)\b(?:sm|md|lg|xl|2xl):/.test(ln))
       add("review", "container-queries", "Viewport breakpoint variant — use container variants (@sm:/@lg:) so the preview matches the export.");
@@ -182,6 +184,55 @@ function readDirection(projectDir, variationId) {
   } catch { return null; }
 }
 
+// ---- Page-scoped review (a promoted site) ----------------------------------
+// After promotion the design lives in site/blocks + content/pages; a review scoped
+// to a page lints the blocks that page uses (plus the chrome and the block kit)
+// against the same rules, with the pinned variation's palette and direction.
+function readSiteRegistry(projectDir) {
+  const idx = readFileSafe(path.join(projectDir, "site", "blocks", "index.ts"));
+  const imports = {};
+  for (const m of idx.matchAll(/import\s*\{\s*([A-Za-z0-9_]+)\s*\}\s*from\s*["']\.\/([^"']+)["']/g)) imports[m[1]] = m[2];
+  const body = (idx.match(/export const blocks[^=]*=\s*\{([\s\S]*?)\n\};/) || [])[1] || "";
+  const files = {};
+  for (const line of body.split("\n")) {
+    const t = line.trim().replace(/,$/, "");
+    const m = t.match(/^(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9_-]+))\s*:\s*([A-Za-z0-9_]+)$/);
+    const key = m ? (m[1] || m[2] || m[3]) : (/^[A-Za-z0-9_]+$/.test(t) ? t : null);
+    const ident = m ? m[4] : t;
+    if (!key || !imports[ident]) continue;
+    files[key] = imports[ident] + (imports[ident].endsWith(".tsx") ? "" : ".tsx");
+  }
+  return files;
+}
+function sitePageFiles(projectDir, pageId) {
+  const page = JSON.parse(readFileSafe(path.join(projectDir, "content", "pages", `${pageId}.json`)) || "{}");
+  const registry = readSiteRegistry(projectDir);
+  const blocksDir = path.join(projectDir, "site", "blocks");
+  const seen = new Set();
+  const files = [];
+  const add = (rel) => { const abs = path.join(blocksDir, rel); if (!seen.has(abs) && fs.existsSync(abs)) { seen.add(abs); files.push({ name: path.posix.join("site/blocks", rel), text: readFileSafe(abs) }); } };
+  for (const b of Array.isArray(page.blocks) ? page.blocks : []) if (b && registry[b.type]) add(registry[b.type]);
+  for (const c of ["Header.tsx", "Footer.tsx"]) add(c);
+  try { for (const f of fs.readdirSync(path.join(blocksDir, "lib"))) if (/\.(tsx|ts)$/.test(f)) add(path.join("lib", f)); } catch {}
+  return { page, files };
+}
+function reviewSitePage(projectDir, variationId, pageId) {
+  const { page, files } = sitePageFiles(projectDir, pageId);
+  const palette = readPalette(projectDir, variationId);
+  const colorRoles = registeredColorRoles(projectDir);
+  const findings = [];
+  for (const f of files) findings.push(...lintSource(f, colorRoles));
+  findings.push(...lintPalette(palette));
+  const counts = { high: 0, medium: 0, low: 0 };
+  for (const x of findings) counts[x.severity] = (counts[x.severity] || 0) + 1;
+  return {
+    variationId, pageId, findings, counts,
+    filesReviewed: files.map((f) => f.name),
+    direction: readDirection(projectDir, variationId),
+    page: { title: page.title || pageId, slug: page.slug ?? (pageId === "home" ? "" : pageId), blocks: (page.blocks || []).map((b) => b && b.type).filter(Boolean) },
+  };
+}
+
 function reviewVariation(projectDir, variationId) {
   const files = componentFiles(projectDir, variationId);
   const palette = readPalette(projectDir, variationId);
@@ -195,4 +246,4 @@ function reviewVariation(projectDir, variationId) {
   return { variationId, findings, counts, filesReviewed: files.map((f) => f.name), direction: readDirection(projectDir, variationId) };
 }
 
-module.exports = { reviewVariation, contrastRatio, parseTokens };
+module.exports = { reviewSitePage, reviewVariation, contrastRatio, parseTokens };

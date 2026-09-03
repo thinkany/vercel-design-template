@@ -2433,12 +2433,17 @@ function versionTagForId(id) {
 // Art Director — a READ-ONLY design review the designer confers with. Deterministic
 // (zero model tokens): lints a variation's files + palette against the /design rules.
 // Never edits; returns findings the designer decides on. See docs/art-director-spec.md.
-ipcMain.handle("artdirector:review", (_event, { id } = {}) => {
+ipcMain.handle("artdirector:review", (_event, { id, pageId } = {}) => {
   if (!varietyLicensed()) return { error: "not-licensed" }; // shares the Research/design-variety tier
   if (!currentProject) return { error: "no-project" };
   if (!id) return { error: "no-variation" };
-  try { return require("./artdirector.cjs").reviewVariation(currentProject, id); }
-  catch (e) { return { error: String((e && e.message) || e) }; }
+  try {
+    const ad = require("./artdirector.cjs");
+    // A promoted site: the review is scoped to one PAGE (its blocks + chrome), since
+    // the design now lives in site/blocks + content/pages, not the variation folder.
+    if (pageId) { if (!validPageId(pageId)) return { error: "bad-page" }; return ad.reviewSitePage(currentProject, id, pageId); }
+    return ad.reviewVariation(currentProject, id);
+  } catch (e) { return { error: String((e && e.message) || e) }; }
 });
 
 // ---- Art Director review store (Phase 3): recommendations per variation, persisted so
