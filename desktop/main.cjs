@@ -1457,88 +1457,11 @@ function readBlockRegistry(dir) {
 }
 function readTextSafe(p) { try { return fs.readFileSync(p, "utf8"); } catch { return ""; } }
 
-// ---- Block schemas → default props ------------------------------------------
-// The CMS edits a block's content from its props' SHAPE, so a block must start
-// with every field present. The registry is TSX with zod schemas, so: bundle
-// site/blocks/index.ts with esbuild (shipped for Vite), load it, and walk each
-// block's zod schema into a default props object (strings "", numbers 0,
-// booleans false, enums their first option, objects recursed, arrays with one
-// example item when the schema requires one). Cached in .thinkany/blocks.json
-// against the newest mtime under site/blocks.
-function blocksMtime(dir) {
-  let latest = 0;
-  const walk = (d) => { let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; } for (const e of es) { const a = path.join(d, e.name); if (e.isDirectory()) walk(a); else { try { latest = Math.max(latest, fs.statSync(a).mtimeMs); } catch {} } } };
-  walk(path.join(dir, "site", "blocks"));
-  return latest;
-}
-function zodDefault(schema, depth = 0, templates = null, at = "") {
-  if (!schema || !schema._def || depth > 8) return "";
-  const d = schema._def;
-  const t = d.typeName;
-  const sub = (inner, key) => zodDefault(inner, depth + 1, templates, key === undefined ? at : (at ? `${at}.${key}` : key));
-  switch (t) {
-    case "ZodDefault": {
-      // The declared default, merged over the inner shape's defaults when both are
-      // plain objects, so optional sub-fields still appear in the editor.
-      let dv; try { dv = d.defaultValue(); } catch { dv = undefined; }
-      const inner = sub(d.innerType);
-      if (dv && typeof dv === "object" && !Array.isArray(dv) && inner && typeof inner === "object" && !Array.isArray(inner)) return { ...inner, ...dv };
-      return dv === undefined ? inner : dv;
-    }
-    case "ZodOptional": case "ZodNullable": return sub(d.innerType);
-    case "ZodEffects": return sub(d.schema);
-    case "ZodObject": { const out = {}; const shape = typeof d.shape === "function" ? d.shape() : d.shape; for (const [k, v] of Object.entries(shape)) out[k] = sub(v, k); return out; }
-    case "ZodArray": {
-      // Remember what one item looks like (by dotted path, indices skipped) so the
-      // editor can add to an EMPTY list; seed one item when the schema needs one.
-      const item = sub(d.type);
-      if (templates && at) templates[at] = item;
-      const min = d.minLength && d.minLength.value;
-      return min > 0 ? [item] : [];
-    }
-    case "ZodString": return "";
-    case "ZodNumber": return 0;
-    case "ZodBoolean": return false;
-    case "ZodEnum": return (d.values && d.values[0]) || "";
-    case "ZodNativeEnum": { const vals = Object.values(d.values || {}); return vals[0] ?? ""; }
-    case "ZodLiteral": return d.value;
-    case "ZodUnion": return sub((d.options || [])[0]);
-    case "ZodRecord": return {};
-    default: return "";
-  }
-}
+// Block schema introspection (defaults, list templates, field kinds, rendered marks)
+// lives in block-schema.cjs so it can run outside Electron; esbuild is handed in
+// through unpacked() because the packaged app can't spawn it from inside the asar.
 function introspectBlocks(dir) {
-  const cachePath = path.join(dir, ".thinkany", "blocks.json");
-  const mtime = blocksMtime(dir);
-  const cached = readJsonFile(cachePath);
-  if (cached && cached.mtime === mtime && cached.defaults) return { defaults: cached.defaults, templates: cached.templates || {} };
-  let defaults = {}; let templates = {};
-  try {
-    const esbuild = require(unpacked(path.join(appRoot, "node_modules", "esbuild")));
-    const result = esbuild.buildSync({
-      entryPoints: [path.join(dir, "site", "blocks", "index.ts")],
-      bundle: true, write: false, platform: "node", format: "cjs", target: "node20",
-      jsx: "automatic", tsconfig: path.join(dir, "site", "tsconfig.json"), logLevel: "silent",
-      // Components only matter for their schemas here; keep the runtime deps external.
-      external: ["react", "react-dom", "react/jsx-runtime", "lucide-react", "motion", "motion/*", "astro/zod", "astro:*"],
-    });
-    const code = result.outputFiles[0].text;
-    const { createRequire } = require("node:module");
-    const req = createRequire(path.join(dir, "package.json"));
-    const mod = { exports: {} };
-    new Function("require", "module", "exports", "__filename", "__dirname", code)(req, mod, mod.exports, path.join(dir, "site", "blocks", "index.ts"), path.join(dir, "site", "blocks"));
-    const blocks = mod.exports.blocks || {};
-    for (const [key, def] of Object.entries(blocks)) {
-      const tpl = {};
-      try { defaults[key] = def && def.props ? zodDefault(def.props, 0, tpl, "") : {}; } catch { defaults[key] = {}; }
-      templates[key] = tpl;
-    }
-  } catch (e) {
-    console.warn(`[blocks] introspection failed: ${e.message}`);
-    return cached && cached.defaults ? { defaults: cached.defaults, templates: cached.templates || {} } : { defaults: {}, templates: {} };
-  }
-  try { fs.mkdirSync(path.dirname(cachePath), { recursive: true }); fs.writeFileSync(cachePath, JSON.stringify({ mtime, defaults, templates }, null, 2) + "\n"); } catch {}
-  return { defaults, templates };
+  return require("./block-schema.cjs").introspectBlocks(dir, { esbuild: require(unpacked(path.join(appRoot, "node_modules", "esbuild"))) });
 }
 
 function readSiteContent(dir) {
@@ -1561,7 +1484,13 @@ function readSiteContent(dir) {
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
     site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], seo: seoSettings(site.seo) },
-    pages, posts, blocks: (() => { const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {} }; return readBlockRegistry(dir).map((b) => ({ ...b, defaults: ib.defaults[b.key] || {}, templates: ib.templates[b.key] || {} })); })(),
+    pages, posts, ...(() => {
+      const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {} };
+      return {
+        blocks: readBlockRegistry(dir).map((b) => ({ ...b, defaults: ib.defaults[b.key] || {}, templates: ib.templates[b.key] || {}, fields: (ib.fields && ib.fields[b.key]) || {} })),
+        marks: ib.marks || {}, // the design's icon set, rendered: { key: "<svg…>" }
+      };
+    })(),
     liveUrl: (pub.site && pub.site.url) || null, previewUrl: siteUrl,
   };
 }

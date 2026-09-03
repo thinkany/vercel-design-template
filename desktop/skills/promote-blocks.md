@@ -111,7 +111,11 @@ section's `data-block` in the design.
 4. **Keep `data-block="{id}"`** on the section root (drop `data-block-name`).
 5. **`.optional()` / `.default()` on everything but the one or two fields the
    section can't render without** (usually `heading`, sometimes `image`).
-6. **Shared prop fragments** come from `site/blocks/lib/schema.ts` (`image`,
+6. **Every image is the `image` fragment** (`{ src, alt }`), whether it's content or
+   a background, a photo, a logo or a poster: never a bare string path. The CMS
+   turns `image` props into an upload field and enum props into a choice; a designer
+   is never asked to type a path or a name.
+7. **Shared prop fragments** come from `site/blocks/lib/schema.ts` (`image`,
    `link`, `anchor`); extend that file rather than redefining shapes per block.
 
 **Chrome** (header/footer) goes in `site/blocks/chrome.ts`, NOT the registry:

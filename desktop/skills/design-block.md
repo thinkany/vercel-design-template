@@ -86,7 +86,9 @@ Then one row in `site/blocks/index.ts` (`testimonials,` or `"team-grid": teamGri
    change is a prop; every class, motif, offset and color stays in the component.
    Repeated things are arrays of small objects; `.min()/.max()` when the layout
    only works for a range. Icons go through the design's `marks` map (extend it if
-   the block needs a new mark, drawn in the same family); images are `image`.
+   the block needs a new mark, drawn in the same family); every image, content or
+   background, is the `image` fragment (`{ src, alt }`), never a bare string path.
+   The CMS turns `image` props into an upload field and enums into a choice.
 2. **`.optional()` / `.default()` on everything but the one or two fields the
    block can't render without.** The CMS seeds every field from the schema, so
    optional means "the block still looks right without it".

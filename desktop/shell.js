@@ -2607,15 +2607,45 @@ function siteFlash(host, text) {
   setTimeout(() => s.remove(), 1800);
 }
 
+// Does this prop hold an image? By schema kind when the introspection knows, else
+// by name (image, photo, logo, background, icon…) or by value (a /images path or
+// an image file). A designer never types a path: these get the upload field.
+const IMAGE_KEY = /(image|img|photo|picture|logo|icon|background|cover|thumbnail|thumb|avatar|poster|banner|src)$/i;
+const IMAGE_VALUE = /^\/images\/|\.(avif|webp|png|jpe?g|gif|svg)(\?.*)?$/i;
+function siteLooksLikeImage(key, v, meta) {
+  if (meta && meta.kind === "image") return true;
+  if (meta && meta.kind && meta.kind !== "string") return false;
+  return IMAGE_KEY.test(key) || (typeof v === "string" && IMAGE_VALUE.test(v));
+}
+// A visual choice among the design's marks (enum over site/blocks/lib/marks.tsx).
+function siteMarkPicker(options, value, onPick, marks) {
+  const grid = siteEl("div", "site-marks");
+  const paint = () => grid.querySelectorAll(".site-mark").forEach((b) => b.classList.toggle("on", b.dataset.key === value));
+  options.forEach((k) => {
+    const b = siteEl("button", "site-mark"); b.type = "button"; b.dataset.key = k; b.title = k;
+    b.innerHTML = marks[k];
+    b.addEventListener("click", () => { value = k; onPick(k); paint(); });
+    grid.appendChild(b);
+  });
+  paint();
+  return grid;
+}
+let siteMarks = {}; // the current project's rendered marks, from site:content
+
 // Generic editor for a block's props: strings → input/textarea, numbers, booleans,
 // arrays of strings, and nested objects / arrays of objects (add/remove, a new item
-// cloned from the last one's shape). No schema needed; the build validates.
-function sitePropsEditor(value, onChange, depth = 0, templates = {}, at = "") {
+// cloned from the last one's shape). `ctx` carries the schema introspection
+// ({ templates, fields }): list-item templates and field kinds by dotted path.
+// Without it the value's shape decides; the build validates either way.
+function sitePropsEditor(value, onChange, depth = 0, ctx = {}, at = "") {
+  const templates = ctx.templates || {};
+  const fields = ctx.fields || {};
   const box = siteEl("div", depth ? "" : "site-props");
   const keys = Object.keys(value || {});
   for (const key of keys) {
     const v = value[key];
     const here = at ? `${at}.${key}` : key; // dotted path, list indices skipped
+    const meta = fields[here];
     const label = key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
     if (typeof v === "boolean") {
       const row = siteEl("label", "toggle-row");
@@ -2627,6 +2657,22 @@ function sitePropsEditor(value, onChange, depth = 0, templates = {}, at = "") {
       const { wrap, input } = siteField(label, v, { type: "number" });
       input.addEventListener("input", () => { value[key] = Number(input.value); onChange(); });
       box.appendChild(wrap);
+    } else if (typeof v === "string" && meta && meta.kind === "enum" && meta.options && meta.options.length) {
+      // A choice. Over the design's marks it's a visual picker; otherwise a select.
+      const wrap = siteEl("div", "site-kv");
+      wrap.appendChild(siteEl("div", "k", label));
+      if (meta.options.every((o) => siteMarks[o])) {
+        wrap.appendChild(siteMarkPicker(meta.options, v, (k) => { value[key] = k; onChange(); }, siteMarks));
+      } else {
+        const sel = document.createElement("select"); sel.className = "field";
+        meta.options.forEach((o) => { const opt = document.createElement("option"); opt.value = String(o); opt.textContent = String(o).replace(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase()); sel.appendChild(opt); });
+        sel.value = v; sel.addEventListener("change", () => { value[key] = sel.value; onChange(); });
+        wrap.appendChild(sel);
+      }
+      box.appendChild(wrap);
+    } else if (typeof v === "string" && siteLooksLikeImage(key, v, meta)) {
+      // A bare path prop: the upload field, writing the path back (no alt to keep).
+      box.appendChild(siteImageControl(v, (next) => { value[key] = next ? next.src : ""; onChange(); }, { label, noAlt: true }));
     } else if (typeof v === "string") {
       const { wrap, input } = siteField(label, v, { textarea: v.length > 60 || /\n/.test(v) });
       input.addEventListener("input", () => { value[key] = input.value; onChange(); });
@@ -2659,7 +2705,7 @@ function sitePropsEditor(value, onChange, depth = 0, templates = {}, at = "") {
             );
             head.appendChild(acts);
             card.appendChild(head);
-            if (item && typeof item === "object") card.appendChild(sitePropsEditor(item, onChange, depth + 1, templates, here));
+            if (item && typeof item === "object") card.appendChild(sitePropsEditor(item, onChange, depth + 1, ctx, here));
             list.appendChild(card);
           });
         };
@@ -2682,7 +2728,7 @@ function sitePropsEditor(value, onChange, depth = 0, templates = {}, at = "") {
     } else if (v && typeof v === "object") {
       const wrap = siteEl("div", "site-kv");
       wrap.appendChild(siteEl("div", "k", label));
-      wrap.appendChild(sitePropsEditor(v, onChange, depth + 1, templates, here));
+      wrap.appendChild(sitePropsEditor(v, onChange, depth + 1, ctx, here));
       box.appendChild(wrap);
     }
   }
@@ -2745,7 +2791,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
         // Older content may lack fields the block accepts: fill them from the defaults.
         const dflt = (def && def.defaults) || {};
         b.props = { ...JSON.parse(JSON.stringify(dflt)), ...(b.props || {}) };
-        blockList.appendChild(sitePropsEditor(b.props, markDirty, 0, (def && def.templates) || {}));
+        blockList.appendChild(sitePropsEditor(b.props, markDirty, 0, { templates: (def && def.templates) || {}, fields: (def && def.fields) || {} }));
       }
     });
   };
@@ -2996,7 +3042,7 @@ function siteBlocksEditor(list, blocks, onChange, stateKey) {
       if (siteRailState.expanded[ek]) {
         const dflt = (def && def.defaults) || {};
         b.props = { ...JSON.parse(JSON.stringify(dflt)), ...(b.props || {}) };
-        host.appendChild(sitePropsEditor(b.props, onChange, 0, (def && def.templates) || {}));
+        host.appendChild(sitePropsEditor(b.props, onChange, 0, { templates: (def && def.templates) || {}, fields: (def && def.fields) || {} }));
       }
     });
     if (blocks.length) {
@@ -3350,7 +3396,7 @@ function siteRichEditor(markdown, onChange, { compact } = {}) {
  * { src, alt } (or a string path for legacy props); onChange(next) receives
  * { src, alt } or "" when cleared.
  */
-function siteImageControl(value, onChange, { label } = {}) {
+function siteImageControl(value, onChange, { label, noAlt } = {}) {
   const M = COPY.site.media;
   let cur = typeof value === "string" ? { src: value, alt: "" } : (value && typeof value === "object" ? { src: value.src || "", alt: value.alt || "" } : { src: "", alt: "" });
   const wrap = siteEl("div", "site-kv");
@@ -3369,9 +3415,8 @@ function siteImageControl(value, onChange, { label } = {}) {
   links.append(chooseLink, removeLink);
   wrap.appendChild(links);
 
-  wrap.appendChild(siteEl("div", "k site-img-altlabel", M.altLabel));
   const alt = document.createElement("input"); alt.className = "field"; alt.value = cur.alt;
-  wrap.appendChild(alt);
+  if (!noAlt) { wrap.appendChild(siteEl("div", "k site-img-altlabel", M.altLabel)); wrap.appendChild(alt); }
 
   const emit = () => onChange(cur.src ? { src: cur.src, alt: alt.value.trim() } : "");
   const paint = () => {
@@ -3617,6 +3662,7 @@ async function renderSite(body) {
   const typesData = await window.desktop.getSiteTypes().catch(() => ({ types: [], entries: {} }));
   const ctx = { types: typesData.types || [], entries: typesData.entries || {}, blocks: data.blocks };
   mediaIndex = await window.desktop.listMedia().catch(() => []); // thumbnails for image fields
+  siteMarks = data.marks || {};
 
   // ── Tabs: Pages · Posts · Types · Navigation · Settings ──
   const TABS = ["pages", "posts", "types", "nav", "settings"];
