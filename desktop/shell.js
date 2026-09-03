@@ -703,6 +703,7 @@ function resetBuildReveal() {
 function revealDuringBuild() {
   if (tabsOpened || !viteUrl) return;
   tabsOpened = true;
+  setTimeout(syncSiteTabOnOpen, 0);
   homeBuilding = true;
   stopWorking();
   previewph.hidden = true;
@@ -782,6 +783,7 @@ async function healBuildPreview() {
 async function showBrowser(landOn) {
   if (!viteUrl || tabsOpened) return;
   tabsOpened = true; // claim immediately so re-entrant calls don't double-open
+  setTimeout(syncSiteTabOnOpen, 0);
   // Keep the "Working…" placeholder up until the server actually SERVES the
   // styleguide (200). Vite may be up but still compiling the just-created
   // variation, so opening now would flash blank tabs. Bounded (~10s) — the
@@ -811,11 +813,12 @@ async function showBrowser(landOn) {
 // The "Site" tab: the public website's live preview (its own Astro server), shown
 // next to Home + Style guide once the design has been promoted. Idempotent: opens
 // the tab if the site server is up and no Site tab exists yet; never steals focus.
-function ensureSiteTab() {
-  if (!siteUrl || !tabsOpened) return;
+function ensureSiteTab(url) {
+  url = url || (siteUrl ? siteUrl + "/" : null);
+  if (!url || !tabsOpened) return;
   if (tabs.some((t) => t.site)) return;
   const keep = activeTab;
-  const tab = openTab(siteUrl + "/", COPY.preview.siteTab);
+  const tab = openTab(url, COPY.preview.siteTab);
   tab.site = true;
   if (keep && tabs.includes(keep)) setActiveTab(keep);
 }
@@ -826,6 +829,24 @@ window.desktop.onSiteReady((url) => {
   if (existing) navigate(existing, url + "/"); // restarted on a new port → follow it
   else ensureSiteTab();
 });
+// Site builder switched off (or opened off): the Site tab shows a note, not the site.
+function siteOffPage() {
+  const P = COPY.preview;
+  const html = `<!doctype html><meta charset="utf-8"><title>${P.siteTab}</title><style>html,body{height:100%;margin:0}body{display:flex;align-items:center;justify-content:center;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#555;background:#fafafb;text-align:center}div{max-width:420px;padding:24px}h1{font-size:15px;font-weight:600;color:#17171b;margin:0 0 6px}p{margin:0}</style><div><h1>${P.siteOffTitle}</h1><p>${P.siteOffBody}</p></div>`;
+  return "data:text/html;charset=utf-8," + encodeURIComponent(html);
+}
+function showSiteOff() {
+  siteUrl = null;
+  const existing = tabs.find((t) => t.site);
+  if (existing) navigate(existing, siteOffPage());
+  else ensureSiteTab(siteOffPage());
+}
+window.desktop.onSiteOff(() => { if (currentStage === "workspace") showSiteOff(); });
+// The "off" signal on project open can land before the workspace tabs exist (the
+// "ready" one arrives seconds later, after Astro starts); ask once the tabs are up.
+async function syncSiteTabOnOpen() {
+  try { const st = await window.desktop.getSiteStatus(); if (st && st.ready && st.enabled === false && !st.url) showSiteOff(); } catch {}
+}
 
 function refreshPreview() {
   // The intake host owns the pane while an onboarding conversation is live — don't
@@ -2524,9 +2545,16 @@ function renderSitePublish(body, site, domainRefreshers) {
   const lead = document.createElement("p");
   lead.className = "muted";
   lead.style.margin = "0 0 12px";
-  lead.textContent = site.ready ? S.lead : (S.notReady[site.reason] || S.notReady["not-promoted"]);
+  lead.textContent = site.ready ? (site.enabled === false ? S.cmsOff : S.lead) : (S.notReady[site.reason] || S.notReady["not-promoted"]);
   body.appendChild(lead);
   if (!site.ready) return;
+  if (site.enabled === false) {
+    // Off per project (the Settings switch): the button is shown but can't run.
+    const off = document.createElement("button"); off.className = "panelbtn primary"; off.disabled = true;
+    off.textContent = site.url ? S.publishSiteChanges : S.publishSite; off.title = S.cmsOff;
+    body.appendChild(off);
+    return;
+  }
 
   let liveBox = null;
   if (site.url) {

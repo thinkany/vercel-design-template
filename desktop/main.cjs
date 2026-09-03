@@ -1034,9 +1034,13 @@ function startSiteFor(projectDir) {
 // already up. Safe to call often (project open, after every agent turn).
 function maybeStartSite(projectDir) {
   if (!projectDir || projectDir !== currentProject) return;
-  if (siteProc || !siteReady(projectDir).ready) return;
+  if (!siteReady(projectDir).ready) return;
+  // Site builder off (Settings switch): no preview server; the Site tab shows a note.
+  if (!loadCmsSettings(projectDir).enabled) { if (siteProc) stopSite(); sendSiteOff(); return; }
+  if (siteProc) return;
   startSiteFor(projectDir).catch((e) => console.error("[main] site server failed:", e.message));
 }
+function sendSiteOff() { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("site:off"); }
 // A one-shot production build of the site (what Vercel will run), so a broken
 // block or content fails HERE with the real message, not on Vercel five minutes
 // later. Returns { ok, log } — log is the tail of the build output.
@@ -1948,7 +1952,12 @@ ipcMain.handle("cms:getSettings", () => ({ ...loadCmsSettings(currentProject), d
 ipcMain.handle("cms:setSettings", (_e, patch) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
-  try { return { ok: true, ...saveCmsSettings(currentProject, patch || {}) }; } catch (e) { return { ok: false, error: e.message }; }
+  try {
+    const next = saveCmsSettings(currentProject, patch || {});
+    // The switch moved: start the preview server, or stop it and tell the Site tab.
+    if (patch && typeof patch.enabled === "boolean") maybeStartSite(currentProject);
+    return { ok: true, ...next };
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 const MEDIA_CONVERT = new Set([".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".heic", ".heif"]);
 function convertImage(inPath, outPath, { maxWidth = MEDIA_MAX_WIDTH, quality = MEDIA_QUALITY } = {}) {
@@ -2028,7 +2037,7 @@ ipcMain.handle("media:delete", (_e, { rel } = {}) => {
 ipcMain.handle("site:status", () => {
   if (!currentProject) return { ready: false, reason: "no-project", url: null };
   const r = siteReady(currentProject);
-  return { ready: r.ready, reason: r.ready ? null : r.reason, url: siteUrl, running: !!siteProc };
+  return { ready: r.ready, reason: r.ready ? null : r.reason, url: siteUrl, running: !!siteProc, enabled: loadCmsSettings(currentProject).enabled };
 });
 ipcMain.handle("site:start", async () => {
   if (!currentProject) return { ok: false, error: "No project is open." };
@@ -2937,6 +2946,7 @@ ipcMain.handle("publish:status", () => {
       return {
         ready: r.ready,
         reason: r.ready ? null : r.reason,
+        enabled: loadCmsSettings(currentProject).enabled, // the Settings switch; off = can't publish
         url: sr.url || null,
         projectName: sr.projectName || `${deriveProjectName(currentProject)}-site`,
         lastDeployAt: sr.lastDeployAt || null,
@@ -2956,6 +2966,7 @@ ipcMain.handle("publish:run", async (event, args) => {
   if (!token) return { ok: false, error: "Connect Vercel first." };
   if (args && args.target === "site") {
     if (!siteLicensed()) return { ok: false, target: "site", error: SITE_NOT_LICENSED };
+    if (!loadCmsSettings(currentProject).enabled) return { ok: false, target: "site", error: "The site builder is off for this project. Turn it on under Pages, Settings to publish." };
     return publishSite(event, token);
   }
   const design = detectDesign(currentProject);

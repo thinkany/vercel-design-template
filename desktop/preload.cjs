@@ -140,6 +140,7 @@ contextBridge.exposeInMainWorld("desktop", {
   saveSiteSeo: (seo) => ipcRenderer.invoke("site:saveSeo", { seo }),
   getLlmsDefault: () => ipcRenderer.invoke("site:llmsDefault"),
   setCmsSettings: (patch) => ipcRenderer.invoke("cms:setSettings", patch),
+  onSiteOff: (cb) => { const l = () => cb(); ipcRenderer.on("site:off", l); return () => ipcRenderer.removeListener("site:off", l); },
   onSiteReady: (cb) => {
     const listener = (_e, url) => cb(url);
     ipcRenderer.on("site:ready", listener);
