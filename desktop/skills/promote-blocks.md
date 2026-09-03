@@ -102,9 +102,15 @@ section's `data-block` in the design.
    client change this without a designer?": yes → prop, no → markup.
 2. **Repeated things are arrays of objects** with a small shape (`{ title, body,
    icon }`, `{ label, href }`), with `.min()/.max()` when the layout only works for
-   a range (three staggered cards → `.min(1).max(3)`). Icons drawn in the design
-   move to `site/blocks/lib/marks.tsx` as a keyed map, and the prop is
-   `z.enum(keys)` so content picks an icon by name.
+   a range (three staggered cards → `.min(1).max(3)`). **Every icon a section
+   shows per item becomes a mark**: an SVG drawn inline in the design, an icon
+   imported from a library (`lucide-react` etc: inline its paths), or a mark
+   already in the design's set all move to `site/blocks/lib/marks.tsx` as a keyed
+   map of inline SVG components (`fill="currentColor"`, so the block can color and
+   animate fill and stroke), and the prop is `z.enum(keys)`. Never `z.string()`
+   holding an icon name, and never SVG markup in content: the CMS turns the enum
+   into a visual picker of the marks, and a string into a text box the designer
+   can't fill.
 3. **Keep every class exactly.** `@lg:`, `cqi`, `color-mix(...)`, arbitrary values,
    token utilities: the site wraps pages in the same `@container` the design
    surface uses, so nothing needs translating. Don't "clean up" while promoting.

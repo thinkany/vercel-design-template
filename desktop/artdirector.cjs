@@ -125,6 +125,11 @@ function lintSource(file, colorRoles) {
     if (/style=\{\{[^}]*:\s*['"]#[0-9a-fA-F]{3,8}['"]/.test(ln))
       add("review", "tokens-only", "Hardcoded hex in inline style — reference a --ta-* token instead.");
 
+    // SITE BLOCKS — an icon prop as free text: the CMS shows a text box asking for a
+    // name the designer can't know. It should be a mark enum (a visual picker).
+    if (/^site\/blocks\//.test(file.name) && /\b(icon|glyph|mark|symbol)\w*\s*:\s*z\.string\(\)/.test(ln))
+      add("medium", "content-fields", "Icon prop is a free string — move the icon into site/blocks/lib/marks.tsx and make the prop z.enum(keys), so the CMS offers a picker instead of a text box.");
+
     // rule 1 — container queries, not viewport. Site blocks are exempt from the viewport-UNIT
     // check: the site isn't framed, and min-h-[100dvh] is the prescribed hero translation.
     const siteBlock = /^site\/blocks\//.test(file.name);

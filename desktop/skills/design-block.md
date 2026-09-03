@@ -86,7 +86,9 @@ Then one row in `site/blocks/index.ts` (`testimonials,` or `"team-grid": teamGri
    change is a prop; every class, motif, offset and color stays in the component.
    Repeated things are arrays of small objects; `.min()/.max()` when the layout
    only works for a range. Icons go through the design's `marks` map (extend it if
-   the block needs a new mark, drawn in the same family); every image, content or
+   the block needs a new mark, drawn in the same family, inline SVG with
+   `fill="currentColor"`); an icon prop is `z.enum(keys)`, never a string holding
+   a name or markup; every image, content or
    background, is the `image` fragment (`{ src, alt }`), never a bare string path.
    The CMS turns `image` props into an upload field and enums into a choice.
 2. **`.optional()` / `.default()` on everything but the one or two fields the
