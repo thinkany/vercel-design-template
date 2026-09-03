@@ -1264,6 +1264,11 @@ function effectiveVoice(dir) {
 function researchLicensed() {
   return !!(process.env.DESIGN_LICENSE_KEY && process.env.DESIGN_LICENSE_KEY.trim());
 }
+// The site builder (CMS writes, media, icons, site publish) is part of the same bundle
+// (Rob, 2026-09-03). Reads and the Site tab preview stay open, so a lapsed license
+// still shows the site; only changing it needs the key.
+function siteLicensed() { return researchLicensed(); }
+const SITE_NOT_LICENSED = "The site builder is part of the Design license. Add your key under Keys & Licenses to make changes.";
 // A stable, anonymous per-install id — the "designer" identity the cloud design-variety
 // endpoint keys anti-repetition memory on (lever 3, §9), so variety compounds across ALL of
 // this designer's projects. Persisted under the PINNED userData (survives app rename/upgrade,
@@ -1486,6 +1491,7 @@ function readSiteContent(dir) {
   const pub = loadPublish(dir);
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
+    licensed: siteLicensed(), // the CMS drawer shows a licensing note instead of the editor when false
     site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
     pages, posts, ...(() => {
       const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {} };
@@ -1549,6 +1555,7 @@ ipcMain.handle("site:content", () => {
 // Save a page. `data` is the whole page document ({ title, slug, seo, blocks });
 // the block props are written as given, the build validates them.
 ipcMain.handle("site:savePage", (_e, { id, data } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (!validPageId(id)) return { ok: false, error: "Bad page id." };
   if (!data || typeof data !== "object" || typeof data.title !== "string" || !data.title.trim()) return { ok: false, error: "A page needs a title." };
@@ -1567,6 +1574,7 @@ ipcMain.handle("site:savePage", (_e, { id, data } = {}) => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle("site:createPage", (_e, { title } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   const t = String(title || "").trim();
   if (!t) return { ok: false, error: "Give the page a title." };
@@ -1582,6 +1590,7 @@ ipcMain.handle("site:createPage", (_e, { title } = {}) => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle("site:deletePage", (_e, { id } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (!validPageId(id) || id === "home") return { ok: false, error: "The home page can't be deleted." };
   try { fs.rmSync(pageFile(currentProject, id), { force: true }); return { ok: true }; }
@@ -1590,6 +1599,7 @@ ipcMain.handle("site:deletePage", (_e, { id } = {}) => {
 // Site-level settings: nav + footer links (the pinned design + url are managed by
 // promotion and publishing, so they're preserved, never edited here).
 ipcMain.handle("site:saveSite", (_e, { nav, footerLinks } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   const p = path.join(siteContentDir(currentProject), "site.json");
   const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
@@ -1603,6 +1613,7 @@ ipcMain.handle("site:saveSite", (_e, { nav, footerLinks } = {}) => {
 
 // Site icons: paths under public/ (the Settings tab's upload fields write them).
 ipcMain.handle("site:saveFavicon", (_e, { favicon } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   const p = path.join(siteContentDir(currentProject), "site.json");
   const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
@@ -1613,6 +1624,7 @@ ipcMain.handle("site:saveFavicon", (_e, { favicon } = {}) => {
 });
 ipcMain.handle("site:llmsDefault", () => (currentProject ? generatedLlms(currentProject) : ""));
 ipcMain.handle("site:saveSeo", (_e, { seo } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   const p = path.join(siteContentDir(currentProject), "site.json");
   const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
@@ -1695,6 +1707,7 @@ function todayIso() { return new Date().toISOString().slice(0, 10); }
 
 ipcMain.handle("site:posts", () => (currentProject ? readPosts(currentProject) : []));
 ipcMain.handle("site:savePost", (_e, { id, data } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (!validPageId(id)) return { ok: false, error: "Bad post id." };
   if (!data || typeof data.title !== "string" || !data.title.trim()) return { ok: false, error: "A post needs a title." };
@@ -1718,6 +1731,7 @@ ipcMain.handle("site:savePost", (_e, { id, data } = {}) => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle("site:createPost", (_e, { title } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   const t = String(title || "").trim();
   if (!t) return { ok: false, error: "Give the post a title." };
@@ -1731,6 +1745,7 @@ ipcMain.handle("site:createPost", (_e, { title } = {}) => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle("site:deletePost", (_e, { id } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (!validPageId(id)) return { ok: false, error: "Bad post id." };
   try { fs.rmSync(postFile(currentProject, id), { force: true }); return { ok: true }; }
@@ -1797,6 +1812,7 @@ ipcMain.handle("site:types", () => {
 // Save one type (create or replace by key). The folder is created so the
 // collection loader has something to read.
 ipcMain.handle("site:saveType", (_e, { type } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   const r = cleanType(type); if (r.error) return { ok: false, error: r.error };
   const types = readTypes(currentProject);
@@ -1808,11 +1824,13 @@ ipcMain.handle("site:saveType", (_e, { type } = {}) => {
 // Remove a type declaration. Its entries stay on disk (never destructive here);
 // they are simply no longer built.
 ipcMain.handle("site:deleteType", (_e, { key } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   const types = readTypes(currentProject).filter((t) => t.key !== key);
   try { writeTypes(currentProject, types); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle("site:saveEntry", (_e, { key, id, data } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (!validTypeKey(key) || !validPageId(id)) return { ok: false, error: "Bad type or entry id." };
   if (!data || typeof data.title !== "string" || !data.title.trim()) return { ok: false, error: "An entry needs a title." };
@@ -1836,6 +1854,7 @@ ipcMain.handle("site:saveEntry", (_e, { key, id, data } = {}) => {
   catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle("site:createEntry", (_e, { key, title } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (!validTypeKey(key)) return { ok: false, error: "Bad type." };
   const t = String(title || "").trim(); if (!t) return { ok: false, error: "Give it a title." };
@@ -1846,6 +1865,7 @@ ipcMain.handle("site:createEntry", (_e, { key, title } = {}) => {
   catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle("site:deleteEntry", (_e, { key, id } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (!validTypeKey(key) || !validPageId(id)) return { ok: false, error: "Bad type or entry id." };
   try { fs.rmSync(entryFile(currentProject, key, id), { force: true }); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
@@ -1923,6 +1943,7 @@ function saveCmsSettings(dir, patch) {
 }
 ipcMain.handle("cms:getSettings", () => ({ ...loadCmsSettings(currentProject), defaults: cmsDefaults() }));
 ipcMain.handle("cms:setSettings", (_e, patch) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   try { return { ok: true, ...saveCmsSettings(currentProject, patch || {}) }; } catch (e) { return { ok: false, error: e.message }; }
 });
@@ -1964,6 +1985,7 @@ async function importMediaFiles(paths, { raw } = {}) {
   return { ok: true, added: added.map((n) => `/images/${n}`) };
 }
 ipcMain.handle("media:upload", async () => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   const res = await dialog.showOpenDialog(mainWindow, {
     title: "Add images",
@@ -1977,6 +1999,7 @@ ipcMain.handle("media:upload", async () => {
 // designer's "upload" for icons a block draws inline. marks.tsx changes → the blocks
 // folder mtime moves → the next site:content re-introspects and the picker has it.
 ipcMain.handle("marks:add", async () => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   const res = await dialog.showOpenDialog(mainWindow, { title: "Add an icon", properties: ["openFile"], filters: [{ name: "SVG", extensions: ["svg"] }] });
   if (res.canceled || !res.filePaths.length) return { ok: false, canceled: true };
@@ -1985,12 +2008,14 @@ ipcMain.handle("marks:add", async () => {
 });
 // Dropped files (the renderer resolves their paths through webUtils in the preload).
 ipcMain.handle("media:import", (_e, { paths, raw } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   const list = (Array.isArray(paths) ? paths : []).filter((p) => typeof p === "string" && path.isAbsolute(p) && fs.existsSync(p));
   if (!list.length) return { ok: true, added: [] };
   return importMediaFiles(list, { raw: !!raw });
 });
 ipcMain.handle("media:delete", (_e, { rel } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (typeof rel !== "string" || rel.includes("..") || path.isAbsolute(rel)) return { ok: false, error: "Bad path." };
   try { fs.rmSync(path.join(mediaDir(currentProject), rel), { force: true }); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
@@ -2926,7 +2951,10 @@ ipcMain.handle("publish:run", async (event, args) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   const token = await vercelAccessToken();
   if (!token) return { ok: false, error: "Connect Vercel first." };
-  if (args && args.target === "site") return publishSite(event, token);
+  if (args && args.target === "site") {
+    if (!siteLicensed()) return { ok: false, target: "site", error: SITE_NOT_LICENSED };
+    return publishSite(event, token);
+  }
   const design = detectDesign(currentProject);
   if (!design.active || !design.previewReady) {
     return { ok: false, error: "There's nothing to publish yet — finish a design first." };

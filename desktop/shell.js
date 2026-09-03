@@ -3724,6 +3724,12 @@ async function renderSite(body) {
   destroyLiveEditors();
   const data = await window.desktop.getSiteContent().catch(() => ({ ready: false, reason: "no-project", pages: [], blocks: [], site: { nav: [], footerLinks: [] } }));
   const refresh = () => { if (RAILS.site.classList.contains("active")) openModal("site"); };
+  if (data.licensed === false) {
+    // Part of the Design bundle: without the key the drawer explains, the Site tab still previews.
+    body.appendChild(siteEl("div", "muted", COPY.site.lead)).style.cssText = "font-size:12.5px;margin-bottom:12px;";
+    body.appendChild(siteEl("div", "muted", COPY.site.notLicensed));
+    return;
+  }
   if (!data.ready) {
     body.appendChild(siteEl("div", "muted", COPY.site.lead)).style.cssText = "font-size:12.5px;margin-bottom:12px;";
     body.appendChild(siteEl("div", "muted", COPY.site.notReady[data.reason] || COPY.site.notReady["not-promoted"]));

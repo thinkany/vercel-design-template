@@ -387,6 +387,7 @@ window.COPY = {
   // ── Site rail: pages, SEO, blocks and navigation, edited as content ──
   site: {
     lead: "The pages of your site, their search settings, the blocks on each, and the navigation. Edits save to the project and show in the Site tab right away.",
+    notLicensed: "The site builder is part of the Design, Research & Art Director license. Add your key under Keys & Licenses to edit pages, posts and settings and to publish the site.",
     notReady: {
       "no-site": "This project doesn’t have a site yet.",
       "not-promoted": "Approve a design and run /promote-blocks in the chat. The site is built from that; then its pages appear here.",
@@ -778,8 +779,8 @@ window.COPY = {
     pasteClaudeKey: "sk-ant-…",
     saveKey: "Save key",
     removeKey: "Remove key",
-    designLabel: "Design, Research & Art Director",
-    designDesc: "Unlocks design directions, competitor research, and the Art Director review.",
+    designLabel: "Design, Research, Art Director & Site builder",
+    designDesc: "Unlocks design directions, competitor research, the Art Director review, and the site builder (pages, posts, media, publishing).",
     figmaLabel: "Figma Export",
     figmaDesc: "Unlocks exporting your designs to Figma.",
     status: "License",
