@@ -1471,30 +1471,38 @@ function blocksMtime(dir) {
   walk(path.join(dir, "site", "blocks"));
   return latest;
 }
-function zodDefault(schema, depth = 0) {
+function zodDefault(schema, depth = 0, templates = null, at = "") {
   if (!schema || !schema._def || depth > 8) return "";
   const d = schema._def;
   const t = d.typeName;
+  const sub = (inner, key) => zodDefault(inner, depth + 1, templates, key === undefined ? at : (at ? `${at}.${key}` : key));
   switch (t) {
     case "ZodDefault": {
       // The declared default, merged over the inner shape's defaults when both are
       // plain objects, so optional sub-fields still appear in the editor.
       let dv; try { dv = d.defaultValue(); } catch { dv = undefined; }
-      const inner = zodDefault(d.innerType, depth + 1);
+      const inner = sub(d.innerType);
       if (dv && typeof dv === "object" && !Array.isArray(dv) && inner && typeof inner === "object" && !Array.isArray(inner)) return { ...inner, ...dv };
       return dv === undefined ? inner : dv;
     }
-    case "ZodOptional": case "ZodNullable": return zodDefault(d.innerType, depth + 1);
-    case "ZodEffects": return zodDefault(d.schema, depth + 1);
-    case "ZodObject": { const out = {}; const shape = typeof d.shape === "function" ? d.shape() : d.shape; for (const [k, v] of Object.entries(shape)) out[k] = zodDefault(v, depth + 1); return out; }
-    case "ZodArray": { const min = d.minLength && d.minLength.value; return min > 0 ? [zodDefault(d.type, depth + 1)] : []; }
+    case "ZodOptional": case "ZodNullable": return sub(d.innerType);
+    case "ZodEffects": return sub(d.schema);
+    case "ZodObject": { const out = {}; const shape = typeof d.shape === "function" ? d.shape() : d.shape; for (const [k, v] of Object.entries(shape)) out[k] = sub(v, k); return out; }
+    case "ZodArray": {
+      // Remember what one item looks like (by dotted path, indices skipped) so the
+      // editor can add to an EMPTY list; seed one item when the schema needs one.
+      const item = sub(d.type);
+      if (templates && at) templates[at] = item;
+      const min = d.minLength && d.minLength.value;
+      return min > 0 ? [item] : [];
+    }
     case "ZodString": return "";
     case "ZodNumber": return 0;
     case "ZodBoolean": return false;
     case "ZodEnum": return (d.values && d.values[0]) || "";
     case "ZodNativeEnum": { const vals = Object.values(d.values || {}); return vals[0] ?? ""; }
     case "ZodLiteral": return d.value;
-    case "ZodUnion": return zodDefault((d.options || [])[0], depth + 1);
+    case "ZodUnion": return sub((d.options || [])[0]);
     case "ZodRecord": return {};
     default: return "";
   }
@@ -1503,8 +1511,8 @@ function introspectBlocks(dir) {
   const cachePath = path.join(dir, ".thinkany", "blocks.json");
   const mtime = blocksMtime(dir);
   const cached = readJsonFile(cachePath);
-  if (cached && cached.mtime === mtime && cached.defaults) return cached.defaults;
-  let defaults = {};
+  if (cached && cached.mtime === mtime && cached.defaults) return { defaults: cached.defaults, templates: cached.templates || {} };
+  let defaults = {}; let templates = {};
   try {
     const esbuild = require(unpacked(path.join(appRoot, "node_modules", "esbuild")));
     const result = esbuild.buildSync({
@@ -1521,14 +1529,16 @@ function introspectBlocks(dir) {
     new Function("require", "module", "exports", "__filename", "__dirname", code)(req, mod, mod.exports, path.join(dir, "site", "blocks", "index.ts"), path.join(dir, "site", "blocks"));
     const blocks = mod.exports.blocks || {};
     for (const [key, def] of Object.entries(blocks)) {
-      try { defaults[key] = def && def.props ? zodDefault(def.props) : {}; } catch { defaults[key] = {}; }
+      const tpl = {};
+      try { defaults[key] = def && def.props ? zodDefault(def.props, 0, tpl, "") : {}; } catch { defaults[key] = {}; }
+      templates[key] = tpl;
     }
   } catch (e) {
     console.warn(`[blocks] introspection failed: ${e.message}`);
-    return cached && cached.defaults ? cached.defaults : {};
+    return cached && cached.defaults ? { defaults: cached.defaults, templates: cached.templates || {} } : { defaults: {}, templates: {} };
   }
-  try { fs.mkdirSync(path.dirname(cachePath), { recursive: true }); fs.writeFileSync(cachePath, JSON.stringify({ mtime, defaults }, null, 2) + "\n"); } catch {}
-  return defaults;
+  try { fs.mkdirSync(path.dirname(cachePath), { recursive: true }); fs.writeFileSync(cachePath, JSON.stringify({ mtime, defaults, templates }, null, 2) + "\n"); } catch {}
+  return { defaults, templates };
 }
 
 function readSiteContent(dir) {
@@ -1551,7 +1561,7 @@ function readSiteContent(dir) {
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
     site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], seo: seoSettings(site.seo) },
-    pages, posts, blocks: (() => { const defs = r.ready ? introspectBlocks(dir) : {}; return readBlockRegistry(dir).map((b) => ({ ...b, defaults: defs[b.key] || {} })); })(),
+    pages, posts, blocks: (() => { const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {} }; return readBlockRegistry(dir).map((b) => ({ ...b, defaults: ib.defaults[b.key] || {}, templates: ib.templates[b.key] || {} })); })(),
     liveUrl: (pub.site && pub.site.url) || null, previewUrl: siteUrl,
   };
 }

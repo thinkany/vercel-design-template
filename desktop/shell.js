@@ -2639,11 +2639,12 @@ function siteFlash(host, text) {
 // Generic editor for a block's props: strings → input/textarea, numbers, booleans,
 // arrays of strings, and nested objects / arrays of objects (add/remove, a new item
 // cloned from the last one's shape). No schema needed; the build validates.
-function sitePropsEditor(value, onChange, depth = 0) {
+function sitePropsEditor(value, onChange, depth = 0, templates = {}, at = "") {
   const box = siteEl("div", depth ? "" : "site-props");
   const keys = Object.keys(value || {});
   for (const key of keys) {
     const v = value[key];
+    const here = at ? `${at}.${key}` : key; // dotted path, list indices skipped
     const label = key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
     if (typeof v === "boolean") {
       const row = siteEl("label", "toggle-row");
@@ -2662,7 +2663,8 @@ function sitePropsEditor(value, onChange, depth = 0) {
     } else if (Array.isArray(v)) {
       const wrap = siteEl("div", "site-kv");
       wrap.appendChild(siteEl("div", "k", label));
-      const allStrings = v.every((x) => typeof x === "string");
+      const tplItem = templates[here];
+      const allStrings = v.length ? v.every((x) => typeof x === "string") : !(tplItem && typeof tplItem === "object");
       if (allStrings) {
         const ta = document.createElement("textarea"); ta.className = "field"; ta.value = v.join("\n");
         ta.placeholder = "One per line";
@@ -2686,15 +2688,19 @@ function sitePropsEditor(value, onChange, depth = 0) {
             );
             head.appendChild(acts);
             card.appendChild(head);
-            if (item && typeof item === "object") card.appendChild(sitePropsEditor(item, onChange, depth + 1));
+            if (item && typeof item === "object") card.appendChild(sitePropsEditor(item, onChange, depth + 1, templates, here));
             list.appendChild(card);
           });
         };
         paint();
         wrap.appendChild(list);
         wrap.appendChild(siteMini(COPY.site.addItem, () => {
+          // A new item from the schema's template for this list; failing that, the
+          // last item's shape with its text blanked.
+          const tpl = templates[here];
           const last = v[v.length - 1];
-          const blank = last && typeof last === "object" ? JSON.parse(JSON.stringify(last), (k, x) => (typeof x === "string" ? "" : x)) : "";
+          const blank = tpl !== undefined ? JSON.parse(JSON.stringify(tpl))
+            : (last && typeof last === "object" ? JSON.parse(JSON.stringify(last), (k, x) => (typeof x === "string" ? "" : x)) : "");
           v.push(blank); onChange(); paint();
         }));
       }
@@ -2705,7 +2711,7 @@ function sitePropsEditor(value, onChange, depth = 0) {
     } else if (v && typeof v === "object") {
       const wrap = siteEl("div", "site-kv");
       wrap.appendChild(siteEl("div", "k", label));
-      wrap.appendChild(sitePropsEditor(v, onChange, depth + 1));
+      wrap.appendChild(sitePropsEditor(v, onChange, depth + 1, templates, here));
       box.appendChild(wrap);
     }
   }
@@ -2768,7 +2774,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
         // Older content may lack fields the block accepts: fill them from the defaults.
         const dflt = (def && def.defaults) || {};
         b.props = { ...JSON.parse(JSON.stringify(dflt)), ...(b.props || {}) };
-        blockList.appendChild(sitePropsEditor(b.props, markDirty));
+        blockList.appendChild(sitePropsEditor(b.props, markDirty, 0, (def && def.templates) || {}));
       }
     });
   };
@@ -2993,7 +2999,7 @@ function siteBlocksEditor(list, blocks, onChange, stateKey) {
       if (siteRailState.expanded[ek]) {
         const dflt = (def && def.defaults) || {};
         b.props = { ...JSON.parse(JSON.stringify(dflt)), ...(b.props || {}) };
-        host.appendChild(sitePropsEditor(b.props, onChange));
+        host.appendChild(sitePropsEditor(b.props, onChange, 0, (def && def.templates) || {}));
       }
     });
     if (blocks.length) {
