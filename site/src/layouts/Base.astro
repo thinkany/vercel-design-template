@@ -23,6 +23,9 @@ const canonical = meta.canonical || new URL(Astro.url.pathname, Astro.site).href
 const image = meta.image ? new URL(meta.image, Astro.site).href : undefined;
 
 const chromeProps = { siteName: siteConfig.clientName, logo: siteConfig.logo, nav: site.nav, footerLinks: site.footerLinks };
+// Site icons from content/site.json (the CMS Settings tab); the scaffold's favicon.svg otherwise.
+const favicon = site.favicon.icon || "/favicon.svg";
+const faviconType = /\.svg$/i.test(favicon) ? "image/svg+xml" : /\.png$/i.test(favicon) ? "image/png" : /\.ico$/i.test(favicon) ? "image/x-icon" : undefined;
 ---
 <!doctype html>
 <html lang="en">
@@ -40,7 +43,8 @@ const chromeProps = { siteName: siteConfig.clientName, logo: siteConfig.logo, na
     <meta property="og:url" content={canonical} />
     {image && <meta property="og:image" content={image} />}
     <meta name="twitter:card" content={image ? "summary_large_image" : "summary"} />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type={faviconType} href={favicon} />
+    {site.favicon.touch && <link rel="apple-touch-icon" sizes="180x180" href={site.favicon.touch} />}
     {site.seo.sitemap && !site.seo.discourage && <link rel="sitemap" href="/sitemap-index.xml" />}
     <!-- Marks JS as available BEFORE first paint, so data-reveal elements only
          start hidden when the observer below will actually reveal them. -->

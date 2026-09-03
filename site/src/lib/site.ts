@@ -25,6 +25,13 @@ export const siteSchema = z.object({
   nav: z.array(navItem).default([]),
   /** Footer-only links (legal, social…). */
   footerLinks: z.array(navLink).default([]),
+  /** Site icons (the CMS Settings tab): paths under public/, e.g. "/images/icon.svg". */
+  favicon: z.object({
+    /** Browser tab / bookmark icon: SVG (best) or a square PNG. */
+    icon: z.string().optional(),
+    /** Home-screen icon on phones: a 180×180 PNG. */
+    touch: z.string().optional(),
+  }).default({}),
   /** Search-engine settings (the CMS Settings tab). */
   seo: z.object({
     /** robots.txt Disallow: /, noindex on every page, no sitemap. */

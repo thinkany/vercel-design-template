@@ -3444,7 +3444,7 @@ function siteRichEditor(markdown, onChange, { compact } = {}) {
  * { src, alt } (or a string path for legacy props); onChange(next) receives
  * { src, alt } or "" when cleared.
  */
-function siteImageControl(value, onChange, { label, noAlt } = {}) {
+function siteImageControl(value, onChange, { label, noAlt, raw, accept } = {}) {
   const M = COPY.site.media;
   let cur = typeof value === "string" ? { src: value, alt: "" } : (value && typeof value === "object" ? { src: value.src || "", alt: value.alt || "" } : { src: "", alt: "" });
   const wrap = siteEl("div", "site-kv");
@@ -3453,7 +3453,7 @@ function siteImageControl(value, onChange, { label, noAlt } = {}) {
   const zone = document.createElement("label"); zone.className = "site-img-zone";
   const preview = document.createElement("img"); preview.className = "site-img-preview";
   const hint = siteEl("div", "site-img-hint");
-  const input = document.createElement("input"); input.type = "file"; input.accept = "image/*,.heic,.heif,.tif,.tiff"; input.style.display = "none";
+  const input = document.createElement("input"); input.type = "file"; input.accept = accept || "image/*,.heic,.heif,.tif,.tiff"; input.style.display = "none";
   zone.append(preview, hint, input);
   wrap.appendChild(zone);
 
@@ -3479,7 +3479,7 @@ function siteImageControl(value, onChange, { label, noAlt } = {}) {
     const paths = Array.from(files || []).map((f) => { try { return window.desktop.pathForFile(f); } catch { return null; } }).filter(Boolean);
     if (!paths.length) return;
     hint.textContent = M.importing;
-    const r = await window.desktop.importMedia(paths);
+    const r = await window.desktop.importMedia(paths, { raw: !!raw });
     if (r && r.ok && r.added && r.added.length) {
       mediaIndex = await window.desktop.listMedia().catch(() => mediaIndex);
       cur = { src: r.added[0], alt: cur.alt }; paint(); emit();
@@ -3684,6 +3684,19 @@ async function renderSiteSettings(host, data) {
     if (seo.llms.enabled && !llmTa.value) llmTa.value = seo.llms.content || (await window.desktop.getLlmsDefault().catch(() => ""));
   };
   await paintSeo();
+
+  // Icons: paths in content/site.json; uploads are kept as they are (no AVIF).
+  wrap.appendChild(siteEl("div", "drawer-sep"));
+  wrap.appendChild(siteEl("div", "sess-label", S.iconsHeading));
+  wrap.appendChild(siteEl("div", "sess-desc", S.iconsDesc));
+  const fav = { ...((data.site && data.site.favicon) || { icon: "", touch: "" }) };
+  const iconStatus = siteEl("div"); iconStatus.style.cssText = "min-height:18px;";
+  const saveIcons = async () => { const r = await window.desktop.saveSiteFavicon(fav); iconStatus.innerHTML = ""; if (r && r.ok) siteFlash(iconStatus, S.saved); };
+  const iconCtl = siteImageControl(fav.icon, (next) => { fav.icon = next ? next.src : ""; saveIcons(); }, { label: S.favicon, noAlt: true, raw: true, accept: ".svg,.png,image/svg+xml,image/png" });
+  iconCtl.appendChild(siteEl("div", "sess-desc", S.faviconHint)); wrap.appendChild(iconCtl);
+  const touchCtl = siteImageControl(fav.touch, (next) => { fav.touch = next ? next.src : ""; saveIcons(); }, { label: S.touch, noAlt: true, raw: true, accept: ".png,image/png" });
+  touchCtl.appendChild(siteEl("div", "sess-desc", S.touchHint)); wrap.appendChild(touchCtl);
+  wrap.appendChild(iconStatus);
 
   wrap.appendChild(siteEl("div", "drawer-sep"));
   wrap.appendChild(siteEl("div", "sess-label", S.siteHeading));

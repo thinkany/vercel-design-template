@@ -1483,7 +1483,7 @@ function readSiteContent(dir) {
   const pub = loadPublish(dir);
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
-    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], seo: seoSettings(site.seo) },
+    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
     pages, posts, ...(() => {
       const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {} };
       return {
@@ -1598,6 +1598,16 @@ ipcMain.handle("site:saveSite", (_e, { nav, footerLinks } = {}) => {
   catch (e) { return { ok: false, error: e.message }; }
 });
 
+// Site icons: paths under public/ (the Settings tab's upload fields write them).
+ipcMain.handle("site:saveFavicon", (_e, { favicon } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const p = path.join(siteContentDir(currentProject), "site.json");
+  const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
+  const f = favicon && typeof favicon === "object" ? favicon : {};
+  const next = { ...cur, favicon: { ...(typeof f.icon === "string" && f.icon ? { icon: f.icon } : {}), ...(typeof f.touch === "string" && f.touch ? { touch: f.touch } : {}) } };
+  try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, favicon: next.favicon }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
 ipcMain.handle("site:llmsDefault", () => (currentProject ? generatedLlms(currentProject) : ""));
 ipcMain.handle("site:saveSeo", (_e, { seo } = {}) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
@@ -1927,7 +1937,8 @@ function convertImage(inPath, outPath, { maxWidth = MEDIA_MAX_WIDTH, quality = M
 }
 // Bring files into public/images (converted per the project's settings). Shared by
 // the file dialog (media:upload) and drag-and-drop from the CMS (media:import).
-async function importMediaFiles(paths) {
+// `raw` keeps the file as it is (no AVIF conversion): icons a browser must read natively.
+async function importMediaFiles(paths, { raw } = {}) {
   fs.mkdirSync(mediaDir(currentProject), { recursive: true });
   const settings = loadCmsSettings(currentProject).media;
   const added = [];
@@ -1935,7 +1946,7 @@ async function importMediaFiles(paths) {
     const ext = path.extname(src).toLowerCase();
     const base = path.basename(src, path.extname(src));
     try {
-      if (MEDIA_CONVERT.has(ext)) {
+      if (MEDIA_CONVERT.has(ext) && !raw) {
         const name = mediaName(currentProject, base + MEDIA_OUT_EXT);
         const r = await convertImage(src, path.join(mediaDir(currentProject), name), settings);
         if (r.ok) { added.push(name); continue; }
@@ -1970,11 +1981,11 @@ ipcMain.handle("marks:add", async () => {
   catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 });
 // Dropped files (the renderer resolves their paths through webUtils in the preload).
-ipcMain.handle("media:import", (_e, { paths } = {}) => {
+ipcMain.handle("media:import", (_e, { paths, raw } = {}) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   const list = (Array.isArray(paths) ? paths : []).filter((p) => typeof p === "string" && path.isAbsolute(p) && fs.existsSync(p));
   if (!list.length) return { ok: true, added: [] };
-  return importMediaFiles(list);
+  return importMediaFiles(list, { raw: !!raw });
 });
 ipcMain.handle("media:delete", (_e, { rel } = {}) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
