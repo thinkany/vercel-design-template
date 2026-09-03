@@ -100,6 +100,12 @@ const TA_COLOR_UTIL = /(?:^|[\s"'`([{])(bg|text|border|from|via|to|ring|fill|str
 function lintSource(file, colorRoles) {
   const findings = [];
   const lines = file.text.split("\n");
+  // SITE BLOCKS — a two-column block (media beside text) without the shared `side`
+  // prop can't alternate from the CMS. Report once, at the grid.
+  if (/^site\/blocks\//.test(file.name) && !/^site\/blocks\/(Header|Footer)\.tsx$/.test(file.name) && /<img\b/.test(file.text) && !/mediaSide/.test(file.text)) {
+    const at = lines.findIndex((l) => /@lg:(?:grid-cols-(?:2\b|\[[^\]]*_[^\]]*\])|flex-row\b)/.test(l));
+    if (at >= 0) findings.push({ severity: "medium", rule: "content-fields", file: file.name, line: at + 1, message: "Two-column block without a side option — add `side: mediaSide` (from ../src/lib/blocks) and render both directions, so the CMS can alternate it." });
+  }
   lines.forEach((raw, i) => {
     const ln = raw;
     const n = i + 1;

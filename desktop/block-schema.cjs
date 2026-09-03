@@ -103,10 +103,11 @@ function introspectBlocks(dir, { esbuild } = {}) {
 // Field kinds by dotted path (list indices skipped, matching the editor's paths).
 // Leaves: image (the { src, alt } fragment), link ({ label, href }), enum (with
 // options), string, number, boolean. Containers: object, list.
-function zodFields(schema, out, at, depth) {
+function zodFields(schema, out, at, depth, desc) {
   if (!schema || !schema._def || depth > 8) return;
   const d = schema._def;
-  const inner = (x) => zodFields(x, out, at, depth + 1);
+  desc = d.description || desc; // .describe() may sit on a wrapper (.default().describe())
+  const inner = (x) => zodFields(x, out, at, depth + 1, desc);
   switch (d.typeName) {
     case "ZodDefault": case "ZodOptional": case "ZodNullable": return inner(d.innerType);
     case "ZodEffects": return inner(d.schema);
@@ -123,7 +124,7 @@ function zodFields(schema, out, at, depth) {
       return;
     }
     case "ZodArray": { if (at) out[at] = { kind: "list" }; return zodFields(d.type, out, at, depth + 1); }
-    case "ZodEnum": { if (at) out[at] = { kind: "enum", options: (d.values || []).slice() }; return; }
+    case "ZodEnum": { if (at) out[at] = { kind: "enum", options: (d.values || []).slice(), ...(desc === "side" ? { ui: "side" } : {}) }; return; }
     case "ZodNativeEnum": { if (at) out[at] = { kind: "enum", options: Object.values(d.values || {}) }; return; }
     case "ZodLiteral": { if (at) out[at] = { kind: "enum", options: [d.value] }; return; }
     case "ZodUnion": {
@@ -132,7 +133,7 @@ function zodFields(schema, out, at, depth) {
       if (at && opts.length && opts.every((o) => o._def && o._def.typeName === "ZodLiteral")) { out[at] = { kind: "enum", options: opts.map((o) => o._def.value) }; return; }
       return inner(opts[0]);
     }
-    case "ZodString": { if (at) out[at] = { kind: d.description === "richtext" ? "richtext" : "string" }; return; }
+    case "ZodString": { if (at) out[at] = { kind: desc === "richtext" ? "richtext" : "string" }; return; }
     case "ZodNumber": { if (at) out[at] = { kind: "number" }; return; }
     case "ZodBoolean": { if (at) out[at] = { kind: "boolean" }; return; }
     default: return;

@@ -48,6 +48,15 @@ export interface Chrome {
  */
 export const richtext = z.string().describe("richtext");
 
+/**
+ * Which side the media sits on in a two-column block (image beside text, a
+ * panel beside a list). Every block with that shape carries it and renders BOTH
+ * directions, so alternating sections down a page is a content choice: the CMS
+ * shows an Image left / Image right control and alternates new blocks
+ * automatically. Default "left"; set "right" in content where the design flips.
+ */
+export const mediaSide = z.enum(["left", "right"]).default("left").describe("side");
+
 export function defineBlock<S extends ZodTypeAny>(def: BlockDef<S>): BlockDef<S> {
   return def;
 }

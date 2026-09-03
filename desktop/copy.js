@@ -594,6 +594,7 @@ window.COPY = {
       designPinned: (v) => `Built from design ${v}`,
     },
     // media picker
+    side: { label: "Layout", left: "Image left", right: "Image right" },
     marks: {
       add: "Add an icon from an SVG file. It joins this design's icon set, drawn inline so the block can color and animate it.",
       adding: "Adding…",

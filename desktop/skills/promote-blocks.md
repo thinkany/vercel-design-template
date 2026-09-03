@@ -17,13 +17,13 @@ narration (imports, schemas, aliases).
 
 1. **Open with one sentence** naming what you'll do: "Turning your approved design
    into site blocks: six sections plus the header and footer."
-3. **TodoWrite in designer language**, one item per section plus the chrome:
+4. **TodoWrite in designer language**, one item per section plus the chrome:
    `Promoting hero`, `Promoting island guide`, …, `Promoting header and footer`,
    `Composing the home page`, `Building the site`. Mark `in_progress` /
    `completed` as you go. No prose per todo.
-4. **One short line per milestone** only when something is done. Design terms
+5. **One short line per milestone** only when something is done. Design terms
    (sections, header, cards), never code terms (props, zod, hydration).
-5. **Close** with what exists now and what to do next (§6).
+6. **Close** with what exists now and what to do next (§6).
 
 **No em-dashes** in anything you say or write.
 
@@ -95,7 +95,15 @@ section's `data-block` in the design.
 
 **Rules that decide whether the promotion is any good:**
 
-1. **Body copy is `richtext`** (from `../src/lib/blocks`), rendered with
+1. **Two columns carry `side: mediaSide`** (from `../src/lib/blocks`): any section
+   with media beside text (photo + copy, panel + list) gets the prop and renders
+   BOTH directions (swap the column widths and add `@lg:order-1/2` on the two
+   cells when `side === "left"` vs `"right"`; keep the design's classes for its own
+   direction and set that value in content). If the design repeats the same
+   structure flipped (alternating feature rows), promote ONE block and set `side`
+   per instance, not two blocks. The CMS shows Image left / Image right and
+   alternates new blocks automatically.
+3. **Body copy is `richtext`** (from `../src/lib/blocks`), rendered with
    `<Rich text={body} className="…the <p>'s classes…" />` in place of the design's
    `<p>`: paragraphs, card bodies, quotes, any prose a client would edit. The CMS
    gives it a rich text editor; markdown on disk. Titles, eyebrows, labels and
@@ -121,13 +129,13 @@ section's `data-block` in the design.
    token utilities: the site wraps pages in the same `@container` the design
    surface uses, so nothing needs translating. Don't "clean up" while promoting.
 4. **Keep `data-block="{id}"`** on the section root (drop `data-block-name`).
-6. **`.optional()` / `.default()` on everything but the one or two fields the
+7. **`.optional()` / `.default()` on everything but the one or two fields the
    section can't render without** (usually `heading`, sometimes `image`).
-7. **Every image is the `image` fragment** (`{ src, alt }`), whether it's content or
+8. **Every image is the `image` fragment** (`{ src, alt }`), whether it's content or
    a background, a photo, a logo or a poster: never a bare string path. The CMS
    turns `image` props into an upload field and enum props into a choice; a designer
    is never asked to type a path or a name.
-8. **Shared prop fragments** come from `site/blocks/lib/schema.ts` (`image`,
+9. **Shared prop fragments** come from `site/blocks/lib/schema.ts` (`image`,
    `link`, `anchor`); extend that file rather than redefining shapes per block.
 
 **Chrome** (header/footer) goes in `site/blocks/chrome.ts`, NOT the registry:

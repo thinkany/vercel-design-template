@@ -2646,6 +2646,18 @@ function siteMarkPicker(options, value, onPick, marks) {
 }
 let siteMarks = {}; // the current project's rendered marks, from site:content
 
+// Alternating layout: a new two-column block lands on the opposite side from the
+// nearest sided block above it, so a page alternates without anyone asking.
+function siteAlternateSide(list, props, def) {
+  const f = def && def.fields && def.fields.side;
+  if (!f || f.ui !== "side" || !props || typeof props.side !== "string") return props;
+  for (let i = list.length - 1; i >= 0; i--) {
+    const prev = list[i] && list[i].props && list[i].props.side;
+    if (prev === "left" || prev === "right") { props.side = prev === "left" ? "right" : "left"; break; }
+  }
+  return props;
+}
+
 // Generic editor for a block's props: strings → input/textarea, numbers, booleans,
 // arrays of strings, and nested objects / arrays of objects (add/remove, a new item
 // cloned from the last one's shape). `ctx` carries the schema introspection
@@ -2675,7 +2687,22 @@ function sitePropsEditor(value, onChange, depth = 0, ctx = {}, at = "") {
       // A choice. Over the design's marks it's a visual picker; otherwise a select.
       const wrap = siteEl("div", "site-kv");
       wrap.appendChild(siteEl("div", "k", label));
-      if (meta.options.every((o) => siteMarks[o])) {
+      if (meta.ui === "side") {
+        // Two-column layout: a segmented Image left / Image right control.
+        wrap.querySelector(".k").textContent = COPY.site.side.label;
+        const seg = siteEl("div", "site-side");
+        const mk = (opt, text, icon) => {
+          const b = siteEl("button", "site-side-opt" + (v === opt ? " on" : "")); b.type = "button";
+          b.innerHTML = icon + `<span>${text}</span>`;
+          b.addEventListener("click", () => { value[key] = opt; v = opt; onChange(); seg.querySelectorAll(".site-side-opt").forEach((x) => x.classList.toggle("on", x === b)); });
+          return b;
+        };
+        seg.append(
+          mk("left", COPY.site.side.left, '<svg viewBox="0 0 24 16" aria-hidden="true"><rect x="1" y="1" width="9" height="14" rx="1.5"/><rect x="13" y="3" width="10" height="2" rx="1"/><rect x="13" y="7" width="10" height="2" rx="1"/><rect x="13" y="11" width="7" height="2" rx="1"/></svg>'),
+          mk("right", COPY.site.side.right, '<svg viewBox="0 0 24 16" aria-hidden="true"><rect x="14" y="1" width="9" height="14" rx="1.5"/><rect x="1" y="3" width="10" height="2" rx="1"/><rect x="1" y="7" width="10" height="2" rx="1"/><rect x="1" y="11" width="7" height="2" rx="1"/></svg>'),
+        );
+        wrap.appendChild(seg);
+      } else if (meta.options.every((o) => siteMarks[o])) {
         wrap.appendChild(siteMarkPicker(meta.options, v, (k) => { value[key] = k; onChange(); }, siteMarks));
       } else {
         const sel = document.createElement("select"); sel.className = "field";
@@ -2826,7 +2853,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
     sel.addEventListener("change", () => {
       if (!sel.value) return;
       const def = byKey[sel.value];
-      draft.blocks.push({ type: sel.value, props: JSON.parse(JSON.stringify((def && def.defaults) || {})) });
+      draft.blocks.push({ type: sel.value, props: siteAlternateSide(draft.blocks, JSON.parse(JSON.stringify((def && def.defaults) || {})), def) });
       siteRailState.expanded[page.id + ":" + (draft.blocks.length - 1)] = true; // open it: the fields are the point
       sel.value = ""; markDirty(); paintBlocks();
     });
@@ -3073,7 +3100,7 @@ function siteBlocksEditor(list, blocks, onChange, stateKey) {
       sel.addEventListener("change", () => {
         if (!sel.value) return;
         const def = byKey[sel.value];
-        list.push({ type: sel.value, props: JSON.parse(JSON.stringify((def && def.defaults) || {})) });
+        list.push({ type: sel.value, props: siteAlternateSide(list, JSON.parse(JSON.stringify((def && def.defaults) || {})), def) });
         siteRailState.expanded[stateKey + ":" + (list.length - 1)] = true;
         sel.value = ""; onChange(); paint();
       });

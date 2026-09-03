@@ -18,10 +18,10 @@ editing a block's *content* (the Pages panel does that, no model turn).
 The designer is watching the Site tab. Suppress technical narration.
 
 1. **Open with one sentence**: "Designing a testimonials block for the About page."
-3. **TodoWrite in designer language**: `Designing the testimonials block`,
+4. **TodoWrite in designer language**: `Designing the testimonials block`,
    `Adding it to the About page`, `Checking the site builds`.
-4. **One short line per milestone.** Design terms, never code terms.
-5. **Close** (§6): where it landed and that its text is now editable in Pages.
+5. **One short line per milestone.** Design terms, never code terms.
+6. **Close** (§6): where it landed and that its text is now editable in Pages.
 
 **No em-dashes** in anything you say or write.
 
@@ -83,7 +83,11 @@ Then one row in `site/blocks/index.ts` (`testimonials,` or `"team-grid": teamGri
 
 **The rules that decide whether the block is any good:**
 
-1. **Body copy is `richtext`** (from `../src/lib/blocks`), rendered with
+1. **Two columns carry `side: mediaSide`** (from `../src/lib/blocks`) and render
+   both directions (column widths swapped, `@lg:order-1/2` on the cells), so the
+   CMS can alternate the block down a page. Place the new instance on the
+   opposite side from the two-column block above it.
+3. **Body copy is `richtext`** (from `../src/lib/blocks`), rendered with
    `<Rich text={…} className="…" />` where the design would put a `<p>`: the CMS
    gives it a rich text editor. Titles, eyebrows, labels stay `z.string()`.
 2. **Props are the CONTENT, markup is the DESIGN.** Every string a client would
@@ -107,9 +111,9 @@ Then one row in `site/blocks/index.ts` (`testimonials,` or `"team-grid": teamGri
    `prefers-reduced-motion`). Interactive pieces aren't supported in page blocks:
    if the request needs one (a carousel, tabs), say so and design the static
    version (a grid, an accordion of `<details>`).
-6. **Keep every class in the design's idiom**: `@lg:` container variants, `cqi`
+7. **Keep every class in the design's idiom**: `@lg:` container variants, `cqi`
    units, `color-mix(...)` on tokens. The site wraps pages in `@container`.
-7. **`data-block="{key}"`** on the root; `id` from the `anchor()` prop when nav
+8. **`data-block="{key}"`** on the root; `id` from the `anchor()` prop when nav
    should reach it.
 
 ## 3. Place it and fill it
