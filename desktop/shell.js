@@ -3342,6 +3342,27 @@ function renderSiteNav(site, refresh, options = []) {
   return wrap;
 }
 
+// Per-tab help modal: the tab's actions as an outline (headed bullet lists).
+const cmshelp = el("cmshelp");
+function openCmsHelp(tab) {
+  const h = COPY.site.help[tab] || COPY.site.help.pages;
+  el("cmshelp-title").textContent = h.title;
+  const body = el("cmshelp-body"); body.innerHTML = "";
+  const intro = siteEl("p", "ch-intro", h.intro); body.appendChild(intro);
+  h.sections.forEach((sec) => {
+    const wrap = siteEl("div", "ch-section");
+    wrap.appendChild(siteEl("div", "ch-h", sec.h));
+    const ul = siteEl("ul", "ch-list");
+    sec.items.forEach((it) => { const li = document.createElement("li"); li.innerHTML = it; ul.appendChild(li); }); // copy-catalog HTML, not user input
+    wrap.appendChild(ul); body.appendChild(wrap);
+  });
+  cmshelp.hidden = false;
+}
+function closeCmsHelp() { cmshelp.hidden = true; }
+el("cmshelp-close").addEventListener("click", closeCmsHelp);
+cmshelp.addEventListener("click", (e) => { if (e.target === cmshelp) closeCmsHelp(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !cmshelp.hidden) { closeCmsHelp(); e.stopPropagation(); } }, true);
+
 // The Settings tab: image optimization (per project, .thinkany/cms.json) + site facts.
 async function renderSiteSettings(host, data) {
   const S = COPY.site.settings;
@@ -3419,6 +3440,11 @@ async function renderSite(body) {
     b.addEventListener("click", () => { siteRailState.tab = t; refresh(); });
     tabs.appendChild(b);
   });
+  // The "?" at the far right: help for the current tab.
+  const helpBtn = siteEl("button", "site-tabs-help"); helpBtn.type = "button"; helpBtn.title = COPY.site.helpTip; helpBtn.setAttribute("aria-label", COPY.site.helpTip);
+  helpBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/><circle cx="12" cy="12" r="4"/></svg>';
+  helpBtn.addEventListener("click", () => openCmsHelp(siteRailState.tab));
+  tabs.appendChild(helpBtn);
   body.appendChild(tabs);
 
   // Selection is per tab: a kind that belongs to another tab is ignored here.

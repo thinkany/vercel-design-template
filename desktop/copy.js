@@ -387,6 +387,55 @@ window.COPY = {
       "no-project": "Open a project to edit its site.",
     },
     tabs: { pages: "Pages", posts: "Posts", types: "Types", nav: "Navigation", settings: "Settings" },
+    helpTip: "Help with this tab",
+    // Per-tab help, as an outline: what the tab is for, then what you can do on it.
+    help: {
+      pages: {
+        title: "Pages",
+        intro: "Every page of your site, built from the blocks that came out of your approved design. Pick a page on the left to edit it on the right.",
+        sections: [
+          { h: "Edit a page", items: ["<b>Title</b> and <b>Address</b> (the home page always lives at /).", "<b>Search &amp; sharing</b>: the search title, description, share image, and whether search engines may list the page.", "<b>Save page</b> writes the changes; the Site tab updates right away."] },
+          { h: "Blocks", items: ["Reorder with the arrows, remove with ×, add one from the list at the bottom.", "<b>Edit content</b> opens a block’s text, images and lists. Images use the upload zone: drop a file, or choose one already in the project.", "Blocks come from the approved design. To change how a block looks, edit the design in the chat; to change what it says, edit here."] },
+          { h: "Add or remove pages", items: ["Type a title in <b>Add a page</b>. Its address is made from the title; adjust it in the editor.", "<b>Delete page</b> removes its file. The home page can’t be deleted.", "A new page needs a link in <b>Navigation</b> to be reachable from the menu."] },
+        ],
+      },
+      posts: {
+        title: "Posts",
+        intro: "Your blog. Posts are written here and listed at /blog, newest first.",
+        sections: [
+          { h: "Write a post", items: ["<b>Add a post</b> creates a draft. Drafts are never published, so you can work on them across sessions.", "<b>Publish date</b> is the date shown on the post; <b>Last edited</b> is stamped automatically on every save.", "<b>Summary</b> appears in the blog list and as the search description. <b>Tags</b> are comma-separated."] },
+          { h: "Draft and publish", items: ["A draft shows <b>Save draft</b> and <b>Publish</b>. Publish makes it live on the next site publish.", "A published post shows <b>Save</b> and <b>Unpublish</b>. Unpublish takes it back to a draft without deleting it.", "<b>Delete post</b> removes the file for good."] },
+          { h: "Search &amp; sharing", items: ["The search title defaults to the post title. Hide a post from search engines with the checkbox; it stays readable at its address."] },
+        ],
+      },
+      types: {
+        title: "Types",
+        intro: "Your own kinds of content, like products, team members or landing pages. A type has fields, an address, and a page template built from your blocks; every entry gets a form made from those fields.",
+        sections: [
+          { h: "Create a type", items: ["<b>Add a content type</b>, give it a name (the address is made from it), and add <b>fields</b>: text, long text, rich text, number, yes/no, date, image, choice, list, link, or a reference to another type.", "Tick <b>Show an index page</b> to list every entry at the type’s address.", "In <b>Page template</b>, choose the blocks that render each entry. In any text, <code>{{field}}</code> fills in that field; <code>{{title}}</code> is the entry’s title. A field name alone in an image slot, like <code>{{photo}}</code>, hands over the whole image."] },
+          { h: "Add entries", items: ["Under a type, type a title and <b>Add</b>. The entry’s form has one control per field.", "An entry can use <b>its own blocks</b> instead of the template, which is how a landing page works.", "Entries live at the type’s address plus their own, like /products/blue-widget."] },
+          { h: "Change or remove", items: ["Click a type to edit its fields or template; existing entries keep their content.", "<b>Delete type</b> stops publishing its entries but leaves their files in the project."] },
+        ],
+      },
+      nav: {
+        title: "Navigation",
+        intro: "The links in the site’s header and footer.",
+        sections: [
+          { h: "Links", items: ["<b>Link Text</b> is what the visitor reads. <b>URL</b> is where it goes.", "The URL field is a list too: open it to pick any page, home-page section, post, content entry or index in the project. Picking fills the link text when it’s empty.", "Reorder with the arrow, remove with ×, <b>+ Add link</b> for a new one."] },
+          { h: "Sub-links", items: ["<b>+ Sub-link</b> under a link makes a dropdown on desktop and an expandable group on mobile."] },
+          { h: "Footer-only links", items: ["Links that appear only in the footer, like a privacy page. Header links appear in the footer as well."] },
+          { h: "Saving", items: ["<b>Save navigation</b> writes the menu; blank rows are dropped."] },
+        ],
+      },
+      settings: {
+        title: "Settings",
+        intro: "Options for this site.",
+        sections: [
+          { h: "Images", items: ["Every image added through the site is optimized automatically (AVIF, scaled to the maximum width). SVG, GIF and AVIF files are kept as they are.", "<b>Quality</b>: lower is smaller. 55 suits photos; 70 or more suits illustrations and screenshots.", "<b>Maximum width</b>: larger images are scaled down on upload; smaller ones are never scaled up.", "Changes apply to new uploads; images already in the project are left alone."] },
+          { h: "Site", items: ["Which design the site is built from, and its live address once published. Publishing happens in the Publish panel."] },
+        ],
+      },
+    },
     liveAt: "Live at",
     previewNote: "Previewing in the Site tab. Publish from the Publish panel when it’s ready.",
     pagesHeading: "Pages",

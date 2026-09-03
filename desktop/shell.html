@@ -174,6 +174,25 @@
       #confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
       /* Publish help — a centered, tabbed walkthrough opened from the Publish drawer. */
+      /* CMS help: a per-tab modal, the publish-help look, content as an outline. */
+      #cmshelp { position: fixed; inset: 0; z-index: 210; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.4); }
+      #cmshelp[hidden] { display: none; }
+      #cmshelp-card { width: 560px; max-width: 92vw; max-height: 84vh; background: #fff; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 18px 60px rgba(0,0,0,.32); }
+      #cmshelp-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; background: #111; }
+      #cmshelp-title { font-size: 15px; font-weight: 600; color: #fff; }
+      #cmshelp-close { border: none; background: none; cursor: pointer; color: #fff; opacity: .7; padding: 0; display: flex; }
+      #cmshelp-close svg { width: 20px; height: 20px; }
+      #cmshelp-body { flex: 1; overflow-y: auto; padding: 18px 20px 14px; font-size: 13px; line-height: 1.5; color: #333; }
+      .ch-intro { margin: 0 0 16px; color: #555; }
+      .ch-section { margin-bottom: 16px; }
+      .ch-h { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #2a2a2a; font-weight: 600; margin-bottom: 6px; }
+      .ch-list { margin: 0; padding-left: 18px; }
+      .ch-list li { margin-bottom: 4px; }
+      .ch-list li b { color: #1a1a1a; font-weight: 600; }
+      /* The tab strip's help button: the rail's life-buoy, at the far right. */
+      .site-tabs-help { margin-left: auto; align-self: center; border: none; background: none; cursor: pointer; padding: 4px; color: #8a8a92; display: flex; }
+      .site-tabs-help:hover { color: #111; }
+      .site-tabs-help svg { width: 18px; height: 18px; }
       /* Media picker: the same overlay shape as the publish help, with a thumbnail grid. */
       #mediapick { position: fixed; inset: 0; z-index: 210; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.4); }
       #mediapick[hidden] { display: none; }
@@ -1763,6 +1782,17 @@
       </div>
     </div>
 
+    <div id="cmshelp" hidden>
+      <div id="cmshelp-card" role="dialog" aria-modal="true" aria-labelledby="cmshelp-title">
+        <div id="cmshelp-head">
+          <span id="cmshelp-title"></span>
+          <button id="cmshelp-close" data-copy-title="chrome.close" data-copy-aria="chrome.close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><path d="M5 5 L19 19 M19 5 L5 19"/></svg>
+          </button>
+        </div>
+        <div id="cmshelp-body"></div>
+      </div>
+    </div>
     <div id="mediapick" hidden>
       <div id="mediapick-card" role="dialog" aria-modal="true" aria-labelledby="mediapick-title">
         <div id="mediapick-head">
