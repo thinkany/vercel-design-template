@@ -239,7 +239,28 @@ function buildSuggestServer(sdk, onSuggest) {
   return sdk.createSdkMcpServer({ name: "artdirector", version: "1.0.0", tools: [suggestTool] });
 }
 
-export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, askIntake, onSuggest, model, copyVoice, onQuery, reviewMode }) {
+// The `skills` MCP server: hands the agent a licensed playbook ON DEMAND. A designer
+// rarely types "/design-block"; they say "design a photo gallery section", the agent
+// decides that's the design-block skill, and reads the project's stub, which points
+// here. The playbook enters the conversation as a tool result, so any phrasing works.
+function buildSkillsServer(sdk, loadSkill) {
+  const loadTool = sdk.tool(
+    "load",
+    "Load a licensed thinkany design playbook (design, design-brief, design-block, promote-blocks, setup-styleguide) " +
+      "and follow it. Call this when a project command stub tells you to, or whenever the designer's request " +
+      "matches one of those skills. Returns the full playbook text.",
+    { name: z.string().describe("the skill name, e.g. design-block") },
+    async ({ name }) => {
+      let body = null;
+      try { body = loadSkill(String(name || "").replace(/^\//, "").trim()); } catch { body = null; }
+      if (!body) return { content: [{ type: "text", text: `The "${name}" playbook is not available: it needs an active Design license (Keys & Licenses in the app). Tell the designer in one plain sentence and stop; do not improvise the procedure.` }] };
+      return { content: [{ type: "text", text: body }] };
+    },
+  );
+  return sdk.createSdkMcpServer({ name: "skills", version: "1.0.0", tools: [loadTool] });
+}
+
+export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, askIntake, onSuggest, model, copyVoice, onQuery, reviewMode, loadSkill }) {
   let resolvedSession = sessionId;
 
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -286,6 +307,8 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
       // The in-process intake tool (the "intake" SDK MCP server when an askIntake bridge
       // is present), pre-approved so it clears the allow-rules stage.
       "mcp__intake__*",
+      // The licensed playbook loader (the "skills" SDK MCP server), pre-approved likewise.
+      "mcp__skills__*",
     ];
     // Read-only review still gets the "suggest" MCP tool — it only emits data, never edits.
     const REVIEW_TOOLS_ALL = [...REVIEW_TOOLS, "mcp__artdirector__*"];
@@ -294,12 +317,15 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
     // when one is actually needed (unchanged behaviour for a plain chat/build turn).
     const wantIntake = askIntake && !reviewMode;
     const wantSuggest = onSuggest && reviewMode;
-    const sdk = (wantIntake || wantSuggest) ? await getSdk() : null;
+    const wantSkills = typeof loadSkill === "function" && !reviewMode;
+    const sdk = (wantIntake || wantSuggest || wantSkills) ? await getSdk() : null;
     const intakeServer = wantIntake ? buildIntakeServer(sdk, askIntake) : null;
     const suggestServer = wantSuggest ? buildSuggestServer(sdk, onSuggest) : null;
+    const skillsServer = wantSkills ? buildSkillsServer(sdk, loadSkill) : null;
     const mcpServers = {
       ...(intakeServer ? { intake: intakeServer } : {}),
       ...(suggestServer ? { artdirector: suggestServer } : {}),
+      ...(skillsServer ? { skills: skillsServer } : {}),
     };
     const iterator = query({
       prompt,

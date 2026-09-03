@@ -1408,7 +1408,10 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode, mo
   // A per-turn model override (turnModel) lets a specific turn run on a cheaper/faster model
   // without changing the user's global pick — e.g. design BUILDS run on Sonnet (high output, low
   // reasoning need) while the rest of the session stays on whatever they chose.
-  const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, askIntake, onSuggest, model: turnModel || currentModel, copyVoice: effectiveVoice(currentProject), onQuery: (q) => { activeQuery = q; }, reviewMode });
+  // The agent can pull a licensed playbook mid-turn (a plain-English "design a gallery
+  // section" → the design-block skill) instead of only through a typed /command.
+  const loadSkill = (name) => { const s = skillsClient && skillsClient.skills()[name]; return s ? s.body : null; };
+  const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, askIntake, onSuggest, model: turnModel || currentModel, copyVoice: effectiveVoice(currentProject), onQuery: (q) => { activeQuery = q; }, reviewMode, loadSkill });
   // A review turn is an isolated, fresh session (its own Art Director persona); it must
   // not become the tracked chat session, or the next chat turn would resume the critique.
   if (!reviewMode && result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it
