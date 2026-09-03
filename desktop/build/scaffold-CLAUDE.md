@@ -159,6 +159,11 @@ is untouched by it; the site is built FROM the design, never the other way.
 - `site/src/**` (CORE): layout, routes, block validation, sitemap/robots/llms.txt. Don't
   edit it in a project; it upgrades with the template.
 
+Once promoted, the DESIGN SURFACE renders the site too (`src/app/site-bridge.tsx`, wired in
+App.tsx): the Home tab, other pages, capture mode and the Figma export all show `content/pages`
+through `site/blocks` with `site.json`'s nav. One truth, two renderers; the variation's
+`Home.tsx` is no longer what the tabs show and shouldn't be edited for site changes.
+
 Block props are the CONTENT (headings, copy, images, card lists); markup is the DESIGN
 (classes verbatim, `@lg:`/`cqi` included, the site wraps pages in the same `@container`).
 Invalid content fails `site:build` naming the page, block and field. `/promote-blocks` turns

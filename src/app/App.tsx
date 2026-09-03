@@ -7,7 +7,14 @@ import { siteConfig, previewConfig, previewWidths, projectType } from "../config
 import type { View } from "../config/site";
 
 import { Dashboard } from "./components/Dashboard";
-import { designPages, defaultDesignPageId } from "./pages";
+import { designPages as authoredPages, defaultDesignPageId } from "./pages";
+import { isPromoted, sitePages, SitePage } from "./site-bridge";
+
+// The pages the design surface renders. Before promotion: the designer's list in
+// pages.ts. Once the design is promoted (content/site.json pins a design), the
+// SITE's pages, rendered through the site's blocks and chrome (site-bridge), so
+// the design tabs, capture mode and the Figma export follow the site.
+const designPages = isPromoted ? sitePages() : authoredPages;
 
 function getInitialPage(): string {
   const params = new URLSearchParams(window.location.search);
@@ -93,7 +100,7 @@ export default function App() {
   // The active DESIGN page (Home or any page added to the manifest), resolved
   // for this variation. Adding a row to pages.ts makes a new page render here.
   const activeDesignPage = designPages.find(p => p.id === page);
-  const DesignPageComponent = activeDesignPage
+  const DesignPageComponent = activeDesignPage && activeDesignPage.component !== "__site__"
     ? resolveComponent(variationId, activeDesignPage.component)
     : null;
 
@@ -131,6 +138,9 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh" }}>
       {page === "dashboard" && <Dashboard />}
+      {activeDesignPage && activeDesignPage.component === "__site__" && (
+        <SitePage pageId={activeDesignPage.id} onNavigate={setPage} view={view} setView={setView} orientation={orientation} setOrientation={setOrientation} capture={captureView} />
+      )}
       {DesignPageComponent && (isBrandProject
         ? <Brand onNavigate={setPage} />
         : <DesignPageComponent onNavigate={setPage} view={view} setView={setView} orientation={orientation} setOrientation={setOrientation} capture={captureView} />

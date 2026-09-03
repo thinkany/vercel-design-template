@@ -200,8 +200,9 @@ The build is the verification. **No screenshots**, the designer will look.
 ## 6. Close
 
 Say what exists now, in one short paragraph: the blocks, the pages composed from
-them, that the header and footer are the site's chrome, and that the design is
-untouched (it stays the reference; the site is built from its styles). Then the
+them, that the header and footer are the site's chrome, and that from now on the
+Home tab shows the site itself (the design surface renders the promoted blocks
+and content), so what they see there and in the Site tab is one and the same. Then the
 next step: the designer can now add pages and edit copy as content, and the app's
 Site panel is where that happens (or, until it lands, `content/pages/*.json`).
 

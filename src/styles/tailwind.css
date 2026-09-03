@@ -1,6 +1,7 @@
 /* ©2026 thinkany llc. All rights reserved. */
 @import 'tailwindcss' source(none);
 @source '../**/*.{js,ts,jsx,tsx}';
+@source '../../site/blocks/**/*.{js,ts,jsx,tsx}'; /* promoted blocks render in the design surface too */
 
 @import 'tw-animate-css';
 

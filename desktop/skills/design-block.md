@@ -124,6 +124,7 @@ so the designer sees the block the moment it builds. **No screenshots.**
 ## 5. Close
 
 One short paragraph: what the block is, which page it's on (and its position),
-that its text and images are now editable in the Pages panel, and that it's in
-the block list for other pages. Mention anything you couldn't do (an interactive
+that its text and images are now editable in the Pages panel, that it's in the
+block list for other pages, and that both the Site tab and the design tabs show
+it (they render the same content). Mention anything you couldn't do (an interactive
 piece designed static, a mark you didn't have), one line each.
