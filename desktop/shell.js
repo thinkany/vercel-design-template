@@ -3427,8 +3427,8 @@ async function renderSiteSettings(host, data) {
   const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:4px;";
   actions.appendChild(siteMini(S.reset, async () => {
     const d = st.defaults.media;
-    q.r.value = String(d.quality); q.v.textContent = String(d.quality);
-    w.r.value = String(d.maxWidth); w.v.textContent = d.maxWidth + "px";
+    q.r.value = String(d.quality); q.r.dispatchEvent(new Event("input")); // label + rail fill follow
+    w.r.value = String(d.maxWidth); w.r.dispatchEvent(new Event("input"));
     await save({ quality: d.quality, maxWidth: d.maxWidth });
   }));
   actions.appendChild(status);
