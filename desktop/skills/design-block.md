@@ -18,10 +18,10 @@ editing a block's *content* (the Pages panel does that, no model turn).
 The designer is watching the Site tab. Suppress technical narration.
 
 1. **Open with one sentence**: "Designing a testimonials block for the About page."
-2. **TodoWrite in designer language**: `Designing the testimonials block`,
+3. **TodoWrite in designer language**: `Designing the testimonials block`,
    `Adding it to the About page`, `Checking the site builds`.
-3. **One short line per milestone.** Design terms, never code terms.
-4. **Close** (§6): where it landed and that its text is now editable in Pages.
+4. **One short line per milestone.** Design terms, never code terms.
+5. **Close** (§6): where it landed and that its text is now editable in Pages.
 
 **No em-dashes** in anything you say or write.
 
@@ -51,7 +51,8 @@ One file `site/blocks/<Name>.tsx`:
 
 ```tsx
 import { z } from "astro/zod";
-import { defineBlock } from "../src/lib/blocks";
+import { defineBlock, richtext } from "../src/lib/blocks";
+import { Rich } from "../src/lib/Rich";
 import { Reveal } from "./lib/Reveal";
 import { anchor, image, link } from "./lib/schema";
 
@@ -59,7 +60,7 @@ const props = z.object({
   id: anchor("testimonials"),      // only when nav links should reach it
   eyebrow: z.string().optional(),
   heading: z.string(),
-  items: z.array(z.object({ quote: z.string(), name: z.string(), role: z.string().optional(), photo: image.optional() })).min(1),
+  items: z.array(z.object({ quote: richtext, name: z.string(), role: z.string().optional(), photo: image.optional() })).min(1),
 });
 
 function Testimonials({ id, eyebrow, heading, items }: z.infer<typeof props>) {
@@ -82,7 +83,10 @@ Then one row in `site/blocks/index.ts` (`testimonials,` or `"team-grid": teamGri
 
 **The rules that decide whether the block is any good:**
 
-1. **Props are the CONTENT, markup is the DESIGN.** Every string a client would
+1. **Body copy is `richtext`** (from `../src/lib/blocks`), rendered with
+   `<Rich text={…} className="…" />` where the design would put a `<p>`: the CMS
+   gives it a rich text editor. Titles, eyebrows, labels stay `z.string()`.
+2. **Props are the CONTENT, markup is the DESIGN.** Every string a client would
    change is a prop; every class, motif, offset and color stays in the component.
    Repeated things are arrays of small objects; `.min()/.max()` when the layout
    only works for a range. Icons go through the design's `marks` map (extend it if
@@ -103,9 +107,9 @@ Then one row in `site/blocks/index.ts` (`testimonials,` or `"team-grid": teamGri
    `prefers-reduced-motion`). Interactive pieces aren't supported in page blocks:
    if the request needs one (a carousel, tabs), say so and design the static
    version (a grid, an accordion of `<details>`).
-5. **Keep every class in the design's idiom**: `@lg:` container variants, `cqi`
+6. **Keep every class in the design's idiom**: `@lg:` container variants, `cqi`
    units, `color-mix(...)` on tokens. The site wraps pages in `@container`.
-6. **`data-block="{key}"`** on the root; `id` from the `anchor()` prop when nav
+7. **`data-block="{key}"`** on the root; `id` from the `anchor()` prop when nav
    should reach it.
 
 ## 3. Place it and fill it

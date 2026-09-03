@@ -3,7 +3,8 @@
 // site renders on-brand from the tokens alone. Replace or extend once the
 // approved design's sections are promoted to blocks.
 import { z } from "astro/zod";
-import { defineBlock } from "../src/lib/blocks";
+import { defineBlock, richtext } from "../src/lib/blocks";
+import { Rich } from "../src/lib/Rich";
 import { link } from "./lib/schema";
 
 /** "primary" = filled brand button; "secondary" = outlined. */
@@ -12,7 +13,7 @@ const cta = link.extend({ style: z.enum(["primary", "secondary"]).default("prima
 const props = z.object({
   eyebrow: z.string().optional(),
   heading: z.string(),
-  body: z.string().optional(),
+  body: richtext.optional(),
   ctas: z.array(cta).default([]),
 });
 
@@ -31,7 +32,7 @@ function Hero({ eyebrow, heading, body, ctas }: z.infer<typeof props>) {
         {heading}
       </h1>
       {body && (
-        <p className="font-ta-serif text-[17px] text-ta-body leading-[1.6] max-w-[440px] mb-9">{body}</p>
+        <Rich text={body} className="font-ta-serif text-[17px] text-ta-body leading-[1.6] max-w-[440px] mb-9" />
       )}
       {ctas.length > 0 && (
         <div className="flex gap-3 flex-wrap justify-center">

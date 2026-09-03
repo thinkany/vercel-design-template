@@ -2684,6 +2684,13 @@ function sitePropsEditor(value, onChange, depth = 0, ctx = {}, at = "") {
         wrap.appendChild(sel);
       }
       box.appendChild(wrap);
+    } else if (typeof v === "string" && meta && meta.kind === "richtext") {
+      // Prose: the rich text editor (markdown on disk, rendered by <Rich> in the block).
+      const wrap = siteEl("div", "site-kv");
+      wrap.appendChild(siteEl("div", "k", label));
+      const rich = siteRichEditor(v, () => { value[key] = rich.getMarkdown(); onChange(); }, { compact: true });
+      wrap.appendChild(rich.wrap);
+      box.appendChild(wrap);
     } else if (typeof v === "string" && siteLooksLikeImage(key, v, meta)) {
       // A bare path prop: the upload field, writing the path back (no alt to keep).
       box.appendChild(siteImageControl(v, (next) => { value[key] = next ? next.src : ""; onChange(); }, { label, noAlt: true }));

@@ -41,6 +41,13 @@ export interface Chrome {
   footer?: BlockDef;
 }
 
+/**
+ * Prose a client edits as rich text (markdown on disk, a WYSIWYG editor in the
+ * CMS). Use it for body copy and render it with <Rich text={…} />; titles,
+ * eyebrows and labels stay z.string().
+ */
+export const richtext = z.string().describe("richtext");
+
 export function defineBlock<S extends ZodTypeAny>(def: BlockDef<S>): BlockDef<S> {
   return def;
 }

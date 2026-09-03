@@ -132,7 +132,7 @@ function zodFields(schema, out, at, depth) {
       if (at && opts.length && opts.every((o) => o._def && o._def.typeName === "ZodLiteral")) { out[at] = { kind: "enum", options: opts.map((o) => o._def.value) }; return; }
       return inner(opts[0]);
     }
-    case "ZodString": { if (at) out[at] = { kind: "string" }; return; }
+    case "ZodString": { if (at) out[at] = { kind: d.description === "richtext" ? "richtext" : "string" }; return; }
     case "ZodNumber": { if (at) out[at] = { kind: "number" }; return; }
     case "ZodBoolean": { if (at) out[at] = { kind: "boolean" }; return; }
     default: return;

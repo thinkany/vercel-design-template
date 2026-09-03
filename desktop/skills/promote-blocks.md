@@ -17,13 +17,13 @@ narration (imports, schemas, aliases).
 
 1. **Open with one sentence** naming what you'll do: "Turning your approved design
    into site blocks: six sections plus the header and footer."
-2. **TodoWrite in designer language**, one item per section plus the chrome:
+3. **TodoWrite in designer language**, one item per section plus the chrome:
    `Promoting hero`, `Promoting island guide`, …, `Promoting header and footer`,
    `Composing the home page`, `Building the site`. Mark `in_progress` /
    `completed` as you go. No prose per todo.
-3. **One short line per milestone** only when something is done. Design terms
+4. **One short line per milestone** only when something is done. Design terms
    (sections, header, cards), never code terms (props, zod, hydration).
-4. **Close** with what exists now and what to do next (§6).
+5. **Close** with what exists now and what to do next (§6).
 
 **No em-dashes** in anything you say or write.
 
@@ -59,7 +59,8 @@ A block is one file in `site/blocks/`, exporting a definition:
 
 ```tsx
 import { z } from "astro/zod";
-import { defineBlock } from "../src/lib/blocks";
+import { defineBlock, richtext } from "../src/lib/blocks";
+import { Rich } from "../src/lib/Rich";
 import { Reveal } from "./lib/Reveal";
 import { anchor, image, link } from "./lib/schema";
 
@@ -67,7 +68,7 @@ const props = z.object({
   id: anchor("island-guide"),          // only for sections nav links point at
   eyebrow: z.string().optional(),
   heading: z.string(),
-  body: z.string().optional(),
+  body: richtext.optional(),           // prose: the CMS edits it as rich text
   tags: z.array(z.string()).default([]),
   image,
 });
@@ -94,7 +95,12 @@ section's `data-block` in the design.
 
 **Rules that decide whether the promotion is any good:**
 
-1. **Props are the CONTENT, markup is the DESIGN.** Everything a client might
+1. **Body copy is `richtext`** (from `../src/lib/blocks`), rendered with
+   `<Rich text={body} className="…the <p>'s classes…" />` in place of the design's
+   `<p>`: paragraphs, card bodies, quotes, any prose a client would edit. The CMS
+   gives it a rich text editor; markdown on disk. Titles, eyebrows, labels and
+   button text stay `z.string()`.
+2. **Props are the CONTENT, markup is the DESIGN.** Everything a client might
    change (headline, body, eyebrow, button labels and targets, image src/alt, card
    titles/bodies, tags, list items) becomes a prop. Everything that makes it look
    like this design (classes, layout, motifs, textures, stagger offsets, colors,
@@ -115,13 +121,13 @@ section's `data-block` in the design.
    token utilities: the site wraps pages in the same `@container` the design
    surface uses, so nothing needs translating. Don't "clean up" while promoting.
 4. **Keep `data-block="{id}"`** on the section root (drop `data-block-name`).
-5. **`.optional()` / `.default()` on everything but the one or two fields the
+6. **`.optional()` / `.default()` on everything but the one or two fields the
    section can't render without** (usually `heading`, sometimes `image`).
-6. **Every image is the `image` fragment** (`{ src, alt }`), whether it's content or
+7. **Every image is the `image` fragment** (`{ src, alt }`), whether it's content or
    a background, a photo, a logo or a poster: never a bare string path. The CMS
    turns `image` props into an upload field and enum props into a choice; a designer
    is never asked to type a path or a name.
-7. **Shared prop fragments** come from `site/blocks/lib/schema.ts` (`image`,
+8. **Shared prop fragments** come from `site/blocks/lib/schema.ts` (`image`,
    `link`, `anchor`); extend that file rather than redefining shapes per block.
 
 **Chrome** (header/footer) goes in `site/blocks/chrome.ts`, NOT the registry:
