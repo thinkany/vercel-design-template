@@ -2829,8 +2829,9 @@ function renderSitePost(post, refresh) {
   const ds = siteField(S.postDescription, draft.description, { textarea: true, hint: S.postDescriptionHint }); ds.input.addEventListener("input", () => { draft.description = ds.input.value; dirty(); }); card.appendChild(ds.wrap);
   card.appendChild(siteImageControl(draft.image, (next) => { draft.image = next ? next.src : ""; dirty(); }, { label: S.postImage }));
   const tg = siteField(S.postTags, draft.tags.join(", "), { hint: S.postTagsHint }); tg.input.addEventListener("input", () => { draft.tags = tg.input.value.split(",").map((x) => x.trim()).filter(Boolean); dirty(); }); card.appendChild(tg.wrap);
-  const body = siteField(S.postBody, draft.body, { textarea: true, hint: S.postBodyHint }); body.input.style.minHeight = "260px"; body.input.style.fontFamily = "ui-monospace, Menlo, monospace"; body.input.style.fontSize = "12.5px";
-  body.input.addEventListener("input", () => { draft.body = body.input.value; dirty(); }); card.appendChild(body.wrap);
+  const bodyWrap = siteEl("div", "site-kv"); bodyWrap.appendChild(siteEl("div", "k", S.postBody));
+  const rich = siteRichEditor(draft.body, () => { draft.body = rich.getMarkdown(); dirty(); });
+  bodyWrap.appendChild(rich.wrap); bodyWrap.appendChild(siteEl("div", "sess-desc", S.postBodyHint)); card.appendChild(bodyWrap);
   card.appendChild(siteEl("div", "sess-label", S.seoHeading)).style.marginTop = "12px";
   const st = siteField(S.seoTitle, draft.seo.title, { hint: S.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; dirty(); }); card.appendChild(st.wrap);
   const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!draft.seo.noindex;
@@ -2902,11 +2903,14 @@ function siteTypeFieldControl(f, value, onChange, ctx) {
     const ta = document.createElement("textarea"); ta.className = "field"; ta.value = Array.isArray(value) ? value.join("\n") : ""; ta.placeholder = S.listHint;
     ta.addEventListener("input", change); wrap.appendChild(ta);
     get = () => ta.value.split("\n").map((x) => x.trim()).filter(Boolean);
+  } else if (f.kind === "richtext") {
+    const rich = siteRichEditor(value == null ? "" : String(value), change, { compact: true });
+    wrap.appendChild(rich.wrap);
+    get = () => rich.getMarkdown();
   } else {
-    const multi = f.kind === "textarea" || f.kind === "richtext";
+    const multi = f.kind === "textarea";
     const input = document.createElement(multi ? "textarea" : "input"); input.className = "field";
     if (!multi) input.type = f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text";
-    if (f.kind === "richtext") { input.style.minHeight = "180px"; input.style.fontFamily = "ui-monospace, Menlo, monospace"; input.style.fontSize = "12.5px"; }
     input.value = value == null ? "" : String(value);
     input.addEventListener("input", change); wrap.appendChild(input);
     get = () => (f.kind === "number" ? (input.value === "" ? "" : Number(input.value)) : input.value);
@@ -3214,6 +3218,131 @@ function openMediaPicker(current) {
   });
 }
 
+// --- Rich text editor (TipTap, markdown on disk) --------------------------------
+// One editor for every prose field in the CMS (post body, richtext fields): the
+// designer types in a rendered document, the file keeps markdown. window.TAEditor
+// is desktop/vendor/editor.js (bundled by desktop/build/bundle-editor.cjs).
+const EDITOR_ICONS = {
+  bold: '<path d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8"/>',
+  italic: '<line x1="19" x2="10" y1="4" y2="4"/><line x1="14" x2="5" y1="20" y2="20"/><line x1="15" x2="9" y1="4" y2="20"/>',
+  strike: '<path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/>',
+  bullet: '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
+  numbered: '<path d="M10 12h11"/><path d="M10 18h11"/><path d="M10 6h11"/><path d="M4 10h2"/><path d="M4 6h1v4"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/>',
+  quote: '<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>',
+  code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  image: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+  rule: '<path d="M5 12h14"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
+  redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"/>',
+};
+const liveEditors = new Set(); // destroyed when the CMS drawer re-renders
+function destroyLiveEditors() { liveEditors.forEach((e) => { try { e.destroy(); } catch {} }); liveEditors.clear(); }
+
+/**
+ * Mount a rich text editor. `markdown` is the initial value; onChange() fires on every
+ * edit (read the value back through getMarkdown()). Returns { wrap, getMarkdown }.
+ * Without the bundle (or if it fails) the field degrades to a markdown textarea.
+ */
+function siteRichEditor(markdown, onChange, { compact } = {}) {
+  const E = COPY.site.editor;
+  const wrap = siteEl("div", "ta-editor" + (compact ? " compact" : ""));
+  const bar = siteEl("div", "ta-editor-bar");
+  const ask = siteEl("div", "ta-editor-ask"); ask.hidden = true;
+  const host = siteEl("div");
+  const raw = document.createElement("textarea"); raw.className = "field raw"; raw.hidden = true; raw.value = markdown || "";
+  const foot = siteEl("div", "ta-editor-foot");
+  wrap.append(bar, ask, host, raw, foot);
+  raw.addEventListener("input", onChange);
+
+  let ed = null;
+  try {
+    ed = window.TAEditor && window.TAEditor.create(host, {
+      markdown: markdown || "", placeholder: E.placeholder,
+      resolveSrc: (src) => (/^\/images\//.test(src) ? (siteMediaFileUrl(src) || src) : src),
+      onChange: () => { paint(); onChange(); },
+    });
+  } catch (e) { console.warn("[editor]", e); ed = null; }
+  if (!ed) { bar.hidden = true; foot.hidden = true; host.hidden = true; raw.hidden = false; return { wrap, getMarkdown: () => raw.value }; }
+  liveEditors.add(ed);
+  const editor = ed.editor;
+
+  // A one-row inline prompt (Electron has no window.prompt): link address, image alt.
+  const showAsk = ({ label, placeholder, value, apply, onApply, extra }) => {
+    ask.innerHTML = ""; ask.hidden = false;
+    ask.appendChild(siteEl("span", "k", label));
+    const inp = document.createElement("input"); inp.className = "field"; inp.placeholder = placeholder || ""; inp.value = value || "";
+    const ok = siteMini(apply, () => { onApply(inp.value.trim()); hideAsk(); });
+    const no = siteMini(E.cancel, () => { hideAsk(); editor.commands.focus(); });
+    ask.append(inp, ok);
+    if (extra) ask.appendChild(siteMini(extra.label, () => { extra.run(); hideAsk(); }, { danger: true }));
+    ask.appendChild(no);
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); ok.click(); } if (e.key === "Escape") { e.preventDefault(); no.click(); } });
+    inp.focus();
+  };
+  const hideAsk = () => { ask.hidden = true; ask.innerHTML = ""; };
+
+  const buttons = [];
+  const btn = (key, title, run, isOn, canRun) => {
+    const b = document.createElement("button"); b.type = "button"; b.title = title;
+    b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${EDITOR_ICONS[key]}</svg>`;
+    b.addEventListener("mousedown", (e) => e.preventDefault()); // keep the selection
+    b.addEventListener("click", run);
+    bar.appendChild(b); buttons.push({ b, isOn, canRun }); return b;
+  };
+  const sep = () => bar.appendChild(siteEl("span", "sep"));
+  const chain = () => editor.chain().focus();
+
+  // Block type: Text / Heading / Subheading (H1 is the title).
+  const block = document.createElement("select"); block.className = "field";
+  [["p", E.blockText], ["h2", E.blockH2], ["h3", E.blockH3]].forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; block.appendChild(o); });
+  block.addEventListener("change", () => { if (block.value === "p") chain().setParagraph().run(); else chain().toggleHeading({ level: Number(block.value.slice(1)) }).run(); });
+  bar.appendChild(block); sep();
+  btn("bold", E.bold, () => chain().toggleBold().run(), () => editor.isActive("bold"));
+  btn("italic", E.italic, () => chain().toggleItalic().run(), () => editor.isActive("italic"));
+  btn("strike", E.strike, () => chain().toggleStrike().run(), () => editor.isActive("strike"));
+  sep();
+  btn("bullet", E.bullet, () => chain().toggleBulletList().run(), () => editor.isActive("bulletList"));
+  btn("numbered", E.numbered, () => chain().toggleOrderedList().run(), () => editor.isActive("orderedList"));
+  btn("quote", E.quote, () => chain().toggleBlockquote().run(), () => editor.isActive("blockquote"));
+  btn("code", E.code, () => chain().toggleCodeBlock().run(), () => editor.isActive("codeBlock"));
+  sep();
+  btn("link", E.link, () => {
+    const cur = editor.getAttributes("link").href || "";
+    showAsk({
+      label: E.linkAsk, placeholder: E.linkPlaceholder, value: cur, apply: E.linkApply,
+      onApply: (href) => { if (!href) chain().extendMarkRange("link").unsetLink().run(); else chain().extendMarkRange("link").setLink({ href }).run(); },
+      extra: cur ? { label: E.linkRemove, run: () => chain().extendMarkRange("link").unsetLink().run() } : null,
+    });
+  }, () => editor.isActive("link"));
+  btn("image", E.image, async () => {
+    const it = await openMediaPicker(null);
+    if (!it || !it.url) { editor.commands.focus(); return; }
+    showAsk({ label: E.altAsk, placeholder: E.altPlaceholder, value: "", apply: E.altApply, onApply: (alt) => chain().setImage({ src: it.url, alt }).run() });
+  }, () => editor.isActive("image"));
+  btn("rule", E.rule, () => chain().setHorizontalRule().run(), () => false);
+  sep();
+  btn("undo", E.undo, () => chain().undo().run(), () => false, () => editor.can().undo());
+  btn("redo", E.redo, () => chain().redo().run(), () => false, () => editor.can().redo());
+
+  function paint() {
+    buttons.forEach(({ b, isOn, canRun }) => { b.classList.toggle("on", !!isOn()); if (canRun) b.disabled = !canRun(); });
+    block.value = editor.isActive("heading", { level: 2 }) ? "h2" : editor.isActive("heading", { level: 3 }) ? "h3" : "p";
+  }
+  editor.on("selectionUpdate", paint); editor.on("transaction", paint); paint();
+
+  // Markdown toggle: the raw file, for the fix the toolbar can't make (and for trust).
+  let showingRaw = false;
+  const toggle = siteMini(E.showMarkdown, () => {
+    showingRaw = !showingRaw;
+    if (showingRaw) { raw.value = ed.getMarkdown(); raw.hidden = false; host.hidden = true; bar.hidden = true; hideAsk(); raw.focus(); }
+    else { ed.setMarkdown(raw.value); raw.hidden = true; host.hidden = false; bar.hidden = false; onChange(); editor.commands.focus(); }
+    toggle.textContent = showingRaw ? E.showEditor : E.showMarkdown;
+  });
+  foot.appendChild(toggle);
+  return { wrap, getMarkdown: () => (showingRaw ? raw.value : ed.getMarkdown()) };
+}
+
 /**
  * The image control: the same drop/click upload zone as Get Designing (a file is
  * dropped or chosen, brought into public/images and optimized, and selected), a
@@ -3476,6 +3605,7 @@ async function renderSiteSettings(host, data) {
 }
 
 async function renderSite(body) {
+  destroyLiveEditors();
   const data = await window.desktop.getSiteContent().catch(() => ({ ready: false, reason: "no-project", pages: [], blocks: [], site: { nav: [], footerLinks: [] } }));
   const refresh = () => { if (RAILS.site.classList.contains("active")) openModal("site"); };
   if (!data.ready) {

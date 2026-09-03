@@ -52,6 +52,7 @@ const SKIP_DIRS = [
   "desktop/bin",      // spawned executables (shell script + shebang CLI)
   "desktop/dev",      // excluded from the bundle anyway
   "desktop/build",    // build tooling; never ships as app logic
+  "desktop/vendor",   // third-party bundles (the editor), already minified
 ];
 
 function skipped(relPosix) {

@@ -5,8 +5,8 @@ description: The first post. Posts are markdown files under content/posts.
 tags: [news]
 ---
 
-This is a post. Write in **markdown**; the frontmatter above carries the title,
-date, summary and SEO fields.
+This is a sample post. Open it in the Pages panel under Posts to edit it, or
+delete it once you have written your own.
 
 ## Headings work
 

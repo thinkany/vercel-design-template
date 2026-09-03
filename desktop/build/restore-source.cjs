@@ -32,6 +32,7 @@ const PATHSPECS = [
   ":(exclude,glob)desktop/bin/**",
   ":(exclude,glob)desktop/dev/**",
   ":(exclude,glob)desktop/build/**",
+  ":(exclude,glob)desktop/vendor/**",
 ];
 
 function run() {

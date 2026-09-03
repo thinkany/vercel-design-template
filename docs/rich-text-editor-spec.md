@@ -1,6 +1,6 @@
 # Rich text editor for posts and richtext fields (TipTap, markdown on disk)
 
-**Status:** spec'd 2026-09-02, agreed (Rob: "designers can't be expected to know markdown").
+**Status:** BUILT 2026-09-03 (phases 1 to 3; phase 4 polish open). Spec'd 2026-09-02, agreed (Rob: "designers can't be expected to know markdown").
 **Sequence:** after the media picker (Phase 2 item 3), since image insertion is the picker.
 **Estimate:** two to three days.
 
