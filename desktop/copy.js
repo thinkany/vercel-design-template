@@ -519,6 +519,10 @@ window.COPY = {
       dims: (w, h) => `${w} × ${h}`,
       noImage: "No image",
       altLabel: "Alt Text",
+      dropHint: "Drop an image here, or click to upload",
+      dropReplace: "Drop or click to replace",
+      chooseExisting: "Choose from project images",
+      importing: "Adding…",
     },
   },
   a11y: {

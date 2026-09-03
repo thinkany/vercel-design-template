@@ -132,6 +132,7 @@ contextBridge.exposeInMainWorld("desktop", {
   // Media: the project's public/images for the image picker.
   listMedia: () => ipcRenderer.invoke("media:list"),
   uploadMedia: () => ipcRenderer.invoke("media:upload"),
+  importMedia: (paths) => ipcRenderer.invoke("media:import", { paths }),
   deleteMedia: (rel) => ipcRenderer.invoke("media:delete", { rel }),
   getCmsSettings: () => ipcRenderer.invoke("cms:getSettings"),
   setCmsSettings: (patch) => ipcRenderer.invoke("cms:setSettings", patch),

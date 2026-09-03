@@ -3188,36 +3188,62 @@ function openMediaPicker(current) {
 }
 
 /**
- * The image control. `value` is { src, alt } (or a string path for legacy props);
- * onChange(next) receives { src, alt } or "" when cleared. Returns the element.
+ * The image control: the same drop/click upload zone as Get Designing (a file is
+ * dropped or chosen, brought into public/images and optimized, and selected), a
+ * link to pick an existing project image, and the alt text beneath. `value` is
+ * { src, alt } (or a string path for legacy props); onChange(next) receives
+ * { src, alt } or "" when cleared.
  */
 function siteImageControl(value, onChange, { label } = {}) {
   const M = COPY.site.media;
   let cur = typeof value === "string" ? { src: value, alt: "" } : (value && typeof value === "object" ? { src: value.src || "", alt: value.alt || "" } : { src: "", alt: "" });
   const wrap = siteEl("div", "site-kv");
   if (label) wrap.appendChild(siteEl("div", "k", label));
-  const row = siteEl("div", "site-img");
-  const thumb = document.createElement("img"); thumb.className = "site-img-thumb";
-  const empty = siteEl("div", "site-img-thumb empty", M.noImage);
-  const side = siteEl("div", "site-img-side");
-  const altLabel = siteEl("div", "k", M.altLabel);
+
+  const zone = document.createElement("label"); zone.className = "site-img-zone";
+  const preview = document.createElement("img"); preview.className = "site-img-preview";
+  const hint = siteEl("div", "site-img-hint");
+  const input = document.createElement("input"); input.type = "file"; input.accept = "image/*,.heic,.heif,.tif,.tiff"; input.style.display = "none";
+  zone.append(preview, hint, input);
+  wrap.appendChild(zone);
+
+  const links = siteEl("div", "site-img-links");
+  const chooseLink = siteEl("button", "site-link", M.chooseExisting); chooseLink.type = "button";
+  const removeLink = siteEl("button", "site-link danger", M.clear); removeLink.type = "button";
+  links.append(chooseLink, removeLink);
+  wrap.appendChild(links);
+
+  wrap.appendChild(siteEl("div", "k site-img-altlabel", M.altLabel));
   const alt = document.createElement("input"); alt.className = "field"; alt.value = cur.alt;
-  const btns = siteEl("div", "site-img-btns");
-  const choose = siteMini(M.choose, async () => { const it = await openMediaPicker(cur.src || null); if (it && it.url) { cur = { src: it.url, alt: cur.alt }; paint(); emit(); } });
-  const clear = siteMini(M.clear, () => { cur = { src: "", alt: cur.alt }; paint(); emit(); }, { danger: true });
-  btns.append(choose, clear);
-  side.append(altLabel, alt, btns);
+  wrap.appendChild(alt);
+
   const emit = () => onChange(cur.src ? { src: cur.src, alt: alt.value.trim() } : "");
-  alt.addEventListener("input", () => { cur.alt = alt.value; emit(); });
   const paint = () => {
-    row.innerHTML = "";
     const file = cur.src ? (/^https?:/.test(cur.src) ? cur.src : siteMediaFileUrl(cur.src)) : null;
-    if (cur.src && file) { thumb.src = file; row.append(thumb, side); }
-    else { empty.textContent = cur.src ? cur.src.split("/").pop() : M.noImage; row.append(empty, side); }
-    choose.textContent = cur.src ? M.change : M.choose; clear.hidden = !cur.src;
+    if (cur.src && file) { preview.src = file; preview.style.display = "block"; }
+    else { preview.removeAttribute("src"); preview.style.display = "none"; }
+    hint.textContent = cur.src ? (cur.src.split("/").pop() + " · " + M.dropReplace) : M.dropHint;
+    zone.classList.toggle("has-image", !!cur.src);
+    removeLink.hidden = !cur.src;
   };
+  const importFiles = async (files) => {
+    const paths = Array.from(files || []).map((f) => { try { return window.desktop.pathForFile(f); } catch { return null; } }).filter(Boolean);
+    if (!paths.length) return;
+    hint.textContent = M.importing;
+    const r = await window.desktop.importMedia(paths);
+    if (r && r.ok && r.added && r.added.length) {
+      mediaIndex = await window.desktop.listMedia().catch(() => mediaIndex);
+      cur = { src: r.added[0], alt: cur.alt }; paint(); emit();
+    } else paint();
+  };
+  input.addEventListener("change", () => { importFiles(input.files); input.value = ""; });
+  ["dragenter", "dragover"].forEach((t) => zone.addEventListener(t, (e) => { e.preventDefault(); zone.classList.add("drag"); }));
+  ["dragleave", "drop"].forEach((t) => zone.addEventListener(t, (e) => { e.preventDefault(); zone.classList.remove("drag"); }));
+  zone.addEventListener("drop", (e) => importFiles(e.dataTransfer && e.dataTransfer.files));
+  chooseLink.addEventListener("click", async () => { const it = await openMediaPicker(cur.src || null); if (it && it.url) { cur = { src: it.url, alt: cur.alt }; paint(); emit(); } });
+  removeLink.addEventListener("click", () => { cur = { src: "", alt: cur.alt }; paint(); emit(); });
+  alt.addEventListener("input", () => { cur.alt = alt.value; emit(); });
   paint();
-  wrap.appendChild(row);
   return wrap;
 }
 // Thumbnails for existing values need the file URL behind a "/images/…" path. The

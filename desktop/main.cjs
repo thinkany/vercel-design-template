@@ -1860,18 +1860,13 @@ function convertImage(inPath, outPath, { maxWidth = MEDIA_MAX_WIDTH, quality = M
     p.on("error", (e) => resolve({ ok: false, error: e.message }));
   });
 }
-ipcMain.handle("media:upload", async () => {
-  if (!currentProject) return { ok: false, error: "No project is open." };
-  const res = await dialog.showOpenDialog(mainWindow, {
-    title: "Add images",
-    properties: ["openFile", "multiSelections"],
-    filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "gif", "webp", "avif", "svg", "tif", "tiff", "heic", "heif"] }],
-  });
-  if (res.canceled || !res.filePaths.length) return { ok: true, added: [] };
+// Bring files into public/images (converted per the project's settings). Shared by
+// the file dialog (media:upload) and drag-and-drop from the CMS (media:import).
+async function importMediaFiles(paths) {
   fs.mkdirSync(mediaDir(currentProject), { recursive: true });
   const settings = loadCmsSettings(currentProject).media;
   const added = [];
-  for (const src of res.filePaths) {
+  for (const src of paths) {
     const ext = path.extname(src).toLowerCase();
     const base = path.basename(src, path.extname(src));
     try {
@@ -1888,6 +1883,23 @@ ipcMain.handle("media:upload", async () => {
     } catch (e) { return { ok: false, error: e.message, added: added.map((n) => `/images/${n}`) }; }
   }
   return { ok: true, added: added.map((n) => `/images/${n}`) };
+}
+ipcMain.handle("media:upload", async () => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: "Add images",
+    properties: ["openFile", "multiSelections"],
+    filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "gif", "webp", "avif", "svg", "tif", "tiff", "heic", "heif"] }],
+  });
+  if (res.canceled || !res.filePaths.length) return { ok: true, added: [] };
+  return importMediaFiles(res.filePaths);
+});
+// Dropped files (the renderer resolves their paths through webUtils in the preload).
+ipcMain.handle("media:import", (_e, { paths } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const list = (Array.isArray(paths) ? paths : []).filter((p) => typeof p === "string" && path.isAbsolute(p) && fs.existsSync(p));
+  if (!list.length) return { ok: true, added: [] };
+  return importMediaFiles(list);
 });
 ipcMain.handle("media:delete", (_e, { rel } = {}) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
