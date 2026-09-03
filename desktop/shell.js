@@ -3616,11 +3616,33 @@ cmshelp.addEventListener("click", (e) => { if (e.target === cmshelp) closeCmsHel
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !cmshelp.hidden) { closeCmsHelp(); e.stopPropagation(); } }, true);
 
 // The Settings tab: image optimization (per project, .thinkany/cms.json) + site facts.
-async function renderSiteSettings(host, data) {
+// An on/off switch row: label left, the switch right. onChange(next) fires on toggle.
+function siteSwitch(label, on, onChange) {
+  const row = siteEl("label", "ta-switch" + (on ? " on" : ""));
+  const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = on;
+  const track = siteEl("span", "ta-switch-track");
+  row.append(siteEl("span", "k", label), cb, track);
+  cb.addEventListener("change", () => { row.classList.toggle("on", cb.checked); onChange(cb.checked); });
+  return row;
+}
+
+// The Settings tab. While the site builder is OFF it holds only the switch; ON, the
+// switch is the last item and the other tabs open up.
+async function renderSiteSettings(host, data, st) {
   const S = COPY.site.settings;
-  const st = await window.desktop.getCmsSettings().catch(() => ({ media: { quality: 55, maxWidth: 2400 }, defaults: { media: { quality: 55, maxWidth: 2400 } } }));
+  st = st || await window.desktop.getCmsSettings().catch(() => ({ media: { quality: 55, maxWidth: 2400 }, defaults: { media: { quality: 55, maxWidth: 2400 } }, enabled: false }));
   const wrap = siteEl("div", "site-single");
   host.appendChild(wrap);
+  const enableRow = () => {
+    const box = siteEl("div", "site-kv");
+    box.appendChild(siteSwitch(S.enable, !!st.enabled, async (next) => {
+      const r = await window.desktop.setCmsSettings({ enabled: next });
+      if (r && r.ok) { siteRailState.tab = "settings"; if (RAILS.site.classList.contains("active")) openModal("site"); }
+    }));
+    box.appendChild(siteEl("div", "sess-desc", st.enabled ? S.enableOnHint : S.enableOffHint));
+    return box;
+  };
+  if (!st.enabled) { wrap.appendChild(enableRow()); return; }
 
   wrap.appendChild(siteEl("div", "sess-label", S.mediaHeading));
   wrap.appendChild(siteEl("div", "sess-desc", S.mediaDesc));
@@ -3718,6 +3740,9 @@ async function renderSiteSettings(host, data) {
     a.addEventListener("click", (e) => { e.preventDefault(); window.desktop.openExternal(data.liveUrl); });
     row.appendChild(a); wrap.appendChild(row);
   } else wrap.appendChild(siteEl("div", "sess-desc", COPY.site.previewNote));
+
+  wrap.appendChild(siteEl("div", "drawer-sep"));
+  wrap.appendChild(enableRow());
 }
 
 async function renderSite(body) {
@@ -3742,13 +3767,17 @@ async function renderSite(body) {
   siteMarks = data.marks || {};
 
   // ── Tabs: Pages · Posts · Types · Navigation · Settings ──
+  // Off per project until the Settings switch is on: only Settings is reachable then.
+  const cms = await window.desktop.getCmsSettings().catch(() => ({ media: { quality: 55, maxWidth: 2400 }, defaults: { media: { quality: 55, maxWidth: 2400 } }, enabled: false }));
   const TABS = ["pages", "posts", "types", "nav", "settings"];
   if (!TABS.includes(siteRailState.tab)) siteRailState.tab = "pages";
+  if (!cms.enabled) siteRailState.tab = "settings";
   const counts = { pages: data.pages.length, posts: posts.length, types: ctx.types.length };
   const tabs = siteEl("div", "site-tabs");
   TABS.forEach((t) => {
     const b = siteEl("button", "site-tab" + (siteRailState.tab === t ? " active" : ""), COPY.site.tabs[t]); b.type = "button";
     if (counts[t] != null) b.appendChild(siteEl("span", "count", String(counts[t])));
+    if (!cms.enabled && t !== "settings") b.disabled = true;
     b.addEventListener("click", () => { siteRailState.tab = t; refresh(); });
     tabs.appendChild(b);
   });
@@ -3793,7 +3822,7 @@ async function renderSite(body) {
     const wrap = siteEl("div", "site-single"); body.appendChild(wrap);
     wrap.appendChild(renderSiteNav(data.site, refresh, siteLinkOptions(data, posts, ctx)));
   } else {
-    await renderSiteSettings(body, data);
+    await renderSiteSettings(body, data, cms);
   }
 }
 

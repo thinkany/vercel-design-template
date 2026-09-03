@@ -317,6 +317,16 @@
       .site-tab:hover { color: #333; border-color: #cfcfd6; }
       .site-tab.active { color: #17171b; border-color: #111; }
       .site-tab .count { font-weight: 500; color: #b0b0b8; margin-left: 4px; font-size: 11px; }
+      .site-tab:disabled { color: #c4c4cc; border-color: #f0f0f4; cursor: default; }
+      .site-tab:disabled .count { color: #d4d4da; }
+      /* The on/off switch: 1px outline; off = white with a black knob, on = black with a white knob. */
+      .ta-switch { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 4px 0; cursor: pointer; }
+      .ta-switch .k { font-size: 13px; font-weight: 600; color: #17171b; }
+      .ta-switch-track { position: relative; width: 38px; height: 22px; flex: none; border: 1px solid #111; border-radius: 11px; background: #fff; transition: background .15s ease; }
+      .ta-switch-track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #111; transition: transform .15s ease, background .15s ease; }
+      .ta-switch.on .ta-switch-track { background: #111; }
+      .ta-switch.on .ta-switch-track::after { background: #fff; transform: translateX(16px); }
+      .ta-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
       .site-cols { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 20px; align-items: start; min-height: 100%; }
       .site-single { max-width: 720px; }
       .site-range { display: flex; align-items: center; gap: 10px; }

@@ -575,6 +575,9 @@ window.COPY = {
     noneOption: "(none)",
     // settings tab
     settings: {
+      enable: "Site builder",
+      enableOffHint: "Turn on to edit this site's pages, posts, types, navigation and settings.",
+      enableOnHint: "Turn off to lock the site builder for this project. Nothing is deleted.",
       iconsHeading: "Icons",
       iconsDesc: "The icons browsers and phones show for this site.",
       favicon: "Browser icon",
