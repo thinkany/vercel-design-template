@@ -55,6 +55,26 @@ export const richtext = z.string().describe("richtext");
  * shows an Image left / Image right control and alternates new blocks
  * automatically. Default "left"; set "right" in content where the design flips.
  */
+/** A menu link. */
+export const navLink = z.object({ label: z.string(), href: z.string() });
+/** A mega-menu column: a heading over links, with an optional feature panel. */
+export const navColumn = z.object({
+  heading: z.string().optional(),
+  links: z.array(navLink).default([]),
+  feature: z.object({
+    image: z.object({ src: z.string(), alt: z.string().default("") }).optional(),
+    title: z.string().optional(),
+    text: z.string().optional(),
+    link: navLink.optional(),
+  }).optional(),
+});
+/**
+ * A top-level menu item. `links` is a plain dropdown; `columns` is a mega menu.
+ * A Header block declares which it renders by what its nav schema accepts: the
+ * CMS offers columns only when the header's schema has them.
+ */
+export const navItem = navLink.extend({ links: z.array(navLink).default([]), columns: z.array(navColumn).default([]) });
+
 export const mediaSide = z.enum(["left", "right"]).default("left").describe("side");
 
 export function defineBlock<S extends ZodTypeAny>(def: BlockDef<S>): BlockDef<S> {

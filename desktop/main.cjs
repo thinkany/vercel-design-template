@@ -1502,6 +1502,7 @@ function readSiteContent(dir) {
       return {
         blocks: readBlockRegistry(dir).map((b) => ({ ...b, defaults: ib.defaults[b.key] || {}, templates: ib.templates[b.key] || {}, fields: (ib.fields && ib.fields[b.key]) || {} })),
         marks: ib.marks || {}, // the design's icon set, rendered: { key: "<svg…>" }
+        megaMenu: !!ib.megaMenu, // the header renders nav columns → the Navigation tab offers them
       };
     })(),
     liveUrl: (pub.site && pub.site.url) || null, previewUrl: siteUrl,

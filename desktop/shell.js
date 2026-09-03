@@ -3612,43 +3612,54 @@ function siteLinkOptions(data, posts, ctx) {
   return out;
 }
 
-// Drag-and-drop for the navigation editor. A top-level item drags with its whole
-// group. Drop zones on a top-level row: top third = before, bottom third = after,
-// middle = INTO its group (only for an item without children, since nesting is one
-// level deep). Drop zones on a sub-link row: before / after within that group. A
-// sub-link dropped before or after a top-level row becomes top-level. Footer links
-// reorder among themselves only.
-let navDrag = null; // { item, arr, scope, hasKids }
-function siteNavDraggable(row, { item, arr, scope, parentItem, repaint, dirty }) {
+// Drag-and-drop for the navigation editor. Rows are top-level items, sub-links,
+// mega-menu columns and column links. Each row says what it REORDERS with (kinds
+// dropped before/after it, into `target`) and what it NESTS (dropped on its middle,
+// into `into`). A top-level item drags with its whole group; nesting is one level,
+// so an item with children can't be nested. Footer links reorder among themselves.
+let navDrag = null; // { item, arr, kind, hasKids }
+function siteNavDraggable(row, { item, kind, owners = [], reorder, nest, repaint, dirty }) {
   const grip = siteEl("span", "site-grip"); grip.title = COPY.site.dragToReorder; grip.setAttribute("aria-hidden", "true");
   grip.innerHTML = '<svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="3" cy="3" r="1.3"/><circle cx="7" cy="3" r="1.3"/><circle cx="3" cy="8" r="1.3"/><circle cx="7" cy="8" r="1.3"/><circle cx="3" cy="13" r="1.3"/><circle cx="7" cy="13" r="1.3"/></svg>';
   row.insertBefore(grip, row.firstChild);
   row.draggable = true;
   const clear = () => row.classList.remove("drop-before", "drop-after", "drop-into");
-  row.addEventListener("dragstart", (e) => { navDrag = { item, arr, scope, hasKids: !!(item.links && item.links.length) }; row.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "nav"); } catch {} });
+  const nestable = (d) => d.kind === "link" || (d.kind === "item" && !d.hasKids);
+  const canReorder = () => !!(reorder && reorder.kinds.includes(navDrag.kind) && (navDrag.kind !== "item" || reorder.topLevel || !navDrag.hasKids));
+  const canNest = () => !!(nest && nestable(navDrag));
+  const ok = () => navDrag && navDrag.item !== item && !owners.includes(navDrag.item) && (canReorder() || canNest());
+  const zone = (e) => {
+    const r = row.getBoundingClientRect(); const y = (e.clientY - r.top) / r.height;
+    if (canReorder() && canNest()) return y < 0.3 ? "before" : y > 0.7 ? "after" : "into";
+    if (canNest()) return "into";
+    return y < 0.5 ? "before" : "after";
+  };
+  row.addEventListener("dragstart", (e) => { e.stopPropagation(); navDrag = { item, kind, hasKids: !!((item.links && item.links.length) || (item.columns && item.columns.length)) }; row.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "nav"); } catch {} });
   row.addEventListener("dragend", () => { navDrag = null; row.classList.remove("dragging"); document.querySelectorAll(".site-nav-row.drop-before,.site-nav-row.drop-after,.site-nav-row.drop-into").forEach((r) => r.classList.remove("drop-before", "drop-after", "drop-into")); });
-  const ok = () => navDrag && navDrag.scope === scope && navDrag.item !== item && navDrag.item !== parentItem;
-  const canNest = () => scope === "nav" && !parentItem && navDrag && !navDrag.hasKids;
-  const zone = (e) => { const r = row.getBoundingClientRect(); const y = (e.clientY - r.top) / r.height; if (!canNest()) return y < 0.5 ? "before" : "after"; return y < 0.3 ? "before" : y > 0.7 ? "after" : "into"; };
-  row.addEventListener("dragover", (e) => { if (!ok()) return; e.preventDefault(); try { e.dataTransfer.dropEffect = "move"; } catch {} const z = zone(e); clear(); row.classList.add("drop-" + z); });
+  row.addEventListener("dragover", (e) => { if (!ok()) return; e.preventDefault(); e.stopPropagation(); try { e.dataTransfer.dropEffect = "move"; } catch {} const z = zone(e); clear(); row.classList.add("drop-" + z); });
   row.addEventListener("dragleave", clear);
   row.addEventListener("drop", (e) => {
     if (!ok()) return;
-    e.preventDefault(); const z = zone(e); clear();
-    const moved = navDrag.item; const from = navDrag.arr; navDrag = null;
-    from.splice(from.indexOf(moved), 1);
-    if (z === "into") { item.links = Array.isArray(item.links) ? item.links : []; delete moved.links; item.links.push(moved); }
+    e.preventDefault(); e.stopPropagation(); const z = zone(e); clear();
+    const moved = navDrag.item; const d = navDrag; navDrag = null;
+    if (!d.remove) { /* removal by identity from wherever it lives */ }
+    siteNavRemove(moved);
+    const strip = () => { delete moved.links; delete moved.columns; };
+    if (z === "into") { strip(); nest.into().push(moved); }
     else {
-      const to = parentItem ? parentItem.links : arr;
-      if (parentItem) delete moved.links; else if (scope === "nav") moved.links = Array.isArray(moved.links) ? moved.links : [];
+      const to = reorder.target();
+      if (reorder.topLevel) { moved.links = Array.isArray(moved.links) ? moved.links : []; moved.columns = Array.isArray(moved.columns) ? moved.columns : []; }
+      else if (d.kind !== "column") strip();
       const at = to.indexOf(item) + (z === "after" ? 1 : 0);
       to.splice(at, 0, moved);
     }
     dirty(); repaint();
   });
 }
+// Remove a dragged thing from wherever it sits in the nav draft (by identity).
+let siteNavRemove = () => {};
 
-function renderSiteNav(site, refresh, options = []) {
+function renderSiteNav(site, refresh, options = [], megaMenu = false) {
   const wrap = siteEl("div");
   wrap.appendChild(siteEl("div", "sess-label", COPY.site.navHeading));
   wrap.appendChild(siteEl("div", "sess-desc", COPY.site.navDesc));
@@ -3662,9 +3673,18 @@ function renderSiteNav(site, refresh, options = []) {
   const draft = JSON.parse(JSON.stringify({ nav: site.nav || [], footerLinks: site.footerLinks || [] }));
   let saveBtn;
   const dirty = () => { saveBtn.disabled = false; };
+  siteNavRemove = (x) => {
+    const pull = (arr) => { const i = arr.indexOf(x); if (i >= 0) { arr.splice(i, 1); return true; } return false; };
+    if (pull(draft.nav) || pull(draft.footerLinks)) return;
+    for (const it of draft.nav) {
+      if (Array.isArray(it.links) && pull(it.links)) return;
+      for (const c of it.columns || []) { if (Array.isArray(c.links) && pull(c.links)) return; }
+      if (Array.isArray(it.columns) && pull(it.columns)) return;
+    }
+  };
   const linkRow = (l, arr, i, paint, withSub, dnd) => {
     const row = siteEl("div", "site-nav-row");
-    if (dnd) siteNavDraggable(row, { item: l, arr, scope: dnd.scope, parentItem: dnd.parentItem, repaint: dnd.repaint, dirty });
+    if (dnd) siteNavDraggable(row, { item: l, kind: dnd.kind, owners: dnd.owners, reorder: dnd.reorder, nest: dnd.nest, repaint: dnd.repaint, dirty });
     const lab = document.createElement("input"); lab.className = "field"; lab.placeholder = COPY.site.navLabel; lab.value = l.label || "";
     const href = document.createElement("input"); href.className = "field"; href.placeholder = COPY.site.navHref; href.value = l.href || "";
     href.setAttribute("list", listId); href.title = COPY.site.navHrefHint;
@@ -3682,19 +3702,64 @@ function renderSiteNav(site, refresh, options = []) {
     if (withSub) {
       l.links = Array.isArray(l.links) ? l.links : [];
       const sub = siteEl("div"); sub.style.cssText = "margin:0 0 6px 14px;";
-      const paintSub = () => { sub.innerHTML = ""; if (l.links.length) sub.appendChild(siteEl("div", "sess-desc", COPY.site.subLinks)); l.links.forEach((s, j) => sub.appendChild(linkRow(s, l.links, j, paintSub, false, dnd && { scope: dnd.scope, parentItem: l, repaint: dnd.repaint }))); sub.appendChild(siteMini(COPY.site.addSubLink, () => { l.links.push({ label: "", href: l.href || "" }); dirty(); paintSub(); })); };
+      const paintSub = () => { sub.innerHTML = ""; if (l.links.length) sub.appendChild(siteEl("div", "sess-desc", COPY.site.subLinks)); l.links.forEach((s, j) => sub.appendChild(linkRow(s, l.links, j, paintSub, false, dnd && { kind: "link", owners: [l], reorder: { kinds: ["link", "item"], target: () => l.links }, nest: null, repaint: dnd.repaint }))); sub.appendChild(siteMini(COPY.site.addSubLink, () => { l.links.push({ label: "", href: l.href || "" }); dirty(); paintSub(); })); };
       paintSub();
       out.appendChild(sub);
+      // Mega menu: columns under this item (only when the header renders them).
+      if (megaMenu && dnd) {
+        l.columns = Array.isArray(l.columns) ? l.columns : [];
+        const cols = siteEl("div"); cols.style.cssText = "margin:0 0 6px 14px;";
+        const paintCols = () => {
+          cols.innerHTML = "";
+          if (l.columns.length) cols.appendChild(siteEl("div", "sess-desc", COPY.site.columns));
+          l.columns.forEach((c, k) => cols.appendChild(columnBox(c, l, k, dnd.repaint)));
+          cols.appendChild(siteMini(COPY.site.addColumn, () => { l.columns.push({ heading: "", links: [] }); dirty(); paintCols(); }));
+        };
+        paintCols();
+        out.appendChild(cols);
+      }
     }
     return out;
   };
+  // One mega-menu column: heading, its links, an optional feature panel.
+  const columnBox = (c, item, k, repaint) => {
+    c.links = Array.isArray(c.links) ? c.links : [];
+    const box = siteEl("div", "site-nav-col");
+    const head = siteEl("div", "site-nav-row col");
+    const hd = document.createElement("input"); hd.className = "field"; hd.placeholder = COPY.site.columnHeading; hd.value = c.heading || "";
+    hd.addEventListener("input", () => { c.heading = hd.value; dirty(); });
+    head.append(hd, siteTrashBtn(() => { item.columns.splice(k, 1); dirty(); repaint(); }, COPY.site.removeColumn));
+    siteNavDraggable(head, { item: c, kind: "column", owners: [item], reorder: { kinds: ["column"], target: () => item.columns }, nest: { into: () => c.links }, repaint, dirty });
+    box.appendChild(head);
+    const linksHost = siteEl("div"); linksHost.style.cssText = "margin:0 0 6px 14px;";
+    const paintLinks = () => {
+      linksHost.innerHTML = "";
+      c.links.forEach((s, j) => linksHost.appendChild(linkRow(s, c.links, j, paintLinks, false, { kind: "link", owners: [item, c], reorder: { kinds: ["link", "item"], target: () => c.links }, nest: null, repaint })));
+      linksHost.appendChild(siteMini(COPY.site.addLink, () => { c.links.push({ label: "", href: "/" }); dirty(); paintLinks(); }));
+    };
+    paintLinks(); box.appendChild(linksHost);
+    // Feature panel (image, title, text, link), folded by default.
+    const f = siteFold(COPY.site.columnFeature, "nav-feature"); f.body.style.paddingLeft = "14px";
+    c.feature = c.feature && typeof c.feature === "object" ? c.feature : {};
+    const ft = siteField(COPY.site.featureTitle, c.feature.title); ft.input.addEventListener("input", () => { c.feature.title = ft.input.value; dirty(); }); f.body.appendChild(ft.wrap);
+    const fx = siteField(COPY.site.featureText, c.feature.text, { textarea: true }); fx.input.addEventListener("input", () => { c.feature.text = fx.input.value; dirty(); }); f.body.appendChild(fx.wrap);
+    f.body.appendChild(siteImageControl(c.feature.image, (next) => { c.feature.image = next ? { src: next.src, alt: next.alt } : undefined; dirty(); }, { label: COPY.site.featureImage }));
+    const fl = siteEl("div", "site-nav-row"); fl.style.gridTemplateColumns = "1fr 1fr";
+    const fll = document.createElement("input"); fll.className = "field"; fll.placeholder = COPY.site.navLabel; fll.value = (c.feature.link && c.feature.link.label) || "";
+    const flh = document.createElement("input"); flh.className = "field"; flh.placeholder = COPY.site.navHref; flh.value = (c.feature.link && c.feature.link.href) || ""; flh.setAttribute("list", listId);
+    const setLink = () => { c.feature.link = flh.value.trim() ? { label: fll.value, href: flh.value } : undefined; dirty(); };
+    fll.addEventListener("input", setLink); flh.addEventListener("input", setLink);
+    fl.append(fll, flh); f.body.appendChild(siteEl("div", "k", COPY.site.featureLink)); f.body.appendChild(fl);
+    box.appendChild(f.sec);
+    return box;
+  };
   const navList = siteEl("div");
-  const paintNav = () => { navList.innerHTML = ""; draft.nav.forEach((l, i) => navList.appendChild(linkRow(l, draft.nav, i, paintNav, true, { scope: "nav", parentItem: null, repaint: paintNav }))); navList.appendChild(siteMini(COPY.site.addLink, () => { draft.nav.push({ label: "", href: "/", links: [] }); dirty(); paintNav(); })); };
+  const paintNav = () => { navList.innerHTML = ""; draft.nav.forEach((l, i) => navList.appendChild(linkRow(l, draft.nav, i, paintNav, true, { kind: "item", owners: [], reorder: { kinds: ["item", "link"], target: () => draft.nav, topLevel: true }, nest: { into: () => (l.links = Array.isArray(l.links) ? l.links : []) }, repaint: paintNav }))); navList.appendChild(siteMini(COPY.site.addLink, () => { draft.nav.push({ label: "", href: "/", links: [] }); dirty(); paintNav(); })); };
   paintNav();
   wrap.appendChild(navList);
   wrap.appendChild(siteEl("div", "sess-label", COPY.site.footerHeading)).style.marginTop = "12px";
   const footList = siteEl("div");
-  const paintFoot = () => { footList.innerHTML = ""; draft.footerLinks.forEach((l, i) => footList.appendChild(linkRow(l, draft.footerLinks, i, paintFoot, false, { scope: "footer", parentItem: null, repaint: paintFoot }))); footList.appendChild(siteMini(COPY.site.addLink, () => { draft.footerLinks.push({ label: "", href: "/" }); dirty(); paintFoot(); })); };
+  const paintFoot = () => { footList.innerHTML = ""; draft.footerLinks.forEach((l, i) => footList.appendChild(linkRow(l, draft.footerLinks, i, paintFoot, false, { kind: "footer", owners: [], reorder: { kinds: ["footer"], target: () => draft.footerLinks }, nest: null, repaint: paintFoot }))); footList.appendChild(siteMini(COPY.site.addLink, () => { draft.footerLinks.push({ label: "", href: "/" }); dirty(); paintFoot(); })); };
   paintFoot();
   wrap.appendChild(footList);
   const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
@@ -3973,7 +4038,7 @@ async function renderSite(body) {
     renderSiteTypesList(left, right, ctx, refresh);
   } else if (siteRailState.tab === "nav") {
     const wrap = siteEl("div", "site-single"); body.appendChild(wrap);
-    wrap.appendChild(renderSiteNav(data.site, refresh, siteLinkOptions(data, posts, ctx)));
+    wrap.appendChild(renderSiteNav(data.site, refresh, siteLinkOptions(data, posts, ctx), !!data.megaMenu));
   } else {
     await renderSiteSettings(body, data, cms);
   }

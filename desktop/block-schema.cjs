@@ -65,8 +65,8 @@ function introspectBlocks(dir, { esbuild } = {}) {
   const cachePath = path.join(dir, ".thinkany", "blocks.json");
   const mtime = blocksMtime(dir);
   const cached = readJsonFile(cachePath);
-  if (cached && cached.mtime === mtime && cached.defaults && cached.fields) return { defaults: cached.defaults, templates: cached.templates || {}, fields: cached.fields || {}, marks: cached.marks || {} };
-  let defaults = {}; let templates = {}; let fields = {}; let marks = {};
+  if (cached && cached.mtime === mtime && cached.defaults && cached.fields && "megaMenu" in cached) return { defaults: cached.defaults, templates: cached.templates || {}, fields: cached.fields || {}, marks: cached.marks || {}, megaMenu: !!cached.megaMenu };
+  let defaults = {}; let templates = {}; let fields = {}; let marks = {}; let megaMenu = false;
   try {
     if (!esbuild) esbuild = require("esbuild");
     const result = esbuild.buildSync({
@@ -91,12 +91,13 @@ function introspectBlocks(dir, { esbuild } = {}) {
       fields[key] = fm;
     }
     marks = renderMarks(dir, esbuild, req);
+    megaMenu = headerAcceptsColumns(dir, esbuild, req);
   } catch (e) {
     console.warn(`[blocks] introspection failed: ${e.message}`);
-    return cached && cached.defaults ? { defaults: cached.defaults, templates: cached.templates || {}, fields: cached.fields || {}, marks: cached.marks || {} } : { defaults: {}, templates: {}, fields: {}, marks: {} };
+    return cached && cached.defaults ? { defaults: cached.defaults, templates: cached.templates || {}, fields: cached.fields || {}, marks: cached.marks || {}, megaMenu: !!cached.megaMenu } : { defaults: {}, templates: {}, fields: {}, marks: {}, megaMenu: false };
   }
-  try { fs.mkdirSync(path.dirname(cachePath), { recursive: true }); fs.writeFileSync(cachePath, JSON.stringify({ mtime, defaults, templates, fields, marks }, null, 2) + "\n"); } catch {}
-  return { defaults, templates, fields, marks };
+  try { fs.mkdirSync(path.dirname(cachePath), { recursive: true }); fs.writeFileSync(cachePath, JSON.stringify({ mtime, defaults, templates, fields, marks, megaMenu }, null, 2) + "\n"); } catch {}
+  return { defaults, templates, fields, marks, megaMenu };
 }
 
 
@@ -140,6 +141,26 @@ function zodFields(schema, out, at, depth, desc) {
   }
 }
 
+// Does the site's Header block render a mega menu? True when its nav schema accepts
+// `columns` (the navItem fragment). The CMS offers columns only then.
+function headerAcceptsColumns(dir, esbuild, req) {
+  const file = path.join(dir, "site", "blocks", "chrome.ts");
+  if (!fs.existsSync(file)) return false;
+  try {
+    const result = esbuild.buildSync({
+      entryPoints: [file], bundle: true, write: false, platform: "node", format: "cjs", target: "node20",
+      jsx: "automatic", tsconfig: path.join(dir, "site", "tsconfig.json"), logLevel: "silent",
+      external: ["react", "react-dom", "react/jsx-runtime", "lucide-react", "motion", "motion/*", "astro/zod", "astro:*"],
+    });
+    const mod = { exports: {} };
+    new Function("require", "module", "exports", "__filename", "__dirname", result.outputFiles[0].text)(req, mod, mod.exports, file, path.dirname(file));
+    const header = mod.exports.chrome && mod.exports.chrome.header;
+    if (!header || !header.props) return false;
+    const f = {}; zodFields(header.props, f, "", 0);
+    return !!f["nav.columns"];
+  } catch (e) { console.warn(`[blocks] chrome introspection failed: ${e.message}`); return false; }
+}
+
 // The design's marks (site/blocks/lib/marks.tsx exports MARKS: key → component),
 // rendered to static SVG with the project's React so the editor can show them.
 function renderMarks(dir, esbuild, req) {
@@ -167,4 +188,4 @@ function renderMarks(dir, esbuild, req) {
   }
 }
 
-module.exports = { introspectBlocks, zodDefault, zodFields, renderMarks, blocksMtime };
+module.exports = { introspectBlocks, zodDefault, zodFields, renderMarks, headerAcceptsColumns, blocksMtime };

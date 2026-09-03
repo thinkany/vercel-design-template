@@ -153,14 +153,21 @@ Chrome components receive `{ siteName, logo, nav, footerLinks }` from the layout
 (nav comes from `content/site.json`), so their props schema is:
 
 ```ts
-const navLink = z.object({ label: z.string(), href: z.string() });
+import { navItem, navLink } from "../src/lib/blocks";
 const props = z.object({
   siteName: z.string(),
   logo: z.string().optional(),
-  nav: z.array(navLink.extend({ links: z.array(navLink).default([]) })).default([]),
+  nav: z.array(navItem).default([]),   // navItem carries links (dropdown) + columns (mega menu)
   footerLinks: z.array(navLink).default([]),
 });
 ```
+
+**Mega menu.** If the design's menu opens into columns (headings over link groups,
+maybe a featured image or call to action), the Header renders `item.columns`
+(`{ heading, links, feature: { image, title, text, link } }`) in the design's
+idiom, and the design's columns move to `content/site.json` `nav[].columns`. If the
+design has a plain dropdown, render `item.links` and ignore `columns`. Using
+`navItem` is what tells the CMS whether to offer columns: keep it either way.
 
 The Header is the one block that runs in the browser: `hydrate: "load"` on its
 definition, and **`export function Header(...)`** (a named export) in its file.

@@ -4,6 +4,7 @@
 // and the navigation the site chrome renders.
 import { z } from "astro/zod";
 import raw from "../../../content/site.json";
+import { navColumn } from "./blocks";
 
 const navLink = z.object({
   label: z.string(),
@@ -13,6 +14,8 @@ const navLink = z.object({
 export const navItem = navLink.extend({
   /** Sub-links (a dropdown on desktop, an inline accordion on mobile). */
   links: z.array(navLink).default([]),
+  /** Mega-menu columns (rendered only by a header whose schema accepts them). */
+  columns: z.array(navColumn).default([]),
 });
 export type NavItem = z.infer<typeof navItem>;
 
