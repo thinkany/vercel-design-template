@@ -759,6 +759,12 @@
       .site-mini { border: 1px solid #ddd; background: #fff; border-radius: 6px; font-size: 11px; line-height: 1; padding: 4px 7px; cursor: pointer; color: #333; }
       .site-mini:hover { border-color: #111; }
       .site-mini:disabled { opacity: .35; cursor: default; }
+      .site-grip { display: inline-flex; align-items: center; width: 12px; margin-right: 6px; color: #c4c4cc; cursor: grab; flex: none; }
+      .site-grip svg { width: 10px; height: 16px; fill: currentColor; }
+      .site-block:hover .site-grip { color: #777; }
+      .site-block.dragging { opacity: .4; }
+      .site-block.drop-before { box-shadow: 0 -2px 0 0 #111; }
+      .site-block.drop-after { box-shadow: 0 2px 0 0 #111; }
       .site-trash { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; color: #c0261e; border-color: #e7b7b3; vertical-align: middle; }
       .site-trash svg { width: 13px; height: 13px; }
       .site-trash:hover { border-color: #c0261e; background: #fff5f4; }

@@ -2639,6 +2639,32 @@ function siteMini(label, onClick, { danger, title, disabled } = {}) {
   b.addEventListener("click", onClick);
   return b;
 }
+// Drag-and-drop reordering for a block list (the arrows stay). Each row gets a grip;
+// dragging over another row shows a line above or below it (by pointer half), and
+// dropping moves the item there. `move(from, to)` reorders the data and repaints.
+let siteDragFrom = -1;
+function siteMakeDraggable(row, i, move) {
+  const grip = siteEl("span", "site-grip"); grip.title = COPY.site.dragToReorder; grip.setAttribute("aria-hidden", "true");
+  grip.innerHTML = '<svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="3" cy="3" r="1.3"/><circle cx="7" cy="3" r="1.3"/><circle cx="3" cy="8" r="1.3"/><circle cx="7" cy="8" r="1.3"/><circle cx="3" cy="13" r="1.3"/><circle cx="7" cy="13" r="1.3"/></svg>';
+  row.insertBefore(grip, row.firstChild);
+  row.draggable = true;
+  row.addEventListener("dragstart", (e) => { siteDragFrom = i; row.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); } catch {} });
+  row.addEventListener("dragend", () => { siteDragFrom = -1; row.classList.remove("dragging"); row.parentElement && row.parentElement.querySelectorAll(".drop-before,.drop-after").forEach((r) => r.classList.remove("drop-before", "drop-after")); });
+  const half = (e) => { const r = row.getBoundingClientRect(); return e.clientY < r.top + r.height / 2 ? "before" : "after"; };
+  row.addEventListener("dragover", (e) => {
+    if (siteDragFrom < 0 || siteDragFrom === i) return;
+    e.preventDefault(); try { e.dataTransfer.dropEffect = "move"; } catch {}
+    const h = half(e); row.classList.toggle("drop-before", h === "before"); row.classList.toggle("drop-after", h === "after");
+  });
+  row.addEventListener("dragleave", () => row.classList.remove("drop-before", "drop-after"));
+  row.addEventListener("drop", (e) => {
+    if (siteDragFrom < 0 || siteDragFrom === i) return;
+    e.preventDefault();
+    const from = siteDragFrom; let to = i + (half(e) === "after" ? 1 : 0); if (from < to) to--;
+    siteDragFrom = -1; row.classList.remove("drop-before", "drop-after");
+    if (from !== to) move(from, to);
+  });
+}
 // A delete control: a red, 1px-stroke trash can (lucide trash-2), mini-button sized.
 function siteTrashBtn(onClick, title) {
   const b = document.createElement("button"); b.type = "button"; b.className = "site-mini site-trash"; b.title = title || ""; b.setAttribute("aria-label", title || "");
@@ -2872,6 +2898,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
       const row = siteEl("div", "site-block");
       const def = byKey[b.type];
       row.appendChild(siteEl("div", "site-block-name", def ? def.name : b.type));
+      siteMakeDraggable(row, i, (from, to) => { const [m] = draft.blocks.splice(from, 1); draft.blocks.splice(to, 0, m); markDirty(); paintBlocks(); });
       const ek = page.id + ":" + i;
       row.append(
         siteMini("↑", () => { [draft.blocks[i - 1], draft.blocks[i]] = [draft.blocks[i], draft.blocks[i - 1]]; markDirty(); paintBlocks(); }, { disabled: i === 0, title: COPY.site.moveUp }),
@@ -3124,6 +3151,7 @@ function siteBlocksEditor(list, blocks, onChange, stateKey) {
       const row = siteEl("div", "site-block");
       const def = byKey[b.type];
       row.appendChild(siteEl("div", "site-block-name", def ? def.name : b.type));
+      siteMakeDraggable(row, i, (from, to) => { const [m] = list.splice(from, 1); list.splice(to, 0, m); onChange(); paint(); });
       const ek = stateKey + ":" + i;
       row.append(
         siteMini("↑", () => { [list[i - 1], list[i]] = [list[i], list[i - 1]]; onChange(); paint(); }, { disabled: i === 0, title: S.moveUp }),
