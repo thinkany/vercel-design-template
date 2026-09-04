@@ -3910,7 +3910,7 @@ async function renderSiteSettings(host, data, st) {
   const wrap = siteEl("div", "site-single");
   host.appendChild(wrap);
   const enableRow = () => {
-    const box = siteEl("div", "site-kv");
+    const box = siteEl("div", "site-kv site-enable-row"); // stays outside the folded sections
     box.appendChild(siteSwitch(S.enable, !!st.enabled, async (next) => {
       const r = await window.desktop.setCmsSettings({ enabled: next });
       if (r && r.ok) { siteRailState.tab = "settings"; if (RAILS.site.classList.contains("active")) openModal("site"); }
@@ -4048,7 +4048,7 @@ function siteAccordionize(wrap) {
   nodes.forEach((n) => {
     const isLabel = n.nodeType === 1 && n.classList.contains("sess-label");
     const isSep = n.nodeType === 1 && n.classList.contains("drawer-sep");
-    const isSwitch = n.nodeType === 1 && n.querySelector && n.querySelector(".ta-switch");
+    const isSwitch = n.nodeType === 1 && n.classList.contains("site-enable-row"); // the Site builder row only
     if (isLabel) {
       const title = n.textContent; const key = "settings:" + title;
       const isOpen = siteFolds[key] !== false; // open unless remembered closed
