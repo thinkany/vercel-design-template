@@ -3612,10 +3612,12 @@ function siteMediaFileUrl(url) {
 
 // Everything in the project a link can point at, for the URL combo in Navigation.
 // Drag-and-drop for the Pages tree. While dragging, a GHOST row shows exactly where
-// the page will land: above a row (upper half), below it at the same level (lower
-// half), or under it as a child (lower half with the pointer moved to the right,
-// drawn indented beneath the parent). Home is the root: nothing nests under it.
+// the page will land: above a row (upper half), or below it (lower half) at a level
+// set by how far the pointer has moved SIDEWAYS since the drag began: right = a
+// child of that row (drawn indented beneath it), left = one level up from it,
+// neither = the same level. Home is the root: nothing nests under it.
 let pageDrag = null;
+let pageDragX = 0; // pointer x at dragstart; sideways movement picks the level
 const PAGE_INDENT = 14; // px per tree level (matches the rows' marginLeft)
 function sitePageGhost() {
   let g = document.querySelector(".site-drop-ghost");
@@ -3625,30 +3627,38 @@ function sitePageGhost() {
 function sitePageDraggable(row, p, pages, refresh, depth = 0) {
   row.draggable = p.id !== "home";
   row.dataset.depth = String(depth);
+  if (p.id !== "home") {
+    const grip = siteEl("span", "site-grip"); grip.title = COPY.site.dragToReorder; grip.setAttribute("aria-hidden", "true");
+    grip.innerHTML = '<svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="3" cy="3" r="1.3"/><circle cx="7" cy="3" r="1.3"/><circle cx="3" cy="8" r="1.3"/><circle cx="7" cy="8" r="1.3"/><circle cx="3" cy="13" r="1.3"/><circle cx="7" cy="13" r="1.3"/></svg>';
+    row.insertBefore(grip, row.firstChild);
+  }
   const isDesc = (id, of) => { let cur = pages.find((x) => x.id === id); let g = 0; while (cur && cur.parent && g++ < 16) { if (cur.parent === of) return true; cur = pages.find((x) => x.id === cur.parent); } return false; };
   const ok = () => pageDrag && pageDrag.id !== p.id && !isDesc(p.id, pageDrag.id);
+  const grandparent = () => { const par = pages.find((x) => x.id === p.parent); return (par && par.parent) || null; };
   const zone = (e) => {
     const r = row.getBoundingClientRect();
-    const lower = e.clientY > r.top + r.height / 2;
-    if (!lower) return "before";
-    const indented = e.clientX > r.left + 28; // moved right: "make it a child"
-    return p.id !== "home" && indented ? "into" : "after";
+    if (e.clientY <= r.top + r.height / 2) return "before";
+    const dx = e.clientX - pageDragX;
+    if (dx > 20 && p.id !== "home") return "into"; // moved right: a child of this row
+    if (dx < -20 && p.parent) return "out";        // moved left: one level up from this row
+    return "after";
   };
+  const levelOf = (z) => (z === "into" ? depth + 1 : z === "out" ? depth - 1 : depth);
   const showGhost = (z) => {
     const g = sitePageGhost();
     g.querySelector(".site-drop-ghost-title").textContent = pageDrag.title;
     g.classList.toggle("child", z === "into");
-    g.style.marginLeft = ((z === "into" ? depth + 1 : depth) * PAGE_INDENT) + "px";
+    g.style.marginLeft = (levelOf(z) * PAGE_INDENT) + "px";
     if (z === "before") row.before(g); else row.after(g);
   };
-  row.addEventListener("dragstart", (e) => { pageDrag = p; row.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", p.id); } catch {} });
+  row.addEventListener("dragstart", (e) => { pageDrag = p; pageDragX = e.clientX; row.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", p.id); } catch {} });
   row.addEventListener("dragend", () => { pageDrag = null; row.classList.remove("dragging"); const g = document.querySelector(".site-drop-ghost"); if (g) g.remove(); });
   row.addEventListener("dragover", (e) => { if (!ok()) return; e.preventDefault(); try { e.dataTransfer.dropEffect = "move"; } catch {} showGhost(zone(e)); });
   row.addEventListener("drop", async (e) => {
     if (!ok()) return; e.preventDefault(); const z = zone(e);
     const g = document.querySelector(".site-drop-ghost"); if (g) g.remove();
     const moved = pageDrag; pageDrag = null;
-    const parent = z === "into" ? p.id : (p.parent || null);
+    const parent = z === "into" ? p.id : z === "out" ? grandparent() : (p.parent || null);
     if ((moved.parent || null) === parent) return;
     const r = await window.desktop.moveSitePage(moved.id, parent);
     if (r && r.ok) refresh(); else if (r && r.error) alert(r.error);
