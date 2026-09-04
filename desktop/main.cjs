@@ -1896,8 +1896,9 @@ ipcMain.handle("site:savePost", (_e, { id, data } = {}) => {
     image: typeof data.image === "string" ? data.image.trim() : "",
     tags: Array.isArray(data.tags) ? data.tags.map((t) => String(t).trim()).filter(Boolean) : [],
     draft: !!data.draft,
-    seo: data.seo && typeof data.seo === "object" ? data.seo : {},
+    seo: data.seo && typeof data.seo === "object" ? Object.fromEntries(Object.entries(data.seo).filter(([, v]) => v !== "" && v != null)) : {},
   };
+  if (fm.seo && fm.seo.jsonld) { const v = validJsonLd(fm.seo.jsonld); if (v) return { ok: false, error: v }; }
   const body = typeof data.body === "string" ? data.body.replace(/^\s*\n/, "").replace(/\s*$/, "") + "\n" : "\n";
   try {
     fs.mkdirSync(postsDir(currentProject), { recursive: true });
