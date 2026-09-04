@@ -49,6 +49,7 @@ export async function selfHost({ repoRoot, stylesDir, log = () => {} }) {
   // many candidates for the styleguide picker, and the site needn't carry those.
   const roles = roleFamilies(stylesDir);
   const wanted = new Set(Object.values(roles));
+  if (!wanted.size) { log("no --ta-font-* roles name a webfont; Google Fonts load directly"); return null; }
   const faces = []; let css = "";
   for (const url of urls) {
     const res = await fetch(url, { headers: { "user-agent": UA, accept: "text/css,*/*;q=0.1" } });
