@@ -33,6 +33,8 @@ export const siteSchema = z.object({
    * the page outline (top-level pages in order, their children as sub-links).
    */
   manageNav: z.boolean().default(true),
+  /** The posts directory: posts are listed at /<path> and served at /<path>/<post>. */
+  blog: z.object({ path: z.string().default("blog") }).default({ path: "blog" }),
   /** Site icons (the CMS Settings tab): paths under public/, e.g. "/images/icon.svg". */
   favicon: z.object({
     /** Browser tab / bookmark icon: SVG (best) or a square PNG. */
@@ -63,3 +65,5 @@ if (!parsed.success) {
   throw new Error(`content/site.json is invalid:\n${issues}`);
 }
 export const site: SiteSettings = parsed.data;
+/** The posts directory, normalized: no slashes, lower-case ("blog"). */
+export const blogPath: string = (site.blog.path || "blog").replace(/^\/+|\/+$/g, "").toLowerCase() || "blog";

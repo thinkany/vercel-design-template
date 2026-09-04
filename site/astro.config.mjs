@@ -24,6 +24,8 @@ const repoRoot = path.resolve(here, "..");
 // globals) are exposed as the `@design` alias so site.css never hardcodes an id.
 const siteJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "content", "site.json"), "utf8"));
 const design = siteJson.design || "v00";
+// The posts directory (Settings → Blog): where posts are listed and served.
+const blogPath = String((siteJson.blog && siteJson.blog.path) || "blog").replace(/^\/+|\/+$/g, "").toLowerCase() || "blog";
 const designStyles =
   design === "v00"
     ? path.resolve(repoRoot, "src", "styles")
@@ -51,7 +53,7 @@ function noindexPaths() {
     for (const f of fs.readdirSync(postsDir)) {
       if (!/\.mdx?$/.test(f)) continue;
       const fm = (fs.readFileSync(path.join(postsDir, f), "utf8").match(/^---\n([\s\S]*?)\n---/) || [])[1] || "";
-      if (/^seo:\n(?:[ \t]+.*\n)*?[ \t]+noindex:[ \t]*true/m.test(fm) || /^draft:[ \t]*true/m.test(fm)) out.add("/blog/" + f.replace(/\.mdx?$/, ""));
+      if (/^seo:\n(?:[ \t]+.*\n)*?[ \t]+noindex:[ \t]*true/m.test(fm) || /^draft:[ \t]*true/m.test(fm)) out.add(`/${blogPath}/` + f.replace(/\.mdx?$/, ""));
     }
   } catch { /* no posts dir */ }
   // designer-defined types: entries flagged noindex, under the type's path
@@ -78,7 +80,7 @@ function lastModified() {
       if (!/\.mdx?$/.test(f)) continue;
       const fm = (fs.readFileSync(path.join(repoRoot, "content", "posts", f), "utf8").match(/^---\n([\s\S]*?)\n---/) || [])[1] || "";
       const m = fm.match(/^updated:[ \t]*"?([^"\n]+)"?/m);
-      if (m) { const d = new Date(m[1].trim()); if (!Number.isNaN(d.getTime())) out.set("/blog/" + f.replace(/\.mdx?$/, ""), d); }
+      if (m) { const d = new Date(m[1].trim()); if (!Number.isNaN(d.getTime())) out.set(`/${blogPath}/` + f.replace(/\.mdx?$/, ""), d); }
     }
   } catch { /* no posts */ }
   return out;

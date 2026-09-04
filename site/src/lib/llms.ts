@@ -3,6 +3,7 @@
 // pages and posts, used when content/site.json carries no custom text.
 import { getCollection } from "astro:content";
 import { pageRoute } from "./pages";
+import { blogPath } from "./site";
 import { siteConfig } from "@/config/site";
 
 export async function generatedLlms(siteUrl: URL | undefined) {
@@ -23,7 +24,7 @@ export async function generatedLlms(siteUrl: URL | undefined) {
     }),
   ];
   if (posts.length) {
-    out.push("", "## Posts", ...posts.map((p) => line(p.data.title, abs(`/blog/${p.id}`), p.data.description)));
+    out.push("", "## Posts", ...posts.map((p) => line(p.data.title, abs(`/${blogPath}/${p.id}`), p.data.description)));
   }
   return out.join("\n") + "\n";
 }

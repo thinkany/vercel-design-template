@@ -1499,7 +1499,7 @@ function readSiteContent(dir) {
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
     licensed: siteLicensed(), // the CMS drawer shows a licensing note instead of the editor when false
-    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
+    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, blogPath: blogPathOf(site), seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
     pages, posts, ...(() => {
       const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {} };
       return {
@@ -1534,9 +1534,12 @@ function generatedLlms(dir) {
   const c = readSiteContent(dir);
   for (const p of c.pages) { if (p.seo && p.seo.noindex) continue; const slug = p.id === "home" ? "" : (p.slug || p.id); out.push(line(p.title, `${base}/${slug}`, p.seo && p.seo.description)); }
   const posts = readPosts(dir).filter((p) => !p.draft && !(p.seo && p.seo.noindex));
-  if (posts.length) { out.push("", "## Posts"); for (const p of posts) out.push(line(p.title, `${base}/blog/${p.id}`, p.description)); }
+  if (posts.length) { out.push("", "## Posts"); for (const p of posts) out.push(line(p.title, `${base}/${blogPathOf(site)}/${p.id}`, p.description)); }
   return out.join("\n") + "\n";
 }
+// The posts directory (content/site.json blog.path), normalized like the site does.
+function blogPathOf(site) { return String((site && site.blog && site.blog.path) || "blog").replace(/^\/+|\/+$/g, "").toLowerCase() || "blog"; }
+function siteJsonOf(dir) { return readJsonFile(path.join(siteContentDir(dir), "site.json")) || {}; }
 function slugifyId(s) {
   return String(s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
 }
@@ -1597,7 +1600,7 @@ function rewriteNavRoutes(dir, oldRoute, newRoute) {
   if (oldRoute === newRoute) return;
   const p = path.join(siteContentDir(dir), "site.json"); const site = readJsonFile(p); if (!site) return;
   const from = "/" + oldRoute, to = "/" + newRoute; let changed = false;
-  const fix = (l) => { if (!l || typeof l.href !== "string") return; if (l.href === from || l.href.startsWith(from + "#")) { l.href = to + l.href.slice(from.length); changed = true; } };
+  const fix = (l) => { if (!l || typeof l.href !== "string") return; if (l.href === from || l.href.startsWith(from + "#") || l.href.startsWith(from + "/")) { l.href = to + l.href.slice(from.length); changed = true; } };
   for (const it of site.nav || []) { fix(it); for (const s of it.links || []) fix(s); for (const c of it.columns || []) { for (const s of c.links || []) fix(s); if (c.feature && c.feature.link) fix(c.feature.link); } }
   for (const l of site.footerLinks || []) fix(l);
   if (changed) fs.writeFileSync(p, JSON.stringify(site, null, 2) + "\n");
@@ -1617,6 +1620,7 @@ ipcMain.handle("site:movePage", (_e, { id, parent, index } = {}) => {
   byId[id].parent = target;
   const sib = Object.values(byId).find((q) => q.id !== id && (q.parent || null) === target && q.slug === byId[id].slug);
   if (sib) return { ok: false, error: `Another page there already uses the address "${byId[id].slug}".` };
+  if (!target && byId[id].slug === blogPathOf(siteJsonOf(currentProject))) return { ok: false, error: `"/${byId[id].slug}" is the posts directory (Settings, Blog). A page can't sit there.` };
   try {
     const siblings = pageSiblings(byId, target, id);
     const at = Number.isFinite(index) ? Math.max(0, Math.min(siblings.length, Math.floor(index))) : siblings.length;
@@ -1650,6 +1654,7 @@ ipcMain.handle("site:savePage", (_e, { id, data } = {}) => {
   for (const k of Object.keys(doc.seo)) if (doc.seo[k] === "" || doc.seo[k] == null) delete doc.seo[k];
   const sib = Object.values(byId).find((q) => q.id !== id && (q.parent || null) === parent && q.slug === doc.slug);
   if (sib) return { ok: false, error: `Another page there already uses the address "${doc.slug}".` };
+  if (!parent && doc.slug === blogPathOf(siteJsonOf(currentProject))) return { ok: false, error: `"/${doc.slug}" is the posts directory (Settings, Blog). Give the page another address.` };
   try {
     fs.mkdirSync(path.dirname(pageFile(currentProject, id)), { recursive: true });
     fs.writeFileSync(pageFile(currentProject, id), JSON.stringify(doc, null, 2) + "\n");
@@ -1663,7 +1668,7 @@ ipcMain.handle("site:createPage", (_e, { title } = {}) => {
   const t = String(title || "").trim();
   if (!t) return { ok: false, error: "Give the page a title." };
   let id = slugifyId(t) || "page";
-  if (id === "blog") id = "blog-page"; // /blog is the posts index
+  if (id === blogPathOf(siteJsonOf(currentProject))) id = `${id}-page`; // the posts directory
   let n = 2; const base = id;
   while (fs.existsSync(pageFile(currentProject, id))) id = `${base}-${n++}`;
   const top = pageSiblings(readPagesIndex(currentProject), null, null);
@@ -1717,6 +1722,25 @@ ipcMain.handle("site:setManageNav", (_e, { manageNav } = {}) => {
   const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
   const next = { ...cur, manageNav: manageNav !== false };
   try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, manageNav: next.manageNav }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+// The posts directory (Settings → Blog). Refused when a top-level page or a content
+// type already uses the address; menu links to posts follow the change.
+ipcMain.handle("site:setBlogPath", (_e, { path: raw } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const next = slugifyId(String(raw || "").trim().replace(/^\/+|\/+$/g, ""));
+  if (!next) return { ok: false, error: "Give the posts directory a name, like blog or news." };
+  const byId = readPagesIndex(currentProject);
+  const page = Object.values(byId).find((q) => q.id !== "home" && !q.parent && q.slug === next);
+  if (page) return { ok: false, error: `The page "${page.title}" already lives at /${next}. Choose another name, or move that page.` };
+  const types = (readJsonFile(path.join(siteContentDir(currentProject), "types.json")) || {}).types || [];
+  if (types.some((t) => String(t.path || "").replace(/^\/+/, "") === next)) return { ok: false, error: `A content type already uses /${next}.` };
+  const p = path.join(siteContentDir(currentProject), "site.json");
+  const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
+  const prev = blogPathOf(cur);
+  const out = { ...cur, blog: { ...(cur.blog || {}), path: next } };
+  try { fs.writeFileSync(p, JSON.stringify(out, null, 2) + "\n"); rewriteNavRoutes(currentProject, prev, next); return { ok: true, path: next }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle("site:llmsDefault", () => (currentProject ? generatedLlms(currentProject) : ""));

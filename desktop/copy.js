@@ -412,7 +412,7 @@ window.COPY = {
       },
       posts: {
         title: "Posts",
-        intro: "Your blog. Posts are written here and listed at /blog, newest first.",
+        intro: "Your blog. Posts are written here and listed at the posts directory (Settings, Blog: /blog by default), newest first.",
         sections: [
           { h: "Write a post", items: ["<b>Add a post</b> creates a draft. Drafts are never published, so you can work on them across sessions.", "<b>Publish date</b> is the date shown on the post; <b>Last edited</b> is stamped automatically on every save.", "<b>Summary</b> appears in the blog list and as the search description. <b>Tags</b> are comma-separated."] },
           { h: "Draft and publish", items: ["A draft shows <b>Save draft</b> and <b>Publish</b>. Publish makes it live on the next site publish.", "A published post shows <b>Save</b> and <b>Unpublish</b>. Unpublish takes it back to a draft without deleting it.", "<b>Delete post</b> removes the file for good."] },
@@ -444,6 +444,7 @@ window.COPY = {
         intro: "Options for this site.",
         sections: [
           { h: "Images", items: ["Every image added through the site is optimized automatically (AVIF, scaled to the maximum width). SVG, GIF and AVIF files are kept as they are.", "<b>Quality</b>: lower is smaller. 55 suits photos; 70 or more suits illustrations and screenshots.", "<b>Maximum width</b>: larger images are scaled down on upload; smaller ones are never scaled up.", "Changes apply to new uploads; images already in the project are left alone."] },
+          { h: "Blog", items: ["<b>Posts Directory</b> is the address posts are listed under and served from (<i>/blog</i>, <i>/blog/my-post</i>). Change it to <i>news</i>, <i>journal</i>, whatever fits. Menu links to posts follow the change, and no page may take that address."] },
           { h: "Navigation", items: ["<b>Manage Navigation</b> on: the menu is whatever you build in the Navigation tab. Off: the menu follows the page outline (top-level pages in order, child pages as sub-links), so adding or moving a page updates the menu.", "A header designed with a mega menu can't be driven from the outline; the switch stays on."] },
           { h: "Icons", items: ["<b>Browser icon</b>: the tab, bookmark and search-result icon. SVG is best; otherwise a square PNG of 512 × 512 or more. Icons are kept as uploaded, never converted.", "<b>Home-screen icon</b>: a 180 × 180 PNG without transparency, for phones that add the site to the home screen. Optional.", "Without an icon of its own, the site shows the template's default."] },
           { h: "Site", items: ["Which design the site is built from, and its live address once published. Publishing happens in the Publish panel."] },
@@ -597,6 +598,9 @@ window.COPY = {
     noneOption: "(none)",
     // settings tab
     settings: {
+      blogHeading: "Blog",
+      postsDir: "Posts Directory",
+      postsDirHint: "Where posts live: the list at /blog and each post at /blog/<post>. One word or hyphenated. No page can use this address.",
       navHeading: "Navigation",
       manageNav: "Manage Navigation",
       manageNavOnHint: "On: the menu is edited in the Navigation tab.",

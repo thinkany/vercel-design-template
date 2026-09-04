@@ -2744,6 +2744,7 @@ function siteMarkPicker(options, value, onPick, marks) {
   return wrap;
 }
 let siteMarks = {}; // the current project's rendered marks, from site:content
+let siteBlogPath = "blog"; // the posts directory (Settings → Blog), from site:content
 
 // Alternating layout: a new two-column block lands on the opposite side from the
 // nearest sided block above it, so a page alternates without anyone asking.
@@ -3020,7 +3021,7 @@ function renderSitePost(post, refresh) {
   const S = COPY.site;
   const card = siteEl("div");
   const h = siteEl("div"); h.style.cssText = "display:flex;align-items:baseline;gap:10px;margin-bottom:10px;";
-  h.append(siteEl("div", "site-page-title", post.title), siteEl("div", "site-page-slug", "/blog/" + post.id));
+  h.append(siteEl("div", "site-page-title", post.title), siteEl("div", "site-page-slug", "/" + siteBlogPath + "/" + post.id));
   h.querySelector(".site-page-title").style.fontSize = "15px";
   card.appendChild(h);
   const draft = JSON.parse(JSON.stringify({ title: post.title, date: post.date, description: post.description, image: post.image, tags: post.tags || [], draft: !!post.draft, seo: post.seo || {}, body: post.body || "" }));
@@ -3695,8 +3696,9 @@ function siteLinkOptions(data, posts, ctx) {
   const addAnchor = (id, label) => { if (id && !seen.has(id)) { seen.add(id); out.push({ group: "sections", label: label || id, href: "/#" + id }); } };
   if (home) home.blocks.forEach((b) => { const id = b.props && b.props.id; const label = b.props && (b.props.heading || b.props.title); if (id) addAnchor(id, label); });
   (data.site.nav || []).forEach((l) => { const m = (l.href || "").match(/^\/#([a-z0-9-]+)$/); if (m) addAnchor(m[1], l.label); (l.links || []).forEach((s) => { const n = (s.href || "").match(/^\/#([a-z0-9-]+)$/); if (n) addAnchor(n[1], s.label); }); });
-  if (posts.length) out.push({ group: "posts", label: COPY.site.tabs.posts, href: "/blog" });
-  posts.filter((p) => !p.draft).forEach((p) => out.push({ group: "posts", label: p.title, href: "/blog/" + p.id }));
+  const blog = "/" + ((data.site && data.site.blogPath) || "blog");
+  if (posts.length) out.push({ group: "posts", label: COPY.site.tabs.posts, href: blog });
+  posts.filter((p) => !p.draft).forEach((p) => out.push({ group: "posts", label: p.title, href: blog + "/" + p.id }));
   ctx.types.forEach((t) => {
     if (t.index) out.push({ group: "indexes", label: t.label, href: t.path });
     (ctx.entries[t.key] || []).forEach((e) => out.push({ group: "types", label: `${e.title} (${t.singular || t.label})`, href: `${t.path}/${e.slug || e.id}` }));
@@ -4009,6 +4011,22 @@ async function renderSiteSettings(host, data, st) {
   navBox.appendChild(siteEl("div", "sess-desc", data.megaMenu ? S.manageNavMegaNote : (manage ? S.manageNavOnHint : S.manageNavOffHint)));
   wrap.appendChild(navBox);
 
+  // Blog: the posts directory.
+  wrap.appendChild(siteEl("div", "drawer-sep"));
+  wrap.appendChild(siteEl("div", "sess-label", S.blogHeading));
+  const bp = siteField(S.postsDir, (data.site && data.site.blogPath) || "blog", { hint: S.postsDirHint });
+  const bpStatus = siteEl("div"); bpStatus.style.cssText = "min-height:18px;";
+  const saveBlogPath = async () => {
+    const v = bp.input.value.trim(); if (!v || v === ((data.site && data.site.blogPath) || "blog")) return;
+    const r = await window.desktop.setBlogPath(v);
+    bpStatus.innerHTML = "";
+    if (r && r.ok) { bp.input.value = r.path; data.site.blogPath = r.path; siteBlogPath = r.path; siteFlash(bpStatus, S.saved); }
+    else if (r && r.error) { const e = siteEl("div", "sess-desc", r.error); e.style.color = "#c0261e"; bpStatus.appendChild(e); }
+  };
+  bp.input.addEventListener("change", saveBlogPath);
+  bp.input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveBlogPath(); } });
+  bp.wrap.appendChild(bpStatus); wrap.appendChild(bp.wrap);
+
   wrap.appendChild(siteEl("div", "drawer-sep"));
   wrap.appendChild(siteEl("div", "sess-label", S.iconsHeading));
   wrap.appendChild(siteEl("div", "sess-desc", S.iconsDesc));
@@ -4090,6 +4108,7 @@ async function renderSite(body) {
   const ctx = { types: typesData.types || [], entries: typesData.entries || {}, blocks: data.blocks };
   mediaIndex = await window.desktop.listMedia().catch(() => []); // thumbnails for image fields
   siteMarks = data.marks || {};
+  siteBlogPath = (data.site && data.site.blogPath) || "blog";
 
   // ── Tabs: Pages · Posts · Types · Navigation · Settings ──
   // Off per project until the Settings switch is on: only Settings is reachable then.

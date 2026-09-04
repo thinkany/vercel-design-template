@@ -1,41 +1,80 @@
 ---
 // ©2026 thinkany llc. All rights reserved.
-// TYPE ENTRY → /<path>/<slug>: the entry rendered through its type's template
-// (blocks with {{field}} bindings), or its own `blocks` when it carries them (a
-// landing page). richtext fields are markdown, rendered to HTML for a binding
-// whose target prop name ends in Html; elsewhere they bind as text.
-import { getCollection } from "astro:content";
+// SECTION ENTRY → /<path>/<slug>. A POST (markdown, at the configured posts
+// directory: content/site.json blog.path) or a TYPE ENTRY rendered through its
+// type's template (blocks with {{field}} bindings), or its own `blocks` when it
+// carries them (a landing page). richtext fields are markdown, rendered to HTML
+// for a binding whose target prop name ends in Html; elsewhere they bind as text.
+import { getCollection, render } from "astro:content";
 import { createMarkdownProcessor } from "@astrojs/markdown-remark";
 import Base from "../../layouts/Base.astro";
 import { resolveBlock } from "../../lib/blocks";
 import { bindTemplate, typesFile } from "../../lib/types";
+import { blogPath } from "../../lib/site";
 import { blocks } from "../../../blocks";
 import rawTypes from "../../../../content/types.json";
 
 export async function getStaticPaths() {
   const { types } = typesFile.parse(rawTypes);
-  const out = [];
+  const out: { params: { type: string; slug: string }; props: Record<string, unknown> }[] = [];
   for (const t of types) {
     const entries = await getCollection(t.key as never);
     for (const e of entries as { id: string; data: { slug?: string } }[]) {
       out.push({ params: { type: t.path.replace(/^\//, ""), slug: e.data.slug ?? e.id }, props: { type: t, entry: e } });
     }
   }
+  const posts = await getCollection("posts", ({ data }) => !data.draft);
+  for (const post of posts) out.push({ params: { type: blogPath, slug: post.id }, props: { post } });
   return out;
 }
 
-const { type, entry } = Astro.props;
-const data = entry.data as Record<string, unknown> & { title: string; seo?: Record<string, unknown>; blocks?: { type: string; props: Record<string, unknown> }[] };
+const { type, entry, post } = Astro.props;
+const fmt = (d: Date) => d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
 
-// richtext → also provide `<key>Html` so a template can bind rendered markdown.
-const md = await createMarkdownProcessor();
-const bound: Record<string, unknown> = { ...data };
-for (const f of type.fields) {
-  if (f.kind === "richtext" && typeof data[f.key] === "string") bound[f.key + "Html"] = (await md.render(data[f.key] as string)).code;
+// A post: its markdown body.
+const postView = post ? await (async () => {
+  const { Content } = await render(post);
+  const seo = { description: post.data.description, image: post.data.image, ...post.data.seo };
+  const updated = post.data.updated && fmt(post.data.updated) !== fmt(post.data.date) ? fmt(post.data.updated) : null;
+  return { Content, seo, updated };
+})() : null;
+
+// A type entry: template + bindings (richtext → also `<key>Html`).
+const data = (entry ? entry.data : {}) as Record<string, unknown> & { title: string; seo?: Record<string, unknown>; blocks?: { type: string; props: Record<string, unknown> }[] };
+let rendered: ReturnType<typeof resolveBlock>[] = [];
+if (!post) {
+  const md = await createMarkdownProcessor();
+  const bound: Record<string, unknown> = { ...data };
+  for (const f of type.fields) {
+    if (f.kind === "richtext" && typeof data[f.key] === "string") bound[f.key + "Html"] = (await md.render(data[f.key] as string)).code;
+  }
+  const instances = data.blocks && data.blocks.length ? data.blocks : bindTemplate(type.template, bound);
+  rendered = instances.map((b, i) => resolveBlock(blocks, b, `content/${type.key}/${entry.id}.json blocks[${i}]`));
 }
-const instances = data.blocks && data.blocks.length ? data.blocks : bindTemplate(type.template, bound);
-const rendered = instances.map((b, i) => resolveBlock(blocks, b, `content/${type.key}/${entry.id}.json blocks[${i}]`));
 ---
-<Base title={data.title} seo={data.seo}>
-  {rendered.map(({ component: Block, props }) => <Block {...props} />)}
-</Base>
+{post && postView ? (
+  <Base title={post.data.title} seo={postView.seo}>
+    <article class="max-w-[720px] mx-auto px-6 py-20">
+      <div class="font-ta-sans text-[11px] tracking-[0.14em] uppercase text-ta-muted mb-3">{fmt(post.data.date)}{postView.updated && <span> · Updated {postView.updated}</span>}</div>
+      <h1 class="font-ta-display text-[clamp(32px,5vw,52px)] text-ta-ink leading-[1.05] tracking-[-0.02em] mb-8">{post.data.title}</h1>
+      {post.data.image && <img src={post.data.image} alt="" class="w-full mb-10" />}
+      <div class="post-body font-ta-serif text-[17px] text-ta-body leading-[1.7]">
+        <postView.Content />
+      </div>
+    </article>
+  </Base>
+) : (
+  <Base title={data.title} seo={data.seo}>
+    {rendered.map(({ component: Block, props }) => <Block {...props} />)}
+  </Base>
+)}
+
+<style is:global>
+  .post-body h2 { font-family: var(--ta-font-display); color: var(--ta-ink); font-size: 28px; line-height: 1.15; margin: 2.2em 0 0.6em; }
+  .post-body h3 { font-family: var(--ta-font-display); color: var(--ta-ink); font-size: 22px; line-height: 1.2; margin: 1.8em 0 0.5em; }
+  .post-body p { margin: 0 0 1.2em; }
+  .post-body a { color: var(--ta-primary); text-decoration: underline; }
+  .post-body ul, .post-body ol { padding-left: 1.4em; margin: 0 0 1.2em; }
+  .post-body blockquote { border-left: 2px solid var(--ta-border); padding-left: 1em; color: var(--ta-muted); margin: 1.5em 0; }
+  .post-body img { max-width: 100%; height: auto; }
+</style>
