@@ -2766,7 +2766,7 @@ function siteAlternateSide(list, props, def) {
 // blockpreview mode, fed the draft props (debounced) as the designer edits. Desktop
 // renders at 1280px scaled to the pane (zoom), Mobile at 390px.
 let siteDesignId = null; // the pinned design, from site:content
-function siteBlockPreview(type, getProps) {
+function siteBlockPreview(type, getProps, { onExpand } = {}) {
   const el = siteEl("div", "site-block-preview");
   const bar = siteEl("div", "site-block-preview-bar");
   const stage = siteEl("div", "site-block-preview-stage");
@@ -2788,8 +2788,39 @@ function siteBlockPreview(type, getProps) {
   wv.addEventListener("did-finish-load", () => { ready = true; fit(); send(); });
   const mk = (m, label) => { const b = siteEl("button", "site-mini" + (mode === m ? " on" : ""), label); b.type = "button"; b.addEventListener("click", () => { mode = m; bar.querySelectorAll(".site-mini").forEach((x) => x.classList.toggle("on", x === b)); fit(); }); return b; };
   bar.append(mk("desktop", COPY.site.previewDesktop), mk("mobile", COPY.site.previewMobile));
+  if (onExpand) { const ex = siteMini(COPY.site.previewExpand, onExpand, { title: COPY.site.previewExpandTip }); ex.style.marginLeft = "auto"; bar.appendChild(ex); }
   window.addEventListener("resize", fit);
-  return { el, push };
+  return { el, push, fit };
+}
+
+// The block editor expanded into its own overlay: fields in a column on the left, the
+// block filling the rest at a much larger size. Edits the SAME draft as the inline
+// editor (nothing to sync); Done closes and repaints the inline view.
+function openBlockEditModal({ title, type, props, ctx, onChange, onSave, canSave, onClose }) {
+  const ov = siteEl("div", "blockedit");
+  const card = siteEl("div", "blockedit-card");
+  const head = siteEl("div", "blockedit-head");
+  head.appendChild(siteEl("div", "blockedit-title", title));
+  const acts = siteEl("div", "blockedit-acts");
+  const save = siteEl("button", "panelbtn primary", COPY.site.save); save.style.cssText = "margin:0;width:auto;"; save.disabled = !canSave();
+  const done = siteEl("button", "panelbtn", COPY.site.blockEditDone); done.style.cssText = "margin:0;width:auto;";
+  acts.append(save, done); head.appendChild(acts);
+  const body = siteEl("div", "blockedit-body");
+  const fields = siteEl("div", "blockedit-fields");
+  const preview = siteBlockPreview(type, () => props);
+  const change = () => { onChange(); preview.push(); save.disabled = !canSave(); };
+  fields.appendChild(sitePropsEditor(props, change, 0, ctx));
+  const pv = siteEl("div", "blockedit-preview"); pv.appendChild(preview.el);
+  body.append(fields, pv); card.append(head, body); ov.appendChild(card);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey, true); if (onClose) onClose(); };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  done.addEventListener("click", close);
+  save.addEventListener("click", async () => { save.disabled = true; await onSave(); save.disabled = !canSave(); });
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  document.addEventListener("keydown", onKey, true);
+  document.body.appendChild(ov);
+  requestAnimationFrame(() => preview.fit && preview.fit());
+  return { close };
 }
 
 // Generic editor for a block's props: strings → input/textarea, numbers, booleans,
@@ -2988,9 +3019,17 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
         b.props = { ...JSON.parse(JSON.stringify(dflt)), ...(b.props || {}) };
         // Fields left, the block as designed right, live (docs/block-editor-preview-spec.md).
         const edit = siteEl("div", "site-block-edit");
-        const preview = siteBlockPreview(b.type, () => b.props);
+        const ctx = { templates: (def && def.templates) || {}, fields: (def && def.fields) || {} };
+        const preview = siteBlockPreview(b.type, () => b.props, {
+          onExpand: () => openBlockEditModal({
+            title: def ? def.name : b.type, type: b.type, props: b.props, ctx,
+            onChange: markDirty, canSave: () => dirty,
+            onSave: async () => { saveBtn.click(); await new Promise((r) => setTimeout(r, 400)); },
+            onClose: paintBlocks, // the inline fields catch up with what was edited large
+          }),
+        });
         const onChange = () => { markDirty(); preview.push(); };
-        edit.appendChild(sitePropsEditor(b.props, onChange, 0, { templates: (def && def.templates) || {}, fields: (def && def.fields) || {} }));
+        edit.appendChild(sitePropsEditor(b.props, onChange, 0, ctx));
         edit.appendChild(preview.el);
         blockList.appendChild(edit);
       }

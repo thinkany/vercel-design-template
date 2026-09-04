@@ -836,6 +836,17 @@
       .site-block-preview-bar .site-mini.on { border-color: #111; background: #111; color: #fff; }
       .site-block-preview-stage { height: 460px; overflow: hidden; background: #fff; }
       .site-block-preview-stage webview { display: block; width: 100%; height: 100%; }
+      /* The expanded block editor: an overlay above the drawer, below the media picker. */
+      .blockedit { position: fixed; inset: 0; z-index: 205; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.45); }
+      .blockedit-card { width: min(1560px, 96vw); height: 92vh; background: #fff; border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.35); display: flex; flex-direction: column; overflow: hidden; }
+      .blockedit-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #ececf1; }
+      .blockedit-title { font-size: 14px; font-weight: 600; color: #17171b; }
+      .blockedit-acts { display: flex; gap: 8px; }
+      .blockedit-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 400px minmax(0, 1fr); }
+      .blockedit-fields { overflow: auto; padding: 14px 16px; border-right: 1px solid #ececf1; }
+      .blockedit-preview { min-width: 0; padding: 14px; display: flex; }
+      .blockedit-preview .site-block-preview { position: static; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+      .blockedit-preview .site-block-preview-stage { flex: 1; height: auto; min-height: 0; }
       .site-nav-col { border: 1px dashed #e2e2e8; border-radius: 8px; padding: 8px 8px 4px; margin: 0 0 8px; }
       .site-nav-row.col { grid-template-columns: auto 1fr; }
       .site-nav-row .field { margin-bottom: 0; }
