@@ -4032,12 +4032,15 @@ function siteAccordionize(wrap) {
     if (isLabel) {
       const title = n.textContent; const key = "settings:" + title;
       const isOpen = siteFolds[key] !== false; // open unless remembered closed
-      section = siteEl("div", "site-acc" + (isOpen ? " open" : ""));
+      // `sec` is this section's own reference: `section` (the walk's cursor) moves on
+      // and ends null, so a click handler must not read it.
+      const sec = siteEl("div", "site-acc" + (isOpen ? " open" : ""));
+      section = sec;
       const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(isOpen));
       head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
       const body = siteEl("div", "site-acc-body"); body.hidden = !isOpen;
-      head.addEventListener("click", () => { const now = body.hidden; body.hidden = !now; section.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(key, now); });
-      section.append(head, body); wrap.appendChild(section);
+      head.addEventListener("click", () => { const now = body.hidden; body.hidden = !now; sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(key, now); });
+      sec.append(head, body); wrap.appendChild(sec);
       return;
     }
     if (isSwitch) { section = null; tail.push(n); return; }
