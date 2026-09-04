@@ -5,16 +5,16 @@
    so utility scanning covers the site's blocks and templates too. Edit the design
    in the variation's tokens.css, never here.
 
-   The variation's fonts.css (its Google Fonts @import) is loaded by Base.astro as
-   its OWN stylesheet, not from here: Tailwind rewrites this file and would leave a
-   remote @import below its output, where browsers ignore it (no fonts in dev). */
+   The variation's fonts.css and tokens.css (both carry a Google Fonts @import) are
+   loaded by Base.astro as their OWN stylesheets, not from here: Tailwind rewrites
+   this file and would leave a remote @import below its output, where browsers
+   ignore it (no webfonts in dev). The design surface loads them the same way. */
 @import "tailwindcss" source(none);
 @source "../../../src/**/*.{js,ts,jsx,tsx}";
 @source "../../blocks/**/*.{js,ts,jsx,tsx}";
 @source "../**/*.{astro,js,ts,jsx,tsx}";
 @import "tw-animate-css";
 
-@import "@design/tokens.css";
 @import "@/styles/theme.css";
 @import "@design/globals.css";
 

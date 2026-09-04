@@ -6,7 +6,8 @@
 // registered them; imported by NAME so the header can hydrate) around the page. The `@container` wrapper is what the design's `@lg:` container
 // variants measure against, exactly as DesignSurface provides in the design
 // surface, so promoted blocks keep their responsive classes unchanged.
-import "@design/fonts.css"; // the design's Google Fonts, its own stylesheet (see site.css)
+import "@design/fonts.css";  // the design's webfonts and tokens: their own stylesheets, so their
+import "@design/tokens.css"; // Google Fonts @import stays at the top where browsers honor it (see site.css)
 import "../styles/site.css";
 import { siteConfig } from "@/config/site";
 import { resolveNav } from "../lib/nav";
