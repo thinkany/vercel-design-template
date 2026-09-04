@@ -64,7 +64,11 @@ const faviconType = /\.svg$/i.test(favicon) ? "image/svg+xml" : /\.png$/i.test(f
     {meta.description && <meta property="og:description" content={meta.description} />}
     <meta property="og:url" content={canonical} />
     {image && <meta property="og:image" content={image} />}
+    {meta.keyphrase && <meta name="keywords" content={meta.keyphrase} />}
     <meta name="twitter:card" content={image ? "summary_large_image" : "summary"} />
+    <meta name="twitter:title" content={meta.title} />
+    {meta.description && <meta name="twitter:description" content={meta.description} />}
+    {image && <meta name="twitter:image" content={image} />}
     <link rel="icon" type={faviconType} href={favicon} />
     {site.favicon.touch && <link rel="apple-touch-icon" sizes="180x180" href={site.favicon.touch} />}
     {site.seo.sitemap && !site.seo.discourage && <link rel="sitemap" href="/sitemap-index.xml" />}

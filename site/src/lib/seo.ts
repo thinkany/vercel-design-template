@@ -10,6 +10,8 @@ export const seoFields = z.object({
   description: z.string().optional(),
   /** Social share image, a public/ path or absolute URL. */
   image: z.string().optional(),
+  /** Focus keyphrase (emitted as the keywords meta; a writing aid more than a ranking one). */
+  keyphrase: z.string().optional(),
   /** Keep this entry out of search engines and the sitemap. */
   noindex: z.boolean().default(false),
   /** Override the canonical URL (rarely needed). */
@@ -21,6 +23,7 @@ export interface ResolvedSeo {
   title: string;
   description: string;
   image?: string;
+  keyphrase?: string;
   noindex: boolean;
   canonical?: string;
 }
@@ -35,6 +38,7 @@ export function resolveSeo(
     title: title === fallback.siteName ? title : `${title} | ${fallback.siteName}`,
     description: s.description || fallback.description || "",
     image: s.image,
+    keyphrase: s.keyphrase,
     noindex: !!s.noindex,
     canonical: s.canonical,
   };

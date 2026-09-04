@@ -3017,12 +3017,14 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
     pw.appendChild(psel); pw.appendChild(siteEl("div", "sess-desc", COPY.site.pageParentHint)); ps.body.appendChild(pw);
   }
 
-  ps.body.appendChild(siteEl("div", "sess-label", COPY.site.seoHeading)).style.marginTop = "12px";
-  const st = siteField(COPY.site.seoTitle, draft.seo.title, { hint: COPY.site.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; markDirty(); }); ps.body.appendChild(st.wrap);
-  const sd = siteField(COPY.site.seoDescription, draft.seo.description, { textarea: true, hint: COPY.site.seoDescriptionHint }); sd.input.addEventListener("input", () => { draft.seo.description = sd.input.value; markDirty(); }); ps.body.appendChild(sd.wrap);
-  ps.body.appendChild(siteImageControl(draft.seo.image, (next) => { draft.seo.image = next ? next.src : ""; markDirty(); }, { label: COPY.site.seoImage }));
+  // SEO: its own section, the LAST one (appended after Blocks, below).
+  const sf = siteFold(COPY.site.seoHeading, "seo:" + page.id);
+  const st = siteField(COPY.site.seoTitle, draft.seo.title, { hint: COPY.site.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; markDirty(); }); sf.body.appendChild(st.wrap);
+  const sd = siteField(COPY.site.seoDescription, draft.seo.description, { textarea: true, hint: COPY.site.seoDescriptionHint }); sd.input.addEventListener("input", () => { draft.seo.description = sd.input.value; markDirty(); }); sf.body.appendChild(sd.wrap);
+  sf.body.appendChild(siteImageControl(draft.seo.image, (next) => { draft.seo.image = next ? next.src : ""; markDirty(); }, { label: COPY.site.seoImage }));
+  const kp = siteField(COPY.site.seoKeyphrase, draft.seo.keyphrase, { hint: COPY.site.seoKeyphraseHint }); kp.input.addEventListener("input", () => { draft.seo.keyphrase = kp.input.value; markDirty(); }); sf.body.appendChild(kp.wrap);
   const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!draft.seo.noindex;
-  nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; markDirty(); }); nx.append(nxCb, siteEl("span", "", COPY.site.seoNoindex)); ps.body.appendChild(nx);
+  nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; markDirty(); }); nx.append(nxCb, siteEl("span", "", COPY.site.seoNoindex)); sf.body.appendChild(nx);
 
   const bf = siteFold(COPY.site.blocksHeading, "blocks:" + page.id); body.appendChild(bf.sec);
   const blockList = siteEl("div");
@@ -3121,6 +3123,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
       if (res && res.ok) { siteRailState.selected = null; refresh(); }
     }, { danger: true }));
   }
+  body.appendChild(sf.sec); // SEO last
   body.appendChild(actions);
   card.appendChild(body);
   return card;
@@ -3136,22 +3139,27 @@ function renderSitePost(post, refresh) {
   const draft = JSON.parse(JSON.stringify({ title: post.title, date: post.date, description: post.description, image: post.image, tags: post.tags || [], draft: !!post.draft, seo: post.seo || {}, body: post.body || "" }));
   let saveBtn;
   const dirty = () => { saveBtn.disabled = false; };
-  const t = siteField(S.pageTitle, draft.title); t.input.addEventListener("input", () => { draft.title = t.input.value; dirty(); }); card.appendChild(t.wrap);
-  const d = siteField(S.postDate, draft.date, { type: "date" }); d.input.addEventListener("input", () => { draft.date = d.input.value; dirty(); }); card.appendChild(d.wrap);
+  // Sections, as pages have: Post settings, Content, SEO (last).
+  const pf = siteFold(S.postSettings, "post-settings:" + post.id); card.appendChild(pf.sec);
+  const t = siteField(S.pageTitle, draft.title); t.input.addEventListener("input", () => { draft.title = t.input.value; dirty(); }); pf.body.appendChild(t.wrap);
+  const d = siteField(S.postDate, draft.date, { type: "date" }); d.input.addEventListener("input", () => { draft.date = d.input.value; dirty(); }); pf.body.appendChild(d.wrap);
   const upd = siteEl("div", "site-kv"); upd.appendChild(siteEl("div", "k", S.postUpdated));
   let updText = S.postNeverSaved;
   if (post.updated) { try { updText = new Date(post.updated).toLocaleString(); } catch { updText = String(post.updated); } }
-  upd.appendChild(siteEl("div", "sess-desc", updText)); card.appendChild(upd);
-  const ds = siteField(S.postDescription, draft.description, { textarea: true, hint: S.postDescriptionHint }); ds.input.addEventListener("input", () => { draft.description = ds.input.value; dirty(); }); card.appendChild(ds.wrap);
-  card.appendChild(siteImageControl(draft.image, (next) => { draft.image = next ? next.src : ""; dirty(); }, { label: S.postImage }));
-  const tg = siteField(S.postTags, draft.tags.join(", "), { hint: S.postTagsHint }); tg.input.addEventListener("input", () => { draft.tags = tg.input.value.split(",").map((x) => x.trim()).filter(Boolean); dirty(); }); card.appendChild(tg.wrap);
-  const bodyWrap = siteEl("div", "site-kv"); bodyWrap.appendChild(siteEl("div", "k", S.postBody));
+  upd.appendChild(siteEl("div", "sess-desc", updText)); pf.body.appendChild(upd);
+  const ds = siteField(S.postDescription, draft.description, { textarea: true, hint: S.postDescriptionHint }); ds.input.addEventListener("input", () => { draft.description = ds.input.value; dirty(); }); pf.body.appendChild(ds.wrap);
+  pf.body.appendChild(siteImageControl(draft.image, (next) => { draft.image = next ? next.src : ""; dirty(); }, { label: S.postImage }));
+  const tg = siteField(S.postTags, draft.tags.join(", "), { hint: S.postTagsHint }); tg.input.addEventListener("input", () => { draft.tags = tg.input.value.split(",").map((x) => x.trim()).filter(Boolean); dirty(); }); pf.body.appendChild(tg.wrap);
+  const cf = siteFold(S.postContent, "post-content:" + post.id); card.appendChild(cf.sec);
   const rich = siteRichEditor(draft.body, () => { draft.body = rich.getMarkdown(); dirty(); });
-  bodyWrap.appendChild(rich.wrap); bodyWrap.appendChild(siteEl("div", "sess-desc", S.postBodyHint)); card.appendChild(bodyWrap);
-  card.appendChild(siteEl("div", "sess-label", S.seoHeading)).style.marginTop = "12px";
-  const st = siteField(S.seoTitle, draft.seo.title, { hint: S.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; dirty(); }); card.appendChild(st.wrap);
+  cf.body.appendChild(rich.wrap); cf.body.appendChild(siteEl("div", "sess-desc", S.postBodyHint));
+  const sf = siteFold(S.seoHeading, "seo-post:" + post.id); card.appendChild(sf.sec);
+  const st = siteField(S.seoTitle, draft.seo.title, { hint: S.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; dirty(); }); sf.body.appendChild(st.wrap);
+  const sd = siteField(S.seoDescription, draft.seo.description, { textarea: true, hint: S.postSeoDescriptionHint }); sd.input.addEventListener("input", () => { draft.seo.description = sd.input.value; dirty(); }); sf.body.appendChild(sd.wrap);
+  sf.body.appendChild(siteImageControl(draft.seo.image, (next) => { draft.seo.image = next ? next.src : ""; dirty(); }, { label: S.seoImage }));
+  const kp = siteField(S.seoKeyphrase, draft.seo.keyphrase, { hint: S.seoKeyphraseHint }); kp.input.addEventListener("input", () => { draft.seo.keyphrase = kp.input.value; dirty(); }); sf.body.appendChild(kp.wrap);
   const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!draft.seo.noindex;
-  nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; dirty(); }); nx.append(nxCb, siteEl("span", "", S.seoNoindex)); card.appendChild(nx);
+  nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; dirty(); }); nx.append(nxCb, siteEl("span", "", S.seoNoindex)); sf.body.appendChild(nx);
 
   // Status + actions. A draft is never built; Publish flips it live on save.
   const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;";

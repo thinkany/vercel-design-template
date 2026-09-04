@@ -82,8 +82,37 @@ interface Props {
  * single-page surface: "/#id" scrolls to the section, "/route" switches page,
  * "#id" scrolls, anything else opens as it would on the site.
  */
+// The design surface is one page, so per-page SEO is applied to the document when a
+// site page renders: title, description, keywords, Open Graph and Twitter tags. The
+// same values the site emits at build, so the local and gated previews match it.
+function applySeo(doc: PageDoc | null, pageId: string) {
+  const seo = (doc && doc.seo) || {};
+  const siteName = siteConfig.clientName || "";
+  const base = doc?.title || pageId;
+  const title = (seo.title as string) || base;
+  const full = title === siteName ? title : `${title} | ${siteName}`;
+  const description = (seo.description as string) || "";
+  const image = (seo.image as string) || "";
+  const keyphrase = (seo.keyphrase as string) || "";
+  document.title = full;
+  const set = (sel: string, attrs: Record<string, string>, content: string) => {
+    let el = document.head.querySelector<HTMLMetaElement>(sel);
+    if (!content) { if (el) el.remove(); return; }
+    if (!el) { el = document.createElement("meta"); for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v); document.head.appendChild(el); }
+    el.setAttribute("content", content);
+  };
+  set('meta[name="description"]', { name: "description" }, description);
+  set('meta[name="keywords"]', { name: "keywords" }, keyphrase);
+  set('meta[property="og:title"]', { property: "og:title" }, full);
+  set('meta[property="og:description"]', { property: "og:description" }, description);
+  set('meta[property="og:image"]', { property: "og:image" }, image ? new URL(image, window.location.origin).href : "");
+  set('meta[name="twitter:card"]', { name: "twitter:card" }, image ? "summary_large_image" : "summary");
+  set('meta[name="robots"]', { name: "robots" }, seo.noindex ? "noindex, nofollow" : "");
+}
+
 export function SitePage({ pageId, onNavigate, view, setView, orientation, setOrientation, capture }: Props) {
   const doc = pageDoc(pageId);
+  useEffect(() => { try { applySeo(doc, pageId); } catch { /* headless capture */ } }, [doc, pageId]);
   const pages = sitePages();
   const Header = chromeMod.Header || null;
   const Footer = chromeMod.Footer || null;
