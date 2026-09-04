@@ -2762,6 +2762,36 @@ function siteAlternateSide(list, props, def) {
   return props;
 }
 
+// The live block preview beside the fields: a webview onto the design surface's
+// blockpreview mode, fed the draft props (debounced) as the designer edits. Desktop
+// renders at 1280px scaled to the pane (zoom), Mobile at 390px.
+let siteDesignId = null; // the pinned design, from site:content
+function siteBlockPreview(type, getProps) {
+  const el = siteEl("div", "site-block-preview");
+  const bar = siteEl("div", "site-block-preview-bar");
+  const stage = siteEl("div", "site-block-preview-stage");
+  el.append(bar, stage);
+  if (!viteUrl || !siteDesignId) { stage.appendChild(siteEl("div", "sess-desc", COPY.site.previewUnavailable)); return { el, push() {} }; }
+  const wv = document.createElement("webview");
+  wv.setAttribute("partition", "persist:preview");
+  wv.setAttribute("src", `${viteUrl}/?v=${encodeURIComponent(siteDesignId)}&blockpreview=${encodeURIComponent(type)}`);
+  stage.appendChild(wv);
+  let mode = "desktop"; let ready = false; let timer = null;
+  const fit = () => {
+    const w = stage.clientWidth || 600;
+    if (mode === "mobile") { wv.style.width = "390px"; wv.style.margin = "0 auto"; try { wv.setZoomFactor(1); } catch {} }
+    else { wv.style.width = "100%"; wv.style.margin = "0"; try { wv.setZoomFactor(Math.max(0.2, Math.min(1, w / 1280))); } catch {} }
+  };
+  const send = () => { if (!ready) return; try { wv.executeJavaScript(`window.__taSetBlockProps && window.__taSetBlockProps(${JSON.stringify(getProps() || {})})`); } catch {} };
+  const push = () => { clearTimeout(timer); timer = setTimeout(send, 150); };
+  wv.addEventListener("dom-ready", () => { ready = true; fit(); send(); });
+  wv.addEventListener("did-finish-load", () => { ready = true; fit(); send(); });
+  const mk = (m, label) => { const b = siteEl("button", "site-mini" + (mode === m ? " on" : ""), label); b.type = "button"; b.addEventListener("click", () => { mode = m; bar.querySelectorAll(".site-mini").forEach((x) => x.classList.toggle("on", x === b)); fit(); }); return b; };
+  bar.append(mk("desktop", COPY.site.previewDesktop), mk("mobile", COPY.site.previewMobile));
+  window.addEventListener("resize", fit);
+  return { el, push };
+}
+
 // Generic editor for a block's props: strings → input/textarea, numbers, booleans,
 // arrays of strings, and nested objects / arrays of objects (add/remove, a new item
 // cloned from the last one's shape). `ctx` carries the schema introspection
@@ -2956,7 +2986,13 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
         // Older content may lack fields the block accepts: fill them from the defaults.
         const dflt = (def && def.defaults) || {};
         b.props = { ...JSON.parse(JSON.stringify(dflt)), ...(b.props || {}) };
-        blockList.appendChild(sitePropsEditor(b.props, markDirty, 0, { templates: (def && def.templates) || {}, fields: (def && def.fields) || {} }));
+        // Fields left, the block as designed right, live (docs/block-editor-preview-spec.md).
+        const edit = siteEl("div", "site-block-edit");
+        const preview = siteBlockPreview(b.type, () => b.props);
+        const onChange = () => { markDirty(); preview.push(); };
+        edit.appendChild(sitePropsEditor(b.props, onChange, 0, { templates: (def && def.templates) || {}, fields: (def && def.fields) || {} }));
+        edit.appendChild(preview.el);
+        blockList.appendChild(edit);
       }
     });
   };
@@ -4121,6 +4157,7 @@ async function renderSite(body) {
   mediaIndex = await window.desktop.listMedia().catch(() => []); // thumbnails for image fields
   siteMarks = data.marks || {};
   siteBlogPath = (data.site && data.site.blogPath) || "blog";
+  siteDesignId = data.design || null;
 
   // ── Tabs: Pages · Posts · Types · Navigation · Settings ──
   // Off per project until the Settings switch is on: only Settings is reachable then.

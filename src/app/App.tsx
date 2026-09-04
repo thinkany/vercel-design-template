@@ -8,7 +8,7 @@ import type { View } from "../config/site";
 
 import { Dashboard } from "./components/Dashboard";
 import { designPages as authoredPages, defaultDesignPageId } from "./pages";
-import { isPromoted, sitePages, SitePage } from "./site-bridge";
+import { isPromoted, sitePages, SitePage, BlockPreview } from "./site-bridge";
 
 // The pages the design surface renders. Before promotion: the designer's list in
 // pages.ts. Once the design is promoted (content/site.json pins a design), the
@@ -18,6 +18,7 @@ const designPages = isPromoted ? sitePages() : authoredPages;
 
 function getInitialPage(): string {
   const params = new URLSearchParams(window.location.search);
+  if (params.has("blockpreview")) return "blockpreview"; // one block, for the CMS editor
   if (params.has("styleguide")) return "styleguide";
   // Explicit design-page route flags (e.g. ?v=v00&about). Home has no flag.
   for (const p of designPages) {
@@ -138,6 +139,7 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh" }}>
       {page === "dashboard" && <Dashboard />}
+      {page === "blockpreview" && <BlockPreview type={new URLSearchParams(window.location.search).get("blockpreview") || ""} />}
       {activeDesignPage && activeDesignPage.component === "__site__" && (
         <SitePage pageId={activeDesignPage.id} onNavigate={setPage} view={view} setView={setView} orientation={orientation} setOrientation={setOrientation} capture={captureView} />
       )}

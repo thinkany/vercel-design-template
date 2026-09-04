@@ -12,7 +12,7 @@
  * site target (or one not yet promoted) still builds: the globs are simply empty
  * and App.tsx keeps the designer's pages.ts.
  */
-import { useCallback, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { DesignSurface } from "./DesignSurface";
 import type { DesignPage } from "./pages.schema";
 import { siteConfig } from "@/config/site";
@@ -135,6 +135,36 @@ export function SitePage({ pageId, onNavigate, view, setView, orientation, setOr
       </div>
     </DesignSurface>
   );
+}
+
+/**
+ * ONE block, live, for the CMS block editor: `/?v=<design>&blockpreview=<type>`.
+ * The editor pushes the draft props into the page (window.__taSetBlockProps) as
+ * the designer types; the block re-renders from them through its own schema, so
+ * what shows is exactly what the site would build. A `props` query param (JSON)
+ * seeds it, for testing. No chrome, no neighbours: the block at container width.
+ */
+export function BlockPreview({ type }: { type: string }) {
+  const [props, setProps] = useState<AnyRecord | null>(() => {
+    const w = window as unknown as { __taBlockProps?: AnyRecord };
+    if (w.__taBlockProps) return w.__taBlockProps;
+    try { const q = new URLSearchParams(window.location.search).get("props"); return q ? (JSON.parse(q) as AnyRecord) : null; } catch { return null; }
+  });
+  useEffect(() => {
+    const w = window as unknown as { __taSetBlockProps?: (p: AnyRecord) => void };
+    w.__taSetBlockProps = (p) => setProps(p && typeof p === "object" ? { ...p } : null);
+    return () => { delete w.__taSetBlockProps; };
+  }, []);
+  const def = blocks[type];
+  if (!def) return <BridgeNote text={`Unknown block "${type}"`} />;
+  if (!props) return null;
+  const parsed = def.props.safeParse(props);
+  if (!parsed.success) {
+    const issues = (parsed.error?.issues || []).map((x) => `${x.path.join(".") || "(root)"}: ${x.message}`).join("; ");
+    return <BridgeNote text={`This block needs more content (${issues})`} />;
+  }
+  const Block = def.component;
+  return <div className="@container w-full bg-ta-surface"><Block {...(parsed.data as AnyRecord)} /></div>;
 }
 
 // A quiet in-surface notice for content the site build would reject too.

@@ -829,6 +829,13 @@
       .site-drop-ghost { display: flex; align-items: center; gap: 6px; padding: 8px 10px; margin-bottom: 6px; border: 1.5px dashed #111; border-radius: 8px; background: #f4f4f7; color: #111; font-size: 13px; font-weight: 500; }
       .site-drop-ghost-arrow { display: none; width: 12px; height: 12px; border-left: 1.5px solid #111; border-bottom: 1.5px solid #111; border-bottom-left-radius: 3px; margin: -6px 2px 0 0; }
       .site-drop-ghost.child .site-drop-ghost-arrow { display: inline-block; }
+      /* Block editor: fields left, the live block right. */
+      .site-block-edit { display: grid; grid-template-columns: minmax(280px, 40%) minmax(0, 1fr); gap: 14px; align-items: start; margin: 4px 0 10px; }
+      .site-block-preview { position: sticky; top: 0; border: 1px solid #e2e2e8; border-radius: 8px; background: #fff; overflow: hidden; }
+      .site-block-preview-bar { display: flex; gap: 6px; padding: 6px 8px; border-bottom: 1px solid #ececf1; background: #fafafb; }
+      .site-block-preview-bar .site-mini.on { border-color: #111; background: #111; color: #fff; }
+      .site-block-preview-stage { height: 460px; overflow: hidden; background: #fff; }
+      .site-block-preview-stage webview { display: block; width: 100%; height: 100%; }
       .site-nav-col { border: 1px dashed #e2e2e8; border-radius: 8px; padding: 8px 8px 4px; margin: 0 0 8px; }
       .site-nav-row.col { grid-template-columns: auto 1fr; }
       .site-nav-row .field { margin-bottom: 0; }
