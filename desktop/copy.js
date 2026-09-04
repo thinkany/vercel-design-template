@@ -437,7 +437,6 @@ window.COPY = {
           { h: "Mega menu", items: ["When the site’s header was designed with a mega menu, each link also offers <b>Add panel</b>: a heading, its links and an optional feature (image, title, text, link). Headers designed with a plain dropdown don’t show panels.", "Drag to rearrange: a link moves with its group, sub-links and panel links can be dropped into any group or panel, or between top-level links to become one."] },
           { h: "Footer", items: ["The footer's own list, independent of the header menu. It starts as a copy of the design's footer links; from then on the two are managed separately.", "<b>Columns</b>: add sub-links to a footer link (or drop links into it) and it becomes a column headed by its text; leave its address empty when the heading shouldn't be a link."] },
           { h: "Legal", items: ["<b>Copyright line</b>: shown at the bottom of every page; <i>{year}</i> and <i>{siteName}</i> are filled in automatically.", "<b>Legal links</b>: Privacy, Terms and the like, shown beside the copyright line."] },
-          { h: "Saving", items: ["<b>Save navigation</b> writes the menu; blank rows are dropped."] },
         ],
       },
       settings: {
