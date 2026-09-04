@@ -1991,11 +1991,14 @@ function loadCmsSettings(dir) {
   // The site builder is ON by default; the Settings switch turns it off per project
   // (only Settings is reachable while off).
   d.enabled = !(j && j.enabled === false);
+  // Drawer UI state kept with the project (which sections are folded).
+  d.ui = { folds: j && j.ui && j.ui.folds && typeof j.ui.folds === "object" ? j.ui.folds : {} };
   return d;
 }
 function saveCmsSettings(dir, patch) {
   const cur = loadCmsSettings(dir);
   const next = { ...cur, media: { ...cur.media, ...(patch && patch.media ? patch.media : {}) }, ...(patch && typeof patch.enabled === "boolean" ? { enabled: patch.enabled } : {}) };
+  if (patch && patch.ui && patch.ui.folds && typeof patch.ui.folds === "object") next.ui = { folds: { ...cur.ui.folds, ...patch.ui.folds } };
   const q = Number(next.media.quality), w = Number(next.media.maxWidth);
   next.media.quality = Math.min(95, Math.max(20, Math.round(Number.isFinite(q) ? q : MEDIA_QUALITY)));
   next.media.maxWidth = Math.min(6000, Math.max(800, Math.round(Number.isFinite(w) ? w : MEDIA_MAX_WIDTH)));

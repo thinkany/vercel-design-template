@@ -2640,16 +2640,23 @@ function siteMini(label, onClick, { danger, title, disabled } = {}) {
   b.addEventListener("click", onClick);
   return b;
 }
-// A foldable section (heading row + body), open state remembered per project + key.
-let siteProjectKey = "default"; // the open project's path, set when the CMS drawer renders
+// Foldable sections in the CMS drawer. Which are open is kept WITH THE PROJECT
+// (.thinkany/cms.json ui.folds, loaded when the drawer renders), not in the
+// window's storage, so it holds per project and across reinstalls.
+let siteFolds = {}; // key → false when folded (absent = open)
+let siteFoldsTimer = null;
+function siteFoldSet(key, open) {
+  siteFolds[key] = open;
+  clearTimeout(siteFoldsTimer);
+  siteFoldsTimer = setTimeout(() => { window.desktop.setCmsSettings({ ui: { folds: { [key]: open } } }).catch(() => {}); }, 150);
+}
 function siteFold(title, key) {
-  const K = "cmsFold:" + siteProjectKey + ":" + key;
-  let isOpen = true; try { isOpen = localStorage.getItem(K) !== "0"; } catch {}
+  const isOpen = siteFolds[key] !== false;
   const sec = siteEl("div", "site-acc" + (isOpen ? " open" : ""));
   const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(isOpen));
   head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
   const body = siteEl("div", "site-acc-body"); body.hidden = !isOpen;
-  head.addEventListener("click", () => { const now = body.hidden; body.hidden = !now; sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); try { localStorage.setItem(K, now ? "1" : "0"); } catch {} });
+  head.addEventListener("click", () => { const now = body.hidden; body.hidden = !now; sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(key, now); });
   sec.append(head, body);
   return { sec, body, head };
 }
@@ -3695,8 +3702,8 @@ let siteNavRemove = () => {};
 
 function renderSiteNav(site, refresh, options = [], megaMenu = false) {
   const wrap = siteEl("div");
-  wrap.appendChild(siteEl("div", "sess-label", COPY.site.navHeading));
-  wrap.appendChild(siteEl("div", "sess-desc", COPY.site.navDesc));
+  const hf = siteFold(COPY.site.navHeading, "nav:header"); wrap.appendChild(hf.sec);
+  hf.body.appendChild(siteEl("div", "sess-desc", COPY.site.navDesc));
   // One datalist shared by every URL field: the project's pages, sections, posts,
   // content entries and indexes. Chromium renders it as a combo: type, or pick.
   const listId = "site-nav-links";
@@ -3793,12 +3800,12 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
   const navList = siteEl("div");
   const paintNav = () => { navList.innerHTML = ""; draft.nav.forEach((l, i) => navList.appendChild(linkRow(l, draft.nav, i, paintNav, true, { kind: "item", owners: [], reorder: { kinds: ["item", "link"], target: () => draft.nav, topLevel: true }, nest: { into: () => (l.links = Array.isArray(l.links) ? l.links : []) }, repaint: paintNav }))); navList.appendChild(siteMini(COPY.site.addLink, () => { draft.nav.push({ label: "", href: "/", links: [] }); dirty(); paintNav(); })); };
   paintNav();
-  wrap.appendChild(navList);
-  wrap.appendChild(siteEl("div", "sess-label", COPY.site.footerHeading)).style.marginTop = "12px";
+  hf.body.appendChild(navList);
+  const ff = siteFold(COPY.site.footerHeading, "nav:footer"); wrap.appendChild(ff.sec);
   const footList = siteEl("div");
   const paintFoot = () => { footList.innerHTML = ""; draft.footerLinks.forEach((l, i) => footList.appendChild(linkRow(l, draft.footerLinks, i, paintFoot, false, { kind: "footer", owners: [], reorder: { kinds: ["footer"], target: () => draft.footerLinks }, nest: null, repaint: paintFoot }))); footList.appendChild(siteMini(COPY.site.addLink, () => { draft.footerLinks.push({ label: "", href: "/" }); dirty(); paintFoot(); })); };
   paintFoot();
-  wrap.appendChild(footList);
+  ff.body.appendChild(footList);
   const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
   saveBtn = siteEl("button", "panelbtn primary", COPY.site.saveNav); saveBtn.disabled = true; saveBtn.style.margin = "0";
   saveBtn.addEventListener("click", async () => {
@@ -3961,18 +3968,13 @@ async function renderSiteSettings(host, data, st) {
 
   wrap.appendChild(siteEl("div", "drawer-sep"));
   wrap.appendChild(enableRow());
-  const ps = await window.desktop.getProjectStatus().catch(() => null);
-  siteAccordionize(wrap, (ps && ps.path) || "default");
+  siteAccordionize(wrap);
 }
 
 // Settings sections fold. Each `.sess-label` heading starts a section (its content
 // runs to the next heading); the trailing Site builder switch stays outside. Which
 // sections are open is remembered per project.
-function siteAccordionize(wrap, projectKey) {
-  const KEY = "cmsSettingsOpen:" + (projectKey || "default");
-  let open = {};
-  try { open = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch { open = {}; }
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(open)); } catch {} };
+function siteAccordionize(wrap) {
   const nodes = Array.from(wrap.childNodes);
   wrap.innerHTML = "";
   let section = null;
@@ -3982,13 +3984,13 @@ function siteAccordionize(wrap, projectKey) {
     const isSep = n.nodeType === 1 && n.classList.contains("drawer-sep");
     const isSwitch = n.nodeType === 1 && n.querySelector && n.querySelector(".ta-switch");
     if (isLabel) {
-      const title = n.textContent;
-      const isOpen = open[title] !== false; // open unless remembered closed
+      const title = n.textContent; const key = "settings:" + title;
+      const isOpen = siteFolds[key] !== false; // open unless remembered closed
       section = siteEl("div", "site-acc" + (isOpen ? " open" : ""));
       const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(isOpen));
       head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
       const body = siteEl("div", "site-acc-body"); body.hidden = !isOpen;
-      head.addEventListener("click", () => { const now = body.hidden; body.hidden = !now; section.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); open[title] = now; save(); });
+      head.addEventListener("click", () => { const now = body.hidden; body.hidden = !now; section.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(key, now); });
       section.append(head, body); wrap.appendChild(section);
       return;
     }
@@ -4019,11 +4021,11 @@ async function renderSite(body) {
   const ctx = { types: typesData.types || [], entries: typesData.entries || {}, blocks: data.blocks };
   mediaIndex = await window.desktop.listMedia().catch(() => []); // thumbnails for image fields
   siteMarks = data.marks || {};
-  siteProjectKey = (((await window.desktop.getProjectStatus().catch(() => null)) || {}).path) || "default";
 
   // ── Tabs: Pages · Posts · Types · Navigation · Settings ──
   // Off per project until the Settings switch is on: only Settings is reachable then.
   const cms = await window.desktop.getCmsSettings().catch(() => ({ media: { quality: 55, maxWidth: 2400 }, defaults: { media: { quality: 55, maxWidth: 2400 } }, enabled: false }));
+  siteFolds = { ...((cms.ui && cms.ui.folds) || {}) };
   const TABS = ["pages", "posts", "types", "nav", "settings"];
   if (!TABS.includes(siteRailState.tab)) siteRailState.tab = "pages";
   if (!cms.enabled) siteRailState.tab = "settings";
