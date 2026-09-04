@@ -1,11 +1,13 @@
 /* ©2026 thinkany llc. All rights reserved. */
-/* The SITE's stylesheet. It loads the PINNED design variation's fonts, tokens and
-   globals (`@design` = src/variations/<id>/styles, set from content/site.json in
+/* The SITE's stylesheet. It loads the PINNED design variation's tokens and globals
+   (`@design` = src/variations/<id>/styles, set from content/site.json in
    astro.config.mjs) plus the shared theme wiring, and owns its own Tailwind entry
    so utility scanning covers the site's blocks and templates too. Edit the design
-   in the variation's tokens.css, never here. */
-@import "@design/fonts.css";
+   in the variation's tokens.css, never here.
 
+   The variation's fonts.css (its Google Fonts @import) is loaded by Base.astro as
+   its OWN stylesheet, not from here: Tailwind rewrites this file and would leave a
+   remote @import below its output, where browsers ignore it (no fonts in dev). */
 @import "tailwindcss" source(none);
 @source "../../../src/**/*.{js,ts,jsx,tsx}";
 @source "../../blocks/**/*.{js,ts,jsx,tsx}";
