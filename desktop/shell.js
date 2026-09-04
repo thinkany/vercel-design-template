@@ -3950,6 +3950,7 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
   paintNav();
   if (site.manageNav !== false) hf.body.appendChild(navList); // derived menus aren't edited here
   const ff = siteFold(COPY.site.footerHeading, "nav:footer"); wrap.appendChild(ff.sec);
+  ff.body.appendChild(siteEl("div", "sess-desc", COPY.site.footerDesc));
   const footList = siteEl("div");
   const paintFoot = () => { footList.innerHTML = ""; draft.footerLinks.forEach((l, i) => footList.appendChild(linkRow(l, draft.footerLinks, i, paintFoot, false, { kind: "footer", owners: [], reorder: { kinds: ["footer"], target: () => draft.footerLinks }, nest: null, repaint: paintFoot }))); footList.appendChild(siteMini(COPY.site.addLink, () => { draft.footerLinks.push({ label: "", href: "/" }); dirty(); paintFoot(); })); };
   paintFoot();

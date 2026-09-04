@@ -516,6 +516,7 @@ window.COPY = {
     deleteConfirm: (t) => `Delete “${t}”? This removes its content file.`,
     navHeading: "Navigation",
     navAuto: "The menu follows the page outline. Turn on Manage Navigation in Settings to edit it by hand.",
+    footerDesc: "Links that appear only in the footer, like a privacy page. The footer already shows the header links, as the design does, so leave this empty unless the footer needs more.",
     navDesc: "The links in the header and footer. A URL can be a page (/about), a section on the home page (/#contact), or a full web address; the list offers everything in the project.",
     navLabel: "Link Text",
     navHref: "URL",
