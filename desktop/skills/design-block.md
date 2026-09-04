@@ -90,15 +90,15 @@ Then one row in `site/blocks/index.ts` (`testimonials,` or `"team-grid": teamGri
    both directions (column widths swapped, `@lg:order-1/2` on the cells), so the
    CMS can alternate the block down a page. Place the new instance on the
    opposite side from the two-column block above it.
-N. **A block whose content is a schema.org thing declares it** with `schema: (props) =>
+2. **A block whose content is a schema.org thing declares it** with `schema: (props) =>
    entity` on `defineBlock` (a FAQ block returns an `FAQPage`, an events block an
    `Event` per item). The page merges once-only types across instances, so several
    FAQ blocks still yield one FAQPage. Never declare WebPage / Organization /
    breadcrumbs: the site adds those.
-1. **Body copy is `richtext`** (from `../src/lib/blocks`), rendered with
+3. **Body copy is `richtext`** (from `../src/lib/blocks`), rendered with
    `<Rich text={…} className="…" />` where the design would put a `<p>`: the CMS
    gives it a rich text editor. Titles, eyebrows, labels stay `z.string()`.
-2. **Props are the CONTENT, markup is the DESIGN.** Every string a client would
+4. **Props are the CONTENT, markup is the DESIGN.** Every string a client would
    change is a prop; every class, motif, offset and color stays in the component.
    Repeated things are arrays of small objects; `.min()/.max()` when the layout
    only works for a range. Icons go through the design's `marks` map (extend it if
@@ -107,21 +107,21 @@ N. **A block whose content is a schema.org thing declares it** with `schema: (pr
    a name or markup; every image, content or
    background, is the `image` fragment (`{ src, alt }`), never a bare string path.
    The CMS turns `image` props into an upload field and enums into a choice.
-3. **`.optional()` / `.default()` on everything but the one or two fields the
+5. **`.optional()` / `.default()` on everything but the one or two fields the
    block can't render without.** The CMS seeds every field from the schema, so
    optional means "the block still looks right without it".
-4. **Speak the design's language.** Same `--ta-*` roles (`bg-ta-surface`,
+6. **Speak the design's language.** Same `--ta-*` roles (`bg-ta-surface`,
    `text-ta-ink`…), same type scale and eyebrow treatment as the sibling block,
    same container width, same section rhythm (light/dark alternation, stagger),
    the same motif kit. A block that could belong to any site is wrong.
-5. **Static HTML.** No `motion`, no `useState`, no `window`. Reveals are
+7. **Static HTML.** No `motion`, no `useState`, no `window`. Reveals are
    `<Reveal delay={…}>`; loops are keyframes in `site/blocks/blocks.css` (respect
    `prefers-reduced-motion`). Interactive pieces aren't supported in page blocks:
    if the request needs one (a carousel, tabs), say so and design the static
    version (a grid, an accordion of `<details>`).
-6. **Keep every class in the design's idiom**: `@lg:` container variants, `cqi`
+8. **Keep every class in the design's idiom**: `@lg:` container variants, `cqi`
    units, `color-mix(...)` on tokens. The site wraps pages in `@container`.
-7. **`data-block="{key}"`** on the root; `id` from the `anchor()` prop when nav
+9. **`data-block="{key}"`** on the root; `id` from the `anchor()` prop when nav
    should reach it.
 
 ## 3. Place it and fill it

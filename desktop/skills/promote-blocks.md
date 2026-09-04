@@ -103,7 +103,7 @@ section's `data-block` in the design.
    structure flipped (alternating feature rows), promote ONE block and set `side`
    per instance, not two blocks. The CMS shows Image left / Image right and
    alternates new blocks automatically.
-N. **A block whose content IS a schema.org thing declares it.** `defineBlock` takes
+2. **A block whose content IS a schema.org thing declares it.** `defineBlock` takes
    an optional `schema: (props) => entity | entity[]` returning schema.org objects
    (no `@context`). The page gathers every block's entities into its JSON-LD graph,
    and once-only types (FAQPage) are MERGED across instances, so two FAQ blocks give
@@ -113,18 +113,18 @@ N. **A block whose content IS a schema.org thing declares it.** `defineBlock` ta
    ```
    Also worth declaring: `Event`, `Product`, `Review`/`AggregateRating`, `HowTo`,
    `VideoObject`. Never `WebPage`, `Organization` or breadcrumbs: the site adds those.
-1. **Body copy is `richtext`** (from `../src/lib/blocks`), rendered with
+3. **Body copy is `richtext`** (from `../src/lib/blocks`), rendered with
    `<Rich text={body} className="…the <p>'s classes…" />` in place of the design's
    `<p>`: paragraphs, card bodies, quotes, any prose a client would edit. The CMS
    gives it a rich text editor; markdown on disk. Titles, eyebrows, labels and
    button text stay `z.string()`.
-2. **Props are the CONTENT, markup is the DESIGN.** Everything a client might
+4. **Props are the CONTENT, markup is the DESIGN.** Everything a client might
    change (headline, body, eyebrow, button labels and targets, image src/alt, card
    titles/bodies, tags, list items) becomes a prop. Everything that makes it look
    like this design (classes, layout, motifs, textures, stagger offsets, colors,
    type scale) stays in the component, verbatim. When unsure, ask "would the
    client change this without a designer?": yes → prop, no → markup.
-3. **Repeated things are arrays of objects** with a small shape (`{ title, body,
+5. **Repeated things are arrays of objects** with a small shape (`{ title, body,
    icon }`, `{ label, href }`), with `.min()/.max()` when the layout only works for
    a range (three staggered cards → `.min(1).max(3)`). **Every icon a section
    shows per item becomes a mark**: an SVG drawn inline in the design, an icon
@@ -135,17 +135,17 @@ N. **A block whose content IS a schema.org thing declares it.** `defineBlock` ta
    holding an icon name, and never SVG markup in content: the CMS turns the enum
    into a visual picker of the marks, and a string into a text box the designer
    can't fill.
-4. **Keep every class exactly.** `@lg:`, `cqi`, `color-mix(...)`, arbitrary values,
+6. **Keep every class exactly.** `@lg:`, `cqi`, `color-mix(...)`, arbitrary values,
    token utilities: the site wraps pages in the same `@container` the design
    surface uses, so nothing needs translating. Don't "clean up" while promoting.
-5. **Keep `data-block="{id}"`** on the section root (drop `data-block-name`).
-6. **`.optional()` / `.default()` on everything but the one or two fields the
+7. **Keep `data-block="{id}"`** on the section root (drop `data-block-name`).
+8. **`.optional()` / `.default()` on everything but the one or two fields the
    section can't render without** (usually `heading`, sometimes `image`).
-7. **Every image is the `image` fragment** (`{ src, alt }`), whether it's content or
+9. **Every image is the `image` fragment** (`{ src, alt }`), whether it's content or
    a background, a photo, a logo or a poster: never a bare string path. The CMS
    turns `image` props into an upload field and enum props into a choice; a designer
    is never asked to type a path or a name.
-8. **Shared prop fragments** come from `site/blocks/lib/schema.ts` (`image`,
+10. **Shared prop fragments** come from `site/blocks/lib/schema.ts` (`image`,
    `link`, `anchor`); extend that file rather than redefining shapes per block.
 
 **Chrome** (header/footer) goes in `site/blocks/chrome.ts`, NOT the registry:
