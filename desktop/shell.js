@@ -7779,7 +7779,7 @@ function showAdToolbar() {
       const a = t && t.getAttribute("data-a");
       if (a === "prev") adReviewPrev();
       else if (a === "next") adReviewNext();
-      else if (a === "exit") exitAdReview();
+      else if (a === "exit") { exitAdReview(); openModal("director"); } // back to the recommendations list
       else if (a === "expand") adToggleExpand();
     });
     adToolbarEl.querySelector(".a11y-tb-exit").textContent = COPY.director.exitReview;
