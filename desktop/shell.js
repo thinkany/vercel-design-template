@@ -4222,6 +4222,38 @@ async function renderSiteSettings(host, data, st) {
   };
   await paintSeo();
 
+  // Logos: slot rows (header / header mobile / footer / footer mobile) + the wordmark.
+  wrap.appendChild(siteEl("div", "drawer-sep"));
+  wrap.appendChild(siteEl("div", "sess-label", S.logosHeading));
+  wrap.appendChild(siteEl("div", "sess-desc", S.logosDesc));
+  const lg = JSON.parse(JSON.stringify((data.site && data.site.logos) || { items: [], wordmark: "" }));
+  const lgStatus = siteEl("div"); lgStatus.style.cssText = "min-height:18px;";
+  let lgTimer = null;
+  const saveLogos = (now) => { clearTimeout(lgTimer); lgTimer = setTimeout(async () => { const r = await window.desktop.saveSiteLogos({ items: lg.items, wordmark: lg.wordmark }); lgStatus.innerHTML = ""; if (r && r.ok) siteFlash(lgStatus, S.saved); else if (r && r.error) { const e = siteEl("div", "sess-desc", r.error); e.style.color = "#c0261e"; lgStatus.appendChild(e); } }, now ? 0 : 1000); };
+  const lgList = siteEl("div");
+  const SLOTS = [["header", S.logoHeader], ["headerMobile", S.logoHeaderMobile], ["footer", S.logoFooter], ["footerMobile", S.logoFooterMobile]];
+  const paintLogos = () => {
+    lgList.innerHTML = "";
+    lg.items.forEach((it, i) => {
+      const card = siteEl("div", "site-item");
+      const head = siteEl("div"); head.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:6px;";
+      const sel = document.createElement("select"); sel.className = "field"; sel.style.cssText = "margin:0;flex:1;";
+      SLOTS.forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; sel.appendChild(o); });
+      sel.value = it.slot; sel.addEventListener("change", () => { it.slot = sel.value; delete it.fromDesign; saveLogos(true); });
+      head.appendChild(sel);
+      if (it.fromDesign) head.appendChild(siteEl("span", "site-tag", S.logoFromDesign));
+      head.appendChild(siteTrashBtn(() => { lg.items.splice(i, 1); saveLogos(true); paintLogos(); }, S.logoRemove));
+      card.appendChild(head);
+      card.appendChild(siteImageControl(it.src, (next) => { it.src = next ? next.src : ""; delete it.fromDesign; saveLogos(true); }, { noAlt: true, raw: true, accept: ".svg,.png,image/svg+xml,image/png" }));
+      lgList.appendChild(card);
+    });
+    lgList.appendChild(siteMini(S.logoAdd, () => { const used = new Set(lg.items.map((x) => x.slot)); const slot = (SLOTS.find(([v]) => !used.has(v)) || SLOTS[0])[0]; lg.items.push({ slot, src: "" }); paintLogos(); }));
+  };
+  paintLogos(); wrap.appendChild(lgList);
+  const wm = siteField(S.wordmark, lg.wordmark || "", { hint: S.wordmarkHint, placeholder: (data.site && data.site.siteNameDefault) || "" });
+  wm.input.addEventListener("input", () => { lg.wordmark = wm.input.value; saveLogos(false); });
+  wrap.appendChild(wm.wrap); wrap.appendChild(lgStatus);
+
   // Icons: paths in content/site.json; uploads are kept as they are (no AVIF).
   // Navigation: managed by hand (the Navigation tab) or derived from the page outline.
   wrap.appendChild(siteEl("div", "drawer-sep"));

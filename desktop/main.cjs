@@ -1499,7 +1499,7 @@ function readSiteContent(dir) {
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
     licensed: siteLicensed(), // the CMS drawer shows a licensing note instead of the editor when false
-    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), siteNameDefault: readProjectEnv(dir).VITE_CLIENT_NAME || path.basename(dir), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, scripts: { gtm: (site.scripts && site.scripts.gtm) || "", extra: Array.isArray(site.scripts && site.scripts.extra) ? site.scripts.extra : [] }, seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
+    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), siteNameDefault: readProjectEnv(dir).VITE_CLIENT_NAME || path.basename(dir), logos: logosSetting(dir, site), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, scripts: { gtm: (site.scripts && site.scripts.gtm) || "", extra: Array.isArray(site.scripts && site.scripts.extra) ? site.scripts.extra : [] }, seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
     pages, posts, ...(() => {
       const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {}, builtins: {} };
       const names = site.blockNames && typeof site.blockNames === "object" ? site.blockNames : {};
@@ -1790,6 +1790,27 @@ ipcMain.handle("site:saveBlockNames", (_e, { names } = {}) => {
   const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
   const next = { ...cur, blockNames: clean };
   try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, blockNames: clean }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+// Logos (Settings): slot rows + the wordmark. The design's brand logo (VITE_BRAND_LOGO)
+// seeds the desktop header slot when the site has none of its own.
+const LOGO_SLOTS = new Set(["header", "headerMobile", "footer", "footerMobile"]);
+function logosSetting(dir, site) {
+  const raw = site.logos && typeof site.logos === "object" ? site.logos : {};
+  const items = (Array.isArray(raw.items) ? raw.items : []).filter((x) => x && LOGO_SLOTS.has(x.slot) && typeof x.src === "string" && x.src).map((x) => ({ slot: x.slot, src: x.src }));
+  const brand = (readProjectEnv(dir).VITE_BRAND_LOGO || "").trim();
+  if (brand && !items.some((x) => x.slot === "header")) items.unshift({ slot: "header", src: brand, fromDesign: true });
+  return { items, wordmark: typeof raw.wordmark === "string" ? raw.wordmark : "" };
+}
+ipcMain.handle("site:saveLogos", (_e, { logos } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const raw = logos && typeof logos === "object" ? logos : {};
+  const items = (Array.isArray(raw.items) ? raw.items : []).filter((x) => x && LOGO_SLOTS.has(x.slot) && typeof x.src === "string" && x.src.trim()).map((x) => ({ slot: x.slot, src: x.src.trim() }));
+  const p = path.join(siteContentDir(currentProject), "site.json");
+  const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
+  const next = { ...cur, logos: { items, ...(typeof raw.wordmark === "string" && raw.wordmark.trim() ? { wordmark: raw.wordmark.trim() } : {}) } };
+  try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, logos: next.logos }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle("site:llmsDefault", () => (currentProject ? generatedLlms(currentProject) : ""));

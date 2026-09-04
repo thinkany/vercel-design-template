@@ -65,6 +65,8 @@ export const richtext = z.string().describe("richtext");
 export const navLink = z.object({ label: z.string(), href: z.string() });
 /** A footer item: a link, or (with `links`) a column headed by its label. */
 export const footerItem = navLink.extend({ href: z.string().default(""), links: z.array(navLink).default([]) });
+/** The resolved logos a Header / Footer receives (site/src/lib/logos.ts). */
+export const logosProp = z.object({ header: z.string().optional(), headerMobile: z.string().optional(), footer: z.string().optional(), footerMobile: z.string().optional(), wordmark: z.string() }).default({ wordmark: "" });
 /** The footer's legal line: copyright text ({year}, {siteName} placeholders) + small links. */
 export const legalLine = z.object({ copyright: z.string().optional(), links: z.array(navLink).default([]) }).default({ links: [] });
 /** Fill the copyright placeholders. */

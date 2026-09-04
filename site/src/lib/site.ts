@@ -49,6 +49,11 @@ export const siteSchema = z.object({
       code: z.string().default(""),
     })).default([]),
   }).default({ gtm: "", extra: [] }),
+  /** Logos per slot (Settings → Logos) + the wordmark shown when a slot has no logo. */
+  logos: z.object({
+    items: z.array(z.object({ slot: z.enum(["header", "headerMobile", "footer", "footerMobile"]), src: z.string() })).default([]),
+    wordmark: z.string().optional(),
+  }).default({ items: [] }),
   /** CMS display names per block key (recognition only; the site doesn't use them). */
   blockNames: z.record(z.string()).default({}),
   /** The posts directory: posts are listed at /<path> and served at /<path>/<post>. */

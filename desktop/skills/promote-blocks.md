@@ -159,19 +159,26 @@ export { Footer } from "./Footer";
 export const chrome: Chrome = { header, footer };
 ```
 
-Chrome components receive `{ siteName, logo, nav, footerLinks, legal }` from the
-layout (all from `content/site.json`), so their props schema is:
+Chrome components receive `{ siteName, logo, logos, nav, footerLinks, legal }` from
+the layout (all from `content/site.json`), so their props schema is:
 
 ```ts
-import { navItem, navLink, legalLine, fillCopyright } from "../src/lib/blocks";
+import { navItem, navLink, legalLine, logosProp, fillCopyright } from "../src/lib/blocks";
 const props = z.object({
   siteName: z.string(),
-  logo: z.string().optional(),
+  logo: z.string().optional(),   // = logos.header (kept for older chrome)
+  logos: logosProp,              // { header, headerMobile, footer, footerMobile, wordmark } resolved
   nav: z.array(navItem).default([]),   // the HEADER menu: links (dropdown) + columns (mega menu)
   footerLinks: z.array(navLink).default([]), // the FOOTER's own links, never the header's
   legal: legalLine,                    // copyright ({year}, {siteName}) + privacy / terms links
 });
 ```
+
+**Logos per slot.** The Header renders `logos.header` on desktop and
+`logos.headerMobile` on mobile (two `<img>`s with `hidden @lg:block` / `@lg:hidden`
+when they differ); the Footer does the same with `logos.footer` / `logos.footerMobile`.
+When a slot has no logo, render `logos.wordmark` as text in the design's wordmark
+style. Never read `siteConfig.logo` in chrome.
 
 **Header and footer never share.** The Header renders `nav`; the Footer renders
 `footerLinks` only (a `footerItem` with `links` is a COLUMN headed by its label, so

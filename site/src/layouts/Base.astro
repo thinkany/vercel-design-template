@@ -11,6 +11,7 @@ import "@design/tokens.css"; // Google Fonts @import stays at the top where brow
 import "../styles/site.css";
 import { siteConfig } from "@/config/site";
 import { resolveNav } from "../lib/nav";
+import { resolveLogos } from "../lib/logos";
 import { jsonLdText, type LdPage } from "../lib/schema";
 import { resolveSeo, type Seo } from "../lib/seo";
 import { site } from "../lib/site";
@@ -28,7 +29,8 @@ const canonical = meta.canonical || new URL(Astro.url.pathname, Astro.site).href
 const shareImage = meta.image || site.seo.image; // the page's own, else the site image
 const image = shareImage ? new URL(shareImage, Astro.site).href : undefined;
 
-const chromeProps = { siteName: siteConfig.clientName, logo: siteConfig.logo, nav: await resolveNav(site), footerLinks: site.footerLinks, legal: site.legal };
+const logos = resolveLogos(site.logos, siteConfig.logo || undefined, site.seo.siteName || siteConfig.clientName);
+const chromeProps = { siteName: siteConfig.clientName, logo: logos.header, logos, nav: await resolveNav(site), footerLinks: site.footerLinks, legal: site.legal };
 // Self-hosted fonts (site/src/lib/self-host-fonts.mjs writes public/fonts at build and
 // defines __TA_FONT_PRELOAD__): the local sheet + preloads for the display and body
 // faces. Not hosted (offline build): preconnect to Google instead.
