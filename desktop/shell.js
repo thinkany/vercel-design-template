@@ -3754,7 +3754,7 @@ let siteNavRemove = () => {};
 function renderSiteNav(site, refresh, options = [], megaMenu = false) {
   const wrap = siteEl("div");
   const hf = siteFold(COPY.site.navHeading, "nav:header"); wrap.appendChild(hf.sec);
-  hf.body.appendChild(siteEl("div", "sess-desc", COPY.site.navDesc));
+  hf.body.appendChild(siteEl("div", "sess-desc", site.manageNav === false ? COPY.site.navAuto : COPY.site.navDesc));
   // One datalist shared by every URL field: the project's pages, sections, posts,
   // content entries and indexes. Chromium renders it as a combo: type, or pick.
   const listId = "site-nav-links";
@@ -3851,7 +3851,7 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
   const navList = siteEl("div");
   const paintNav = () => { navList.innerHTML = ""; draft.nav.forEach((l, i) => navList.appendChild(linkRow(l, draft.nav, i, paintNav, true, { kind: "item", owners: [], reorder: { kinds: ["item", "link"], target: () => draft.nav, topLevel: true }, nest: { into: () => (l.links = Array.isArray(l.links) ? l.links : []) }, repaint: paintNav }))); navList.appendChild(siteMini(COPY.site.addLink, () => { draft.nav.push({ label: "", href: "/", links: [] }); dirty(); paintNav(); })); };
   paintNav();
-  hf.body.appendChild(navList);
+  if (site.manageNav !== false) hf.body.appendChild(navList); // derived menus aren't edited here
   const ff = siteFold(COPY.site.footerHeading, "nav:footer"); wrap.appendChild(ff.sec);
   const footList = siteEl("div");
   const paintFoot = () => { footList.innerHTML = ""; draft.footerLinks.forEach((l, i) => footList.appendChild(linkRow(l, draft.footerLinks, i, paintFoot, false, { kind: "footer", owners: [], reorder: { kinds: ["footer"], target: () => draft.footerLinks }, nest: null, repaint: paintFoot }))); footList.appendChild(siteMini(COPY.site.addLink, () => { draft.footerLinks.push({ label: "", href: "/" }); dirty(); paintFoot(); })); };
@@ -3994,6 +3994,21 @@ async function renderSiteSettings(host, data, st) {
   await paintSeo();
 
   // Icons: paths in content/site.json; uploads are kept as they are (no AVIF).
+  // Navigation: managed by hand (the Navigation tab) or derived from the page outline.
+  wrap.appendChild(siteEl("div", "drawer-sep"));
+  wrap.appendChild(siteEl("div", "sess-label", S.navHeading));
+  const navBox = siteEl("div", "site-kv");
+  const manage = !!(data.site && data.site.manageNav !== false);
+  const navSwitch = siteSwitch(S.manageNav, data.megaMenu ? true : manage, async (next) => {
+    const r = await window.desktop.setManageNav(next);
+    if (r && r.ok) { siteFlash(navBox, S.saved); }
+    else if (r && r.error) { const e = siteEl("div", "sess-desc", r.error); e.style.color = "#c0261e"; navBox.appendChild(e); }
+  });
+  if (data.megaMenu) { const cb = navSwitch.querySelector("input"); cb.disabled = true; navSwitch.style.cursor = "default"; navSwitch.classList.add("locked"); }
+  navBox.appendChild(navSwitch);
+  navBox.appendChild(siteEl("div", "sess-desc", data.megaMenu ? S.manageNavMegaNote : (manage ? S.manageNavOnHint : S.manageNavOffHint)));
+  wrap.appendChild(navBox);
+
   wrap.appendChild(siteEl("div", "drawer-sep"));
   wrap.appendChild(siteEl("div", "sess-label", S.iconsHeading));
   wrap.appendChild(siteEl("div", "sess-desc", S.iconsDesc));

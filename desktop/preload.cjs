@@ -139,6 +139,7 @@ contextBridge.exposeInMainWorld("desktop", {
   deleteMedia: (rel) => ipcRenderer.invoke("media:delete", { rel }),
   getCmsSettings: () => ipcRenderer.invoke("cms:getSettings"),
   saveSiteSeo: (seo) => ipcRenderer.invoke("site:saveSeo", { seo }),
+  setManageNav: (manageNav) => ipcRenderer.invoke("site:setManageNav", { manageNav }),
   getLlmsDefault: () => ipcRenderer.invoke("site:llmsDefault"),
   setCmsSettings: (patch) => ipcRenderer.invoke("cms:setSettings", patch),
   onSiteOff: (cb) => { const l = () => cb(); ipcRenderer.on("site:off", l); return () => ipcRenderer.removeListener("site:off", l); },

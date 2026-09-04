@@ -28,6 +28,11 @@ export const siteSchema = z.object({
   nav: z.array(navItem).default([]),
   /** Footer-only links (legal, social…). */
   footerLinks: z.array(navLink).default([]),
+  /**
+   * true: the header menu is `nav` above, edited in the CMS. false: the menu follows
+   * the page outline (top-level pages in order, their children as sub-links).
+   */
+  manageNav: z.boolean().default(true),
   /** Site icons (the CMS Settings tab): paths under public/, e.g. "/images/icon.svg". */
   favicon: z.object({
     /** Browser tab / bookmark icon: SVG (best) or a square PNG. */

@@ -444,6 +444,7 @@ window.COPY = {
         intro: "Options for this site.",
         sections: [
           { h: "Images", items: ["Every image added through the site is optimized automatically (AVIF, scaled to the maximum width). SVG, GIF and AVIF files are kept as they are.", "<b>Quality</b>: lower is smaller. 55 suits photos; 70 or more suits illustrations and screenshots.", "<b>Maximum width</b>: larger images are scaled down on upload; smaller ones are never scaled up.", "Changes apply to new uploads; images already in the project are left alone."] },
+          { h: "Navigation", items: ["<b>Manage Navigation</b> on: the menu is whatever you build in the Navigation tab. Off: the menu follows the page outline (top-level pages in order, child pages as sub-links), so adding or moving a page updates the menu.", "A header designed with a mega menu can't be driven from the outline; the switch stays on."] },
           { h: "Icons", items: ["<b>Browser icon</b>: the tab, bookmark and search-result icon. SVG is best; otherwise a square PNG of 512 × 512 or more. Icons are kept as uploaded, never converted.", "<b>Home-screen icon</b>: a 180 × 180 PNG without transparency, for phones that add the site to the home screen. Optional.", "Without an icon of its own, the site shows the template's default."] },
           { h: "Site", items: ["Which design the site is built from, and its live address once published. Publishing happens in the Publish panel."] },
         ],
@@ -507,6 +508,7 @@ window.COPY = {
     deletePage: "Delete page",
     deleteConfirm: (t) => `Delete “${t}”? This removes its content file.`,
     navHeading: "Navigation",
+    navAuto: "The menu follows the page outline. Turn on Manage Navigation in Settings to edit it by hand.",
     navDesc: "The links in the header and footer. A URL can be a page (/about), a section on the home page (/#contact), or a full web address; the list offers everything in the project.",
     navLabel: "Link Text",
     navHref: "URL",
@@ -595,6 +597,11 @@ window.COPY = {
     noneOption: "(none)",
     // settings tab
     settings: {
+      navHeading: "Navigation",
+      manageNav: "Manage Navigation",
+      manageNavOnHint: "On: the menu is edited in the Navigation tab.",
+      manageNavOffHint: "Off: the menu follows the page outline. Top-level pages in their order, with their child pages as sub-links.",
+      manageNavMegaNote: "Sites with mega-menus must manually manage the navigation.",
       enable: "Site builder",
       enableOffHint: "Turn on to edit this site's pages, posts, types, navigation and settings.",
       enableOnHint: "Turn off to lock the site builder for this project. Nothing is deleted.",

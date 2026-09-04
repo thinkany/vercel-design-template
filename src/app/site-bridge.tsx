@@ -25,7 +25,7 @@ type ChromeModule = { Header?: ((p: AnyRecord) => ReactNode) | null; Footer?: ((
 
 // content/site.json → { design, nav, footerLinks }
 const siteFiles = import.meta.glob("../../content/site.json", { eager: true, import: "default" }) as Record<string, AnyRecord>;
-const site = (Object.values(siteFiles)[0] || {}) as { design?: string; nav?: AnyRecord[]; footerLinks?: AnyRecord[] };
+const site = (Object.values(siteFiles)[0] || {}) as { design?: string; nav?: AnyRecord[]; footerLinks?: AnyRecord[]; manageNav?: boolean };
 
 // content/pages/*.json → the site's pages
 const pageFiles = import.meta.glob("../../content/pages/*.json", { eager: true, import: "default" }) as Record<string, PageDoc>;
@@ -88,7 +88,11 @@ export function SitePage({ pageId, onNavigate, view, setView, orientation, setOr
   const Footer = chromeMod.Footer || null;
   // The chrome's props go through its own schema (as Astro's layout does), so nav
   // items get their defaults (an item without `links` gets []).
-  const rawChrome = { siteName: siteConfig.clientName, logo: siteConfig.logo || undefined, nav: (site.nav || []).map((l) => ({ links: [], ...(l as AnyRecord) })), footerLinks: site.footerLinks || [] };
+  // The menu: edited nav, or (manageNav: false) derived from the page outline, as site/src/lib/nav.ts does.
+  const nav = site.manageNav === false
+    ? pages.filter((p) => p.id !== "home" && !(pageDoc(p.id)?.parent)).map((p) => ({ label: p.name, href: "/" + p.route, links: pages.filter((c) => pageDoc(c.id)?.parent === p.id).map((c) => ({ label: c.name, href: "/" + c.route })), columns: [] }))
+    : (site.nav || []).map((l) => ({ links: [], ...(l as AnyRecord) }));
+  const rawChrome = { siteName: siteConfig.clientName, logo: siteConfig.logo || undefined, nav, footerLinks: site.footerLinks || [] };
   const parseChrome = (def?: BlockDef) => { const r = def?.props.safeParse(rawChrome); return r && r.success && r.data ? r.data : rawChrome; };
   const headerProps = parseChrome(chromeMod.chrome?.header);
   const footerProps = parseChrome(chromeMod.chrome?.footer);
