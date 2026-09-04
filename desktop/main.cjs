@@ -1499,7 +1499,7 @@ function readSiteContent(dir) {
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
     licensed: siteLicensed(), // the CMS drawer shows a licensing note instead of the editor when false
-    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, scripts: { gtm: (site.scripts && site.scripts.gtm) || "", extra: Array.isArray(site.scripts && site.scripts.extra) ? site.scripts.extra : [] }, seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
+    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), siteNameDefault: readProjectEnv(dir).VITE_CLIENT_NAME || path.basename(dir), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, scripts: { gtm: (site.scripts && site.scripts.gtm) || "", extra: Array.isArray(site.scripts && site.scripts.extra) ? site.scripts.extra : [] }, seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
     pages, posts, ...(() => {
       const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {}, builtins: {} };
       const names = site.blockNames && typeof site.blockNames === "object" ? site.blockNames : {};
@@ -1516,10 +1516,14 @@ function readSiteContent(dir) {
 }
 // Search-engine settings in content/site.json (built into robots.txt, the sitemap,
 // llms.txt and the pages' robots meta). Defaults mirror site/src/lib/site.ts.
+const SEO_SEPARATORS = ["-", "\u2013", "\u2014", ":", "\u00b7", "\u2022", "*", "\u22c6", "|", "~", "\u00ab", "\u00bb", "<", ">"]; // Yoast's set
 function seoSettings(raw) {
   const r = raw && typeof raw === "object" ? raw : {};
   const llms = r.llms && typeof r.llms === "object" ? r.llms : {};
   return {
+    siteName: typeof r.siteName === "string" ? r.siteName.trim() : "",
+    separator: SEO_SEPARATORS.includes(r.separator) ? r.separator : "|",
+    image: typeof r.image === "string" ? r.image.trim() : "",
     discourage: !!r.discourage,
     sitemap: r.sitemap !== false,
     llms: { enabled: llms.enabled !== false, content: typeof llms.content === "string" && llms.content.trim() ? llms.content : null },

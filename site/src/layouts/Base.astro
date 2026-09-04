@@ -21,9 +21,11 @@ interface Props {
   seo?: Partial<Seo>;
 }
 const { title, description, seo } = Astro.props;
-const meta = resolveSeo(seo, { title, description, siteName: siteConfig.clientName });
+const siteName = site.seo.siteName || siteConfig.clientName;
+const meta = resolveSeo(seo, { title, description, siteName, separator: site.seo.separator });
 const canonical = meta.canonical || new URL(Astro.url.pathname, Astro.site).href;
-const image = meta.image ? new URL(meta.image, Astro.site).href : undefined;
+const shareImage = meta.image || site.seo.image; // the page's own, else the site image
+const image = shareImage ? new URL(shareImage, Astro.site).href : undefined;
 
 const chromeProps = { siteName: siteConfig.clientName, logo: siteConfig.logo, nav: await resolveNav(site), footerLinks: site.footerLinks, legal: site.legal };
 // Self-hosted fonts (site/src/lib/self-host-fonts.mjs writes public/fonts at build and
@@ -59,7 +61,7 @@ const faviconType = /\.svg$/i.test(favicon) ? "image/svg+xml" : /\.png$/i.test(f
     <link rel="canonical" href={canonical} />
     {(meta.noindex || site.seo.discourage) && <meta name="robots" content="noindex, nofollow" />}
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content={siteConfig.clientName} />
+    <meta property="og:site_name" content={siteName} />
     <meta property="og:title" content={meta.title} />
     {meta.description && <meta property="og:description" content={meta.description} />}
     <meta property="og:url" content={canonical} />

@@ -25,7 +25,7 @@ type ChromeModule = { Header?: ((p: AnyRecord) => ReactNode) | null; Footer?: ((
 
 // content/site.json → { design, nav, footerLinks }
 const siteFiles = import.meta.glob("../../content/site.json", { eager: true, import: "default" }) as Record<string, AnyRecord>;
-const site = (Object.values(siteFiles)[0] || {}) as { design?: string; nav?: AnyRecord[]; footerLinks?: AnyRecord[]; legal?: AnyRecord; manageNav?: boolean };
+const site = (Object.values(siteFiles)[0] || {}) as { design?: string; nav?: AnyRecord[]; footerLinks?: AnyRecord[]; legal?: AnyRecord; manageNav?: boolean; seo?: { siteName?: string; separator?: string; image?: string } };
 
 // content/pages/*.json → the site's pages
 const pageFiles = import.meta.glob("../../content/pages/*.json", { eager: true, import: "default" }) as Record<string, PageDoc>;
@@ -87,12 +87,13 @@ interface Props {
 // same values the site emits at build, so the local and gated previews match it.
 function applySeo(doc: PageDoc | null, pageId: string) {
   const seo = (doc && doc.seo) || {};
-  const siteName = siteConfig.clientName || "";
+  const siteName = (site.seo && site.seo.siteName) || siteConfig.clientName || "";
+  const sep = (site.seo && site.seo.separator) || "|";
   const base = doc?.title || pageId;
   const title = (seo.title as string) || base;
-  const full = title === siteName ? title : `${title} | ${siteName}`;
+  const full = title === siteName ? title : `${title} ${sep} ${siteName}`;
   const description = (seo.description as string) || "";
-  const image = (seo.image as string) || "";
+  const image = (seo.image as string) || (site.seo && site.seo.image) || "";
   const keyphrase = (seo.keyphrase as string) || "";
   document.title = full;
   const set = (sel: string, attrs: Record<string, string>, content: string) => {

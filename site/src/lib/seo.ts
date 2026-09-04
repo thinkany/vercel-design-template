@@ -30,12 +30,13 @@ export interface ResolvedSeo {
 
 export function resolveSeo(
   seo: Partial<Seo> | undefined,
-  fallback: { title: string; description?: string; siteName: string },
+  fallback: { title: string; description?: string; siteName: string; separator?: string },
 ): ResolvedSeo {
   const s = seo ?? {};
   const title = s.title || fallback.title;
+  const sep = fallback.separator || "|";
   return {
-    title: title === fallback.siteName ? title : `${title} | ${fallback.siteName}`,
+    title: title === fallback.siteName ? title : `${title} ${sep} ${fallback.siteName}`,
     description: s.description || fallback.description || "",
     image: s.image,
     keyphrase: s.keyphrase,

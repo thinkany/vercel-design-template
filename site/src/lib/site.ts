@@ -62,6 +62,12 @@ export const siteSchema = z.object({
   }).default({}),
   /** Search-engine settings (the CMS Settings tab). */
   seo: z.object({
+    /** The website name in titles and og:site_name (defaults to the project's client name). */
+    siteName: z.string().optional(),
+    /** Between a page title and the website name: "Island Guide | Visit Hawaii". */
+    separator: z.string().default("|"),
+    /** The share image used when a page or post has none of its own. */
+    image: z.string().optional(),
     /** robots.txt Disallow: /, noindex on every page, no sitemap. */
     discourage: z.boolean().default(false),
     /** Build sitemap-index.xml (ignored while discourage is on). */
@@ -73,7 +79,7 @@ export const siteSchema = z.object({
     }).default({ enabled: true, content: null }),
     // zod 3 returns a `.default()` value as-is (inner defaults don't apply), so
     // the defaults are spelled out in full at both levels.
-  }).default({ discourage: false, sitemap: true, llms: { enabled: true, content: null } }),
+  }).default({ separator: "|", discourage: false, sitemap: true, llms: { enabled: true, content: null } }),
 });
 export type SiteSettings = z.infer<typeof siteSchema>;
 

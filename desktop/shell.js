@@ -4153,6 +4153,24 @@ async function renderSiteSettings(host, data, st) {
     const h = siteEl("div", "sess-desc", hint); h.style.margin = "-6px 0 12px 22px";
     return { row, cb, hint: h };
   };
+  // Website name, title separator, site image (the defaults every page's SEO falls back to).
+  let seoTimer = null; const saveSeoSoon = () => { clearTimeout(seoTimer); seoTimer = setTimeout(saveSeo, 1000); };
+  const sn = siteField(S.siteNameLabel, seo.siteName || "", { hint: S.siteNameHint, placeholder: (data.site && data.site.siteNameDefault) || "" });
+  sn.input.addEventListener("input", () => { seo.siteName = sn.input.value; saveSeoSoon(); });
+  wrap.appendChild(sn.wrap);
+  const sepWrap = siteEl("div", "site-kv"); sepWrap.appendChild(siteEl("div", "k", S.separatorLabel));
+  const seps = siteEl("div", "site-seps");
+  ["-", "\u2013", "\u2014", ":", "\u00b7", "\u2022", "*", "\u22c6", "|", "~", "\u00ab", "\u00bb", "<", ">"].forEach((c) => {
+    const b = siteEl("button", "site-sep" + ((seo.separator || "|") === c ? " on" : ""), c); b.type = "button"; b.title = c;
+    b.addEventListener("click", () => { seo.separator = c; seps.querySelectorAll(".site-sep").forEach((x) => x.classList.toggle("on", x === b)); sepHint.textContent = S.separatorHint(c, sn.input.value || sn.input.placeholder); saveSeo(); });
+    seps.appendChild(b);
+  });
+  sepWrap.appendChild(seps);
+  const sepHint = siteEl("div", "sess-desc", S.separatorHint(seo.separator || "|", seo.siteName || (data.site && data.site.siteNameDefault) || ""));
+  sn.input.addEventListener("input", () => { sepHint.textContent = S.separatorHint(seo.separator || "|", sn.input.value || sn.input.placeholder); });
+  sepWrap.appendChild(sepHint); wrap.appendChild(sepWrap);
+  const si = siteImageControl(seo.image || "", (next) => { seo.image = next ? next.src : ""; saveSeo(); }, { label: S.siteImageLabel, noAlt: true });
+  si.appendChild(siteEl("div", "sess-desc", S.siteImageHint)); wrap.appendChild(si);
   const disc = toggle(S.discourage, S.discourageHint, seo.discourage, (on) => { seo.discourage = on; paintSeo(); saveSeo(); });
   const smap = toggle(S.sitemap, S.sitemapHint, seo.sitemap, (on) => { seo.sitemap = on; saveSeo(); });
   const llm = toggle(S.llms, S.llmsHint, seo.llms.enabled, (on) => { seo.llms.enabled = on; paintSeo(); saveSeo(); });
