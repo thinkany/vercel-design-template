@@ -57,6 +57,8 @@ export const richtext = z.string().describe("richtext");
  */
 /** A menu link. */
 export const navLink = z.object({ label: z.string(), href: z.string() });
+/** A footer item: a link, or (with `links`) a column headed by its label. */
+export const footerItem = navLink.extend({ href: z.string().default(""), links: z.array(navLink).default([]) });
 /** The footer's legal line: copyright text ({year}, {siteName} placeholders) + small links. */
 export const legalLine = z.object({ copyright: z.string().optional(), links: z.array(navLink).default([]) }).default({ links: [] });
 /** Fill the copyright placeholders. */

@@ -1602,7 +1602,7 @@ function rewriteNavRoutes(dir, oldRoute, newRoute) {
   const from = "/" + oldRoute, to = "/" + newRoute; let changed = false;
   const fix = (l) => { if (!l || typeof l.href !== "string") return; if (l.href === from || l.href.startsWith(from + "#") || l.href.startsWith(from + "/")) { l.href = to + l.href.slice(from.length); changed = true; } };
   for (const it of site.nav || []) { fix(it); for (const s of it.links || []) fix(s); for (const c of it.columns || []) { for (const s of c.links || []) fix(s); if (c.feature && c.feature.link) fix(c.feature.link); } }
-  for (const l of site.footerLinks || []) fix(l);
+  for (const l of site.footerLinks || []) { fix(l); for (const s of l.links || []) fix(s); }
   for (const l of (site.legal && site.legal.links) || []) fix(l);
   if (changed) fs.writeFileSync(p, JSON.stringify(site, null, 2) + "\n");
 }
@@ -1697,7 +1697,12 @@ ipcMain.handle("site:saveSite", (_e, { nav, footerLinks, legal } = {}) => {
   const clean = (arr, sub) => (Array.isArray(arr) ? arr : [])
     .filter((l) => l && typeof l.label === "string" && l.label.trim() && typeof l.href === "string" && l.href.trim())
     .map((l) => ({ label: l.label.trim(), href: l.href.trim(), ...(sub && Array.isArray(l.links) && l.links.length ? { links: clean(l.links, false) } : {}) }));
-  const next = { ...cur, nav: clean(nav, true), footerLinks: clean(footerLinks, false) };
+  // A footer item may be a column: a label with links and no address of its own.
+  const cleanFooter = (arr) => (Array.isArray(arr) ? arr : [])
+    .map((l) => l && typeof l.label === "string" ? { label: l.label.trim(), href: typeof l.href === "string" ? l.href.trim() : "", links: clean(l.links, false) } : null)
+    .filter((l) => l && l.label && (l.href || l.links.length))
+    .map((l) => ({ label: l.label, ...(l.href ? { href: l.href } : {}), ...(l.links.length ? { links: l.links } : {}) }));
+  const next = { ...cur, nav: clean(nav, true), footerLinks: cleanFooter(footerLinks) };
   if (legal && typeof legal === "object") next.legal = { ...(typeof legal.copyright === "string" && legal.copyright.trim() ? { copyright: legal.copyright.trim() } : {}), links: clean(legal.links, false) };
   try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, site: next }; }
   catch (e) { return { ok: false, error: e.message }; }

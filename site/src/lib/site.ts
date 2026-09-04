@@ -26,8 +26,8 @@ export const siteSchema = z.object({
   url: z.string().url().optional(),
   /** Primary navigation, shared by the header and footer chrome. */
   nav: z.array(navItem).default([]),
-  /** The footer's own links, independent of the header menu. */
-  footerLinks: z.array(navLink).default([]),
+  /** The footer's own links, independent of the header menu. An item with `links` is a COLUMN: its label is the heading (href optional). */
+  footerLinks: z.array(navLink.extend({ href: z.string().default(""), links: z.array(navLink).default([]) })).default([]),
   /** The legal line: copyright ({year} and {siteName} are filled in) + privacy / terms links. */
   legal: z.object({ copyright: z.string().optional(), links: z.array(navLink).default([]) }).default({ links: [] }),
   /**

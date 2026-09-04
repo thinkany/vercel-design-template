@@ -3865,6 +3865,7 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
   siteNavRemove = (x) => {
     const pull = (arr) => { const i = arr.indexOf(x); if (i >= 0) { arr.splice(i, 1); return true; } return false; };
     if (pull(draft.nav) || pull(draft.footerLinks) || pull(draft.legal.links)) return;
+    for (const it of draft.footerLinks) { if (Array.isArray(it.links) && pull(it.links)) return; }
     for (const it of draft.nav) {
       if (Array.isArray(it.links) && pull(it.links)) return;
       for (const c of it.columns || []) { if (Array.isArray(c.links) && pull(c.links)) return; }
@@ -3885,7 +3886,7 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
     });
     row.append(lab, href);
     let paintCols = null; // set below when this item can hold mega-menu panels
-    if (withSub && megaMenu && dnd) {
+    if (withSub && megaMenu && dnd && dnd.kind === "item") { // panels are a header thing
       const addPanel = siteMini(COPY.site.addColumn, () => { l.columns = Array.isArray(l.columns) ? l.columns : []; l.columns.push({ heading: "", links: [] }); dirty(); if (paintCols) paintCols(); }, { title: COPY.site.addColumnTip });
       row.appendChild(addPanel);
     }
@@ -3899,7 +3900,7 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
       paintSub();
       out.appendChild(sub);
       // Mega menu: columns under this item (only when the header renders them).
-      if (megaMenu && dnd) {
+      if (megaMenu && dnd && dnd.kind === "item") {
         l.columns = Array.isArray(l.columns) ? l.columns : [];
         const cols = siteEl("div"); cols.style.cssText = "margin:0 0 6px 14px;";
         paintCols = () => {
@@ -3952,7 +3953,7 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
   const ff = siteFold(COPY.site.footerHeading, "nav:footer"); wrap.appendChild(ff.sec);
   ff.body.appendChild(siteEl("div", "sess-desc", COPY.site.footerDesc));
   const footList = siteEl("div");
-  const paintFoot = () => { footList.innerHTML = ""; draft.footerLinks.forEach((l, i) => footList.appendChild(linkRow(l, draft.footerLinks, i, paintFoot, false, { kind: "footer", owners: [], reorder: { kinds: ["footer"], target: () => draft.footerLinks }, nest: null, repaint: paintFoot }))); footList.appendChild(siteMini(COPY.site.addLink, () => { draft.footerLinks.push({ label: "", href: "/" }); dirty(); paintFoot(); })); };
+  const paintFoot = () => { footList.innerHTML = ""; draft.footerLinks.forEach((l, i) => footList.appendChild(linkRow(l, draft.footerLinks, i, paintFoot, true, { kind: "footer", owners: [], reorder: { kinds: ["footer", "link"], target: () => draft.footerLinks, topLevel: true }, nest: { into: () => (l.links = Array.isArray(l.links) ? l.links : []) }, repaint: paintFoot }))); footList.appendChild(siteMini(COPY.site.addLink, () => { draft.footerLinks.push({ label: "", href: "/" }); dirty(); paintFoot(); })); };
   paintFoot();
   ff.body.appendChild(footList);
   // Legal: the copyright line + privacy / terms links, their own section.

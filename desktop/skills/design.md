@@ -436,7 +436,8 @@ hand-rolls site nav. What you touch:
   plus `legal`: the copyright line and privacy / terms links). A divergent
   `Footer.tsx` renders `footerLinks` and `legal` from there, never `NAV_ITEMS` or
   `pages.ts`, so header and footer stay independently editable (in the design and,
-  after promotion, in the CMS).
+  after promotion, in the CMS). A footer link with `links` is a column headed by
+  its label: render columns when the design calls for them.
 - **The logo/wordmark IS the home link, don't add a standalone "Home" nav item.** A
   separate "Home" link reads dated; the brand lockup fills that role. Link the logo to
   home (`?v={id}`) and **omit the home page from the nav list** (filter it out of the

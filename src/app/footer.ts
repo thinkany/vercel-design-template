@@ -11,7 +11,8 @@
 import { designPages } from "./pages";
 import { siteConfig } from "@/config/site";
 
-export type FooterLink = { label: string; page?: string; href?: string };
+/** A footer link, or a COLUMN when it carries `links` (its label is the heading). */
+export type FooterLink = { label: string; page?: string; href?: string; links?: FooterLink[] };
 
 /** Footer links: a page id (in-app navigation) or an href (anchor / URL). */
 export const footerLinks: FooterLink[] = designPages
