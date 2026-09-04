@@ -54,7 +54,7 @@ if (!post) {
 }
 ---
 {post && postView ? (
-  <Base title={post.data.title} seo={postView.seo}>
+  <Base title={post.data.title} seo={postView.seo} ld={{ kind: "post", datePublished: post.data.date.toISOString(), dateModified: (post.data.updated || post.data.date).toISOString(), tags: post.data.tags }}>
     <article class="max-w-[720px] mx-auto px-6 py-20">
       <div class="font-ta-sans text-[11px] tracking-[0.14em] uppercase text-ta-muted mb-3">{fmt(post.data.date)}{postView.updated && <span> · Updated {postView.updated}</span>}</div>
       <h1 class="font-ta-display text-[clamp(32px,5vw,52px)] text-ta-ink leading-[1.05] tracking-[-0.02em] mb-8">{post.data.title}</h1>

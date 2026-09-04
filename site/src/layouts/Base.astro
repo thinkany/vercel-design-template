@@ -11,6 +11,7 @@ import "@design/tokens.css"; // Google Fonts @import stays at the top where brow
 import "../styles/site.css";
 import { siteConfig } from "@/config/site";
 import { resolveNav } from "../lib/nav";
+import { jsonLdText, type LdPage } from "../lib/schema";
 import { resolveSeo, type Seo } from "../lib/seo";
 import { site } from "../lib/site";
 import { Header, Footer, chrome } from "../../blocks/chrome";
@@ -20,7 +21,7 @@ interface Props {
   description?: string;
   seo?: Partial<Seo>;
 }
-const { title, description, seo } = Astro.props;
+const { title, description, seo, ld } = Astro.props as { title: string; description?: string; seo?: Record<string, unknown>; ld?: LdPage };
 const siteName = site.seo.siteName || siteConfig.clientName;
 const meta = resolveSeo(seo, { title, description, siteName, separator: site.seo.separator });
 const canonical = meta.canonical || new URL(Astro.url.pathname, Astro.site).href;
@@ -44,6 +45,13 @@ const gtmHead = !injectScripts ? "" : gtmId
   : gtmRaw;
 const gtmBody = injectScripts && gtmId ? `<!-- Google Tag Manager (noscript) --><noscript><iframe src="https://www.googletagmanager.com/ns.html?id=${gtmId}" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript><!-- End Google Tag Manager (noscript) -->` : "";
 const extra = (where: "head" | "bodyStart" | "bodyEnd") => (injectScripts ? site.scripts.extra.filter((s) => s.placement === where && s.code.trim()).map((s) => s.code).join("\n") : "");
+// Structured data: one JSON-LD graph, generated (site/src/lib/schema.ts) + the page's custom block.
+const ldText = jsonLdText({
+  siteUrl: Astro.site ? Astro.site.href.replace(/\/$/, "") : "",
+  siteName, logo: siteConfig.logo || undefined, schema: site.seo.schema,
+  url: canonical, title: (seo && (seo as { title?: string }).title) || title, description: meta.description, image,
+  page: ld || { kind: "page" }, custom: seo ? (seo as { jsonld?: string }).jsonld : undefined,
+});
 // Site icons from content/site.json (the CMS Settings tab); the scaffold's favicon.svg otherwise.
 const favicon = site.favicon.icon || "/favicon.svg";
 const faviconType = /\.svg$/i.test(favicon) ? "image/svg+xml" : /\.png$/i.test(favicon) ? "image/png" : /\.ico$/i.test(favicon) ? "image/x-icon" : undefined;
@@ -77,7 +85,8 @@ const faviconType = /\.svg$/i.test(favicon) ? "image/svg+xml" : /\.png$/i.test(f
     <!-- Marks JS as available BEFORE first paint, so data-reveal elements only
          start hidden when the observer below will actually reveal them. -->
     <script is:inline>document.documentElement.classList.add("js");</script>
-      <Fragment set:html={gtmHead} />
+      <script type="application/ld+json" set:html={ldText} />
+    <Fragment set:html={gtmHead} />
     <Fragment set:html={extra("head")} />
   </head>
   <body class="bg-ta-surface text-ta-body font-ta-sans">

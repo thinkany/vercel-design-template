@@ -16,6 +16,8 @@ import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } fro
 import { DesignSurface } from "./DesignSurface";
 import type { DesignPage } from "./pages.schema";
 import { siteConfig } from "@/config/site";
+const schemaFiles = import.meta.glob("../../site/src/lib/schema.ts", { eager: true }) as Record<string, { jsonLdText?: (i: unknown) => string }>;
+const jsonLdText = (Object.values(schemaFiles)[0] || {}).jsonLdText;
 
 type AnyRecord = Record<string, unknown>;
 type BlockInstance = { type: string; props?: AnyRecord };
@@ -25,7 +27,7 @@ type ChromeModule = { Header?: ((p: AnyRecord) => ReactNode) | null; Footer?: ((
 
 // content/site.json → { design, nav, footerLinks }
 const siteFiles = import.meta.glob("../../content/site.json", { eager: true, import: "default" }) as Record<string, AnyRecord>;
-const site = (Object.values(siteFiles)[0] || {}) as { design?: string; nav?: AnyRecord[]; footerLinks?: AnyRecord[]; legal?: AnyRecord; manageNav?: boolean; seo?: { siteName?: string; separator?: string; image?: string } };
+const site = (Object.values(siteFiles)[0] || {}) as { design?: string; url?: string; nav?: AnyRecord[]; footerLinks?: AnyRecord[]; legal?: AnyRecord; manageNav?: boolean; seo?: { siteName?: string; separator?: string; image?: string; schema?: AnyRecord } };
 
 // content/pages/*.json → the site's pages
 const pageFiles = import.meta.glob("../../content/pages/*.json", { eager: true, import: "default" }) as Record<string, PageDoc>;
@@ -85,7 +87,7 @@ interface Props {
 // The design surface is one page, so per-page SEO is applied to the document when a
 // site page renders: title, description, keywords, Open Graph and Twitter tags. The
 // same values the site emits at build, so the local and gated previews match it.
-function applySeo(doc: PageDoc | null, pageId: string) {
+function applySeo(doc: PageDoc | null, pageId: string, pages: DesignPage[]) {
   const seo = (doc && doc.seo) || {};
   const siteName = (site.seo && site.seo.siteName) || siteConfig.clientName || "";
   const sep = (site.seo && site.seo.separator) || "|";
@@ -109,11 +111,20 @@ function applySeo(doc: PageDoc | null, pageId: string) {
   set('meta[property="og:image"]', { property: "og:image" }, image ? new URL(image, window.location.origin).href : "");
   set('meta[name="twitter:card"]', { name: "twitter:card" }, image ? "summary_large_image" : "summary");
   set('meta[name="robots"]', { name: "robots" }, seo.noindex ? "noindex, nofollow" : "");
+  // Structured data, the same graph the site emits (reviewable in the preview's source).
+  let ld = document.head.querySelector<HTMLScriptElement>('script[type="application/ld+json"][data-ta]');
+  if (jsonLdText) {
+    if (!ld) { ld = document.createElement("script"); ld.type = "application/ld+json"; ld.setAttribute("data-ta", "1"); document.head.appendChild(ld); }
+    const origin = (site.url || window.location.origin).replace(/\/$/, "");
+    const route = pages.find((p) => p.id === pageId)?.route || "";
+    const crumbs = pageId === "home" ? [] : [{ name: (pageDoc("home")?.title) || "Home", url: origin + "/" }, { name: base, url: origin + "/" + route }];
+    ld.textContent = jsonLdText({ siteUrl: origin, siteName, logo: siteConfig.logo || undefined, schema: site.seo && site.seo.schema, url: origin + "/" + route, title, description, image: image ? new URL(image, origin).href : undefined, page: { kind: "page", crumbs }, custom: seo.jsonld as string });
+  } else if (ld) ld.remove();
 }
 
 export function SitePage({ pageId, onNavigate, view, setView, orientation, setOrientation, capture }: Props) {
   const doc = pageDoc(pageId);
-  useEffect(() => { try { applySeo(doc, pageId); } catch { /* headless capture */ } }, [doc, pageId]);
+  useEffect(() => { try { applySeo(doc, pageId, pages); } catch { /* headless capture */ } }, [doc, pageId, pages]);
   const pages = sitePages();
   const Header = chromeMod.Header || null;
   const Footer = chromeMod.Footer || null;

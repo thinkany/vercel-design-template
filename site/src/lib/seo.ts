@@ -16,6 +16,8 @@ export const seoFields = z.object({
   noindex: z.boolean().default(false),
   /** Override the canonical URL (rarely needed). */
   canonical: z.string().url().optional(),
+  /** Custom JSON-LD for this entry (an object or an array), added to the generated graph. */
+  jsonld: z.string().optional(),
 });
 export type Seo = z.infer<typeof seoFields>;
 

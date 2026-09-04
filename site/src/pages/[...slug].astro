@@ -20,11 +20,18 @@ export async function getStaticPaths() {
   const pages = await getCollection("pages");
   return pages.map((page) => {
     const slug = pageRoute(page, pages); // parent chain: "about/island-guide"
-    return { params: { slug: slug || undefined }, props: { page } };
+    // Breadcrumbs: Home, then each ancestor, then this page.
+    const chain: typeof pages = []; let cur: (typeof pages)[number] | undefined = page; let g = 0;
+    while (cur && cur.id !== "home" && g++ < 16) { chain.unshift(cur); cur = cur.data.parent ? pages.find((p) => p.id === cur!.data.parent) : undefined; }
+    const home = pages.find((p) => p.id === "home");
+    const crumbs = [...(home ? [{ name: home.data.title, route: "" }] : []), ...chain.map((p) => ({ name: p.data.title, route: pageRoute(p, pages) }))];
+    return { params: { slug: slug || undefined }, props: { page, crumbs } };
   });
 }
 
-const { page } = Astro.props;
+const { page, crumbs } = Astro.props;
+const site = Astro.site ? Astro.site.href.replace(/\/$/, "") : "";
+const ld = { kind: "page" as const, crumbs: page.id === "home" ? [] : (crumbs as { name: string; route: string }[]).map((c) => ({ name: c.name, url: site + "/" + c.route })) };
 const rendered = page.data.blocks.map((b, i) => {
   const where = `content/pages/${page.id}.json blocks[${i}]`;
   const r = resolveBlock(withBuiltins(blocks), b, where);
@@ -34,6 +41,6 @@ const rendered = page.data.blocks.map((b, i) => {
   return r;
 });
 ---
-<Base title={page.data.title} seo={page.data.seo}>
+<Base title={page.data.title} seo={page.data.seo} ld={ld}>
   {rendered.map(({ component: Block, props }) => <Block {...props} />)}
 </Base>

@@ -68,6 +68,16 @@ export const siteSchema = z.object({
     separator: z.string().default("|"),
     /** The share image used when a page or post has none of its own. */
     image: z.string().optional(),
+    /** Structured data: who publishes the site (Organization / Person / LocalBusiness). */
+    schema: z.object({
+      type: z.enum(["Organization", "Person", "LocalBusiness"]).default("Organization"),
+      name: z.string().optional(),
+      logo: z.string().optional(),
+      sameAs: z.array(z.string()).default([]),
+      phone: z.string().optional(),
+      address: z.string().optional(),
+      hours: z.string().optional(),
+    }).default({ type: "Organization", sameAs: [] }),
     /** robots.txt Disallow: /, noindex on every page, no sitemap. */
     discourage: z.boolean().default(false),
     /** Build sitemap-index.xml (ignored while discourage is on). */

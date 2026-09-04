@@ -33,7 +33,7 @@ const summaryField = blog ? undefined : type.fields.find((f) => f.kind === "text
 const href = (e: (typeof entries)[number]) => `${type.path}/${e.data.slug ?? e.id}`;
 ---
 {blog ? (
-  <Base title="Blog" description="Latest posts">
+  <Base title="Blog" description="Latest posts" ld={{ kind: "collection" }}>
     <main class="max-w-[720px] mx-auto px-6 py-20">
       <h1 class="font-ta-display text-[clamp(32px,5vw,48px)] text-ta-ink leading-[1.05] tracking-[-0.02em] mb-12">Blog</h1>
       <ul class="list-none p-0 m-0 flex flex-col gap-10">
@@ -50,7 +50,7 @@ const href = (e: (typeof entries)[number]) => `${type.path}/${e.data.slug ?? e.i
     </main>
   </Base>
 ) : (
-  <Base title={type.index?.title || type.label} description={type.index?.description}>
+  <Base title={type.index?.title || type.label} description={type.index?.description} ld={{ kind: "collection" }}>
     <main class="mx-auto max-w-[1160px] px-6 py-20">
       <h1 class="font-ta-display text-[clamp(32px,5vw,48px)] text-ta-ink leading-[1.05] tracking-[-0.02em] mb-4">{type.index?.title || type.label}</h1>
       {type.index?.description && <p class="font-ta-serif text-[17px] text-ta-body leading-[1.6] max-w-[60ch] mb-12">{type.index.description}</p>}
