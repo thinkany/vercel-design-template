@@ -134,6 +134,7 @@ let viteUrl = null;
 let siteUrl = null; // the site (public website) dev server, once the design is promoted
 let design = { active: false, variationId: null, previewReady: false };
 let agentBusy = false;
+let previewZoomChecked = false; // the tabs' stored zoom is normalized once per launch
 // Serialization gate: a re-picked deliverable can't start a new turn until the prior
 // turn's result/error EVENT has been handled (i.e. after showBriefComplete has already
 // decided). Without it, a backed-out turn's completion hijacks the fresh turn's
@@ -374,6 +375,9 @@ function buildPreviewWebview(tab) {
   // Tell the page (dashboard) whether design-variety is licensed, so a variation card can
   // show its "Try another direction" button.
   wv.addEventListener("dom-ready", async () => {
+    // Page zoom is stored per host in this partition (and persists): if something left the
+    // preview host zoomed (an earlier build's block preview did), put it back to 1:1 once.
+    if (!previewZoomChecked) { previewZoomChecked = true; try { if (Math.abs(wv.getZoomFactor() - 1) > 0.01) wv.setZoomFactor(1); } catch {} }
     try { const m = await getDirectionMeta(); wv.send("variety:licensed", !!(m.axes && Object.keys(m.axes).length)); }
     catch { /* webview gone */ }
   });
