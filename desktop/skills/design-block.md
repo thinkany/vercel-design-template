@@ -11,7 +11,10 @@ reference the site was built from, and `content/` is the source of truth for wha
 the site says. This skill keeps it that way.
 
 Not this skill: a change to the *design* before promotion (that is `/design`), or
-editing a block's *content* (the CMS does that, no model turn).
+editing a block's *content* (the CMS does that, no model turn). Also not this
+skill: an embed, a form widget, a pasted script. Every site has a built-in
+**Code snippet** block for that (site/src/lib/builtin-blocks.tsx); point the
+designer at it in the CMS block picker instead of designing one.
 
 ## 0. Communication protocol, same as `/design`
 
