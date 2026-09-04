@@ -25,7 +25,7 @@ const meta = resolveSeo(seo, { title, description, siteName: siteConfig.clientNa
 const canonical = meta.canonical || new URL(Astro.url.pathname, Astro.site).href;
 const image = meta.image ? new URL(meta.image, Astro.site).href : undefined;
 
-const chromeProps = { siteName: siteConfig.clientName, logo: siteConfig.logo, nav: await resolveNav(site), footerLinks: site.footerLinks };
+const chromeProps = { siteName: siteConfig.clientName, logo: siteConfig.logo, nav: await resolveNav(site), footerLinks: site.footerLinks, legal: site.legal };
 // Self-hosted fonts (site/src/lib/self-host-fonts.mjs writes public/fonts at build and
 // defines __TA_FONT_PRELOAD__): the local sheet + preloads for the display and body
 // faces. Not hosted (offline build): preconnect to Google instead.

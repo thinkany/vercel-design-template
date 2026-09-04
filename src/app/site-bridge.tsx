@@ -25,7 +25,7 @@ type ChromeModule = { Header?: ((p: AnyRecord) => ReactNode) | null; Footer?: ((
 
 // content/site.json → { design, nav, footerLinks }
 const siteFiles = import.meta.glob("../../content/site.json", { eager: true, import: "default" }) as Record<string, AnyRecord>;
-const site = (Object.values(siteFiles)[0] || {}) as { design?: string; nav?: AnyRecord[]; footerLinks?: AnyRecord[]; manageNav?: boolean };
+const site = (Object.values(siteFiles)[0] || {}) as { design?: string; nav?: AnyRecord[]; footerLinks?: AnyRecord[]; legal?: AnyRecord; manageNav?: boolean };
 
 // content/pages/*.json → the site's pages
 const pageFiles = import.meta.glob("../../content/pages/*.json", { eager: true, import: "default" }) as Record<string, PageDoc>;
@@ -92,7 +92,7 @@ export function SitePage({ pageId, onNavigate, view, setView, orientation, setOr
   const nav = site.manageNav === false
     ? pages.filter((p) => p.id !== "home" && !(pageDoc(p.id)?.parent)).map((p) => ({ label: p.name, href: "/" + p.route, links: pages.filter((c) => pageDoc(c.id)?.parent === p.id).map((c) => ({ label: c.name, href: "/" + c.route })), columns: [] }))
     : (site.nav || []).map((l) => ({ links: [], ...(l as AnyRecord) }));
-  const rawChrome = { siteName: siteConfig.clientName, logo: siteConfig.logo || undefined, nav, footerLinks: site.footerLinks || [] };
+  const rawChrome = { siteName: siteConfig.clientName, logo: siteConfig.logo || undefined, nav, footerLinks: site.footerLinks || [], legal: site.legal || { links: [] } };
   const parseChrome = (def?: BlockDef) => { const r = def?.props.safeParse(rawChrome); return r && r.success && r.data ? r.data : rawChrome; };
   const headerProps = parseChrome(chromeMod.chrome?.header);
   const footerProps = parseChrome(chromeMod.chrome?.footer);

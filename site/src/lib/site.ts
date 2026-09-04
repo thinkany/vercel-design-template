@@ -26,8 +26,10 @@ export const siteSchema = z.object({
   url: z.string().url().optional(),
   /** Primary navigation, shared by the header and footer chrome. */
   nav: z.array(navItem).default([]),
-  /** Footer-only links (legal, social…). */
+  /** The footer's own links, independent of the header menu. */
   footerLinks: z.array(navLink).default([]),
+  /** The legal line: copyright ({year} and {siteName} are filled in) + privacy / terms links. */
+  legal: z.object({ copyright: z.string().optional(), links: z.array(navLink).default([]) }).default({ links: [] }),
   /**
    * true: the header menu is `nav` above, edited in the CMS. false: the menu follows
    * the page outline (top-level pages in order, their children as sub-links).

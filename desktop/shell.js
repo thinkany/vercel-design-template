@@ -3849,7 +3849,7 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
   options.forEach((o) => { const opt = document.createElement("option"); opt.value = o.href; opt.label = `${o.label} · ${COPY.site.navGroups[o.group] || o.group}`; dl.appendChild(opt); });
   wrap.appendChild(dl);
   const labelFor = (href) => { const o = options.find((x) => x.href === href); return o ? o.label : ""; };
-  const draft = JSON.parse(JSON.stringify({ nav: site.nav || [], footerLinks: site.footerLinks || [] }));
+  const draft = JSON.parse(JSON.stringify({ nav: site.nav || [], footerLinks: site.footerLinks || [], legal: { copyright: (site.legal && site.legal.copyright) || "", links: (site.legal && site.legal.links) || [] } }));
   // Autosave: every change (typing, drag, add, remove) writes content/site.json a
   // moment after the last one. No re-render on save, so typing keeps its focus;
   // the drawer picks the saved menu up next time it opens.
@@ -3857,14 +3857,14 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
   const setStatus = (text, error) => { status.textContent = text || ""; status.style.color = error ? "#c0261e" : "#999"; };
   const saveNow = async () => {
     setStatus(COPY.site.saving);
-    const res = await window.desktop.saveSiteSettings(draft.nav, draft.footerLinks);
-    if (res && res.ok) { site.nav = res.site.nav; site.footerLinks = res.site.footerLinks; setStatus(COPY.site.saved); setTimeout(() => { if (status.textContent === COPY.site.saved) setStatus(""); }, 1800); }
+    const res = await window.desktop.saveSiteSettings(draft.nav, draft.footerLinks, draft.legal);
+    if (res && res.ok) { site.nav = res.site.nav; site.footerLinks = res.site.footerLinks; site.legal = res.site.legal; setStatus(COPY.site.saved); setTimeout(() => { if (status.textContent === COPY.site.saved) setStatus(""); }, 1800); }
     else setStatus((res && res.error) || "Couldn't save.", true);
   };
   const dirty = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 600); };
   siteNavRemove = (x) => {
     const pull = (arr) => { const i = arr.indexOf(x); if (i >= 0) { arr.splice(i, 1); return true; } return false; };
-    if (pull(draft.nav) || pull(draft.footerLinks)) return;
+    if (pull(draft.nav) || pull(draft.footerLinks) || pull(draft.legal.links)) return;
     for (const it of draft.nav) {
       if (Array.isArray(it.links) && pull(it.links)) return;
       for (const c of it.columns || []) { if (Array.isArray(c.links) && pull(c.links)) return; }
@@ -3955,6 +3955,17 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
   const paintFoot = () => { footList.innerHTML = ""; draft.footerLinks.forEach((l, i) => footList.appendChild(linkRow(l, draft.footerLinks, i, paintFoot, false, { kind: "footer", owners: [], reorder: { kinds: ["footer"], target: () => draft.footerLinks }, nest: null, repaint: paintFoot }))); footList.appendChild(siteMini(COPY.site.addLink, () => { draft.footerLinks.push({ label: "", href: "/" }); dirty(); paintFoot(); })); };
   paintFoot();
   ff.body.appendChild(footList);
+  // Legal: the copyright line + privacy / terms links, their own section.
+  const lf = siteFold(COPY.site.legalHeading, "nav:legal"); wrap.appendChild(lf.sec);
+  lf.body.appendChild(siteEl("div", "sess-desc", COPY.site.legalDesc));
+  const cr = siteField(COPY.site.copyright, draft.legal.copyright, { hint: COPY.site.copyrightHint, placeholder: "© {year} {siteName}" });
+  cr.input.addEventListener("input", () => { draft.legal.copyright = cr.input.value; dirty(); });
+  lf.body.appendChild(cr.wrap);
+  lf.body.appendChild(siteEl("div", "k", COPY.site.legalLinks));
+  const legalList = siteEl("div");
+  const paintLegal = () => { legalList.innerHTML = ""; draft.legal.links.forEach((l, i) => legalList.appendChild(linkRow(l, draft.legal.links, i, paintLegal, false, { kind: "legal", owners: [], reorder: { kinds: ["legal"], target: () => draft.legal.links }, nest: null, repaint: paintLegal }))); legalList.appendChild(siteMini(COPY.site.addLink, () => { draft.legal.links.push({ label: "", href: "/" }); dirty(); paintLegal(); })); };
+  paintLegal();
+  lf.body.appendChild(legalList);
   const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;min-height:18px;";
   status = siteEl("div", "sess-desc"); status.style.margin = "0";
   actions.appendChild(status);

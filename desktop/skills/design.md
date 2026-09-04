@@ -431,6 +431,12 @@ hand-rolls site nav. What you touch:
   `Header.tsx`/`Footer.tsx`, keep that logo-vs-wordmark branch** (`siteConfig.logo ?
   <img …/> : siteConfig.clientName`) so the logo isn't lost, capped to a sensible height
   with aspect preserved.
+- **The footer has its OWN links, never the header's list.** They live in
+  [`footer.ts`](../../src/app/footer.ts) (`footerLinks`, seeded from the pages once,
+  plus `legal`: the copyright line and privacy / terms links). A divergent
+  `Footer.tsx` renders `footerLinks` and `legal` from there, never `NAV_ITEMS` or
+  `pages.ts`, so header and footer stay independently editable (in the design and,
+  after promotion, in the CMS).
 - **The logo/wordmark IS the home link, don't add a standalone "Home" nav item.** A
   separate "Home" link reads dated; the brand lockup fills that role. Link the logo to
   home (`?v={id}`) and **omit the home page from the nav list** (filter it out of the

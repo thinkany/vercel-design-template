@@ -57,6 +57,12 @@ export const richtext = z.string().describe("richtext");
  */
 /** A menu link. */
 export const navLink = z.object({ label: z.string(), href: z.string() });
+/** The footer's legal line: copyright text ({year}, {siteName} placeholders) + small links. */
+export const legalLine = z.object({ copyright: z.string().optional(), links: z.array(navLink).default([]) }).default({ links: [] });
+/** Fill the copyright placeholders. */
+export function fillCopyright(text: string | undefined, siteName: string): string {
+  return (text || "© {year} {siteName}").replace(/\{year\}/g, String(new Date().getFullYear())).replace(/\{siteName\}/g, siteName);
+}
 /** A mega-menu column: a heading over links, with an optional feature panel. */
 export const navColumn = z.object({
   heading: z.string().optional(),

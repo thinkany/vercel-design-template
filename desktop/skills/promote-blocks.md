@@ -149,18 +149,25 @@ export { Footer } from "./Footer";
 export const chrome: Chrome = { header, footer };
 ```
 
-Chrome components receive `{ siteName, logo, nav, footerLinks }` from the layout
-(nav comes from `content/site.json`), so their props schema is:
+Chrome components receive `{ siteName, logo, nav, footerLinks, legal }` from the
+layout (all from `content/site.json`), so their props schema is:
 
 ```ts
-import { navItem, navLink } from "../src/lib/blocks";
+import { navItem, navLink, legalLine, fillCopyright } from "../src/lib/blocks";
 const props = z.object({
   siteName: z.string(),
   logo: z.string().optional(),
-  nav: z.array(navItem).default([]),   // navItem carries links (dropdown) + columns (mega menu)
-  footerLinks: z.array(navLink).default([]),
+  nav: z.array(navItem).default([]),   // the HEADER menu: links (dropdown) + columns (mega menu)
+  footerLinks: z.array(navLink).default([]), // the FOOTER's own links, never the header's
+  legal: legalLine,                    // copyright ({year}, {siteName}) + privacy / terms links
 });
 ```
+
+**Header and footer never share.** The Header renders `nav`; the Footer renders
+`footerLinks` only (never `nav`, even when the design's footer repeated the menu:
+§4 copies those links into `footerLinks` so the two are independent from here on)
+and the legal line: `fillCopyright(legal.copyright, siteName)` plus `legal.links`,
+in the design's idiom.
 
 **Mega menu.** If the design's menu opens into columns (headings over link groups,
 maybe a featured image or call to action), the Header renders `item.columns`
@@ -190,7 +197,8 @@ almost every design and each has one translation:
 | `useDrawerLock`, frame-box positioning (`box.top`) | `fixed inset-0` scrim + `fixed inset-y-0` panel; lock scroll with `document.documentElement.style.overflow` |
 | `useLayoutEffect` anywhere in the Header | `const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;` and call that: the header is server-rendered first, and React warns on a layout effect there |
 | `siteConfig.clientName` / `siteConfig.logo` in chrome | the `siteName` / `logo` props |
-| `NAV_ITEMS` in `nav.ts` / hardcoded footer links | `content/site.json` `nav` (see §4) |
+| `NAV_ITEMS` in `nav.ts` | `content/site.json` `nav` (see §4) |
+| `footerLinks` / `legal` in `src/app/footer.ts`, or footer links hardcoded in the design | `content/site.json` `footerLinks` + `legal` (see §4); the Footer block reads its props, never `nav` |
 | `getVariationId()`, `window.location.search`, `?v=` | nothing; the site is pinned in `site.json` |
 | `DesignSurface`, `ViewToggle`, device frames, `capture` prop | nothing; the layout provides the shell |
 | `data-block-name`, `data-capture-ready` | dropped |
@@ -205,8 +213,13 @@ yet. Never set `hydrate` on a page block; the build rejects it.
 Write, in the same turn as the last block:
 
 - **`content/site.json`**: set `design` to the promoted variation id; build `nav`
-  from the design's nav source. Anchor links are `"/#section-id"` so they work
-  from every page; sub-links (dropdowns) go in `links`. Keep `url` as is.
+  from the design's HEADER nav source. Anchor links are `"/#section-id"` so they work
+  from every page; sub-links (dropdowns) go in `links`. Build `footerLinks` from the
+  design's FOOTER link list (`src/app/footer.ts` or the variation Footer's own list;
+  if the design's footer showed the header menu, copy those links here, so the two
+  lists are independent from now on). Build `legal` from the footer's copyright line
+  (write it with placeholders: `"© {year} {siteName}"`) and any privacy / terms links.
+  Keep `url` as is.
 - **`content/pages/home.json`** (one per design page, `about.json` for an About
   page, `slug` = the page's route): `title`, `seo.description` (a real one-line
   summary of the page, from the hero copy), and `blocks` in the design's order,

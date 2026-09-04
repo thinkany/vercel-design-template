@@ -8,6 +8,7 @@
     "public/brand/**",
     "src/app/pages.ts",
     "src/app/menu.ts",
+    "src/app/footer.ts",
     "pnpm-lock.yaml",
     "package-lock.json",
     "figma-export/**",
@@ -21,6 +22,7 @@
     "public/brand/**": "Designer logos.",
     "src/app/pages.ts": "Designer's page list (data). pages.schema.ts is CORE.",
     "src/app/menu.ts": "Designer's nav menus (data). menu.schema.ts is CORE.",
+    "src/app/footer.ts": "Designer's footer links + legal line (data), independent of the header menu.",
     "pnpm-lock.yaml": "Vercel builds from it with --no-frozen-lockfile, so new template deps still resolve; regenerating needs pnpm, so don't clobber.",
     "content/**": "The site's content: site.json (pinned design, URL, nav), pages, posts and any designer-defined types (collections.ts). Never touch.",
     "site/blocks/**": "Blocks promoted from the designer's approved design + their registry (index.ts). site/src/** is CORE."

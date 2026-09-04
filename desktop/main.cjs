@@ -1499,7 +1499,7 @@ function readSiteContent(dir) {
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
     licensed: siteLicensed(), // the CMS drawer shows a licensing note instead of the editor when false
-    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
+    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
     pages, posts, ...(() => {
       const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {} };
       return {
@@ -1603,6 +1603,7 @@ function rewriteNavRoutes(dir, oldRoute, newRoute) {
   const fix = (l) => { if (!l || typeof l.href !== "string") return; if (l.href === from || l.href.startsWith(from + "#") || l.href.startsWith(from + "/")) { l.href = to + l.href.slice(from.length); changed = true; } };
   for (const it of site.nav || []) { fix(it); for (const s of it.links || []) fix(s); for (const c of it.columns || []) { for (const s of c.links || []) fix(s); if (c.feature && c.feature.link) fix(c.feature.link); } }
   for (const l of site.footerLinks || []) fix(l);
+  for (const l of (site.legal && site.legal.links) || []) fix(l);
   if (changed) fs.writeFileSync(p, JSON.stringify(site, null, 2) + "\n");
 }
 // Drag-and-drop in the Pages list: put a page under a parent (null = top level) at a
@@ -1688,7 +1689,7 @@ ipcMain.handle("site:deletePage", (_e, { id } = {}) => {
 });
 // Site-level settings: nav + footer links (the pinned design + url are managed by
 // promotion and publishing, so they're preserved, never edited here).
-ipcMain.handle("site:saveSite", (_e, { nav, footerLinks } = {}) => {
+ipcMain.handle("site:saveSite", (_e, { nav, footerLinks, legal } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   const p = path.join(siteContentDir(currentProject), "site.json");
@@ -1697,6 +1698,7 @@ ipcMain.handle("site:saveSite", (_e, { nav, footerLinks } = {}) => {
     .filter((l) => l && typeof l.label === "string" && l.label.trim() && typeof l.href === "string" && l.href.trim())
     .map((l) => ({ label: l.label.trim(), href: l.href.trim(), ...(sub && Array.isArray(l.links) && l.links.length ? { links: clean(l.links, false) } : {}) }));
   const next = { ...cur, nav: clean(nav, true), footerLinks: clean(footerLinks, false) };
+  if (legal && typeof legal === "object") next.legal = { ...(typeof legal.copyright === "string" && legal.copyright.trim() ? { copyright: legal.copyright.trim() } : {}), links: clean(legal.links, false) };
   try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, site: next }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
