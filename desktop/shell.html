@@ -811,6 +811,7 @@
       .ta-editor .ProseMirror a { color: #1a1a1a; text-decoration: underline; }
       .ta-editor .ProseMirror img { max-width: 100%; height: auto; border-radius: 4px; display: block; }
       .ta-editor .ProseMirror img.ProseMirror-selectednode { outline: 2px solid #111; outline-offset: 2px; }
+      .ta-editor .ProseMirror::after { content: ""; display: block; clear: both; } /* floated images never spill past the document */
       .ta-editor .ProseMirror hr { border: 0; border-top: 1px solid #ddd; margin: 1.2em 0; }
       .ta-editor .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: #aaa; float: left; pointer-events: none; height: 0; }
       .ta-editor textarea.field.raw { border: 0; border-radius: 0; min-height: 260px; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; resize: vertical; }

@@ -3569,6 +3569,9 @@ const EDITOR_ICONS = {
   rule: '<path d="M5 12h14"/>',
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
   redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"/>',
+  alignLeft: '<path d="M21 6H3"/><path d="M15 12H3"/><path d="M17 18H3"/>',
+  alignCenter: '<path d="M21 6H3"/><path d="M17 12H7"/><path d="M19 18H5"/>',
+  alignRight: '<path d="M21 6H3"/><path d="M21 12H9"/><path d="M21 18H7"/>',
 };
 const liveEditors = new Set(); // destroyed when the CMS drawer re-renders
 function destroyLiveEditors() { liveEditors.forEach((e) => { try { e.destroy(); } catch {} }); liveEditors.clear(); }
@@ -3629,7 +3632,7 @@ function siteRichEditor(markdown, onChange, { compact } = {}) {
 
   // Block type: Text / Heading / Subheading (H1 is the title).
   const block = document.createElement("select"); block.className = "field";
-  [["p", E.blockText], ["h2", E.blockH2], ["h3", E.blockH3]].forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; block.appendChild(o); });
+  [["p", E.blockText], ["h2", E.blockH2], ["h3", E.blockH3], ["h4", E.blockH4], ["h5", E.blockH5], ["h6", E.blockH6]].forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; block.appendChild(o); });
   block.addEventListener("change", () => { if (block.value === "p") chain().setParagraph().run(); else chain().toggleHeading({ level: Number(block.value.slice(1)) }).run(); });
   bar.appendChild(block); sep();
   btn("bold", E.bold, () => chain().toggleBold().run(), () => editor.isActive("bold"));
@@ -3656,12 +3659,20 @@ function siteRichEditor(markdown, onChange, { compact } = {}) {
   }, () => editor.isActive("image"));
   btn("rule", E.rule, () => chain().setHorizontalRule().run(), () => false);
   sep();
+  // Alignment: paragraphs and headings by text-align; a selected image by its own attribute.
+  const align = (a) => { if (editor.isActive("image")) chain().updateAttributes("image", { textAlign: a }).run(); else chain().setTextAlign(a).run(); };
+  const alignOn = (a) => (editor.isActive("image") ? (editor.getAttributes("image").textAlign || "left") === a : editor.isActive({ textAlign: a }) || (a === "left" && !editor.isActive({ textAlign: "center" }) && !editor.isActive({ textAlign: "right" })));
+  btn("alignLeft", E.alignLeft, () => align("left"), () => alignOn("left"));
+  btn("alignCenter", E.alignCenter, () => align("center"), () => alignOn("center"));
+  btn("alignRight", E.alignRight, () => align("right"), () => alignOn("right"));
+  sep();
   btn("undo", E.undo, () => chain().undo().run(), () => false, () => editor.can().undo());
   btn("redo", E.redo, () => chain().redo().run(), () => false, () => editor.can().redo());
 
   function paint() {
     buttons.forEach(({ b, isOn, canRun }) => { b.classList.toggle("on", !!isOn()); if (canRun) b.disabled = !canRun(); });
-    block.value = editor.isActive("heading", { level: 2 }) ? "h2" : editor.isActive("heading", { level: 3 }) ? "h3" : "p";
+    const lvl = [2, 3, 4, 5, 6].find((l) => editor.isActive("heading", { level: l }));
+    block.value = lvl ? "h" + lvl : "p";
   }
   editor.on("selectionUpdate", paint); editor.on("transaction", paint); paint();
 

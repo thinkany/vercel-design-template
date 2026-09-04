@@ -20,6 +20,20 @@ function inline(s: string): string {
   return s;
 }
 
+// The editor writes an ALIGNED paragraph / heading / image as an HTML block. Those, and
+// only those, pass through: tag, text-align style, float / centering on an image, src,
+// alt; inline marks inside come as their own tags (strong, em, s, a, code, br).
+const ALIGNED_OPEN = /^<(p|h[2-6]|img)\b/i;
+const OK_INLINE = /^<\/?(strong|em|s|a|code|br)\b[^>]*>$/i;
+function sanitizeAligned(html: string): string {
+  return html
+    .replace(/<(p|h[2-6])\b[^>]*>/gi, (m, tag) => { const a = (m.match(/text-align:\s*(left|center|right)/i) || [])[1]; return a ? `<${tag.toLowerCase()} style="text-align:${a.toLowerCase()}">` : `<${tag.toLowerCase()}>`; })
+    .replace(/<img\b[^>]*>/gi, (m) => { const src = (m.match(/\bsrc="([^"]*)"/i) || [])[1] || ""; const alt = (m.match(/\balt="([^"]*)"/i) || [])[1] || ""; const al = (m.match(/data-align="(left|right|center)"/i) || [])[1]; const style = al === "left" ? "float:left;margin:0 1.25em 1em 0;max-width:50%" : al === "right" ? "float:right;margin:0 0 1em 1.25em;max-width:50%" : al === "center" ? "display:block;margin:0 auto" : ""; return `<img src="${src}" alt="${alt}" loading="lazy"${style ? ` style="${style}"` : ""} />`; })
+    .replace(/<a\b[^>]*>/gi, (m) => { const href = (m.match(/\bhref="([^"]*)"/i) || [])[1] || "#"; return `<a href="${href}">`; })
+    .replace(/<(?!\/?(?:p|h[2-6]|img|strong|em|s|a|code|br)\b)[^>]*>/gi, "") // any other tag is dropped
+    .replace(/\son\w+="[^"]*"/gi, "");
+}
+
 const LIST = /^\s*(?:[-*+]|\d+[.)])\s+/;
 const BLOCK_START = /^(?:#{1,6}\s|>\s?|```|(?:-{3,}|\*{3,}|_{3,})\s*$)/;
 
@@ -31,6 +45,12 @@ export function renderMarkdown(md: string | undefined | null): string {
     const line = lines[i];
     if (!line.trim()) { i++; continue; }
     let m: RegExpMatchArray | null;
+    if (ALIGNED_OPEN.test(line.trim())) {
+      // An aligned block from the editor: runs to the blank line (HTML block rule).
+      const buf: string[] = [];
+      while (i < lines.length && lines[i].trim()) buf.push(lines[i++]);
+      out.push(sanitizeAligned(buf.join("\n"))); continue;
+    }
     if (line.startsWith("```")) {
       const buf: string[] = []; i++;
       while (i < lines.length && !lines[i].startsWith("```")) buf.push(lines[i++]);
