@@ -3611,21 +3611,42 @@ function siteMediaFileUrl(url) {
 }
 
 // Everything in the project a link can point at, for the URL combo in Navigation.
-// Drag-and-drop for the Pages tree. Middle of a row = nest under that page; top or
-// bottom edge = the same level as that page. Home is the root: nothing nests under it.
+// Drag-and-drop for the Pages tree. While dragging, a GHOST row shows exactly where
+// the page will land: above a row (upper half), below it at the same level (lower
+// half), or under it as a child (lower half with the pointer moved to the right,
+// drawn indented beneath the parent). Home is the root: nothing nests under it.
 let pageDrag = null;
-function sitePageDraggable(row, p, pages, refresh) {
+const PAGE_INDENT = 14; // px per tree level (matches the rows' marginLeft)
+function sitePageGhost() {
+  let g = document.querySelector(".site-drop-ghost");
+  if (!g) { g = siteEl("div", "site-drop-ghost"); g.appendChild(siteEl("span", "site-drop-ghost-arrow")); g.appendChild(siteEl("span", "site-drop-ghost-title")); }
+  return g;
+}
+function sitePageDraggable(row, p, pages, refresh, depth = 0) {
   row.draggable = p.id !== "home";
-  const clear = () => row.classList.remove("drop-before", "drop-after", "drop-into");
+  row.dataset.depth = String(depth);
   const isDesc = (id, of) => { let cur = pages.find((x) => x.id === id); let g = 0; while (cur && cur.parent && g++ < 16) { if (cur.parent === of) return true; cur = pages.find((x) => x.id === cur.parent); } return false; };
   const ok = () => pageDrag && pageDrag.id !== p.id && !isDesc(p.id, pageDrag.id);
-  const zone = (e) => { const r = row.getBoundingClientRect(); const y = (e.clientY - r.top) / r.height; if (p.id === "home") return y < 0.5 ? "before" : "after"; return y < 0.3 ? "before" : y > 0.7 ? "after" : "into"; };
+  const zone = (e) => {
+    const r = row.getBoundingClientRect();
+    const lower = e.clientY > r.top + r.height / 2;
+    if (!lower) return "before";
+    const indented = e.clientX > r.left + 28; // moved right: "make it a child"
+    return p.id !== "home" && indented ? "into" : "after";
+  };
+  const showGhost = (z) => {
+    const g = sitePageGhost();
+    g.querySelector(".site-drop-ghost-title").textContent = pageDrag.title;
+    g.classList.toggle("child", z === "into");
+    g.style.marginLeft = ((z === "into" ? depth + 1 : depth) * PAGE_INDENT) + "px";
+    if (z === "before") row.before(g); else row.after(g);
+  };
   row.addEventListener("dragstart", (e) => { pageDrag = p; row.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", p.id); } catch {} });
-  row.addEventListener("dragend", () => { pageDrag = null; row.classList.remove("dragging"); document.querySelectorAll(".site-list-row.drop-before,.site-list-row.drop-after,.site-list-row.drop-into").forEach((r) => r.classList.remove("drop-before", "drop-after", "drop-into")); });
-  row.addEventListener("dragover", (e) => { if (!ok()) return; e.preventDefault(); try { e.dataTransfer.dropEffect = "move"; } catch {} const z = zone(e); clear(); row.classList.add("drop-" + z); });
-  row.addEventListener("dragleave", clear);
+  row.addEventListener("dragend", () => { pageDrag = null; row.classList.remove("dragging"); const g = document.querySelector(".site-drop-ghost"); if (g) g.remove(); });
+  row.addEventListener("dragover", (e) => { if (!ok()) return; e.preventDefault(); try { e.dataTransfer.dropEffect = "move"; } catch {} showGhost(zone(e)); });
   row.addEventListener("drop", async (e) => {
-    if (!ok()) return; e.preventDefault(); const z = zone(e); clear();
+    if (!ok()) return; e.preventDefault(); const z = zone(e);
+    const g = document.querySelector(".site-drop-ghost"); if (g) g.remove();
     const moved = pageDrag; pageDrag = null;
     const parent = z === "into" ? p.id : (p.parent || null);
     if ((moved.parent || null) === parent) return;
@@ -4068,8 +4089,8 @@ async function renderSite(body) {
     const walk = (pid, depth) => kids(pid).forEach((p) => { pageRow(p, depth); walk(p.id, depth + 1); });
     const pageRow = (p, depth) => {
       const row = listRow(p.title, p.id === "home" ? COPY.site.homeSlug : "/" + (p.route || p.slug || p.id), cur && cur.id === p.id, () => { siteRailState.selected = { kind: "page", id: p.id }; refresh(); });
-      row.style.marginLeft = depth * 14 + "px";
-      sitePageDraggable(row, p, data.pages, refresh);
+      row.style.marginLeft = depth * PAGE_INDENT + "px";
+      sitePageDraggable(row, p, data.pages, refresh, depth);
       left.appendChild(row);
     };
     const home = data.pages.find((p) => p.id === "home"); if (home) pageRow(home, 0);
