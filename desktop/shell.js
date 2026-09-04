@@ -7819,6 +7819,9 @@ function showAdToolbar() {
     adToolbarEl.querySelector(".a11y-tb-exit").textContent = COPY.director.exitReview;
   }
   adToolbarEl.hidden = false;
+  // Every arrival (Show on page, a new walk) opens the details; only the caret, via
+  // Next / Prev's updateAdToolbar path, carries a closed state along.
+  if (adReview) adReview.expanded = true;
   updateAdToolbar();
 }
 function hideAdToolbar() { if (adToolbarEl) adToolbarEl.hidden = true; }
