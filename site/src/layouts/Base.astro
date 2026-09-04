@@ -26,6 +26,12 @@ const canonical = meta.canonical || new URL(Astro.url.pathname, Astro.site).href
 const image = meta.image ? new URL(meta.image, Astro.site).href : undefined;
 
 const chromeProps = { siteName: siteConfig.clientName, logo: siteConfig.logo, nav: await resolveNav(site), footerLinks: site.footerLinks };
+// Self-hosted fonts (site/src/lib/self-host-fonts.mjs writes public/fonts at build and
+// defines __TA_FONT_PRELOAD__): the local sheet + preloads for the display and body
+// faces. Not hosted (offline build): preconnect to Google instead.
+declare const __TA_FONT_PRELOAD__: string[] | null;
+const fontPreload: string[] | null = typeof __TA_FONT_PRELOAD__ !== "undefined" ? __TA_FONT_PRELOAD__ : null;
+const fontsHosted = Array.isArray(fontPreload);
 // Site icons from content/site.json (the CMS Settings tab); the scaffold's favicon.svg otherwise.
 const favicon = site.favicon.icon || "/favicon.svg";
 const faviconType = /\.svg$/i.test(favicon) ? "image/svg+xml" : /\.png$/i.test(favicon) ? "image/png" : /\.ico$/i.test(favicon) ? "image/x-icon" : undefined;
@@ -35,6 +41,9 @@ const faviconType = /\.svg$/i.test(favicon) ? "image/svg+xml" : /\.png$/i.test(f
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    {(fontPreload || []).map((f) => <link rel="preload" as="font" type="font/woff2" href={f} crossorigin />)}
+    {fontsHosted ? <link rel="stylesheet" href="/fonts/fonts.css" /> : <link rel="preconnect" href="https://fonts.googleapis.com" />}
+    {!fontsHosted && <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />}
     <title>{meta.title}</title>
     {meta.description && <meta name="description" content={meta.description} />}
     <link rel="canonical" href={canonical} />

@@ -384,7 +384,12 @@ Source over plain HTTP:
 1. **Download into `public/`.** A same-origin file resolves in both the preview and
    the Figma export; external CDN URLs render in preview but the export *skips* any
    that stall/CORS. One bounded attempt:
-   `curl -fsS --max-time 8 -o public/images/hero.jpg "<url>"`, reference `/images/hero.jpg`.
+   `curl -fsS --max-time 8 -o public/images/hero.jpg "<url>"`. Then, once every
+   image is in and BEFORE writing the components, run `node scripts/optimize-images.mjs`
+   once: it converts the downloads to AVIF (a fraction of the bytes at the same look),
+   removes the originals and updates any reference already written. Reference the
+   AVIF name: `/images/hero.avif`. The CMS converts uploads the same way, so every
+   image the site serves is AVIF (SVG and GIF stay as they are).
 2. **Fast 200 → use it. Anything else (timeout/non-200/error) → placeholder, move on.**
    The `curl` is allowlisted (never prompts) and bounded (can't hang). **Don't retry,
    escalate to a browser, or stop to ask**, drop the network-free `<ImagePlaceholder>`
@@ -398,8 +403,8 @@ Source over plain HTTP:
    only images you actually used; placeholders get no entry):
    ```json
    { "images": [
-     { "file": "hero.jpg",  "source": "unsplash.com", "url": "<url>", "free": true },
-     { "file": "team1.jpg", "source": "acme.com",     "url": "<url>", "free": false }
+     { "file": "hero.avif",  "source": "unsplash.com", "url": "<url>", "free": true },
+     { "file": "team1.avif", "source": "acme.com",     "url": "<url>", "free": false }
    ] }
    ```
    **`free: true` ONLY** for a known free source (Unsplash, Pexels, Pixabay, Wikimedia,

@@ -136,6 +136,11 @@ function lintSource(file, colorRoles) {
     if (/^site\/blocks\//.test(file.name) && /\b(icon|glyph|mark|symbol)\w*\s*:\s*z\.string\(\)/.test(ln))
       add("medium", "content-fields", "Icon prop is a free string — move the icon into site/blocks/lib/marks.tsx and make the prop z.enum(keys), so the CMS offers a picker instead of a text box.");
 
+    // ASSETS — a raster image served as JPG/PNG/WebP: the optimizer converts it to AVIF
+    // and rewrites the reference (the CMS already serves uploads as AVIF).
+    if (/\/images\/[^"'\s)]+\.(?:jpe?g|png|webp|tiff?)\b/i.test(ln))
+      add("low", "assets", "Image served as JPG/PNG — run `node scripts/optimize-images.mjs` to convert to AVIF and update the references (smaller, faster to load).");
+
     // rule 1 — container queries, not viewport. Site blocks are exempt from the viewport-UNIT
     // check: the site isn't framed, and min-h-[100dvh] is the prescribed hero translation.
     const siteBlock = /^site\/blocks\//.test(file.name);
@@ -233,6 +238,11 @@ function reviewSitePage(projectDir, variationId, pageId) {
   const colorRoles = registeredColorRoles(projectDir);
   const findings = [];
   for (const f of files) findings.push(...lintSource(f, colorRoles));
+  // The page's content too: images referenced from content/pages/<id>.json.
+  try {
+    const raw = readFileSafe(path.join(projectDir, "content", "pages", `${pageId}.json`));
+    raw.split("\n").forEach((ln, i) => { if (/\/images\/[^"'\s)]+\.(?:jpe?g|png|webp|tiff?)\b/i.test(ln)) findings.push({ severity: "low", rule: "assets", file: `content/pages/${pageId}.json`, line: i + 1, message: "Image served as JPG/PNG — run `node scripts/optimize-images.mjs` to convert to AVIF and update the references (smaller, faster to load)." }); });
+  } catch {}
   findings.push(...lintPalette(palette));
   const counts = { high: 0, medium: 0, low: 0 };
   for (const x of findings) counts[x.severity] = (counts[x.severity] || 0) + 1;

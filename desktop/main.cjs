@@ -2153,6 +2153,23 @@ ipcMain.handle("site:build", async () => {
 // The SITE publish: the public website, its own Vercel project ("<name>-site"), no
 // gate, SITE_URL baked in. Guarantees the site deps in package.json first (Vercel
 // installs from it), and pins content/site.json's url to the live address after.
+// scripts/optimize-images.mjs in the project (its own sharp): JPG/PNG → AVIF + reference rewrite.
+function optimizeImages(projectDir) {
+  return new Promise((resolve) => {
+    const p = spawn(process.execPath, [path.join(projectDir, "scripts", "optimize-images.mjs"), "--json"], { cwd: projectDir, env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } });
+    let out = "", err = "";
+    p.stdout.on("data", (b) => { out += b.toString(); });
+    p.stderr.on("data", (b) => { err += b.toString(); });
+    p.on("error", (e) => resolve({ ok: false, detail: `Images left as they are (${e.message})` }));
+    p.on("exit", (code) => {
+      try {
+        const r = JSON.parse(out.trim().split("\n").pop());
+        const n = (r.converted || []).length;
+        resolve({ ok: true, detail: n ? `${n} image(s) converted to AVIF, ${r.rewrites || 0} file(s) updated` : "Images already optimized" });
+      } catch { resolve({ ok: false, detail: `Images left as they are${code ? ` (exit ${code})` : ""}${err.trim() ? `: ${err.trim().split("\n").pop()}` : ""}` }); }
+    });
+  });
+}
 async function publishSite(event, token) {
   const r = siteReady(currentProject);
   if (!r.ready) {
@@ -2166,6 +2183,11 @@ async function publishSite(event, token) {
   const onProgress = (evt) => { if (!event.sender.isDestroyed()) event.sender.send("publish:progress", { ...evt, target: "site" }); };
   try {
     ensureSiteDeps(currentProject);
+    // Every raster the site serves as AVIF, whatever path it came in by (design-time
+    // sourcing, uploads, files dropped into public/images). Never blocks a publish.
+    onProgress({ step: "images", status: "run", detail: "Optimizing images" });
+    const opt = await optimizeImages(currentProject);
+    onProgress({ step: "images", status: opt.ok ? "done" : "warn", detail: opt.detail });
     // Build locally first: a bad block or content fails here with the real message
     // instead of on Vercel minutes later.
     onProgress({ step: "check", status: "run", detail: "Checking the site builds" });

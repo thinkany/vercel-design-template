@@ -11,6 +11,7 @@ import { defineConfig } from "astro/config";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import tailwindcss from "@tailwindcss/vite";
+import selfHostFonts from "./src/lib/self-host-fonts.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -100,6 +101,8 @@ export default defineConfig({
   build: { format: "file" },
   integrations: [
     react(),
+    // The design's Google Fonts, served from this origin with preloads (no font flash).
+    selfHostFonts({ repoRoot, stylesDir: designStyles }),
     // The sitemap is a build-time choice (Settings): off, or off while search
     // engines are discouraged, and the integration isn't loaded at all.
     ...(siteJson.seo && (siteJson.seo.discourage || siteJson.seo.sitemap === false) ? [] : [sitemap({
