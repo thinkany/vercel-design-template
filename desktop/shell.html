@@ -834,8 +834,8 @@
       .site-block-preview { position: sticky; top: 0; border: 1px solid #e2e2e8; border-radius: 8px; background: #fff; overflow: hidden; }
       .site-block-preview-bar { display: flex; gap: 6px; padding: 6px 8px; border-bottom: 1px solid #ececf1; background: #fafafb; }
       .site-block-preview-bar .site-mini.on { border-color: #111; background: #111; color: #fff; }
-      .site-block-preview-stage { height: 460px; overflow: hidden; background: #fff; }
-      .site-block-preview-stage webview { display: block; width: 100%; height: 100%; }
+      .site-block-preview-stage { height: 460px; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
+      .site-block-preview-stage webview { display: flex; flex: 1 1 auto; min-height: 0; width: 100%; }
       /* The expanded block editor: an overlay above the drawer, below the media picker. */
       .blockedit { position: fixed; inset: 0; z-index: 205; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.45); }
       .blockedit-card { width: min(1560px, 96vw); height: 92vh; background: #fff; border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.35); display: flex; flex-direction: column; overflow: hidden; }

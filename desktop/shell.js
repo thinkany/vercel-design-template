@@ -2773,14 +2773,16 @@ function siteBlockPreview(type, getProps, { onExpand } = {}) {
   el.append(bar, stage);
   if (!viteUrl || !siteDesignId) { stage.appendChild(siteEl("div", "sess-desc", COPY.site.previewUnavailable)); return { el, push() {} }; }
   const wv = document.createElement("webview");
-  wv.setAttribute("partition", "persist:preview");
+  // Its OWN partition: Chromium keeps page zoom per host per session, so a zoom set here
+  // in the tabs' partition would rezoom the browser tabs on the same localhost host.
+  wv.setAttribute("partition", "persist:blockpreview");
   wv.setAttribute("src", `${viteUrl}/?v=${encodeURIComponent(siteDesignId)}&blockpreview=${encodeURIComponent(type)}`);
   stage.appendChild(wv);
   let mode = "desktop"; let ready = false; let timer = null;
   const fit = () => {
     const w = stage.clientWidth || 600;
-    if (mode === "mobile") { wv.style.width = "390px"; wv.style.margin = "0 auto"; try { wv.setZoomFactor(1); } catch {} }
-    else { wv.style.width = "100%"; wv.style.margin = "0"; try { wv.setZoomFactor(Math.max(0.2, Math.min(1, w / 1280))); } catch {} }
+    if (mode === "mobile") { wv.style.width = "390px"; wv.style.alignSelf = "center"; try { wv.setZoomFactor(1); } catch {} }
+    else { wv.style.width = "100%"; wv.style.alignSelf = "stretch"; try { wv.setZoomFactor(Math.max(0.2, Math.min(1, w / 1280))); } catch {} }
   };
   const send = () => { if (!ready) return; try { wv.executeJavaScript(`window.__taSetBlockProps && window.__taSetBlockProps(${JSON.stringify(getProps() || {})})`); } catch {} };
   const push = () => { clearTimeout(timer); timer = setTimeout(send, 150); };
