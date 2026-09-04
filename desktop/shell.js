@@ -3783,8 +3783,11 @@ function sitePageDraggable(row, p, pages, refresh, depth = 0) {
     g.style.marginLeft = (levelOf(z) * PAGE_INDENT) + "px";
     if (z === "before") row.before(g); else row.after(g);
   };
-  row.addEventListener("dragstart", (e) => { pageDrag = p; pageDragX = e.clientX; row.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", p.id); } catch {} });
-  row.addEventListener("dragend", () => { pageDrag = null; pageDropTarget = null; row.classList.remove("dragging"); const g = document.querySelector(".site-drop-ghost"); if (g) g.remove(); });
+  // The page and its descendants dim together: the whole branch moves.
+  const branchRows = () => { const list = row.parentElement; if (!list) return [row]; return Array.from(list.querySelectorAll(".site-list-row")).filter((r) => r === row || (r.__page && isDesc(r.__page.id, p.id))); };
+  row.__page = p;
+  row.addEventListener("dragstart", (e) => { pageDrag = p; pageDragX = e.clientX; branchRows().forEach((r) => r.classList.add("dragging")); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", p.id); } catch {} });
+  row.addEventListener("dragend", () => { pageDrag = null; pageDropTarget = null; branchRows().forEach((r) => r.classList.remove("dragging")); const g = document.querySelector(".site-drop-ghost"); if (g) g.remove(); });
   row.addEventListener("dragover", (e) => { if (!ok()) return; e.preventDefault(); try { e.dataTransfer.dropEffect = "move"; } catch {} showGhost(zone(e)); });
   row.addEventListener("drop", (e) => { if (!ok()) return; e.preventDefault(); sitePageDrop({ p, zone: zone(e), grandparent: grandparent(), pages, refresh }); });
 }
@@ -3846,8 +3849,9 @@ function siteNavDraggable(row, { item, kind, owners = [], reorder, nest, repaint
     }
     dirty(); repaint();
   };
-  row.addEventListener("dragstart", (e) => { e.stopPropagation(); navDrag = { item, kind, hasKids: !!((item.links && item.links.length) || (item.columns && item.columns.length)), title: item.label || item.heading || "" }; row.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "nav"); } catch {} });
-  row.addEventListener("dragend", () => { navDrag = null; row.classList.remove("dragging"); siteGhostClear(); });
+  // The whole group dims (row + sub-list) so it reads as one thing being moved.
+  row.addEventListener("dragstart", (e) => { e.stopPropagation(); navDrag = { item, kind, hasKids: !!((item.links && item.links.length) || (item.columns && item.columns.length)), title: item.label || item.heading || "" }; holder().classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "nav"); } catch {} });
+  row.addEventListener("dragend", () => { navDrag = null; holder().classList.remove("dragging"); siteGhostClear(); });
   row.addEventListener("dragover", (e) => {
     if (!ok()) return; e.preventDefault(); e.stopPropagation(); try { e.dataTransfer.dropEffect = "move"; } catch {}
     const z = zone(e); const g = siteDragGhost(navDrag.title, z === "into");

@@ -820,7 +820,8 @@
       .site-nav-row { display: grid; grid-template-columns: auto 1fr 1fr; grid-auto-flow: column; grid-auto-columns: auto; gap: 6px; align-items: center; margin-bottom: 6px; border-radius: 6px; }
       .site-nav-row .site-mini { white-space: nowrap; }
       .site-nav-row .site-grip { margin-right: 0; }
-      .site-nav-row.dragging { opacity: .4; }
+      .site-nav-row.dragging, .site-nav-out.dragging { opacity: .4; }
+      .site-nav-out.dragging .site-nav-row.dragging { opacity: 1; } /* no double dimming inside a dimmed group */
       .site-nav-row.drop-before { box-shadow: 0 -2px 0 0 #111; }
       .site-nav-row.drop-after { box-shadow: 0 2px 0 0 #111; }
       .site-nav-row.drop-into { outline: 2px solid #111; outline-offset: 1px; }
