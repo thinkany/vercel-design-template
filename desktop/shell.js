@@ -2675,31 +2675,49 @@ function siteFold(title, key) {
   return { sec, body, head };
 }
 
+// The shared drop indicator: a ghost row (as in the Pages tree) placed exactly where
+// the dragged thing will land, indented with a corner arrow when it nests. The ghost
+// accepts the drop itself (rows shift when it's inserted, so the pointer is often
+// over it at release) and forwards it to the target it stands for.
+let siteGhostDrop = null; // () => void for the drop the ghost represents
+function siteDragGhost(title, child) {
+  let g = document.querySelector(".site-drop-ghost.generic");
+  if (!g) {
+    g = siteEl("div", "site-drop-ghost generic"); g.append(siteEl("span", "site-drop-ghost-arrow"), siteEl("span", "site-drop-ghost-title"));
+    g.addEventListener("dragover", (e) => { if (siteGhostDrop) { e.preventDefault(); e.stopPropagation(); try { e.dataTransfer.dropEffect = "move"; } catch {} } });
+    g.addEventListener("drop", (e) => { if (siteGhostDrop) { e.preventDefault(); e.stopPropagation(); const f = siteGhostDrop; siteGhostClear(); f(); } });
+  }
+  g.querySelector(".site-drop-ghost-title").textContent = title || "";
+  g.classList.toggle("child", !!child);
+  return g;
+}
+function siteGhostClear() { const g = document.querySelector(".site-drop-ghost.generic"); if (g) g.remove(); siteGhostDrop = null; }
+
 // Drag-and-drop reordering for a block list (the arrows stay). Each row gets a grip;
 // dragging over another row shows a line above or below it (by pointer half), and
 // dropping moves the item there. `move(from, to)` reorders the data and repaints.
 let siteDragFrom = -1;
+let siteDragTitle = ""; // the dragged block's name, for the ghost
 function siteMakeDraggable(row, i, move) {
   const grip = siteEl("span", "site-grip"); grip.title = COPY.site.dragToReorder; grip.setAttribute("aria-hidden", "true");
   grip.innerHTML = '<svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="3" cy="3" r="1.3"/><circle cx="7" cy="3" r="1.3"/><circle cx="3" cy="8" r="1.3"/><circle cx="7" cy="8" r="1.3"/><circle cx="3" cy="13" r="1.3"/><circle cx="7" cy="13" r="1.3"/></svg>';
   row.insertBefore(grip, row.firstChild);
   row.draggable = true;
-  row.addEventListener("dragstart", (e) => { siteDragFrom = i; row.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); } catch {} });
-  row.addEventListener("dragend", () => { siteDragFrom = -1; row.classList.remove("dragging"); row.parentElement && row.parentElement.querySelectorAll(".drop-before,.drop-after").forEach((r) => r.classList.remove("drop-before", "drop-after")); });
+  const title = () => { const n = row.querySelector(".site-block-name"); return n ? n.textContent : ""; };
+  row.addEventListener("dragstart", (e) => { siteDragFrom = i; siteDragTitle = title(); row.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); } catch {} });
+  row.addEventListener("dragend", () => { siteDragFrom = -1; row.classList.remove("dragging"); siteGhostClear(); });
   const half = (e) => { const r = row.getBoundingClientRect(); return e.clientY < r.top + r.height / 2 ? "before" : "after"; };
+  const doDrop = (h) => { const from = siteDragFrom; let to = i + (h === "after" ? 1 : 0); if (from < to) to--; siteDragFrom = -1; if (from !== to) move(from, to); };
   row.addEventListener("dragover", (e) => {
     if (siteDragFrom < 0 || siteDragFrom === i) return;
     e.preventDefault(); try { e.dataTransfer.dropEffect = "move"; } catch {}
-    const h = half(e); row.classList.toggle("drop-before", h === "before"); row.classList.toggle("drop-after", h === "after");
+    const h = half(e); const g = siteDragGhost(siteDragTitle, false);
+    // "after" lands below the block's open editor, when it has one.
+    const anchor = h === "after" && row.nextElementSibling && row.nextElementSibling.classList.contains("site-block-edit") ? row.nextElementSibling : row;
+    if (h === "before") row.before(g); else anchor.after(g);
+    siteGhostDrop = () => doDrop(h);
   });
-  row.addEventListener("dragleave", () => row.classList.remove("drop-before", "drop-after"));
-  row.addEventListener("drop", (e) => {
-    if (siteDragFrom < 0 || siteDragFrom === i) return;
-    e.preventDefault();
-    const from = siteDragFrom; let to = i + (half(e) === "after" ? 1 : 0); if (from < to) to--;
-    siteDragFrom = -1; row.classList.remove("drop-before", "drop-after");
-    if (from !== to) move(from, to);
-  });
+  row.addEventListener("drop", (e) => { if (siteDragFrom < 0 || siteDragFrom === i) return; e.preventDefault(); const h = half(e); siteGhostClear(); doDrop(h); });
 }
 // A delete control: a red, 1px-stroke trash can (lucide trash-2), mini-button sized.
 function siteTrashBtn(onClick, title) {
@@ -3802,8 +3820,7 @@ function siteNavDraggable(row, { item, kind, owners = [], reorder, nest, repaint
   grip.innerHTML = '<svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="3" cy="3" r="1.3"/><circle cx="7" cy="3" r="1.3"/><circle cx="3" cy="8" r="1.3"/><circle cx="7" cy="8" r="1.3"/><circle cx="3" cy="13" r="1.3"/><circle cx="7" cy="13" r="1.3"/></svg>';
   row.insertBefore(grip, row.firstChild);
   row.draggable = true;
-  const clear = () => row.classList.remove("drop-before", "drop-after", "drop-into");
-  const nestable = (d) => d.kind === "link" || (d.kind === "item" && !d.hasKids);
+  const nestable = (d) => d.kind === "link" || (d.kind === "item" && !d.hasKids) || (d.kind === "footer" && !d.hasKids);
   const canReorder = () => !!(reorder && reorder.kinds.includes(navDrag.kind) && (navDrag.kind !== "item" || reorder.topLevel || !navDrag.hasKids));
   const canNest = () => !!(nest && nestable(navDrag));
   const ok = () => navDrag && navDrag.item !== item && !owners.includes(navDrag.item) && (canReorder() || canNest());
@@ -3813,27 +3830,31 @@ function siteNavDraggable(row, { item, kind, owners = [], reorder, nest, repaint
     if (canNest()) return "into";
     return y < 0.5 ? "before" : "after";
   };
-  row.addEventListener("dragstart", (e) => { e.stopPropagation(); navDrag = { item, kind, hasKids: !!((item.links && item.links.length) || (item.columns && item.columns.length)) }; row.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "nav"); } catch {} });
-  row.addEventListener("dragend", () => { navDrag = null; row.classList.remove("dragging"); document.querySelectorAll(".site-nav-row.drop-before,.site-nav-row.drop-after,.site-nav-row.drop-into").forEach((r) => r.classList.remove("drop-before", "drop-after", "drop-into")); });
-  row.addEventListener("dragover", (e) => { if (!ok()) return; e.preventDefault(); e.stopPropagation(); try { e.dataTransfer.dropEffect = "move"; } catch {} const z = zone(e); clear(); row.classList.add("drop-" + z); });
-  row.addEventListener("dragleave", clear);
-  row.addEventListener("drop", (e) => {
-    if (!ok()) return;
-    e.preventDefault(); e.stopPropagation(); const z = zone(e); clear();
+  // The row's holder (row + its sub-list) so "after" lands below the whole group.
+  const holder = () => (row.parentElement && row.parentElement.classList.contains("site-nav-out") ? row.parentElement : row);
+  const doDrop = (z) => {
     const moved = navDrag.item; const d = navDrag; navDrag = null;
-    if (!d.remove) { /* removal by identity from wherever it lives */ }
     siteNavRemove(moved);
     const strip = () => { delete moved.links; delete moved.columns; };
     if (z === "into") { strip(); nest.into().push(moved); }
     else {
       const to = reorder.target();
-      if (reorder.topLevel) { moved.links = Array.isArray(moved.links) ? moved.links : []; moved.columns = Array.isArray(moved.columns) ? moved.columns : []; }
+      if (reorder.topLevel) { moved.links = Array.isArray(moved.links) ? moved.links : []; if (d.kind === "item") moved.columns = Array.isArray(moved.columns) ? moved.columns : []; }
       else if (d.kind !== "column") strip();
       const at = to.indexOf(item) + (z === "after" ? 1 : 0);
       to.splice(at, 0, moved);
     }
     dirty(); repaint();
+  };
+  row.addEventListener("dragstart", (e) => { e.stopPropagation(); navDrag = { item, kind, hasKids: !!((item.links && item.links.length) || (item.columns && item.columns.length)), title: item.label || item.heading || "" }; row.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "nav"); } catch {} });
+  row.addEventListener("dragend", () => { navDrag = null; row.classList.remove("dragging"); siteGhostClear(); });
+  row.addEventListener("dragover", (e) => {
+    if (!ok()) return; e.preventDefault(); e.stopPropagation(); try { e.dataTransfer.dropEffect = "move"; } catch {}
+    const z = zone(e); const g = siteDragGhost(navDrag.title, z === "into");
+    if (z === "before") holder().before(g); else if (z === "after") holder().after(g); else row.after(g); // into: beneath the row, above its sub-list
+    siteGhostDrop = () => doDrop(z);
   });
+  row.addEventListener("drop", (e) => { if (!ok()) return; e.preventDefault(); e.stopPropagation(); const z = zone(e); siteGhostClear(); doDrop(z); });
 }
 // Remove a dragged thing from wherever it sits in the nav draft (by identity).
 let siteNavRemove = () => {};
@@ -3891,7 +3912,7 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
       row.appendChild(addPanel);
     }
     row.appendChild(siteTrashBtn(() => { arr.splice(i, 1); dirty(); paint(); }, COPY.site.removeItem));
-    const out = siteEl("div");
+    const out = siteEl("div", "site-nav-out");
     out.appendChild(row);
     if (withSub) {
       l.links = Array.isArray(l.links) ? l.links : [];
