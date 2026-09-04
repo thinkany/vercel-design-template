@@ -1485,7 +1485,7 @@ function readSiteContent(dir) {
     pages = fs.readdirSync(pagesDir).filter((f) => f.endsWith(".json")).sort().map((f) => {
       const id = f.replace(/\.json$/, "");
       const data = readJsonFile(path.join(pagesDir, f)) || {};
-      return { id, title: data.title || id, slug: data.slug ?? (id === "home" ? "" : id), parent: typeof data.parent === "string" ? data.parent : null, seo: data.seo || {}, blocks: Array.isArray(data.blocks) ? data.blocks : [] };
+      return { id, title: data.title || id, slug: data.slug ?? (id === "home" ? "" : id), parent: typeof data.parent === "string" ? data.parent : null, order: Number.isFinite(data.order) ? data.order : null, seo: data.seo || {}, blocks: Array.isArray(data.blocks) ? data.blocks : [] };
     });
   } catch { /* no pages dir */ }
   // Full routes from the parent chain; a parent that doesn't exist is ignored.
@@ -1566,8 +1566,22 @@ ipcMain.handle("site:content", () => {
 function pageRouteOf(id, byId) { const parts = []; let cur = id, g = 0; while (cur && byId[cur] && g++ < 16) { if (cur === "home") break; parts.unshift(byId[cur].slug ?? cur); cur = byId[cur].parent; } return parts.join("/"); }
 function readPagesIndex(dir) {
   const pagesDir = path.join(siteContentDir(dir), "pages"); const byId = {};
-  try { for (const f of fs.readdirSync(pagesDir)) { if (!f.endsWith(".json")) continue; const id = f.replace(/\.json$/, ""); const d = readJsonFile(path.join(pagesDir, f)) || {}; byId[id] = { id, slug: d.slug ?? (id === "home" ? "" : id), parent: typeof d.parent === "string" ? d.parent : null }; } } catch {}
+  try { for (const f of fs.readdirSync(pagesDir)) { if (!f.endsWith(".json")) continue; const id = f.replace(/\.json$/, ""); const d = readJsonFile(path.join(pagesDir, f)) || {}; byId[id] = { id, slug: d.slug ?? (id === "home" ? "" : id), parent: typeof d.parent === "string" ? d.parent : null, order: Number.isFinite(d.order) ? d.order : null, title: d.title || id }; } } catch {}
   return byId;
+}
+// Siblings under `parent` in outline order (explicit order first, then title).
+function pageSiblings(byId, parent, except) {
+  return Object.values(byId).filter((q) => q.id !== "home" && q.id !== except && (q.parent || null) === (parent || null))
+    .sort((a, b) => ((a.order ?? 1e9) - (b.order ?? 1e9)) || String(a.title).localeCompare(String(b.title)));
+}
+// Write `order` = 0..n over these siblings' files (only the files whose order changes).
+function renumberPages(dir, siblings) {
+  siblings.forEach((q, i) => {
+    if (q.order === i) return;
+    const f = pageFile(dir, q.id); const doc = readJsonFile(f); if (!doc) return;
+    doc.order = i; q.order = i;
+    fs.writeFileSync(f, JSON.stringify(doc, null, 2) + "\n");
+  });
 }
 // Can `id` live under `parent`? Not home, not itself, not one of its own descendants.
 function validParent(id, parent, byId) {
@@ -1588,8 +1602,9 @@ function rewriteNavRoutes(dir, oldRoute, newRoute) {
   for (const l of site.footerLinks || []) fix(l);
   if (changed) fs.writeFileSync(p, JSON.stringify(site, null, 2) + "\n");
 }
-// Drag-and-drop in the Pages list: put a page under a parent (null = top level).
-ipcMain.handle("site:movePage", (_e, { id, parent } = {}) => {
+// Drag-and-drop in the Pages list: put a page under a parent (null = top level) at a
+// position among that parent's children (`index`; omitted = last).
+ipcMain.handle("site:movePage", (_e, { id, parent, index } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (!validPageId(id)) return { ok: false, error: "Bad page id." };
@@ -1602,8 +1617,16 @@ ipcMain.handle("site:movePage", (_e, { id, parent } = {}) => {
   byId[id].parent = target;
   const sib = Object.values(byId).find((q) => q.id !== id && (q.parent || null) === target && q.slug === byId[id].slug);
   if (sib) return { ok: false, error: `Another page there already uses the address "${byId[id].slug}".` };
-  try { fs.writeFileSync(pageFile(currentProject, id), JSON.stringify(doc, null, 2) + "\n"); rewriteNavRoutes(currentProject, oldRoute, pageRouteOf(id, byId)); return { ok: true }; }
-  catch (e) { return { ok: false, error: e.message }; }
+  try {
+    const siblings = pageSiblings(byId, target, id);
+    const at = Number.isFinite(index) ? Math.max(0, Math.min(siblings.length, Math.floor(index))) : siblings.length;
+    siblings.splice(at, 0, byId[id]);
+    doc.order = at; byId[id].order = at;
+    fs.writeFileSync(pageFile(currentProject, id), JSON.stringify(doc, null, 2) + "\n");
+    renumberPages(currentProject, siblings);
+    rewriteNavRoutes(currentProject, oldRoute, pageRouteOf(id, byId));
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle("site:savePage", (_e, { id, data } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
@@ -1614,10 +1637,12 @@ ipcMain.handle("site:savePage", (_e, { id, data } = {}) => {
   const parent = typeof data.parent === "string" && data.parent && validPageId(data.parent) ? data.parent : null;
   const pv = validParent(id, parent, byId); if (!pv.ok) return pv;
   const oldRoute = byId[id] ? pageRouteOf(id, byId) : null;
+  const prevOrder = byId[id] && byId[id].order;
   const doc = {
     title: data.title.trim(),
     slug: id === "home" ? "" : slugifyId(data.slug ?? id),
     ...(parent ? { parent } : {}),
+    ...(Number.isFinite(prevOrder) && (byId[id].parent || null) === parent ? { order: prevOrder } : {}), // a new parent → last among its children
     seo: data.seo && typeof data.seo === "object" ? data.seo : {},
     blocks: Array.isArray(data.blocks) ? data.blocks.filter((b) => b && typeof b.type === "string").map((b) => ({ type: b.type, props: pruneEmptyProps(b.props && typeof b.props === "object" ? b.props : {}) })) : [],
   };
@@ -1641,7 +1666,8 @@ ipcMain.handle("site:createPage", (_e, { title } = {}) => {
   if (id === "blog") id = "blog-page"; // /blog is the posts index
   let n = 2; const base = id;
   while (fs.existsSync(pageFile(currentProject, id))) id = `${base}-${n++}`;
-  const doc = { title: t, slug: id, seo: {}, blocks: [] };
+  const top = pageSiblings(readPagesIndex(currentProject), null, null);
+  const doc = { title: t, slug: id, order: top.length ? Math.max(...top.map((q) => (Number.isFinite(q.order) ? q.order : -1))) + 1 : 0, seo: {}, blocks: [] };
   try {
     fs.mkdirSync(path.dirname(pageFile(currentProject, id)), { recursive: true });
     fs.writeFileSync(pageFile(currentProject, id), JSON.stringify(doc, null, 2) + "\n");

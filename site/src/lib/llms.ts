@@ -7,7 +7,8 @@ import { siteConfig } from "@/config/site";
 
 export async function generatedLlms(siteUrl: URL | undefined) {
   const abs = (p: string) => new URL(p, siteUrl).href;
-  const pages = (await getCollection("pages")).filter((p) => !p.data.seo.noindex);
+  const pages = (await getCollection("pages")).filter((p) => !p.data.seo.noindex)
+    .sort((a, b) => (a.id === "home" ? -1 : b.id === "home" ? 1 : (a.data.order ?? 1e9) - (b.data.order ?? 1e9) || a.data.title.localeCompare(b.data.title)));
   const posts = (await getCollection("posts", ({ data }) => !data.draft && !data.seo.noindex)).sort(
     (a, b) => b.data.date.getTime() - a.data.date.getTime(),
   );

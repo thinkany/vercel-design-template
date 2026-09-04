@@ -3637,13 +3637,18 @@ function sitePageGhost() {
   }
   return g;
 }
-async function sitePageDrop({ p, zone, grandparent, refresh }) {
+async function sitePageDrop({ p, zone, grandparent, pages, refresh }) {
   const g = document.querySelector(".site-drop-ghost"); if (g) g.remove();
   const moved = pageDrag; pageDrag = null; pageDropTarget = null;
   if (!moved) return;
-  const parent = zone === "into" ? p.id : zone === "out" ? grandparent : (p.parent || null);
-  if ((moved.parent || null) === parent) return;
-  const r = await window.desktop.moveSitePage(moved.id, parent);
+  // Where it lands: the parent, and its position among that parent's children (the
+  // moved page itself excluded, so the index matches what main will splice into).
+  const kidsOf = (pid) => pages.filter((x) => x.id !== "home" && x.id !== moved.id && (x.parent || null) === (pid || null)).sort((a, b) => ((a.order ?? 1e9) - (b.order ?? 1e9)) || a.title.localeCompare(b.title));
+  let parent, index;
+  if (zone === "into") { parent = p.id; index = kidsOf(p.id).length; }
+  else if (zone === "out") { parent = grandparent; const par = pages.find((x) => x.id === p.parent); index = kidsOf(grandparent).findIndex((x) => x.id === (par && par.id)) + 1; }
+  else { parent = p.parent || null; const sibs = kidsOf(parent); const i = sibs.findIndex((x) => x.id === p.id); index = p.id === "home" ? 0 : Math.max(0, i) + (zone === "after" ? 1 : 0); }
+  const r = await window.desktop.moveSitePage(moved.id, parent, index);
   if (r && r.ok) refresh(); else if (r && r.error) alert(r.error);
 }
 function sitePageDraggable(row, p, pages, refresh, depth = 0) {
@@ -3668,7 +3673,7 @@ function sitePageDraggable(row, p, pages, refresh, depth = 0) {
   const levelOf = (z) => (z === "into" ? depth + 1 : z === "out" ? depth - 1 : depth);
   const showGhost = (z) => {
     const g = sitePageGhost();
-    pageDropTarget = { p, zone: z, grandparent: grandparent(), refresh };
+    pageDropTarget = { p, zone: z, grandparent: grandparent(), pages, refresh };
     g.querySelector(".site-drop-ghost-title").textContent = pageDrag.title;
     g.classList.toggle("child", z === "into");
     g.style.marginLeft = (levelOf(z) * PAGE_INDENT) + "px";
@@ -3677,7 +3682,7 @@ function sitePageDraggable(row, p, pages, refresh, depth = 0) {
   row.addEventListener("dragstart", (e) => { pageDrag = p; pageDragX = e.clientX; row.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", p.id); } catch {} });
   row.addEventListener("dragend", () => { pageDrag = null; pageDropTarget = null; row.classList.remove("dragging"); const g = document.querySelector(".site-drop-ghost"); if (g) g.remove(); });
   row.addEventListener("dragover", (e) => { if (!ok()) return; e.preventDefault(); try { e.dataTransfer.dropEffect = "move"; } catch {} showGhost(zone(e)); });
-  row.addEventListener("drop", (e) => { if (!ok()) return; e.preventDefault(); sitePageDrop({ p, zone: zone(e), grandparent: grandparent(), refresh }); });
+  row.addEventListener("drop", (e) => { if (!ok()) return; e.preventDefault(); sitePageDrop({ p, zone: zone(e), grandparent: grandparent(), pages, refresh }); });
 }
 
 function siteLinkOptions(data, posts, ctx) {
@@ -4113,7 +4118,7 @@ async function renderSite(body) {
     const cur = sel && sel.kind === "page" && data.pages.some((p) => p.id === sel.id) ? sel : (data.pages[0] ? { kind: "page", id: data.pages[0].id } : null);
     // A tree: children indented under their parent (home first, then by title). Drag a
     // page onto another to nest it; drop between pages to sit at that level.
-    const kids = (pid) => data.pages.filter((p) => (p.parent || null) === pid && p.id !== "home").sort((a, b) => a.title.localeCompare(b.title));
+    const kids = (pid) => data.pages.filter((p) => (p.parent || null) === pid && p.id !== "home").sort((a, b) => ((a.order ?? 1e9) - (b.order ?? 1e9)) || a.title.localeCompare(b.title));
     const walk = (pid, depth) => kids(pid).forEach((p) => { pageRow(p, depth); walk(p.id, depth + 1); });
     const pageRow = (p, depth) => {
       const row = listRow(p.title, p.id === "home" ? COPY.site.homeSlug : "/" + (p.route || p.slug || p.id), cur && cur.id === p.id, () => { siteRailState.selected = { kind: "page", id: p.id }; refresh(); });

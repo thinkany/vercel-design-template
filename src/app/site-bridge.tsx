@@ -19,7 +19,7 @@ import { siteConfig } from "@/config/site";
 
 type AnyRecord = Record<string, unknown>;
 type BlockInstance = { type: string; props?: AnyRecord };
-type PageDoc = { title?: string; slug?: string; parent?: string; seo?: AnyRecord; blocks?: BlockInstance[] };
+type PageDoc = { title?: string; slug?: string; parent?: string; order?: number; seo?: AnyRecord; blocks?: BlockInstance[] };
 type BlockDef = { name: string; props: { safeParse: (v: unknown) => { success: boolean; data?: AnyRecord; error?: { issues: { path: (string | number)[]; message: string }[] } } }; component: (props: AnyRecord) => ReactNode };
 type ChromeModule = { Header?: ((p: AnyRecord) => ReactNode) | null; Footer?: ((p: AnyRecord) => ReactNode) | null; chrome?: { header?: BlockDef; footer?: BlockDef } };
 
@@ -50,9 +50,12 @@ export function sitePages(): DesignPage[] {
   for (const [file, doc] of Object.entries(pageFiles)) docs[pageIdOf(file)] = doc;
   // Route = the parent chain's slugs (mirrors site/src/lib/pages.ts).
   const route = (id: string) => { const parts: string[] = []; let cur: string | undefined = id; let g = 0; while (cur && docs[cur] && g++ < 16) { if (cur === "home") break; parts.unshift(docs[cur].slug ?? cur); cur = docs[cur].parent; } return parts.join("/"); };
-  const out = Object.keys(docs).map((id) => ({ id, route: route(id), name: docs[id].title || id, component: "__site__" }));
-  out.sort((a, b) => (a.id === "home" ? -1 : b.id === "home" ? 1 : a.name.localeCompare(b.name)));
-  return out;
+  // Outline order: home, then each level by its `order` (title as the fallback), depth-first.
+  const kids = (pid: string | null) => Object.keys(docs).filter((id) => id !== "home" && (docs[id].parent ?? null) === pid)
+    .sort((a, b) => ((docs[a].order ?? 1e9) - (docs[b].order ?? 1e9)) || (docs[a].title || a).localeCompare(docs[b].title || b));
+  const ordered: string[] = []; const walk = (pid: string | null, depth: number) => { if (depth > 16) return; for (const id of kids(pid)) { ordered.push(id); walk(id, depth + 1); } };
+  if (docs.home) ordered.push("home"); walk(null, 0);
+  return ordered.map((id) => ({ id, route: route(id), name: docs[id].title || id, component: "__site__" }));
 }
 
 function pageDoc(id: string): PageDoc | null {

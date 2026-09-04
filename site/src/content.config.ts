@@ -25,6 +25,8 @@ const pages = defineCollection({
     slug: z.string().optional(),
     /** Parent page id: this page lives under it ("about" + slug "team" → /about/team). */
     parent: z.string().optional(),
+    /** Position among its siblings in the page outline (the CMS sets it by drag-and-drop). */
+    order: z.number().optional(),
     seo: seoFields.default({}),
     blocks: z.array(blockInstance).default([]),
   }),
