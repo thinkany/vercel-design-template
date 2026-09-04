@@ -188,6 +188,7 @@ almost every design and each has one translation:
 | `<button onClick={scroll…}>` CTAs | `<a href="…" className="…same classes… no-underline inline-block">` |
 | `useMenuState()` / `MenuStateContext` / `MENU_SIDE` | local `useState` inside the Header block; `MENU_SIDE` a const in the file |
 | `useDrawerLock`, frame-box positioning (`box.top`) | `fixed inset-0` scrim + `fixed inset-y-0` panel; lock scroll with `document.documentElement.style.overflow` |
+| `useLayoutEffect` anywhere in the Header | `const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;` and call that: the header is server-rendered first, and React warns on a layout effect there |
 | `siteConfig.clientName` / `siteConfig.logo` in chrome | the `siteName` / `logo` props |
 | `NAV_ITEMS` in `nav.ts` / hardcoded footer links | `content/site.json` `nav` (see §4) |
 | `getVariationId()`, `window.location.search`, `?v=` | nothing; the site is pinned in `site.json` |
