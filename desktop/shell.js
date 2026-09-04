@@ -4021,14 +4021,17 @@ async function renderSiteSettings(host, data, st) {
   wrap.appendChild(siteEl("div", "sess-label", S.blogHeading));
   const bp = siteField(S.postsDir, (data.site && data.site.blogPath) || "blog", { hint: S.postsDirHint });
   const bpStatus = siteEl("div"); bpStatus.style.cssText = "min-height:18px;";
+  // Autosave a second after the last keystroke (Enter saves at once); green "Saved" flash.
+  let bpTimer = null;
   const saveBlogPath = async () => {
+    clearTimeout(bpTimer);
     const v = bp.input.value.trim(); if (!v || v === ((data.site && data.site.blogPath) || "blog")) return;
     const r = await window.desktop.setBlogPath(v);
     bpStatus.innerHTML = "";
     if (r && r.ok) { bp.input.value = r.path; data.site.blogPath = r.path; siteBlogPath = r.path; siteFlash(bpStatus, S.saved); }
     else if (r && r.error) { const e = siteEl("div", "sess-desc", r.error); e.style.color = "#c0261e"; bpStatus.appendChild(e); }
   };
-  bp.input.addEventListener("change", saveBlogPath);
+  bp.input.addEventListener("input", () => { clearTimeout(bpTimer); bpTimer = setTimeout(saveBlogPath, 1000); });
   bp.input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveBlogPath(); } });
   bp.wrap.appendChild(bpStatus); wrap.appendChild(bp.wrap);
 
