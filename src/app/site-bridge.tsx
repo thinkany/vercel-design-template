@@ -126,10 +126,11 @@ function applySeo(doc: PageDoc | null, pageId: string, pages: DesignPage[], bloc
 
 export function SitePage({ pageId, onNavigate, view, setView, orientation, setOrientation, capture }: Props) {
   const doc = pageDoc(pageId);
+  const pages = sitePages();
   // Entities the page's blocks declare (a FAQ block's questions), merged like the site does.
   const blockLd = (doc?.blocks || []).flatMap((b) => { const def = blocks[b.type]; if (!def || !def.schema) return []; const parsed = def.props.safeParse(b.props || {}); if (!parsed.success || !parsed.data) return []; try { const s = def.schema(parsed.data); return Array.isArray(s) ? s : s ? [s] : []; } catch { return []; } });
-  useEffect(() => { try { applySeo(doc, pageId, pages, blockLd); } catch { /* headless capture */ } }, [doc, pageId, pages, JSON.stringify(blockLd)]);
-  const pages = sitePages();
+  const blockLdKey = JSON.stringify(blockLd);
+  useEffect(() => { try { applySeo(doc, pageId, pages, blockLd); } catch { /* headless capture */ } }, [doc, pageId, pages, blockLdKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const Header = chromeMod.Header || null;
   const Footer = chromeMod.Footer || null;
   // The chrome's props go through its own schema (as Astro's layout does), so nav
