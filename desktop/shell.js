@@ -2933,7 +2933,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
   const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!draft.seo.noindex;
   nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; markDirty(); }); nx.append(nxCb, siteEl("span", "", COPY.site.seoNoindex)); ps.body.appendChild(nx);
 
-  const bf = siteFold(COPY.site.blocksHeading, "blocks:" + page.id); bf.body.appendChild(bf.sec);
+  const bf = siteFold(COPY.site.blocksHeading, "blocks:" + page.id); body.appendChild(bf.sec);
   const blockList = siteEl("div");
   const byKey = Object.fromEntries(blocks.map((b) => [b.key, b]));
   const paintBlocks = () => {
