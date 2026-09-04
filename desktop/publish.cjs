@@ -301,9 +301,13 @@ async function buildFailureLines(token, teamId, id) {
       .map((t) => String(t).replace(/\x1b\[[0-9;]*m/g, "").trimEnd())
       .filter((t) => t.trim());
     if (!lines.length) return "";
-    let i = lines.findIndex((l) => /ERR_|Error:|error /.test(l));
+    // The reason usually sits a few lines ABOVE the first "Error"/stack line (Vite's
+    // "Rollup failed to resolve import …", pnpm's ERR_, a tool's "error:"), so look for
+    // those first, then fall back, and keep a few lines of context on both sides.
+    let i = lines.findIndex((l) => /failed to resolve|could not resolve|cannot find module|ENOENT|ERR_PNPM|is not exported|Unexpected token/i.test(l));
+    if (i < 0) i = lines.findIndex((l) => /ERR_|Error:|error /.test(l));
     if (i < 0) i = Math.max(0, lines.length - 6);
-    return lines.slice(Math.max(0, i - 1), i + 5).join("\n");
+    return lines.slice(Math.max(0, i - 2), i + 6).join("\n");
   } catch {
     return "";
   }

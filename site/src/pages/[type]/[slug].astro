@@ -4,9 +4,9 @@
 // directory: content/site.json blog.path) or a TYPE ENTRY rendered through its
 // type's template (blocks with {{field}} bindings), or its own `blocks` when it
 // carries them (a landing page). richtext fields are markdown, rendered to HTML
-// for a binding whose target prop name ends in Html; elsewhere they bind as text.
+// (site/src/lib/richtext) for a binding whose target prop name ends in Html.
 import { getCollection, render } from "astro:content";
-import { createMarkdownProcessor } from "@astrojs/markdown-remark";
+import { renderMarkdown } from "../../lib/richtext";
 import Base from "../../layouts/Base.astro";
 import { resolveBlock } from "../../lib/blocks";
 import { bindTemplate, typesFile } from "../../lib/types";
@@ -44,10 +44,10 @@ const postView = post ? await (async () => {
 const data = (entry ? entry.data : {}) as Record<string, unknown> & { title: string; seo?: Record<string, unknown>; blocks?: { type: string; props: Record<string, unknown> }[] };
 let rendered: ReturnType<typeof resolveBlock>[] = [];
 if (!post) {
-  const md = await createMarkdownProcessor();
+  // richtext → also `<key>Html`, through the site's own renderer (no extra package).
   const bound: Record<string, unknown> = { ...data };
   for (const f of type.fields) {
-    if (f.kind === "richtext" && typeof data[f.key] === "string") bound[f.key + "Html"] = (await md.render(data[f.key] as string)).code;
+    if (f.kind === "richtext" && typeof data[f.key] === "string") bound[f.key + "Html"] = renderMarkdown(data[f.key] as string);
   }
   const instances = data.blocks && data.blocks.length ? data.blocks : bindTemplate(type.template, bound);
   rendered = instances.map((b, i) => resolveBlock(withBuiltins(blocks), b, `content/${type.key}/${entry.id}.json blocks[${i}]`));
