@@ -2008,14 +2008,14 @@ function saveCmsSettings(dir, patch) {
 }
 ipcMain.handle("cms:getSettings", () => ({ ...loadCmsSettings(currentProject), defaults: cmsDefaults() }));
 ipcMain.handle("cms:setSettings", (_e, patch) => {
-  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
-  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!siteLicensed()) { console.warn("[cms] settings not saved: no Design license"); return { ok: false, error: SITE_NOT_LICENSED }; }
+  if (!currentProject) { console.warn("[cms] settings not saved: no project open"); return { ok: false, error: "No project is open." }; }
   try {
     const next = saveCmsSettings(currentProject, patch || {});
     // The switch moved: start the preview server, or stop it and tell the Site tab.
     if (patch && typeof patch.enabled === "boolean") maybeStartSite(currentProject);
     return { ok: true, ...next };
-  } catch (e) { return { ok: false, error: e.message }; }
+  } catch (e) { console.error("[cms] settings not saved:", e.message); return { ok: false, error: e.message }; }
 });
 const MEDIA_CONVERT = new Set([".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".heic", ".heif"]);
 function convertImage(inPath, outPath, { maxWidth = MEDIA_MAX_WIDTH, quality = MEDIA_QUALITY } = {}) {
