@@ -905,6 +905,8 @@
          modal's light action buttons + field on the otherwise-dark bar. */
       .ad-tb-drop { display: grid; grid-template-rows: 0fr; min-height: 0; opacity: 0; margin-top: 0; transition: grid-template-rows .38s ease-out, opacity .44s ease, margin-top .38s ease-out; }
       #ad-toolbar.expanded .ad-tb-drop { grid-template-rows: 1fr; opacity: 1; margin-top: 10px; }
+      /* The bar's padding is 16px left (title) / 8px right (buttons); the card pulls left 8px so it sits centered. */
+      #ad-toolbar .ad-tb-drop { margin-left: -8px; }
       /* The collapsing grid item carries NO padding/bg (so it truly hits 0 height); the visible
          white panel + its padding live one level in, clipped away when collapsed. */
       .ad-tb-drop-inner { overflow: hidden; min-height: 0; }
