@@ -1521,6 +1521,12 @@ function seoSettings(raw) {
   const r = raw && typeof raw === "object" ? raw : {};
   const llms = r.llms && typeof r.llms === "object" ? r.llms : {};
   return {
+    schema: (() => { const c = r.schema && typeof r.schema === "object" ? r.schema : {}; return {
+      type: ["Organization", "Person", "LocalBusiness"].includes(c.type) ? c.type : "Organization",
+      name: typeof c.name === "string" ? c.name.trim() : "", logo: typeof c.logo === "string" ? c.logo.trim() : "",
+      sameAs: (Array.isArray(c.sameAs) ? c.sameAs : []).map((u) => String(u).trim()).filter(Boolean),
+      phone: typeof c.phone === "string" ? c.phone.trim() : "", address: typeof c.address === "string" ? c.address.trim() : "", hours: typeof c.hours === "string" ? c.hours.trim() : "",
+    }; })(),
     siteName: typeof r.siteName === "string" ? r.siteName.trim() : "",
     separator: SEO_SEPARATORS.includes(r.separator) ? r.separator : "|",
     image: typeof r.image === "string" ? r.image.trim() : "",
@@ -1660,6 +1666,7 @@ ipcMain.handle("site:savePage", (_e, { id, data } = {}) => {
   };
   // Drop empty SEO strings so defaults apply.
   for (const k of Object.keys(doc.seo)) if (doc.seo[k] === "" || doc.seo[k] == null) delete doc.seo[k];
+  if (doc.seo.jsonld) { const v = validJsonLd(doc.seo.jsonld); if (v) return { ok: false, error: v }; }
   const sib = Object.values(byId).find((q) => q.id !== id && (q.parent || null) === parent && q.slug === doc.slug);
   if (sib) return { ok: false, error: `Another page there already uses the address "${doc.slug}".` };
   if (!parent && doc.slug === blogPathOf(siteJsonOf(currentProject))) return { ok: false, error: `"/${doc.slug}" is the posts directory (Settings, Blog). Give the page another address.` };
@@ -1869,6 +1876,11 @@ function readPosts(dir) {
 function todayIso() { return new Date().toISOString().slice(0, 10); }
 
 ipcMain.handle("site:posts", () => (currentProject ? readPosts(currentProject) : []));
+// Custom JSON-LD must parse and be an object or an array; the reason comes back to the editor.
+function validJsonLd(text) {
+  try { const v = JSON.parse(text); if (!v || (typeof v !== "object")) return "Custom schema must be a JSON object or array."; return null; }
+  catch (e) { return `Custom schema isn't valid JSON: ${e.message}`; }
+}
 ipcMain.handle("site:savePost", (_e, { id, data } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };

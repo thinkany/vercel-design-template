@@ -2648,6 +2648,9 @@ function siteMini(label, onClick, { danger, title, disabled } = {}) {
   b.addEventListener("click", onClick);
   return b;
 }
+// A sub-heading with a body, used inside a section (not folded, not remembered).
+function siteFoldInline(title) { const sec = siteEl("div", "site-sub"); sec.appendChild(siteEl("div", "k site-sub-title", title)); const body = siteEl("div"); sec.appendChild(body); return { sec, body }; }
+
 // Foldable sections in the CMS drawer. Which are open is kept WITH THE PROJECT
 // (.thinkany/cms.json ui.folds, loaded when the drawer renders), not in the
 // window's storage, so it holds per project and across reinstalls.
@@ -3023,6 +3026,9 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
   const sd = siteField(COPY.site.seoDescription, draft.seo.description, { textarea: true, hint: COPY.site.seoDescriptionHint }); sd.input.addEventListener("input", () => { draft.seo.description = sd.input.value; markDirty(); }); sf.body.appendChild(sd.wrap);
   sf.body.appendChild(siteImageControl(draft.seo.image, (next) => { draft.seo.image = next ? next.src : ""; markDirty(); }, { label: COPY.site.seoImage }));
   const kp = siteField(COPY.site.seoKeyphrase, draft.seo.keyphrase, { hint: COPY.site.seoKeyphraseHint }); kp.input.addEventListener("input", () => { draft.seo.keyphrase = kp.input.value; markDirty(); }); sf.body.appendChild(kp.wrap);
+  const jl = siteEl("div", "site-kv"); jl.appendChild(siteEl("div", "k", COPY.site.seoJsonLd));
+  const jta = document.createElement("textarea"); jta.className = "field site-code"; jta.spellcheck = false; jta.value = draft.seo.jsonld || ""; jta.placeholder = COPY.site.seoJsonLdPlaceholder;
+  jta.addEventListener("input", () => { draft.seo.jsonld = jta.value; markDirty(); }); jl.appendChild(jta); jl.appendChild(siteEl("div", "sess-desc", COPY.site.seoJsonLdHint)); sf.body.appendChild(jl);
   const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!draft.seo.noindex;
   nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; markDirty(); }); nx.append(nxCb, siteEl("span", "", COPY.site.seoNoindex)); sf.body.appendChild(nx);
 
@@ -3158,6 +3164,9 @@ function renderSitePost(post, refresh) {
   const sd = siteField(S.seoDescription, draft.seo.description, { textarea: true, hint: S.postSeoDescriptionHint }); sd.input.addEventListener("input", () => { draft.seo.description = sd.input.value; dirty(); }); sf.body.appendChild(sd.wrap);
   sf.body.appendChild(siteImageControl(draft.seo.image, (next) => { draft.seo.image = next ? next.src : ""; dirty(); }, { label: S.seoImage }));
   const kp = siteField(S.seoKeyphrase, draft.seo.keyphrase, { hint: S.seoKeyphraseHint }); kp.input.addEventListener("input", () => { draft.seo.keyphrase = kp.input.value; dirty(); }); sf.body.appendChild(kp.wrap);
+  const jl = siteEl("div", "site-kv"); jl.appendChild(siteEl("div", "k", S.seoJsonLd));
+  const jta = document.createElement("textarea"); jta.className = "field site-code"; jta.spellcheck = false; jta.value = draft.seo.jsonld || ""; jta.placeholder = S.seoJsonLdPlaceholder;
+  jta.addEventListener("input", () => { draft.seo.jsonld = jta.value; dirty(); }); jl.appendChild(jta); jl.appendChild(siteEl("div", "sess-desc", S.seoJsonLdHint)); sf.body.appendChild(jl);
   const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!draft.seo.noindex;
   nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; dirty(); }); nx.append(nxCb, siteEl("span", "", S.seoNoindex)); sf.body.appendChild(nx);
 
@@ -4171,6 +4180,24 @@ async function renderSiteSettings(host, data, st) {
   sepWrap.appendChild(sepHint); wrap.appendChild(sepWrap);
   const si = siteImageControl(seo.image || "", (next) => { seo.image = next ? next.src : ""; saveSeo(); }, { label: S.siteImageLabel, noAlt: true });
   si.appendChild(siteEl("div", "sess-desc", S.siteImageHint)); wrap.appendChild(si);
+  // Structured data: who publishes the site. Generated into every page's JSON-LD.
+  seo.schema = seo.schema && typeof seo.schema === "object" ? seo.schema : { type: "Organization", sameAs: [] };
+  const sch = siteFoldInline(S.schemaHeading);
+  sch.body.appendChild(siteEl("div", "sess-desc", S.schemaDesc));
+  const stype = siteEl("div", "site-kv"); stype.appendChild(siteEl("div", "k", S.schemaType));
+  const tsel = document.createElement("select"); tsel.className = "field";
+  [["Organization", S.schemaOrg], ["Person", S.schemaPerson], ["LocalBusiness", S.schemaLocal]].forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; tsel.appendChild(o); });
+  tsel.value = seo.schema.type || "Organization"; tsel.addEventListener("change", () => { seo.schema.type = tsel.value; local.hidden = tsel.value !== "LocalBusiness"; saveSeo(); });
+  stype.appendChild(tsel); sch.body.appendChild(stype);
+  const sname = siteField(S.schemaName, seo.schema.name || "", { placeholder: seo.siteName || (data.site && data.site.siteNameDefault) || "", hint: S.schemaNameHint }); sname.input.addEventListener("input", () => { seo.schema.name = sname.input.value; saveSeoSoon(); }); sch.body.appendChild(sname.wrap);
+  const slogo = siteImageControl(seo.schema.logo || "", (next) => { seo.schema.logo = next ? next.src : ""; saveSeo(); }, { label: S.schemaLogo, noAlt: true }); slogo.appendChild(siteEl("div", "sess-desc", S.schemaLogoHint)); sch.body.appendChild(slogo);
+  const same = siteField(S.schemaSameAs, (seo.schema.sameAs || []).join("\n"), { textarea: true, hint: S.schemaSameAsHint }); same.input.addEventListener("input", () => { seo.schema.sameAs = same.input.value.split("\n").map((x) => x.trim()).filter(Boolean); saveSeoSoon(); }); sch.body.appendChild(same.wrap);
+  const sphone = siteField(S.schemaPhone, seo.schema.phone || ""); sphone.input.addEventListener("input", () => { seo.schema.phone = sphone.input.value; saveSeoSoon(); }); sch.body.appendChild(sphone.wrap);
+  const saddr = siteField(S.schemaAddress, seo.schema.address || "", { textarea: true }); saddr.input.addEventListener("input", () => { seo.schema.address = saddr.input.value; saveSeoSoon(); }); sch.body.appendChild(saddr.wrap);
+  const local = siteEl("div"); local.hidden = (seo.schema.type || "Organization") !== "LocalBusiness";
+  const shours = siteField(S.schemaHours, seo.schema.hours || "", { hint: S.schemaHoursHint }); shours.input.addEventListener("input", () => { seo.schema.hours = shours.input.value; saveSeoSoon(); }); local.appendChild(shours.wrap);
+  sch.body.appendChild(local);
+  wrap.appendChild(sch.sec);
   const disc = toggle(S.discourage, S.discourageHint, seo.discourage, (on) => { seo.discourage = on; paintSeo(); saveSeo(); });
   const smap = toggle(S.sitemap, S.sitemapHint, seo.sitemap, (on) => { seo.sitemap = on; saveSeo(); });
   const llm = toggle(S.llms, S.llmsHint, seo.llms.enabled, (on) => { seo.llms.enabled = on; paintSeo(); saveSeo(); });
