@@ -1700,7 +1700,7 @@ ipcMain.handle("site:saveSite", (_e, { nav, footerLinks, legal } = {}) => {
   // A footer item may be a column: a label with links and no address of its own.
   const cleanFooter = (arr) => (Array.isArray(arr) ? arr : [])
     .map((l) => l && typeof l.label === "string" ? { label: l.label.trim(), href: typeof l.href === "string" ? l.href.trim() : "", links: clean(l.links, false) } : null)
-    .filter((l) => l && l.label && (l.href || l.links.length))
+    .filter((l) => l && l.label) // text is enough: a column heading being built has no address and no finished links yet
     .map((l) => ({ label: l.label, ...(l.href ? { href: l.href } : {}), ...(l.links.length ? { links: l.links } : {}) }));
   const next = { ...cur, nav: clean(nav, true), footerLinks: cleanFooter(footerLinks) };
   if (legal && typeof legal === "object") next.legal = { ...(typeof legal.copyright === "string" && legal.copyright.trim() ? { copyright: legal.copyright.trim() } : {}), links: clean(legal.links, false) };

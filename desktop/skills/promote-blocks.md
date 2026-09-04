@@ -165,7 +165,8 @@ const props = z.object({
 
 **Header and footer never share.** The Header renders `nav`; the Footer renders
 `footerLinks` only (a `footerItem` with `links` is a COLUMN headed by its label, so
-render columns when any item has links, in the design's idiom) (never `nav`, even when the design's footer repeated the menu:
+render columns when any item has links, IN LIST ORDER: a headed item is a column
+where it sits, a run of plain links forms a column where it sits, in the design's idiom) (never `nav`, even when the design's footer repeated the menu:
 §4 copies those links into `footerLinks` so the two are independent from here on)
 and the legal line: `fillCopyright(legal.copyright, siteName)` plus `legal.links`,
 in the design's idiom.

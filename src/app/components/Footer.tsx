@@ -35,15 +35,18 @@ export function Footer({ onNavigate }: { onNavigate: (page: string) => void }) {
           )}
         </div>
         {footerLinks.some((l) => l.links && l.links.length) ? (
-          // Columns: an item with links is a headed group; plain links form a first column.
+          // Columns, in LIST ORDER: a headed item is a column; a run of plain links forms one where it sits.
           <nav className="grid gap-8 @lg:auto-cols-fr @lg:grid-flow-col">
-            {footerLinks.filter((l) => !(l.links && l.links.length)).length > 0 && (
-              <div className="flex flex-col gap-2">{footerLinks.filter((l) => !(l.links && l.links.length)).map((l) => render(l, linkClass))}</div>
-            )}
-            {footerLinks.filter((l) => l.links && l.links.length).map((c) => (
-              <div key={c.label} className="flex flex-col gap-2">
-                <div className="font-ta-sans text-[11px] tracking-[0.14em] uppercase text-ta-ink font-semibold">{c.label}</div>
-                {c.links!.map((l) => render(l, linkClass))}
+            {footerLinks.reduce<{ heading?: typeof footerLinks[number]; links: typeof footerLinks }[]>((groups, it) => {
+              if (it.links && it.links.length) groups.push({ heading: it, links: it.links });
+              else { const last = groups[groups.length - 1]; if (last && !last.heading) last.links.push(it); else groups.push({ links: [it] }); }
+              return groups;
+            }, []).map((g, i) => (
+              <div key={(g.heading ? g.heading.label : "links") + i} className="flex flex-col gap-2">
+                {g.heading && (g.heading.href || g.heading.page
+                  ? render(g.heading, "font-ta-sans text-[11px] tracking-[0.14em] uppercase text-ta-ink font-semibold cursor-pointer no-underline")
+                  : <div className="font-ta-sans text-[11px] tracking-[0.14em] uppercase text-ta-ink font-semibold">{g.heading.label}</div>)}
+                {g.links.map((l) => render(l, linkClass))}
               </div>
             ))}
           </nav>
