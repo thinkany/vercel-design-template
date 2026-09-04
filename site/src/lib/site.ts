@@ -49,6 +49,8 @@ export const siteSchema = z.object({
       code: z.string().default(""),
     })).default([]),
   }).default({ gtm: "", extra: [] }),
+  /** CMS display names per block key (recognition only; the site doesn't use them). */
+  blockNames: z.record(z.string()).default({}),
   /** The posts directory: posts are listed at /<path> and served at /<path>/<post>. */
   blog: z.object({ path: z.string().default("blog") }).default({ path: "blog" }),
   /** Site icons (the CMS Settings tab): paths under public/, e.g. "/images/icon.svg". */

@@ -12,6 +12,7 @@ import { resolveBlock } from "../../lib/blocks";
 import { bindTemplate, typesFile } from "../../lib/types";
 import { blogPath } from "../../lib/site";
 import { blocks } from "../../../blocks";
+import { withBuiltins } from "../../lib/builtin-blocks";
 import rawTypes from "../../../../content/types.json";
 
 export async function getStaticPaths() {
@@ -49,7 +50,7 @@ if (!post) {
     if (f.kind === "richtext" && typeof data[f.key] === "string") bound[f.key + "Html"] = (await md.render(data[f.key] as string)).code;
   }
   const instances = data.blocks && data.blocks.length ? data.blocks : bindTemplate(type.template, bound);
-  rendered = instances.map((b, i) => resolveBlock(blocks, b, `content/${type.key}/${entry.id}.json blocks[${i}]`));
+  rendered = instances.map((b, i) => resolveBlock(withBuiltins(blocks), b, `content/${type.key}/${entry.id}.json blocks[${i}]`));
 }
 ---
 {post && postView ? (

@@ -1501,9 +1501,12 @@ function readSiteContent(dir) {
     licensed: siteLicensed(), // the CMS drawer shows a licensing note instead of the editor when false
     site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, scripts: { gtm: (site.scripts && site.scripts.gtm) || "", extra: Array.isArray(site.scripts && site.scripts.extra) ? site.scripts.extra : [] }, seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
     pages, posts, ...(() => {
-      const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {} };
+      const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {}, builtins: {} };
+      const names = site.blockNames && typeof site.blockNames === "object" ? site.blockNames : {};
+      const all = [...readBlockRegistry(dir), ...Object.values(ib.builtins || {})];
       return {
-        blocks: readBlockRegistry(dir).map((b) => ({ ...b, defaults: ib.defaults[b.key] || {}, templates: ib.templates[b.key] || {}, fields: (ib.fields && ib.fields[b.key]) || {} })),
+        // `name` is what the CMS shows (the designer's display name when set); originalName is the block's own.
+        blocks: all.map((b) => ({ ...b, originalName: b.name, name: (typeof names[b.key] === "string" && names[b.key].trim()) || b.name, defaults: ib.defaults[b.key] || {}, templates: ib.templates[b.key] || {}, fields: (ib.fields && ib.fields[b.key]) || {} })),
         marks: ib.marks || {}, // the design's icon set, rendered: { key: "<svg…>" }
         megaMenu: !!ib.megaMenu, // the header renders nav columns → the Navigation tab offers them
       };
@@ -1764,6 +1767,18 @@ ipcMain.handle("site:saveScripts", (_e, { scripts } = {}) => {
   const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
   const next = { ...cur, scripts: { gtm: String(sc.gtm || "").trim(), extra } };
   try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, scripts: next.scripts }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+// Block display names (the Blocks tab): recognition in the CMS only.
+ipcMain.handle("site:saveBlockNames", (_e, { names } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const clean = {};
+  for (const [k, v] of Object.entries(names && typeof names === "object" ? names : {})) if (/^[a-z0-9_-]+$/i.test(k) && typeof v === "string" && v.trim()) clean[k] = v.trim();
+  const p = path.join(siteContentDir(currentProject), "site.json");
+  const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
+  const next = { ...cur, blockNames: clean };
+  try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, blockNames: clean }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle("site:llmsDefault", () => (currentProject ? generatedLlms(currentProject) : ""));

@@ -33,7 +33,8 @@ const pageFiles = import.meta.glob("../../content/pages/*.json", { eager: true, 
 // site/blocks/index.ts → the block registry; site/blocks/chrome.ts → Header/Footer
 const registryFiles = import.meta.glob("../../site/blocks/index.ts", { eager: true }) as Record<string, { blocks?: Record<string, BlockDef> }>;
 const chromeFiles = import.meta.glob("../../site/blocks/chrome.ts", { eager: true }) as Record<string, ChromeModule>;
-const blocks: Record<string, BlockDef> = (Object.values(registryFiles)[0] || {}).blocks || {};
+const builtinFiles = import.meta.glob("../../site/src/lib/builtin-blocks.tsx", { eager: true }) as Record<string, { builtinBlocks?: Record<string, BlockDef> }>;
+const blocks: Record<string, BlockDef> = { ...((Object.values(builtinFiles)[0] || {}).builtinBlocks || {}), ...((Object.values(registryFiles)[0] || {}).blocks || {}) };
 const chromeMod: ChromeModule = Object.values(chromeFiles)[0] || {};
 
 // Block-owned CSS (keyframes the promoted blocks use), when the site target exists.

@@ -396,7 +396,13 @@ window.COPY = {
       "no-home": "The site has no home page yet.",
       "no-project": "Open a project to edit its site.",
     },
-    tabs: { pages: "Pages", posts: "Posts", types: "Types", nav: "Navigation", settings: "Settings" },
+    tabs: { pages: "Pages", posts: "Posts", types: "Types", blocks: "Blocks", nav: "Navigation", settings: "Settings" },
+    blocksDesc: "Every block this site can use: the ones promoted from the design, plus the built-in ones every site has. Give a block a name that's easier to recognise when composing pages; the block itself doesn't change.",
+    blockBuiltIn: "Built in",
+    blockOriginal: (n) => `Design name: ${n}`,
+    blockUsedOn: (pages) => `Used on: ${pages.join(", ")}`,
+    blockUnused: "Not used on any page yet",
+    codePlaceholder: "<script>…</script> or any HTML",
     helpTip: "Help with this tab",
     // Per-tab help, as an outline: what the tab is for, then what you can do on it.
     help: {
@@ -426,6 +432,15 @@ window.COPY = {
           { h: "Create a type", items: ["<b>Add a content type</b>, give it a name (the address is made from it), and add <b>fields</b>: text, long text, rich text, number, yes/no, date, image, choice, list, link, or a reference to another type.", "Tick <b>Show an index page</b> to list every entry at the type’s address.", "In <b>Page template</b>, choose the blocks that render each entry. In any text, <code>{{field}}</code> fills in that field; <code>{{title}}</code> is the entry’s title. A field name alone in an image slot, like <code>{{photo}}</code>, hands over the whole image."] },
           { h: "Add entries", items: ["Under a type, type a title and <b>Add</b>. The entry’s form has one control per field.", "An entry can use <b>its own blocks</b> instead of the template, which is how a landing page works.", "Entries live at the type’s address plus their own, like /products/blue-widget."] },
           { h: "Change or remove", items: ["Click a type to edit its fields or template; existing entries keep their content.", "<b>Delete type</b> stops publishing its entries but leaves their files in the project."] },
+        ],
+      },
+      blocks: {
+        title: "Blocks",
+        intro: "The block library: everything a page can be composed from.",
+        sections: [
+          { h: "Display names", items: ["Rename a block for recognition (<i>Alternating content</i> instead of <i>Island Guide</i>, say). The name shows in the block picker and on page rows; the block's design and fields are unchanged. Clear the field to go back to the design's name."] },
+          { h: "Built-in blocks", items: ["<b>Code snippet</b>: paste HTML or a script (a HubSpot form, an embed, a widget) and it's placed on the page as written. It runs on the site; the design surface shows the markup but doesn't run scripts."] },
+          { h: "New blocks", items: ["Blocks come from the design: promote a design, or ask for a new section in the chat, and it appears here."] },
         ],
       },
       nav: {

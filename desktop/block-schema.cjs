@@ -23,6 +23,7 @@ function blocksMtime(dir) {
   let latest = 0;
   const walk = (d) => { let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; } for (const e of es) { const a = path.join(d, e.name); if (e.isDirectory()) walk(a); else { try { latest = Math.max(latest, fs.statSync(a).mtimeMs); } catch {} } } };
   walk(path.join(dir, "site", "blocks"));
+  try { latest = Math.max(latest, fs.statSync(path.join(dir, "site", "src", "lib", "builtin-blocks.tsx")).mtimeMs); } catch {}
   return latest;
 }
 function zodDefault(schema, depth = 0, templates = null, at = "") {
@@ -65,8 +66,8 @@ function introspectBlocks(dir, { esbuild } = {}) {
   const cachePath = path.join(dir, ".thinkany", "blocks.json");
   const mtime = blocksMtime(dir);
   const cached = readJsonFile(cachePath);
-  if (cached && cached.mtime === mtime && cached.defaults && cached.fields && "megaMenu" in cached) return { defaults: cached.defaults, templates: cached.templates || {}, fields: cached.fields || {}, marks: cached.marks || {}, megaMenu: !!cached.megaMenu };
-  let defaults = {}; let templates = {}; let fields = {}; let marks = {}; let megaMenu = false;
+  if (cached && cached.mtime === mtime && cached.defaults && cached.fields && "megaMenu" in cached && cached.builtins) return { defaults: cached.defaults, templates: cached.templates || {}, fields: cached.fields || {}, marks: cached.marks || {}, megaMenu: !!cached.megaMenu, builtins: cached.builtins || {} };
+  let defaults = {}; let templates = {}; let fields = {}; let marks = {}; let megaMenu = false; let builtinMeta = {};
   try {
     if (!esbuild) esbuild = require("esbuild");
     const result = esbuild.buildSync({
@@ -81,7 +82,20 @@ function introspectBlocks(dir, { esbuild } = {}) {
     const req = createRequire(path.join(dir, "package.json"));
     const mod = { exports: {} };
     new Function("require", "module", "exports", "__filename", "__dirname", code)(req, mod, mod.exports, path.join(dir, "site", "blocks", "index.ts"), path.join(dir, "site", "blocks"));
-    const blocks = mod.exports.blocks || {};
+    const registry = mod.exports.blocks || {};
+    // Built-in blocks (site/src/lib/builtin-blocks.tsx, CORE) sit beneath the registry.
+    let builtins = {};
+    const bfile = path.join(dir, "site", "src", "lib", "builtin-blocks.tsx");
+    if (fs.existsSync(bfile)) {
+      try {
+        const br = esbuild.buildSync({ entryPoints: [bfile], bundle: true, write: false, platform: "node", format: "cjs", target: "node20", jsx: "automatic", tsconfig: path.join(dir, "site", "tsconfig.json"), logLevel: "silent", external: ["react", "react-dom", "react/jsx-runtime", "astro/zod", "astro:*"] });
+        const bm = { exports: {} };
+        new Function("require", "module", "exports", "__filename", "__dirname", br.outputFiles[0].text)(req, bm, bm.exports, bfile, path.dirname(bfile));
+        builtins = bm.exports.builtinBlocks || {};
+      } catch (e) { console.warn(`[blocks] built-in blocks failed: ${e.message}`); }
+    }
+    builtinMeta = Object.fromEntries(Object.entries(builtins).filter(([k]) => !registry[k]).map(([k, d]) => [k, { key: k, name: d.name || k, description: d.description || "", builtin: true }]));
+    const blocks = { ...builtins, ...registry };
     for (const [key, def] of Object.entries(blocks)) {
       const tpl = {};
       try { defaults[key] = def && def.props ? zodDefault(def.props, 0, tpl, "") : {}; } catch { defaults[key] = {}; }
@@ -94,10 +108,10 @@ function introspectBlocks(dir, { esbuild } = {}) {
     megaMenu = headerAcceptsColumns(dir, esbuild, req);
   } catch (e) {
     console.warn(`[blocks] introspection failed: ${e.message}`);
-    return cached && cached.defaults ? { defaults: cached.defaults, templates: cached.templates || {}, fields: cached.fields || {}, marks: cached.marks || {}, megaMenu: !!cached.megaMenu } : { defaults: {}, templates: {}, fields: {}, marks: {}, megaMenu: false };
+    return cached && cached.defaults ? { defaults: cached.defaults, templates: cached.templates || {}, fields: cached.fields || {}, marks: cached.marks || {}, megaMenu: !!cached.megaMenu, builtins: cached.builtins || {} } : { defaults: {}, templates: {}, fields: {}, marks: {}, megaMenu: false, builtins: {} };
   }
-  try { fs.mkdirSync(path.dirname(cachePath), { recursive: true }); fs.writeFileSync(cachePath, JSON.stringify({ mtime, defaults, templates, fields, marks, megaMenu }, null, 2) + "\n"); } catch {}
-  return { defaults, templates, fields, marks, megaMenu };
+  try { fs.mkdirSync(path.dirname(cachePath), { recursive: true }); fs.writeFileSync(cachePath, JSON.stringify({ mtime, defaults, templates, fields, marks, megaMenu, builtins: builtinMeta }, null, 2) + "\n"); } catch {}
+  return { defaults, templates, fields, marks, megaMenu, builtins: builtinMeta };
 }
 
 
@@ -134,7 +148,7 @@ function zodFields(schema, out, at, depth, desc) {
       if (at && opts.length && opts.every((o) => o._def && o._def.typeName === "ZodLiteral")) { out[at] = { kind: "enum", options: opts.map((o) => o._def.value) }; return; }
       return inner(opts[0]);
     }
-    case "ZodString": { if (at) out[at] = { kind: desc === "richtext" ? "richtext" : "string" }; return; }
+    case "ZodString": { if (at) out[at] = { kind: desc === "richtext" ? "richtext" : desc === "code" ? "code" : "string" }; return; }
     case "ZodNumber": { if (at) out[at] = { kind: "number" }; return; }
     case "ZodBoolean": { if (at) out[at] = { kind: "boolean" }; return; }
     default: return;

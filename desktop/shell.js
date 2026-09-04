@@ -2900,6 +2900,12 @@ function sitePropsEditor(value, onChange, depth = 0, ctx = {}, at = "") {
         wrap.appendChild(sel);
       }
       box.appendChild(wrap);
+    } else if (typeof v === "string" && meta && meta.kind === "code") {
+      // A snippet: monospace, whitespace kept, no rich editing.
+      const wrap = siteEl("div", "site-kv"); wrap.appendChild(siteEl("div", "k", label));
+      const ta = document.createElement("textarea"); ta.className = "field site-code"; ta.spellcheck = false; ta.value = v; ta.placeholder = COPY.site.codePlaceholder;
+      ta.addEventListener("input", () => { value[key] = ta.value; onChange(); });
+      wrap.appendChild(ta); box.appendChild(wrap);
     } else if (typeof v === "string" && meta && meta.kind === "richtext") {
       // Prose: the rich text editor (markdown on disk, rendered by <Rich> in the block).
       const wrap = siteEl("div", "site-kv");
@@ -4029,6 +4035,38 @@ el("cmshelp-close").addEventListener("click", closeCmsHelp);
 cmshelp.addEventListener("click", (e) => { if (e.target === cmshelp) closeCmsHelp(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !cmshelp.hidden) { closeCmsHelp(); e.stopPropagation(); } }, true);
 
+// The Blocks tab: the block library. Every block the site can use (promoted + built
+// in), with a display name the designer can set for recognition when composing pages
+// (the block itself is unchanged), its description, and where it's used.
+function renderSiteBlocks(data) {
+  const S = COPY.site;
+  const wrap = siteEl("div");
+  wrap.appendChild(siteEl("div", "sess-desc", S.blocksDesc));
+  const names = {}; data.blocks.forEach((b) => { if (b.name !== b.originalName) names[b.key] = b.name; });
+  const status = siteEl("div"); status.style.cssText = "min-height:18px;";
+  let timer = null;
+  const save = () => { clearTimeout(timer); timer = setTimeout(async () => { const r = await window.desktop.saveBlockNames(names); status.innerHTML = ""; if (r && r.ok) siteFlash(status, S.saved); else if (r && r.error) { const e = siteEl("div", "sess-desc", r.error); e.style.color = "#c0261e"; status.appendChild(e); } }, 1000); };
+  const usage = (key) => data.pages.filter((p) => (p.blocks || []).some((b) => b.type === key)).map((p) => p.title);
+  data.blocks.forEach((b) => {
+    const card = siteEl("div", "site-item");
+    const head = siteEl("div"); head.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:6px;";
+    const name = document.createElement("input"); name.className = "field"; name.style.cssText = "margin:0;flex:1;font-weight:600;"; name.value = b.name; name.placeholder = b.originalName;
+    name.addEventListener("input", () => { const v = name.value.trim(); if (v && v !== b.originalName) names[b.key] = v; else delete names[b.key]; save(); });
+    head.appendChild(name);
+    if (b.builtin) head.appendChild(siteEl("span", "site-tag", S.blockBuiltIn));
+    card.appendChild(head);
+    const meta = siteEl("div", "sess-desc");
+    const parts = [S.blockOriginal(b.originalName)];
+    if (b.description) parts.push(b.description);
+    const on = usage(b.key); parts.push(on.length ? S.blockUsedOn(on) : S.blockUnused);
+    meta.textContent = parts.join("  ·  ");
+    card.appendChild(meta);
+    wrap.appendChild(card);
+  });
+  wrap.appendChild(status);
+  return wrap;
+}
+
 // The Settings tab: image optimization (per project, .thinkany/cms.json) + site facts.
 // An on/off switch row: label left, the switch right. onChange(next) fires on toggle.
 function siteSwitch(label, on, onChange) {
@@ -4293,10 +4331,10 @@ async function renderSite(body) {
   // Off per project until the Settings switch is on: only Settings is reachable then.
   const cms = await window.desktop.getCmsSettings().catch(() => ({ media: { quality: 55, maxWidth: 2400 }, defaults: { media: { quality: 55, maxWidth: 2400 } }, enabled: false }));
   siteFolds = { ...((cms.ui && cms.ui.folds) || {}) };
-  const TABS = ["pages", "posts", "types", "nav", "settings"];
+  const TABS = ["pages", "posts", "types", "blocks", "nav", "settings"];
   if (!TABS.includes(siteRailState.tab)) siteRailState.tab = "pages";
   if (!cms.enabled) siteRailState.tab = "settings";
-  const counts = { pages: data.pages.length, posts: posts.length, types: ctx.types.length };
+  const counts = { pages: data.pages.length, posts: posts.length, types: ctx.types.length, blocks: data.blocks.length };
   const tabs = siteEl("div", "site-tabs");
   TABS.forEach((t) => {
     const b = siteEl("button", "site-tab" + (siteRailState.tab === t ? " active" : ""), COPY.site.tabs[t]); b.type = "button";
@@ -4354,6 +4392,9 @@ async function renderSite(body) {
   } else if (siteRailState.tab === "types") {
     const { left, right } = two();
     renderSiteTypesList(left, right, ctx, refresh);
+  } else if (siteRailState.tab === "blocks") {
+    const wrap = siteEl("div", "site-single"); body.appendChild(wrap);
+    wrap.appendChild(renderSiteBlocks(data));
   } else if (siteRailState.tab === "nav") {
     const wrap = siteEl("div", "site-single"); body.appendChild(wrap);
     wrap.appendChild(renderSiteNav(data.site, refresh, siteLinkOptions(data, posts, ctx), !!data.megaMenu));
