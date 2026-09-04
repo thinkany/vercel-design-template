@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import path from 'path'
+import fs from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
@@ -352,7 +353,15 @@ function figmaAssetResolver() {
   }
 }
 
+// public/version.json is the template's version manifest: served at /version.json
+// AND compiled into the bundle (src/version.ts) through this constant. A file under
+// public/ can't be imported from JavaScript (Vite warns), so it's read here instead.
+const VERSION_MANIFEST = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'public', 'version.json'), 'utf8'))
+
 export default defineConfig({
+  define: {
+    __TA_VERSION_MANIFEST__: JSON.stringify(VERSION_MANIFEST),
+  },
   plugins: [
     figmaAssetResolver(),
     variationApiPlugin(),

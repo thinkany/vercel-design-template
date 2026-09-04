@@ -9,7 +9,9 @@
 //
 // A release bumps public/version.json (and scripts/upgrade.mjs stamps README from
 // it) — nothing else here changes.
-import manifest from "../public/version.json";
+//
+// The file is read at build time by vite.config.ts and compiled in as
+// __TA_VERSION_MANIFEST__ (a file under public/ can't be imported from JavaScript).
 
 export type VersionManifest = {
   version: string;
@@ -18,6 +20,9 @@ export type VersionManifest = {
   /** Canonical URL of the distribution zip the upgrade overlay pulls. */
   zipUrl?: string;
 };
+
+declare const __TA_VERSION_MANIFEST__: VersionManifest;
+const manifest: VersionManifest = typeof __TA_VERSION_MANIFEST__ !== "undefined" ? __TA_VERSION_MANIFEST__ : { version: "0.0.0" };
 
 /** This template copy's own version, compiled into the bundle. */
 export const TEMPLATE_VERSION: string = manifest.version;
