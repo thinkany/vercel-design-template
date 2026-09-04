@@ -3694,9 +3694,13 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
       // Picked from the list (an exact match) with no text yet → fill the text too.
       if (!lab.value.trim()) { const t = labelFor(href.value); if (t) { lab.value = t; l.label = t; } }
     });
-    row.append(lab, href,
-      siteMini("↑", () => { if (i > 0) { [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; dirty(); paint(); } }, { disabled: i === 0, title: COPY.site.moveUp }),
-      siteTrashBtn(() => { arr.splice(i, 1); dirty(); paint(); }, COPY.site.removeItem));
+    row.append(lab, href);
+    let paintCols = null; // set below when this item can hold mega-menu panels
+    if (withSub && megaMenu && dnd) {
+      const addPanel = siteMini(COPY.site.addColumn, () => { l.columns = Array.isArray(l.columns) ? l.columns : []; l.columns.push({ heading: "", links: [] }); dirty(); if (paintCols) paintCols(); }, { title: COPY.site.addColumnTip });
+      row.appendChild(addPanel);
+    }
+    row.appendChild(siteTrashBtn(() => { arr.splice(i, 1); dirty(); paint(); }, COPY.site.removeItem));
     const out = siteEl("div");
     out.appendChild(row);
     if (withSub) {
@@ -3709,11 +3713,10 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
       if (megaMenu && dnd) {
         l.columns = Array.isArray(l.columns) ? l.columns : [];
         const cols = siteEl("div"); cols.style.cssText = "margin:0 0 6px 14px;";
-        const paintCols = () => {
+        paintCols = () => {
           cols.innerHTML = "";
           if (l.columns.length) cols.appendChild(siteEl("div", "sess-desc", COPY.site.columns));
           l.columns.forEach((c, k) => cols.appendChild(columnBox(c, l, k, dnd.repaint)));
-          cols.appendChild(siteMini(COPY.site.addColumn, () => { l.columns.push({ heading: "", links: [] }); dirty(); paintCols(); }));
         };
         paintCols();
         out.appendChild(cols);
