@@ -1161,6 +1161,9 @@ function closeModal() {
   setTimeout(() => { if (!modal.classList.contains("open")) modal.hidden = true; }, 240);
 }
 async function openModal(kind) {
+  // A drawer opening ends an on-page review walk (Art Director / Accessibility bar).
+  if (adReview) exitAdReview();
+  if (typeof a11yReview !== "undefined" && a11yReview) exitA11yReview();
   const { title, render, wide } = PANELS[kind];
   modalTitle.textContent = title;
   modalBody.innerHTML = "";
