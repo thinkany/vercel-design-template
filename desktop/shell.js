@@ -7731,7 +7731,9 @@ async function showAdOnPage(rec) {
   if (idx < 0) { recs = [rec]; idx = 0; }
   const tab = designTab(); if (!tab) return;
   setActiveTab(tab); // the walk happens on the design, whatever tab was active
-  adReview = { recs, idx, tab, prevUrl: tab.url, count: 0, expanded: false };
+  // Arrives OPEN so the action is one click away; the caret's state then holds across
+  // Next / Prev until the designer toggles it again.
+  adReview = { recs, idx, tab, prevUrl: tab.url, count: 0, expanded: true };
   showAdToolbar();
   navigate(tab, `${viteUrl}/?v=${id}${routeFlag}&capture=desktop`);
   onceWebviewLoaded(tab.wv, async () => {
