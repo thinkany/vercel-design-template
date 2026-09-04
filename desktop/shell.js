@@ -3910,6 +3910,15 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
       if (!lab.value.trim()) { const t = labelFor(href.value); if (t) { lab.value = t; l.label = t; } }
     });
     row.append(lab, href);
+    // A footer column's top item is its HEADING when it has no address: say so in the
+    // URL field, and set the text bold while it is one.
+    const updHeading = () => {
+      if (!(dnd && dnd.kind === "footer" && withSub)) return;
+      const col = Array.isArray(l.links) && l.links.length > 0;
+      href.placeholder = col ? COPY.site.navHrefHeading : COPY.site.navHref;
+      row.classList.toggle("is-heading", col && !href.value.trim());
+    };
+    href.addEventListener("input", updHeading);
     let paintCols = null; // set below when this item can hold mega-menu panels
     if (withSub && megaMenu && dnd && dnd.kind === "item") { // panels are a header thing
       const addPanel = siteMini(COPY.site.addColumn, () => { l.columns = Array.isArray(l.columns) ? l.columns : []; l.columns.push({ heading: "", links: [] }); dirty(); if (paintCols) paintCols(); }, { title: COPY.site.addColumnTip });
@@ -3921,8 +3930,8 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
     if (withSub) {
       l.links = Array.isArray(l.links) ? l.links : [];
       const sub = siteEl("div"); sub.style.cssText = "margin:0 0 6px 14px;";
-      const paintSub = () => { sub.innerHTML = ""; if (l.links.length) sub.appendChild(siteEl("div", "sess-desc", COPY.site.subLinks)); l.links.forEach((s, j) => sub.appendChild(linkRow(s, l.links, j, paintSub, false, dnd && { kind: "link", owners: [l], reorder: { kinds: ["link", "item"], target: () => l.links }, nest: null, repaint: dnd.repaint }))); sub.appendChild(siteMini(COPY.site.addSubLink, () => { l.links.push({ label: "", href: l.href || "" }); dirty(); paintSub(); })); };
-      paintSub();
+      const paintSub = () => { updHeading(); sub.innerHTML = ""; if (l.links.length) sub.appendChild(siteEl("div", "sess-desc", COPY.site.subLinks)); l.links.forEach((s, j) => sub.appendChild(linkRow(s, l.links, j, paintSub, false, dnd && { kind: "link", owners: [l], reorder: { kinds: ["link", "item"], target: () => l.links }, nest: null, repaint: dnd.repaint }))); sub.appendChild(siteMini(COPY.site.addSubLink, () => { l.links.push({ label: "", href: l.href || "" }); dirty(); paintSub(); })); };
+      paintSub(); updHeading();
       out.appendChild(sub);
       // Mega menu: columns under this item (only when the header renders them).
       if (megaMenu && dnd && dnd.kind === "item") {

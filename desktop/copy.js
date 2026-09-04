@@ -516,6 +516,7 @@ window.COPY = {
     deletePage: "Delete page",
     deleteConfirm: (t) => `Delete “${t}”? This removes its content file.`,
     navHeading: "Navigation",
+    navHrefHeading: "Leave empty: this is the column's heading",
     navAuto: "The menu follows the page outline. Turn on Manage Navigation in Settings to edit it by hand.",
     footerDesc: "The footer's own links, independent of the header menu. Give a link sub-links and it becomes a column, with its text as the heading (the address is then optional).",
     legalHeading: "Legal",
