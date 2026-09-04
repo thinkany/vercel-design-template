@@ -673,6 +673,7 @@ async function revealPreviewAfterEdit() {
   browser.hidden = false;
   showPreviewHelp(); // updated preview shown → offer the blank-recovery help
   updateRerollBtn(); // edit turn settled → re-evaluate the reroll button
+  applyAdFocus(); // an Art Director action → land on the design, at the target
 }
 
 // ---- Progressive build reveal (styleguide live, home still designing) --------
@@ -5104,6 +5105,7 @@ window.desktop.onAgentEvent((evt) => {
       if (homeBuilding) { finishBuildReveal(); break; }
       if (guarding) { revealPreviewAfterEdit(); break; }
       refreshPreview();
+      applyAdFocus(); // an Art Director action that edited nothing still lands on the design
       break;
   }
 });
@@ -7160,6 +7162,7 @@ function applyRec(rec) {
     : `[Apply an Art Director recommendation to design variation ${vid}.] Make ONLY this change, ` +
       `editing only files under \`src/variations/${vid}/\`. Do not rebuild the page or touch anything else. ` +
       `Keep to the design rules (tokens/utilities, container queries).\n\n${rec.title}\n${rec.apply}`;
+  queueAdFocus(rec);
   runAgent(prompt, COPY.director.applyingEcho(rec.title), {});
 }
 
@@ -7259,6 +7262,7 @@ function runRecCommand(rec, prompt, echo) {
   persistDirector();
   closeRecModal();
   closeModal();
+  queueAdFocus(rec);
   runAgent(prompt, echo, {});
 }
 
@@ -7686,8 +7690,35 @@ let adReview = null;   // { recs, idx, tab, prevUrl, count, expanded }
 let adToolbarEl = null;
 const AD_CARET_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
 
+// The DESIGN tab: the Home tab, else any tab showing the design (not the Style guide,
+// not the Site). Art Director walks and actions happen there, never on whichever tab
+// happened to be active (a review begun from the Style guide used to land back on it).
+function designTab() {
+  return tabs.find((t) => t.navKind === "home")
+    || tabs.find((t) => t.url && /[?&]v=/.test(t.url) && !/styleguide/.test(t.url) && !t.site)
+    || activeTab;
+}
+// After an Art Director action's turn: land on the design tab and scroll to what the
+// recommendation targeted (a brief highlight), so the change is seen where it was made.
+let adFocusAfter = null; // { tab, anchor }
+function queueAdFocus(rec) { adFocusAfter = { tab: designTab(), anchor: (rec && rec.anchor) || null }; }
+async function applyAdFocus() {
+  const f = adFocusAfter; adFocusAfter = null;
+  if (!f || !f.tab || !tabs.includes(f.tab)) return;
+  setActiveTab(f.tab);
+  if (!f.anchor) return;
+  for (let i = 0; i < 8; i++) { // the tab may still be reloading behind the cover
+    try {
+      await f.tab.wv.executeJavaScript(AD_HIGHLIGHT_JS);
+      const n = await f.tab.wv.executeJavaScript(`window.__adHighlight ? window.__adHighlight.show(${JSON.stringify([f.anchor])}) : 0`);
+      if (n) { f.tab.wv.executeJavaScript("window.__adHighlight.focus(0)"); setTimeout(() => { try { f.tab.wv.executeJavaScript("window.__adHighlight && window.__adHighlight.clear()"); } catch {} }, 3000); }
+      return;
+    } catch { await new Promise((r) => setTimeout(r, 400)); }
+  }
+}
+
 async function showAdOnPage(rec) {
-  if (!rec || !activeTab || !viteUrl) return;
+  if (!rec || !viteUrl) return;
   const id = directorState.vid || currentPreviewVariation();
   if (!id || id === "v00") return;
   // Page scope: open THAT page in capture mode (its route flag), not the home page.
@@ -7698,7 +7729,8 @@ async function showAdOnPage(rec) {
   let recs = directorState.active || [];
   let idx = recs.findIndex((r) => r && r.id === rec.id);
   if (idx < 0) { recs = [rec]; idx = 0; }
-  const tab = activeTab;
+  const tab = designTab(); if (!tab) return;
+  setActiveTab(tab); // the walk happens on the design, whatever tab was active
   adReview = { recs, idx, tab, prevUrl: tab.url, count: 0, expanded: false };
   showAdToolbar();
   navigate(tab, `${viteUrl}/?v=${id}${routeFlag}&capture=desktop`);
