@@ -3765,8 +3765,18 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
   wrap.appendChild(dl);
   const labelFor = (href) => { const o = options.find((x) => x.href === href); return o ? o.label : ""; };
   const draft = JSON.parse(JSON.stringify({ nav: site.nav || [], footerLinks: site.footerLinks || [] }));
-  let saveBtn;
-  const dirty = () => { saveBtn.disabled = false; };
+  // Autosave: every change (typing, drag, add, remove) writes content/site.json a
+  // moment after the last one. No re-render on save, so typing keeps its focus;
+  // the drawer picks the saved menu up next time it opens.
+  let saveTimer = null; let status;
+  const setStatus = (text, error) => { status.textContent = text || ""; status.style.color = error ? "#c0261e" : "#999"; };
+  const saveNow = async () => {
+    setStatus(COPY.site.saving);
+    const res = await window.desktop.saveSiteSettings(draft.nav, draft.footerLinks);
+    if (res && res.ok) { site.nav = res.site.nav; site.footerLinks = res.site.footerLinks; setStatus(COPY.site.saved); setTimeout(() => { if (status.textContent === COPY.site.saved) setStatus(""); }, 1800); }
+    else setStatus((res && res.error) || "Couldn't save.", true);
+  };
+  const dirty = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 600); };
   siteNavRemove = (x) => {
     const pull = (arr) => { const i = arr.indexOf(x); if (i >= 0) { arr.splice(i, 1); return true; } return false; };
     if (pull(draft.nav) || pull(draft.footerLinks)) return;
@@ -3859,15 +3869,9 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
   const paintFoot = () => { footList.innerHTML = ""; draft.footerLinks.forEach((l, i) => footList.appendChild(linkRow(l, draft.footerLinks, i, paintFoot, false, { kind: "footer", owners: [], reorder: { kinds: ["footer"], target: () => draft.footerLinks }, nest: null, repaint: paintFoot }))); footList.appendChild(siteMini(COPY.site.addLink, () => { draft.footerLinks.push({ label: "", href: "/" }); dirty(); paintFoot(); })); };
   paintFoot();
   ff.body.appendChild(footList);
-  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
-  saveBtn = siteEl("button", "panelbtn primary", COPY.site.saveNav); saveBtn.disabled = true; saveBtn.style.margin = "0";
-  saveBtn.addEventListener("click", async () => {
-    saveBtn.disabled = true;
-    const res = await window.desktop.saveSiteSettings(draft.nav, draft.footerLinks);
-    if (res && res.ok) { siteFlash(actions, COPY.site.saved); refresh(); }
-    else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
-  });
-  actions.appendChild(saveBtn);
+  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;min-height:18px;";
+  status = siteEl("div", "sess-desc"); status.style.margin = "0";
+  actions.appendChild(status);
   wrap.appendChild(actions);
   return wrap;
 }
