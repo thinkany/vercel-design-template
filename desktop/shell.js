@@ -2645,10 +2645,16 @@ function siteMini(label, onClick, { danger, title, disabled } = {}) {
 // window's storage, so it holds per project and across reinstalls.
 let siteFolds = {}; // key → false when folded (absent = open)
 let siteFoldsTimer = null;
+let siteFoldsPending = {}; // every change since the last save (a quick run of clicks is one write)
 function siteFoldSet(key, open) {
   siteFolds[key] = open;
+  siteFoldsPending[key] = open;
   clearTimeout(siteFoldsTimer);
-  siteFoldsTimer = setTimeout(() => { window.desktop.setCmsSettings({ ui: { folds: { [key]: open } } }).catch(() => {}); }, 150);
+  siteFoldsTimer = setTimeout(async () => {
+    const folds = siteFoldsPending; siteFoldsPending = {};
+    try { const r = await window.desktop.setCmsSettings({ ui: { folds } }); if (!r || !r.ok) console.warn("[cms] fold state not saved:", r && r.error); }
+    catch (e) { console.warn("[cms] fold state not saved:", e); }
+  }, 150);
 }
 function siteFold(title, key) {
   const isOpen = siteFolds[key] !== false;
@@ -3619,10 +3625,26 @@ function siteMediaFileUrl(url) {
 let pageDrag = null;
 let pageDragX = 0; // pointer x at dragstart; sideways movement picks the level
 const PAGE_INDENT = 14; // px per tree level (matches the rows' marginLeft)
+let pageDropTarget = null; // { p, zone, grandparent } the ghost currently stands for
 function sitePageGhost() {
   let g = document.querySelector(".site-drop-ghost");
-  if (!g) { g = siteEl("div", "site-drop-ghost"); g.appendChild(siteEl("span", "site-drop-ghost-arrow")); g.appendChild(siteEl("span", "site-drop-ghost-title")); }
+  if (!g) {
+    g = siteEl("div", "site-drop-ghost"); g.appendChild(siteEl("span", "site-drop-ghost-arrow")); g.appendChild(siteEl("span", "site-drop-ghost-title"));
+    // Inserting the ghost shifts rows, so the pointer is often over the ghost itself
+    // at release: it accepts the drop for the target it represents.
+    g.addEventListener("dragover", (e) => { if (pageDrag && pageDropTarget) { e.preventDefault(); try { e.dataTransfer.dropEffect = "move"; } catch {} } });
+    g.addEventListener("drop", (e) => { if (pageDrag && pageDropTarget) { e.preventDefault(); sitePageDrop(pageDropTarget); } });
+  }
   return g;
+}
+async function sitePageDrop({ p, zone, grandparent, refresh }) {
+  const g = document.querySelector(".site-drop-ghost"); if (g) g.remove();
+  const moved = pageDrag; pageDrag = null; pageDropTarget = null;
+  if (!moved) return;
+  const parent = zone === "into" ? p.id : zone === "out" ? grandparent : (p.parent || null);
+  if ((moved.parent || null) === parent) return;
+  const r = await window.desktop.moveSitePage(moved.id, parent);
+  if (r && r.ok) refresh(); else if (r && r.error) alert(r.error);
 }
 function sitePageDraggable(row, p, pages, refresh, depth = 0) {
   row.draggable = p.id !== "home";
@@ -3646,23 +3668,16 @@ function sitePageDraggable(row, p, pages, refresh, depth = 0) {
   const levelOf = (z) => (z === "into" ? depth + 1 : z === "out" ? depth - 1 : depth);
   const showGhost = (z) => {
     const g = sitePageGhost();
+    pageDropTarget = { p, zone: z, grandparent: grandparent(), refresh };
     g.querySelector(".site-drop-ghost-title").textContent = pageDrag.title;
     g.classList.toggle("child", z === "into");
     g.style.marginLeft = (levelOf(z) * PAGE_INDENT) + "px";
     if (z === "before") row.before(g); else row.after(g);
   };
   row.addEventListener("dragstart", (e) => { pageDrag = p; pageDragX = e.clientX; row.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", p.id); } catch {} });
-  row.addEventListener("dragend", () => { pageDrag = null; row.classList.remove("dragging"); const g = document.querySelector(".site-drop-ghost"); if (g) g.remove(); });
+  row.addEventListener("dragend", () => { pageDrag = null; pageDropTarget = null; row.classList.remove("dragging"); const g = document.querySelector(".site-drop-ghost"); if (g) g.remove(); });
   row.addEventListener("dragover", (e) => { if (!ok()) return; e.preventDefault(); try { e.dataTransfer.dropEffect = "move"; } catch {} showGhost(zone(e)); });
-  row.addEventListener("drop", async (e) => {
-    if (!ok()) return; e.preventDefault(); const z = zone(e);
-    const g = document.querySelector(".site-drop-ghost"); if (g) g.remove();
-    const moved = pageDrag; pageDrag = null;
-    const parent = z === "into" ? p.id : z === "out" ? grandparent() : (p.parent || null);
-    if ((moved.parent || null) === parent) return;
-    const r = await window.desktop.moveSitePage(moved.id, parent);
-    if (r && r.ok) refresh(); else if (r && r.error) alert(r.error);
-  });
+  row.addEventListener("drop", (e) => { if (!ok()) return; e.preventDefault(); sitePageDrop({ p, zone: zone(e), grandparent: grandparent(), refresh }); });
 }
 
 function siteLinkOptions(data, posts, ctx) {
