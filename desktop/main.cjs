@@ -1499,7 +1499,7 @@ function readSiteContent(dir) {
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
     licensed: siteLicensed(), // the CMS drawer shows a licensing note instead of the editor when false
-    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, blogPath: blogPathOf(site), seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
+    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
     pages, posts, ...(() => {
       const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {} };
       return {
@@ -1712,12 +1712,14 @@ ipcMain.handle("site:saveFavicon", (_e, { favicon } = {}) => {
   try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, favicon: next.favicon }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
-// Manage Navigation (Settings): false = the menu follows the page outline. A header
-// that renders a mega menu can't be driven from the outline, so it stays true.
+// Does the menu USE mega-menu panels? (A header merely able to render them doesn't count.)
+function navHasPanels(site) { return Array.isArray(site && site.nav) && site.nav.some((it) => it && Array.isArray(it.columns) && it.columns.length > 0); }
+// Manage Navigation (Settings): false = the menu follows the page outline. A menu with
+// mega-menu panels can't be derived from the outline, so it stays true while any exist.
 ipcMain.handle("site:setManageNav", (_e, { manageNav } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
-  if (manageNav === false && introspectBlocks(currentProject).megaMenu) return { ok: false, error: "Sites with mega-menus must manually manage the navigation." };
+  if (manageNav === false && navHasPanels(siteJsonOf(currentProject))) return { ok: false, error: "Sites with mega-menus must manually manage the navigation." };
   const p = path.join(siteContentDir(currentProject), "site.json");
   const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
   const next = { ...cur, manageNav: manageNav !== false };

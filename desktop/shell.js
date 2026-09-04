@@ -4001,14 +4001,15 @@ async function renderSiteSettings(host, data, st) {
   wrap.appendChild(siteEl("div", "sess-label", S.navHeading));
   const navBox = siteEl("div", "site-kv");
   const manage = !!(data.site && data.site.manageNav !== false);
-  const navSwitch = siteSwitch(S.manageNav, data.megaMenu ? true : manage, async (next) => {
+  const locked = !!(data.site && data.site.navHasPanels); // panels in the menu: can't be outline-driven
+  const navSwitch = siteSwitch(S.manageNav, locked ? true : manage, async (next) => {
     const r = await window.desktop.setManageNav(next);
     if (r && r.ok) { siteFlash(navBox, S.saved); }
     else if (r && r.error) { const e = siteEl("div", "sess-desc", r.error); e.style.color = "#c0261e"; navBox.appendChild(e); }
   });
-  if (data.megaMenu) { const cb = navSwitch.querySelector("input"); cb.disabled = true; navSwitch.style.cursor = "default"; navSwitch.classList.add("locked"); }
+  if (locked) { const cb = navSwitch.querySelector("input"); cb.disabled = true; navSwitch.style.cursor = "default"; navSwitch.classList.add("locked"); }
   navBox.appendChild(navSwitch);
-  navBox.appendChild(siteEl("div", "sess-desc", data.megaMenu ? S.manageNavMegaNote : (manage ? S.manageNavOnHint : S.manageNavOffHint)));
+  navBox.appendChild(siteEl("div", "sess-desc", locked ? S.manageNavMegaNote : (manage ? S.manageNavOnHint : S.manageNavOffHint)));
   wrap.appendChild(navBox);
 
   // Blog: the posts directory.
