@@ -21,10 +21,10 @@ designer at it in the CMS block picker instead of designing one.
 The designer is watching the Site tab. Suppress technical narration.
 
 1. **Open with one sentence**: "Designing a testimonials block for the About page."
-4. **TodoWrite in designer language**: `Designing the testimonials block`,
+2. **TodoWrite in designer language**: `Designing the testimonials block`,
    `Adding it to the About page`, `Checking the site builds`.
-5. **One short line per milestone.** Design terms, never code terms.
-6. **Close** (§6): where it landed and that its text is now editable in the CMS.
+3. **One short line per milestone.** Design terms, never code terms.
+4. **Close** (§6): where it landed and that its text is now editable in the CMS.
 
 **No em-dashes** in anything you say or write.
 
@@ -90,7 +90,12 @@ Then one row in `site/blocks/index.ts` (`testimonials,` or `"team-grid": teamGri
    both directions (column widths swapped, `@lg:order-1/2` on the cells), so the
    CMS can alternate the block down a page. Place the new instance on the
    opposite side from the two-column block above it.
-3. **Body copy is `richtext`** (from `../src/lib/blocks`), rendered with
+N. **A block whose content is a schema.org thing declares it** with `schema: (props) =>
+   entity` on `defineBlock` (a FAQ block returns an `FAQPage`, an events block an
+   `Event` per item). The page merges once-only types across instances, so several
+   FAQ blocks still yield one FAQPage. Never declare WebPage / Organization /
+   breadcrumbs: the site adds those.
+1. **Body copy is `richtext`** (from `../src/lib/blocks`), rendered with
    `<Rich text={…} className="…" />` where the design would put a `<p>`: the CMS
    gives it a rich text editor. Titles, eyebrows, labels stay `z.string()`.
 2. **Props are the CONTENT, markup is the DESIGN.** Every string a client would
@@ -102,21 +107,21 @@ Then one row in `site/blocks/index.ts` (`testimonials,` or `"team-grid": teamGri
    a name or markup; every image, content or
    background, is the `image` fragment (`{ src, alt }`), never a bare string path.
    The CMS turns `image` props into an upload field and enums into a choice.
-2. **`.optional()` / `.default()` on everything but the one or two fields the
+3. **`.optional()` / `.default()` on everything but the one or two fields the
    block can't render without.** The CMS seeds every field from the schema, so
    optional means "the block still looks right without it".
-3. **Speak the design's language.** Same `--ta-*` roles (`bg-ta-surface`,
+4. **Speak the design's language.** Same `--ta-*` roles (`bg-ta-surface`,
    `text-ta-ink`…), same type scale and eyebrow treatment as the sibling block,
    same container width, same section rhythm (light/dark alternation, stagger),
    the same motif kit. A block that could belong to any site is wrong.
-4. **Static HTML.** No `motion`, no `useState`, no `window`. Reveals are
+5. **Static HTML.** No `motion`, no `useState`, no `window`. Reveals are
    `<Reveal delay={…}>`; loops are keyframes in `site/blocks/blocks.css` (respect
    `prefers-reduced-motion`). Interactive pieces aren't supported in page blocks:
    if the request needs one (a carousel, tabs), say so and design the static
    version (a grid, an accordion of `<details>`).
-7. **Keep every class in the design's idiom**: `@lg:` container variants, `cqi`
+6. **Keep every class in the design's idiom**: `@lg:` container variants, `cqi`
    units, `color-mix(...)` on tokens. The site wraps pages in `@container`.
-8. **`data-block="{key}"`** on the root; `id` from the `anchor()` prop when nav
+7. **`data-block="{key}"`** on the root; `id` from the `anchor()` prop when nav
    should reach it.
 
 ## 3. Place it and fill it

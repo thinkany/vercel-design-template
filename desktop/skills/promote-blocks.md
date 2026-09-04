@@ -17,13 +17,13 @@ narration (imports, schemas, aliases).
 
 1. **Open with one sentence** naming what you'll do: "Turning your approved design
    into site blocks: six sections plus the header and footer."
-4. **TodoWrite in designer language**, one item per section plus the chrome:
+2. **TodoWrite in designer language**, one item per section plus the chrome:
    `Promoting hero`, `Promoting island guide`, …, `Promoting header and footer`,
    `Composing the home page`, `Building the site`. Mark `in_progress` /
    `completed` as you go. No prose per todo.
-5. **One short line per milestone** only when something is done. Design terms
+3. **One short line per milestone** only when something is done. Design terms
    (sections, header, cards), never code terms (props, zod, hydration).
-6. **Close** with what exists now and what to do next (§6).
+4. **Close** with what exists now and what to do next (§6).
 
 **No em-dashes** in anything you say or write.
 
@@ -103,7 +103,17 @@ section's `data-block` in the design.
    structure flipped (alternating feature rows), promote ONE block and set `side`
    per instance, not two blocks. The CMS shows Image left / Image right and
    alternates new blocks automatically.
-3. **Body copy is `richtext`** (from `../src/lib/blocks`), rendered with
+N. **A block whose content IS a schema.org thing declares it.** `defineBlock` takes
+   an optional `schema: (props) => entity | entity[]` returning schema.org objects
+   (no `@context`). The page gathers every block's entities into its JSON-LD graph,
+   and once-only types (FAQPage) are MERGED across instances, so two FAQ blocks give
+   one FAQPage with every question. Example, a FAQ block:
+   ```ts
+   schema: (p) => ({ "@type": "FAQPage", mainEntity: p.items.map((q) => ({ "@type": "Question", name: q.question, acceptedAnswer: { "@type": "Answer", text: q.answer } })) }),
+   ```
+   Also worth declaring: `Event`, `Product`, `Review`/`AggregateRating`, `HowTo`,
+   `VideoObject`. Never `WebPage`, `Organization` or breadcrumbs: the site adds those.
+1. **Body copy is `richtext`** (from `../src/lib/blocks`), rendered with
    `<Rich text={body} className="…the <p>'s classes…" />` in place of the design's
    `<p>`: paragraphs, card bodies, quotes, any prose a client would edit. The CMS
    gives it a rich text editor; markdown on disk. Titles, eyebrows, labels and
@@ -114,7 +124,7 @@ section's `data-block` in the design.
    like this design (classes, layout, motifs, textures, stagger offsets, colors,
    type scale) stays in the component, verbatim. When unsure, ask "would the
    client change this without a designer?": yes → prop, no → markup.
-2. **Repeated things are arrays of objects** with a small shape (`{ title, body,
+3. **Repeated things are arrays of objects** with a small shape (`{ title, body,
    icon }`, `{ label, href }`), with `.min()/.max()` when the layout only works for
    a range (three staggered cards → `.min(1).max(3)`). **Every icon a section
    shows per item becomes a mark**: an SVG drawn inline in the design, an icon
@@ -125,17 +135,17 @@ section's `data-block` in the design.
    holding an icon name, and never SVG markup in content: the CMS turns the enum
    into a visual picker of the marks, and a string into a text box the designer
    can't fill.
-3. **Keep every class exactly.** `@lg:`, `cqi`, `color-mix(...)`, arbitrary values,
+4. **Keep every class exactly.** `@lg:`, `cqi`, `color-mix(...)`, arbitrary values,
    token utilities: the site wraps pages in the same `@container` the design
    surface uses, so nothing needs translating. Don't "clean up" while promoting.
-4. **Keep `data-block="{id}"`** on the section root (drop `data-block-name`).
-7. **`.optional()` / `.default()` on everything but the one or two fields the
+5. **Keep `data-block="{id}"`** on the section root (drop `data-block-name`).
+6. **`.optional()` / `.default()` on everything but the one or two fields the
    section can't render without** (usually `heading`, sometimes `image`).
-8. **Every image is the `image` fragment** (`{ src, alt }`), whether it's content or
+7. **Every image is the `image` fragment** (`{ src, alt }`), whether it's content or
    a background, a photo, a logo or a poster: never a bare string path. The CMS
    turns `image` props into an upload field and enum props into a choice; a designer
    is never asked to type a path or a name.
-9. **Shared prop fragments** come from `site/blocks/lib/schema.ts` (`image`,
+8. **Shared prop fragments** come from `site/blocks/lib/schema.ts` (`image`,
    `link`, `anchor`); extend that file rather than redefining shapes per block.
 
 **Chrome** (header/footer) goes in `site/blocks/chrome.ts`, NOT the registry:
