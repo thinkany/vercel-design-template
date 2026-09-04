@@ -4167,6 +4167,44 @@ async function renderSiteSettings(host, data, st) {
   bp.input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveBlogPath(); } });
   bp.wrap.appendChild(bpStatus); wrap.appendChild(bp.wrap);
 
+  // Scripts: GTM + additional scripts with a placement. Published site only.
+  wrap.appendChild(siteEl("div", "drawer-sep"));
+  wrap.appendChild(siteEl("div", "sess-label", S.scriptsHeading));
+  wrap.appendChild(siteEl("div", "sess-desc", S.scriptsDesc));
+  const sc = JSON.parse(JSON.stringify((data.site && data.site.scripts) || { gtm: "", extra: [] }));
+  const scStatus = siteEl("div"); scStatus.style.cssText = "min-height:18px;";
+  let scTimer = null;
+  const saveScripts = () => { clearTimeout(scTimer); scTimer = setTimeout(async () => {
+    const r = await window.desktop.saveSiteScripts(sc); scStatus.innerHTML = "";
+    if (r && r.ok) siteFlash(scStatus, S.saved); else if (r && r.error) { const e = siteEl("div", "sess-desc", r.error); e.style.color = "#c0261e"; scStatus.appendChild(e); }
+  }, 1000); };
+  const code = (value, onInput, placeholder) => { const ta = document.createElement("textarea"); ta.className = "field site-code"; ta.spellcheck = false; ta.value = value || ""; if (placeholder) ta.placeholder = placeholder; ta.addEventListener("input", () => { onInput(ta.value); saveScripts(); }); return ta; };
+  const gtm = siteEl("div", "site-kv"); gtm.appendChild(siteEl("div", "k", S.gtm));
+  gtm.appendChild(code(sc.gtm, (v) => { sc.gtm = v; }, S.gtmPlaceholder)); gtm.appendChild(siteEl("div", "sess-desc", S.gtmHint));
+  wrap.appendChild(gtm);
+  const rep = siteEl("div", "site-kv"); rep.appendChild(siteEl("div", "k", S.extraScripts));
+  const repList = siteEl("div");
+  const paintScripts = () => {
+    repList.innerHTML = "";
+    sc.extra.forEach((x, i) => {
+      const card = siteEl("div", "site-item");
+      const head = siteEl("div", "site-item-head");
+      const name = document.createElement("input"); name.className = "field"; name.placeholder = S.scriptName; name.value = x.name || ""; name.style.cssText = "margin:0;flex:1;";
+      name.addEventListener("input", () => { x.name = name.value; saveScripts(); });
+      const place = document.createElement("select"); place.className = "field"; place.style.cssText = "margin:0;width:auto;";
+      [["head", S.placeHead], ["bodyStart", S.placeBodyStart], ["bodyEnd", S.placeBodyEnd]].forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; place.appendChild(o); });
+      place.value = x.placement || "head"; place.addEventListener("change", () => { x.placement = place.value; saveScripts(); });
+      const row = siteEl("div"); row.style.cssText = "display:flex;gap:6px;align-items:center;flex:1;";
+      row.append(name, place, siteTrashBtn(() => { sc.extra.splice(i, 1); saveScripts(); paintScripts(); }, S.removeScript));
+      head.appendChild(row); card.appendChild(head);
+      card.appendChild(code(x.code, (v) => { x.code = v; }, S.scriptPlaceholder));
+      repList.appendChild(card);
+    });
+    repList.appendChild(siteMini(S.addScript, () => { sc.extra.push({ name: "", placement: "head", code: "" }); paintScripts(); }));
+  };
+  paintScripts();
+  rep.appendChild(repList); wrap.appendChild(rep); wrap.appendChild(scStatus);
+
   wrap.appendChild(siteEl("div", "drawer-sep"));
   wrap.appendChild(siteEl("div", "sess-label", S.iconsHeading));
   wrap.appendChild(siteEl("div", "sess-desc", S.iconsDesc));

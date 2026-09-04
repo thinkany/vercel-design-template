@@ -141,6 +141,7 @@ contextBridge.exposeInMainWorld("desktop", {
   saveSiteSeo: (seo) => ipcRenderer.invoke("site:saveSeo", { seo }),
   setManageNav: (manageNav) => ipcRenderer.invoke("site:setManageNav", { manageNav }),
   setBlogPath: (path) => ipcRenderer.invoke("site:setBlogPath", { path }),
+  saveSiteScripts: (scripts) => ipcRenderer.invoke("site:saveScripts", { scripts }),
   getLlmsDefault: () => ipcRenderer.invoke("site:llmsDefault"),
   setCmsSettings: (patch) => ipcRenderer.invoke("cms:setSettings", patch),
   onSiteOff: (cb) => { const l = () => cb(); ipcRenderer.on("site:off", l); return () => ipcRenderer.removeListener("site:off", l); },

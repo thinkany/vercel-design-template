@@ -1499,7 +1499,7 @@ function readSiteContent(dir) {
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
     licensed: siteLicensed(), // the CMS drawer shows a licensing note instead of the editor when false
-    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
+    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, scripts: { gtm: (site.scripts && site.scripts.gtm) || "", extra: Array.isArray(site.scripts && site.scripts.extra) ? site.scripts.extra : [] }, seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
     pages, posts, ...(() => {
       const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {} };
       return {
@@ -1750,6 +1750,20 @@ ipcMain.handle("site:setBlogPath", (_e, { path: raw } = {}) => {
   const prev = blogPathOf(cur);
   const out = { ...cur, blog: { ...(cur.blog || {}), path: next } };
   try { fs.writeFileSync(p, JSON.stringify(out, null, 2) + "\n"); rewriteNavRoutes(currentProject, prev, next); return { ok: true, path: next }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+// Scripts (Settings): GTM + named scripts with a placement. Injected by the site
+// layout only on Vercel builds (the published site).
+ipcMain.handle("site:saveScripts", (_e, { scripts } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const sc = scripts && typeof scripts === "object" ? scripts : {};
+  const PLACES = new Set(["head", "bodyStart", "bodyEnd"]);
+  const extra = (Array.isArray(sc.extra) ? sc.extra : []).map((x) => x && typeof x === "object" ? { name: String(x.name || "").trim(), placement: PLACES.has(x.placement) ? x.placement : "head", code: String(x.code || "") } : null).filter((x) => x && (x.name || x.code.trim()));
+  const p = path.join(siteContentDir(currentProject), "site.json");
+  const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
+  const next = { ...cur, scripts: { gtm: String(sc.gtm || "").trim(), extra } };
+  try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, scripts: next.scripts }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle("site:llmsDefault", () => (currentProject ? generatedLlms(currentProject) : ""));

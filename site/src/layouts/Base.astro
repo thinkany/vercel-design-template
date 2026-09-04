@@ -32,6 +32,16 @@ const chromeProps = { siteName: siteConfig.clientName, logo: siteConfig.logo, na
 declare const __TA_FONT_PRELOAD__: string[] | null;
 const fontPreload: string[] | null = typeof __TA_FONT_PRELOAD__ !== "undefined" ? __TA_FONT_PRELOAD__ : null;
 const fontsHosted = Array.isArray(fontPreload);
+// Scripts (Settings → Scripts) go in ONLY when the build runs on Vercel, i.e. the
+// published site: never local dev, the local build check, or the design previews.
+const injectScripts = import.meta.env.VERCEL === "1" || process.env.VERCEL === "1";
+const gtmRaw = (site.scripts.gtm || "").trim();
+const gtmId = /^GTM-[A-Z0-9]+$/i.test(gtmRaw) ? gtmRaw.toUpperCase() : null;
+const gtmHead = !injectScripts ? "" : gtmId
+  ? `<!-- Google Tag Manager --><script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${gtmId}');</script><!-- End Google Tag Manager -->`
+  : gtmRaw;
+const gtmBody = injectScripts && gtmId ? `<!-- Google Tag Manager (noscript) --><noscript><iframe src="https://www.googletagmanager.com/ns.html?id=${gtmId}" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript><!-- End Google Tag Manager (noscript) -->` : "";
+const extra = (where: "head" | "bodyStart" | "bodyEnd") => (injectScripts ? site.scripts.extra.filter((s) => s.placement === where && s.code.trim()).map((s) => s.code).join("\n") : "");
 // Site icons from content/site.json (the CMS Settings tab); the scaffold's favicon.svg otherwise.
 const favicon = site.favicon.icon || "/favicon.svg";
 const faviconType = /\.svg$/i.test(favicon) ? "image/svg+xml" : /\.png$/i.test(favicon) ? "image/png" : /\.ico$/i.test(favicon) ? "image/x-icon" : undefined;
@@ -61,8 +71,12 @@ const faviconType = /\.svg$/i.test(favicon) ? "image/svg+xml" : /\.png$/i.test(f
     <!-- Marks JS as available BEFORE first paint, so data-reveal elements only
          start hidden when the observer below will actually reveal them. -->
     <script is:inline>document.documentElement.classList.add("js");</script>
+      <Fragment set:html={gtmHead} />
+    <Fragment set:html={extra("head")} />
   </head>
   <body class="bg-ta-surface text-ta-body font-ta-sans">
+    <Fragment set:html={gtmBody} />
+    <Fragment set:html={extra("bodyStart")} />
     <div class="@container relative flex min-h-screen w-full flex-col">
       {Header && (chrome.header?.hydrate ? <Header client:load {...chromeProps} /> : <Header {...chromeProps} />)}
       <main class="flex-1">
@@ -91,5 +105,6 @@ const faviconType = /\.svg$/i.test(favicon) ? "image/svg+xml" : /\.png$/i.test(f
         els.forEach((el) => el.classList.add("is-revealed"));
       }
     </script>
+    <Fragment set:html={extra("bodyEnd")} />
   </body>
 </html>

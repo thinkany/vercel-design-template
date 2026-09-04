@@ -35,6 +35,20 @@ export const siteSchema = z.object({
    * the page outline (top-level pages in order, their children as sub-links).
    */
   manageNav: z.boolean().default(true),
+  /**
+   * Scripts injected ONLY on the published site (a Vercel build), never in local dev,
+   * the local build check or the gated design previews. gtm: a GTM container id
+   * (GTM-XXXXXXX, both snippets are generated) or a pasted snippet (head). extra:
+   * named scripts with a placement.
+   */
+  scripts: z.object({
+    gtm: z.string().default(""),
+    extra: z.array(z.object({
+      name: z.string().default(""),
+      placement: z.enum(["head", "bodyStart", "bodyEnd"]).default("head"),
+      code: z.string().default(""),
+    })).default([]),
+  }).default({ gtm: "", extra: [] }),
   /** The posts directory: posts are listed at /<path> and served at /<path>/<post>. */
   blog: z.object({ path: z.string().default("blog") }).default({ path: "blog" }),
   /** Site icons (the CMS Settings tab): paths under public/, e.g. "/images/icon.svg". */
