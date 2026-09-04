@@ -21,7 +21,7 @@ interface Props {
   description?: string;
   seo?: Partial<Seo>;
 }
-const { title, description, seo, ld } = Astro.props as { title: string; description?: string; seo?: Record<string, unknown>; ld?: LdPage };
+const { title, description, seo, ld, ldBlocks } = Astro.props as { title: string; description?: string; seo?: Record<string, unknown>; ld?: LdPage; ldBlocks?: Record<string, unknown>[] };
 const siteName = site.seo.siteName || siteConfig.clientName;
 const meta = resolveSeo(seo, { title, description, siteName, separator: site.seo.separator });
 const canonical = meta.canonical || new URL(Astro.url.pathname, Astro.site).href;
@@ -50,7 +50,7 @@ const ldText = jsonLdText({
   siteUrl: Astro.site ? Astro.site.href.replace(/\/$/, "") : "",
   siteName, logo: siteConfig.logo || undefined, schema: site.seo.schema,
   url: canonical, title: (seo && (seo as { title?: string }).title) || title, description: meta.description, image,
-  page: ld || { kind: "page" }, custom: seo ? (seo as { jsonld?: string }).jsonld : undefined,
+  page: ld || { kind: "page" }, blocks: ldBlocks || [], custom: seo ? (seo as { jsonld?: string }).jsonld : undefined,
 });
 // Site icons from content/site.json (the CMS Settings tab); the scaffold's favicon.svg otherwise.
 const favicon = site.favicon.icon || "/favicon.svg";

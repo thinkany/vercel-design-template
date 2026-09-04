@@ -22,7 +22,7 @@ const jsonLdText = (Object.values(schemaFiles)[0] || {}).jsonLdText;
 type AnyRecord = Record<string, unknown>;
 type BlockInstance = { type: string; props?: AnyRecord };
 type PageDoc = { title?: string; slug?: string; parent?: string; order?: number; seo?: AnyRecord; blocks?: BlockInstance[] };
-type BlockDef = { name: string; props: { safeParse: (v: unknown) => { success: boolean; data?: AnyRecord; error?: { issues: { path: (string | number)[]; message: string }[] } } }; component: (props: AnyRecord) => ReactNode };
+type BlockDef = { name: string; props: { safeParse: (v: unknown) => { success: boolean; data?: AnyRecord; error?: { issues: { path: (string | number)[]; message: string }[] } } }; component: (props: AnyRecord) => ReactNode; schema?: (props: AnyRecord) => AnyRecord | AnyRecord[] | undefined };
 type ChromeModule = { Header?: ((p: AnyRecord) => ReactNode) | null; Footer?: ((p: AnyRecord) => ReactNode) | null; chrome?: { header?: BlockDef; footer?: BlockDef } };
 
 // content/site.json → { design, nav, footerLinks }
@@ -87,7 +87,7 @@ interface Props {
 // The design surface is one page, so per-page SEO is applied to the document when a
 // site page renders: title, description, keywords, Open Graph and Twitter tags. The
 // same values the site emits at build, so the local and gated previews match it.
-function applySeo(doc: PageDoc | null, pageId: string, pages: DesignPage[]) {
+function applySeo(doc: PageDoc | null, pageId: string, pages: DesignPage[], blockLd: AnyRecord[] = []) {
   const seo = (doc && doc.seo) || {};
   const siteName = (site.seo && site.seo.siteName) || siteConfig.clientName || "";
   const sep = (site.seo && site.seo.separator) || "|";
@@ -118,13 +118,15 @@ function applySeo(doc: PageDoc | null, pageId: string, pages: DesignPage[]) {
     const origin = (site.url || window.location.origin).replace(/\/$/, "");
     const route = pages.find((p) => p.id === pageId)?.route || "";
     const crumbs = pageId === "home" ? [] : [{ name: (pageDoc("home")?.title) || "Home", url: origin + "/" }, { name: base, url: origin + "/" + route }];
-    ld.textContent = jsonLdText({ siteUrl: origin, siteName, logo: siteConfig.logo || undefined, schema: site.seo && site.seo.schema, url: origin + "/" + route, title, description, image: image ? new URL(image, origin).href : undefined, page: { kind: "page", crumbs }, custom: seo.jsonld as string });
+    ld.textContent = jsonLdText({ siteUrl: origin, siteName, logo: siteConfig.logo || undefined, schema: site.seo && site.seo.schema, url: origin + "/" + route, title, description, image: image ? new URL(image, origin).href : undefined, page: { kind: "page", crumbs }, blocks: blockLd, custom: seo.jsonld as string });
   } else if (ld) ld.remove();
 }
 
 export function SitePage({ pageId, onNavigate, view, setView, orientation, setOrientation, capture }: Props) {
   const doc = pageDoc(pageId);
-  useEffect(() => { try { applySeo(doc, pageId, pages); } catch { /* headless capture */ } }, [doc, pageId, pages]);
+  // Entities the page's blocks declare (a FAQ block's questions), merged like the site does.
+  const blockLd = (doc?.blocks || []).flatMap((b) => { const def = blocks[b.type]; if (!def || !def.schema) return []; const parsed = def.props.safeParse(b.props || {}); if (!parsed.success || !parsed.data) return []; try { const s = def.schema(parsed.data); return Array.isArray(s) ? s : s ? [s] : []; } catch { return []; } });
+  useEffect(() => { try { applySeo(doc, pageId, pages, blockLd); } catch { /* headless capture */ } }, [doc, pageId, pages, JSON.stringify(blockLd)]);
   const pages = sitePages();
   const Header = chromeMod.Header || null;
   const Footer = chromeMod.Footer || null;

@@ -65,7 +65,7 @@ if (!post) {
     </article>
   </Base>
 ) : (
-  <Base title={data.title} seo={data.seo}>
+  <Base title={data.title} seo={data.seo} ldBlocks={rendered.flatMap((r) => r.schema || [])}>
     {rendered.map(({ component: Block, props }) => <Block {...props} />)}
   </Base>
 )}

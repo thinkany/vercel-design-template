@@ -33,6 +33,12 @@ export interface BlockDef<S extends ZodTypeAny = ZodTypeAny> {
   component: ComponentType<z.infer<S>>;
   /** Browser hydration, when the block needs it. Omit for static HTML. */
   hydrate?: Hydrate;
+  /**
+   * Structured data this block's content represents (schema.org entities, without
+   * @context). Gathered per page into the page's JSON-LD graph; entities that may
+   * appear only once per page (FAQPage) are merged across instances.
+   */
+  schema?: (props: z.infer<S>) => Record<string, unknown> | Record<string, unknown>[] | undefined;
 }
 
 /** Site chrome: the header/footer rendered around every page by the layout. */
@@ -117,5 +123,7 @@ export function resolveBlock(
       .join("\n");
     throw new Error(`${where}: block "${instance.type}" has invalid props:\n${issues}`);
   }
-  return { component: def.component, props: parsed.data, hydrate: def.hydrate };
+  let schema: Record<string, unknown>[] = [];
+  if (def.schema) { try { const s = def.schema(parsed.data); schema = Array.isArray(s) ? s : s ? [s] : []; } catch { schema = []; } }
+  return { component: def.component, props: parsed.data, hydrate: def.hydrate, schema };
 }

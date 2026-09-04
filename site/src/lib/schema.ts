@@ -31,8 +31,36 @@ export type LdInput = {
   description?: string;
   image?: string;         // absolute share image URL
   page: LdPage;
+  blocks?: Record<string, unknown>[]; // entities declared by the page's blocks (BlockDef.schema)
   custom?: string;        // the page's own JSON-LD (a string, validated on save)
 };
+
+// Types that may appear ONCE per page: instances merge into one node, their list
+// property concatenated (two FAQ blocks → one FAQPage with every question).
+const MERGE_ONCE: Record<string, string> = { FAQPage: "mainEntity", ItemList: "itemListElement" };
+
+/** Merge extra entities into a page graph: once-only types merged, duplicates by @id dropped. */
+export function mergeEntities(extras: Record<string, unknown>[]): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  const ids = new Set<string>();
+  const once = new Map<string, Record<string, unknown>>();
+  for (const e of extras) {
+    if (!e || typeof e !== "object") continue;
+    const type = String((e as { "@type"?: unknown })["@type"] || "");
+    const listKey = MERGE_ONCE[type];
+    if (listKey) {
+      const items = Array.isArray(e[listKey]) ? (e[listKey] as unknown[]) : [];
+      const cur = once.get(type);
+      if (cur) { (cur[listKey] as unknown[]).push(...items); }
+      else { const node = { ...e, [listKey]: [...items] }; once.set(type, node); out.push(node); }
+      continue;
+    }
+    const id = (e as { "@id"?: unknown })["@id"];
+    if (typeof id === "string") { if (ids.has(id)) continue; ids.add(id); }
+    out.push(e);
+  }
+  return out;
+}
 
 const abs = (base: string, p?: string) => (p ? (/^https?:/i.test(p) ? p : base.replace(/\/$/, "") + (p.startsWith("/") ? p : "/" + p)) : undefined);
 
@@ -66,9 +94,12 @@ export function buildJsonLd(i: LdInput): Record<string, unknown>[] {
       graph.push({ "@type": "BreadcrumbList", "@id": `${i.url}#breadcrumb`, itemListElement: i.page.crumbs.map((c, n) => ({ "@type": "ListItem", position: n + 1, name: c.name, item: c.url })) });
     }
   }
+  // Blocks' entities + the page's custom block, merged so once-only types stay single.
+  const extras: Record<string, unknown>[] = [...(i.blocks || [])];
   if (i.custom && i.custom.trim()) {
-    try { const c = JSON.parse(i.custom); if (Array.isArray(c)) graph.push(...c); else if (c && typeof c === "object") graph.push(c as Record<string, unknown>); } catch { /* validated on save; a bad value is skipped, never breaks the page */ }
+    try { const c = JSON.parse(i.custom); if (Array.isArray(c)) extras.push(...(c as Record<string, unknown>[])); else if (c && typeof c === "object") extras.push(c as Record<string, unknown>); } catch { /* validated on save; a bad value is skipped, never breaks the page */ }
   }
+  graph.push(...mergeEntities(extras));
   return graph;
 }
 
