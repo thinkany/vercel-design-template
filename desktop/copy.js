@@ -407,6 +407,7 @@ window.COPY = {
           { h: "Edit a page", items: ["<b>Title</b> and <b>Address</b> (the home page always lives at /).", "<b>Search &amp; sharing</b>: the search title, description, share image, and whether search engines may list the page.", "<b>Save page</b> writes the changes; the Site tab updates right away."] },
           { h: "Blocks", items: ["Reorder with the arrows, remove with ×, add one from the list at the bottom.", "<b>Edit content</b> opens a block’s text, images and lists. Images use the upload zone: drop a file, or choose one already in the project.", "Blocks come from the approved design. To change how a block looks, edit the design in the chat; to change what it says, edit here."] },
           { h: "Add or remove pages", items: ["Type a title in <b>Add a page</b>. Its address is made from the title; adjust it in the editor.", "<b>Delete page</b> removes its file. The home page can’t be deleted.", "A new page needs a link in <b>Navigation</b> to be reachable from the menu."] },
+          { h: "Nested pages", items: ["Drag a page onto another to nest it (<i>/about/island-guide</i>); drop it between pages to put it at that level. <b>Parent page</b> in the editor does the same.", "Menu links to a moved page are updated to its new address."] },
         ],
       },
       posts: {
@@ -455,6 +456,10 @@ window.COPY = {
     newPagePlaceholder: "Page title (e.g. About)",
     create: "Create",
     pageSettings: "Page settings",
+    pageSlugHint: "One word or hyphenated, no slashes. A nested page's full address adds its parent's, like /about/island-guide.",
+    pageParent: "Parent page",
+    pageParentNone: "None (top level)",
+    pageParentHint: "Nest this page under another. Its address becomes the parent's plus its own, and menu links to it are updated.",
     pageTitle: "Title",
     pageSlug: "Address",
     homeSlug: "/ (home)",

@@ -2,6 +2,7 @@
 // The generated llms.txt (llmstxt.org): a plain-text map of the site's public
 // pages and posts, used when content/site.json carries no custom text.
 import { getCollection } from "astro:content";
+import { pageRoute } from "./pages";
 import { siteConfig } from "@/config/site";
 
 export async function generatedLlms(siteUrl: URL | undefined) {
@@ -16,7 +17,7 @@ export async function generatedLlms(siteUrl: URL | undefined) {
     "",
     "## Pages",
     ...pages.map((p) => {
-      const slug = p.data.slug ?? (p.id === "home" ? "" : p.id);
+      const slug = pageRoute(p, pages);
       return line(p.data.title, abs(`/${slug}`), p.data.seo.description);
     }),
   ];

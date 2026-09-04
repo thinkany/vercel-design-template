@@ -2888,14 +2888,25 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
   }
 
   // Working copy; Save writes it. Deep-cloned so a cancelled edit changes nothing.
-  const draft = JSON.parse(JSON.stringify({ title: page.title, slug: page.slug, seo: page.seo || {}, blocks: page.blocks || [] }));
+  const draft = JSON.parse(JSON.stringify({ title: page.title, slug: page.slug, parent: page.parent || null, seo: page.seo || {}, blocks: page.blocks || [] }));
   let dirty = false;
   const markDirty = () => { dirty = true; saveBtn.disabled = false; };
   const body = siteEl("div"); body.style.marginTop = "10px";
 
   const ps = siteFold(COPY.site.pageSettings, "page-settings:" + page.id); body.appendChild(ps.sec);
   const t = siteField(COPY.site.pageTitle, draft.title); t.input.addEventListener("input", () => { draft.title = t.input.value; markDirty(); }); ps.body.appendChild(t.wrap);
-  if (page.id !== "home") { const sl = siteField(COPY.site.pageSlug, draft.slug || page.id); sl.input.addEventListener("input", () => { draft.slug = sl.input.value; markDirty(); }); ps.body.appendChild(sl.wrap); }
+  if (page.id !== "home") {
+    const sl = siteField(COPY.site.pageSlug, draft.slug || page.id, { hint: COPY.site.pageSlugHint }); sl.input.addEventListener("input", () => { draft.slug = sl.input.value; markDirty(); }); ps.body.appendChild(sl.wrap);
+    // Parent page: any page but home, itself, or one of its own descendants.
+    const all = (renderSitePage.pages || []);
+    const under = (id) => { let cur = all.find((x) => x.id === id); let g = 0; while (cur && cur.parent && g++ < 16) { if (cur.parent === page.id) return true; cur = all.find((x) => x.id === cur.parent); } return false; };
+    const pw = siteEl("div", "site-kv"); pw.appendChild(siteEl("div", "k", COPY.site.pageParent));
+    const psel = document.createElement("select"); psel.className = "field";
+    const o0 = document.createElement("option"); o0.value = ""; o0.textContent = COPY.site.pageParentNone; psel.appendChild(o0);
+    all.filter((x) => x.id !== "home" && x.id !== page.id && !under(x.id)).forEach((x) => { const o = document.createElement("option"); o.value = x.id; o.textContent = `${x.title}  ·  /${x.route || x.slug || x.id}`; psel.appendChild(o); });
+    psel.value = draft.parent || ""; psel.addEventListener("change", () => { draft.parent = psel.value || null; markDirty(); });
+    pw.appendChild(psel); pw.appendChild(siteEl("div", "sess-desc", COPY.site.pageParentHint)); ps.body.appendChild(pw);
+  }
 
   ps.body.appendChild(siteEl("div", "sess-label", COPY.site.seoHeading)).style.marginTop = "12px";
   const st = siteField(COPY.site.seoTitle, draft.seo.title, { hint: COPY.site.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; markDirty(); }); ps.body.appendChild(st.wrap);
@@ -3593,9 +3604,32 @@ function siteMediaFileUrl(url) {
 }
 
 // Everything in the project a link can point at, for the URL combo in Navigation.
+// Drag-and-drop for the Pages tree. Middle of a row = nest under that page; top or
+// bottom edge = the same level as that page. Home is the root: nothing nests under it.
+let pageDrag = null;
+function sitePageDraggable(row, p, pages, refresh) {
+  row.draggable = p.id !== "home";
+  const clear = () => row.classList.remove("drop-before", "drop-after", "drop-into");
+  const isDesc = (id, of) => { let cur = pages.find((x) => x.id === id); let g = 0; while (cur && cur.parent && g++ < 16) { if (cur.parent === of) return true; cur = pages.find((x) => x.id === cur.parent); } return false; };
+  const ok = () => pageDrag && pageDrag.id !== p.id && !isDesc(p.id, pageDrag.id);
+  const zone = (e) => { const r = row.getBoundingClientRect(); const y = (e.clientY - r.top) / r.height; if (p.id === "home") return y < 0.5 ? "before" : "after"; return y < 0.3 ? "before" : y > 0.7 ? "after" : "into"; };
+  row.addEventListener("dragstart", (e) => { pageDrag = p; row.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", p.id); } catch {} });
+  row.addEventListener("dragend", () => { pageDrag = null; row.classList.remove("dragging"); document.querySelectorAll(".site-list-row.drop-before,.site-list-row.drop-after,.site-list-row.drop-into").forEach((r) => r.classList.remove("drop-before", "drop-after", "drop-into")); });
+  row.addEventListener("dragover", (e) => { if (!ok()) return; e.preventDefault(); try { e.dataTransfer.dropEffect = "move"; } catch {} const z = zone(e); clear(); row.classList.add("drop-" + z); });
+  row.addEventListener("dragleave", clear);
+  row.addEventListener("drop", async (e) => {
+    if (!ok()) return; e.preventDefault(); const z = zone(e); clear();
+    const moved = pageDrag; pageDrag = null;
+    const parent = z === "into" ? p.id : (p.parent || null);
+    if ((moved.parent || null) === parent) return;
+    const r = await window.desktop.moveSitePage(moved.id, parent);
+    if (r && r.ok) refresh(); else if (r && r.error) alert(r.error);
+  });
+}
+
 function siteLinkOptions(data, posts, ctx) {
   const out = [];
-  data.pages.forEach((p) => out.push({ group: "pages", label: p.title, href: "/" + (p.id === "home" ? "" : (p.slug || p.id)) }));
+  data.pages.forEach((p) => out.push({ group: "pages", label: p.title, href: "/" + (p.id === "home" ? "" : (p.route || p.slug || p.id)) }));
   // Home-page sections: a block instance that sets its own id (nav anchors), plus any
   // anchor the nav already uses (blocks whose id is a schema default don't expose it).
   const home = data.pages.find((p) => p.id === "home");
@@ -4026,8 +4060,20 @@ async function renderSite(body) {
   if (siteRailState.tab === "pages") {
     const { left, right } = two();
     const cur = sel && sel.kind === "page" && data.pages.some((p) => p.id === sel.id) ? sel : (data.pages[0] ? { kind: "page", id: data.pages[0].id } : null);
-    data.pages.forEach((p) => left.appendChild(listRow(p.title, p.id === "home" ? COPY.site.homeSlug : "/" + (p.slug || p.id), cur && cur.id === p.id, () => { siteRailState.selected = { kind: "page", id: p.id }; refresh(); })));
+    // A tree: children indented under their parent (home first, then by title). Drag a
+    // page onto another to nest it; drop between pages to sit at that level.
+    const kids = (pid) => data.pages.filter((p) => (p.parent || null) === pid && p.id !== "home").sort((a, b) => a.title.localeCompare(b.title));
+    const walk = (pid, depth) => kids(pid).forEach((p) => { pageRow(p, depth); walk(p.id, depth + 1); });
+    const pageRow = (p, depth) => {
+      const row = listRow(p.title, p.id === "home" ? COPY.site.homeSlug : "/" + (p.route || p.slug || p.id), cur && cur.id === p.id, () => { siteRailState.selected = { kind: "page", id: p.id }; refresh(); });
+      row.style.marginLeft = depth * 14 + "px";
+      sitePageDraggable(row, p, data.pages, refresh);
+      left.appendChild(row);
+    };
+    const home = data.pages.find((p) => p.id === "home"); if (home) pageRow(home, 0);
+    walk(null, 0);
     left.appendChild(addRow(COPY.site.newPagePlaceholder, COPY.site.create, async (t) => { const res = await window.desktop.createSitePage(t); if (res && res.ok) { siteRailState.selected = { kind: "page", id: res.page.id }; refresh(); } }));
+    renderSitePage.pages = data.pages; // for the parent picker
     if (cur) right.appendChild(renderSitePage(data.pages.find((p) => p.id === cur.id), data.blocks, refresh, true));
   } else if (siteRailState.tab === "posts") {
     const { left, right } = two();

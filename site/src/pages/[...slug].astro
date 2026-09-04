@@ -12,12 +12,13 @@
 import { getCollection } from "astro:content";
 import Base from "../layouts/Base.astro";
 import { resolveBlock } from "../lib/blocks";
+import { pageRoute } from "../lib/pages";
 import { blocks } from "../../blocks";
 
 export async function getStaticPaths() {
   const pages = await getCollection("pages");
   return pages.map((page) => {
-    const slug = page.data.slug ?? (page.id === "home" ? "" : page.id);
+    const slug = pageRoute(page, pages); // parent chain: "about/island-guide"
     return { params: { slug: slug || undefined }, props: { page } };
   });
 }

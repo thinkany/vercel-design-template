@@ -21,8 +21,10 @@ const pages = defineCollection({
   loader: glob({ pattern: "**/*.json", base: "../content/pages" }),
   schema: z.object({
     title: z.string(),
-    /** URL path without leading slash. Omit (or "") for the home page. Defaults to the file name. */
+    /** URL segment without slashes. Omit (or "") for the home page. Defaults to the file name. */
     slug: z.string().optional(),
+    /** Parent page id: this page lives under it ("about" + slug "team" → /about/team). */
+    parent: z.string().optional(),
     seo: seoFields.default({}),
     blocks: z.array(blockInstance).default([]),
   }),

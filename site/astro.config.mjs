@@ -40,11 +40,11 @@ function noindexPaths() {
   const pagesDir = path.join(repoRoot, "content", "pages");
   const postsDir = path.join(repoRoot, "content", "posts");
   try {
-    for (const f of fs.readdirSync(pagesDir)) {
-      if (!f.endsWith(".json")) continue;
-      const d = JSON.parse(fs.readFileSync(path.join(pagesDir, f), "utf8"));
-      if (d && d.seo && d.seo.noindex) { const id = f.replace(/\.json$/, ""); out.add("/" + (d.slug ?? (id === "home" ? "" : id))); }
-    }
+    const docs = {};
+    for (const f of fs.readdirSync(pagesDir)) { if (f.endsWith(".json")) { try { docs[f.replace(/\.json$/, "")] = JSON.parse(fs.readFileSync(path.join(pagesDir, f), "utf8")) || {}; } catch {} } }
+    // Route = parent chain (mirrors site/src/lib/pages.ts, which can't be imported here).
+    const route = (id) => { const parts = []; let cur = id, g = 0; while (cur && docs[cur] && g++ < 16) { if (cur === "home") break; parts.unshift(docs[cur].slug ?? cur); cur = docs[cur].parent; } return parts.join("/"); };
+    for (const id of Object.keys(docs)) { const d = docs[id]; if (d && d.seo && d.seo.noindex) out.add("/" + route(id)); }
   } catch { /* no pages dir */ }
   try {
     for (const f of fs.readdirSync(postsDir)) {

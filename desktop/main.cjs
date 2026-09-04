@@ -1485,9 +1485,12 @@ function readSiteContent(dir) {
     pages = fs.readdirSync(pagesDir).filter((f) => f.endsWith(".json")).sort().map((f) => {
       const id = f.replace(/\.json$/, "");
       const data = readJsonFile(path.join(pagesDir, f)) || {};
-      return { id, title: data.title || id, slug: data.slug ?? (id === "home" ? "" : id), seo: data.seo || {}, blocks: Array.isArray(data.blocks) ? data.blocks : [] };
+      return { id, title: data.title || id, slug: data.slug ?? (id === "home" ? "" : id), parent: typeof data.parent === "string" ? data.parent : null, seo: data.seo || {}, blocks: Array.isArray(data.blocks) ? data.blocks : [] };
     });
   } catch { /* no pages dir */ }
+  // Full routes from the parent chain; a parent that doesn't exist is ignored.
+  const byId = Object.fromEntries(pages.map((p) => [p.id, p]));
+  for (const p of pages) { if (p.parent && !byId[p.parent]) p.parent = null; p.route = pageRouteOf(p.id, byId); }
   // Home first, then alphabetical.
   pages.sort((a, b) => (a.id === "home" ? -1 : b.id === "home" ? 1 : a.title.localeCompare(b.title)));
   let posts = 0;
@@ -1559,22 +1562,73 @@ ipcMain.handle("site:content", () => {
 });
 // Save a page. `data` is the whole page document ({ title, slug, seo, blocks });
 // the block props are written as given, the build validates them.
+// Route = parent chain (mirrors site/src/lib/pages.ts).
+function pageRouteOf(id, byId) { const parts = []; let cur = id, g = 0; while (cur && byId[cur] && g++ < 16) { if (cur === "home") break; parts.unshift(byId[cur].slug ?? cur); cur = byId[cur].parent; } return parts.join("/"); }
+function readPagesIndex(dir) {
+  const pagesDir = path.join(siteContentDir(dir), "pages"); const byId = {};
+  try { for (const f of fs.readdirSync(pagesDir)) { if (!f.endsWith(".json")) continue; const id = f.replace(/\.json$/, ""); const d = readJsonFile(path.join(pagesDir, f)) || {}; byId[id] = { id, slug: d.slug ?? (id === "home" ? "" : id), parent: typeof d.parent === "string" ? d.parent : null }; } } catch {}
+  return byId;
+}
+// Can `id` live under `parent`? Not home, not itself, not one of its own descendants.
+function validParent(id, parent, byId) {
+  if (!parent) return { ok: true };
+  if (id === "home") return { ok: false, error: "The home page can't be moved under another page." };
+  if (parent === "home") return { ok: false, error: "Pages can't be nested under the home page." };
+  if (!byId[parent]) return { ok: false, error: "That parent page doesn't exist." };
+  let cur = parent, g = 0; while (cur && g++ < 16) { if (cur === id) return { ok: false, error: "A page can't be nested under itself." }; cur = byId[cur].parent; }
+  return { ok: true };
+}
+// A route change (new slug or parent) updates menu links that pointed at the old one.
+function rewriteNavRoutes(dir, oldRoute, newRoute) {
+  if (oldRoute === newRoute) return;
+  const p = path.join(siteContentDir(dir), "site.json"); const site = readJsonFile(p); if (!site) return;
+  const from = "/" + oldRoute, to = "/" + newRoute; let changed = false;
+  const fix = (l) => { if (!l || typeof l.href !== "string") return; if (l.href === from || l.href.startsWith(from + "#")) { l.href = to + l.href.slice(from.length); changed = true; } };
+  for (const it of site.nav || []) { fix(it); for (const s of it.links || []) fix(s); for (const c of it.columns || []) { for (const s of c.links || []) fix(s); if (c.feature && c.feature.link) fix(c.feature.link); } }
+  for (const l of site.footerLinks || []) fix(l);
+  if (changed) fs.writeFileSync(p, JSON.stringify(site, null, 2) + "\n");
+}
+// Drag-and-drop in the Pages list: put a page under a parent (null = top level).
+ipcMain.handle("site:movePage", (_e, { id, parent } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!validPageId(id)) return { ok: false, error: "Bad page id." };
+  const byId = readPagesIndex(currentProject); if (!byId[id]) return { ok: false, error: "No such page." };
+  const target = parent && validPageId(parent) ? parent : null;
+  const v = validParent(id, target, byId); if (!v.ok) return v;
+  const doc = readJsonFile(pageFile(currentProject, id)) || {};
+  const oldRoute = pageRouteOf(id, byId);
+  if (target) doc.parent = target; else delete doc.parent;
+  byId[id].parent = target;
+  const sib = Object.values(byId).find((q) => q.id !== id && (q.parent || null) === target && q.slug === byId[id].slug);
+  if (sib) return { ok: false, error: `Another page there already uses the address "${byId[id].slug}".` };
+  try { fs.writeFileSync(pageFile(currentProject, id), JSON.stringify(doc, null, 2) + "\n"); rewriteNavRoutes(currentProject, oldRoute, pageRouteOf(id, byId)); return { ok: true }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
 ipcMain.handle("site:savePage", (_e, { id, data } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (!validPageId(id)) return { ok: false, error: "Bad page id." };
   if (!data || typeof data !== "object" || typeof data.title !== "string" || !data.title.trim()) return { ok: false, error: "A page needs a title." };
+  const byId = readPagesIndex(currentProject);
+  const parent = typeof data.parent === "string" && data.parent && validPageId(data.parent) ? data.parent : null;
+  const pv = validParent(id, parent, byId); if (!pv.ok) return pv;
+  const oldRoute = byId[id] ? pageRouteOf(id, byId) : null;
   const doc = {
     title: data.title.trim(),
     slug: id === "home" ? "" : slugifyId(data.slug ?? id),
+    ...(parent ? { parent } : {}),
     seo: data.seo && typeof data.seo === "object" ? data.seo : {},
     blocks: Array.isArray(data.blocks) ? data.blocks.filter((b) => b && typeof b.type === "string").map((b) => ({ type: b.type, props: pruneEmptyProps(b.props && typeof b.props === "object" ? b.props : {}) })) : [],
   };
   // Drop empty SEO strings so defaults apply.
   for (const k of Object.keys(doc.seo)) if (doc.seo[k] === "" || doc.seo[k] == null) delete doc.seo[k];
+  const sib = Object.values(byId).find((q) => q.id !== id && (q.parent || null) === parent && q.slug === doc.slug);
+  if (sib) return { ok: false, error: `Another page there already uses the address "${doc.slug}".` };
   try {
     fs.mkdirSync(path.dirname(pageFile(currentProject, id)), { recursive: true });
     fs.writeFileSync(pageFile(currentProject, id), JSON.stringify(doc, null, 2) + "\n");
+    if (oldRoute != null) { byId[id] = { id, slug: doc.slug, parent }; rewriteNavRoutes(currentProject, oldRoute, pageRouteOf(id, byId)); }
     return { ok: true, page: { id, ...doc } };
   } catch (e) { return { ok: false, error: e.message }; }
 });

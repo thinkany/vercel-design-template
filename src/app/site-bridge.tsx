@@ -19,7 +19,7 @@ import { siteConfig } from "@/config/site";
 
 type AnyRecord = Record<string, unknown>;
 type BlockInstance = { type: string; props?: AnyRecord };
-type PageDoc = { title?: string; slug?: string; seo?: AnyRecord; blocks?: BlockInstance[] };
+type PageDoc = { title?: string; slug?: string; parent?: string; seo?: AnyRecord; blocks?: BlockInstance[] };
 type BlockDef = { name: string; props: { safeParse: (v: unknown) => { success: boolean; data?: AnyRecord; error?: { issues: { path: (string | number)[]; message: string }[] } } }; component: (props: AnyRecord) => ReactNode };
 type ChromeModule = { Header?: ((p: AnyRecord) => ReactNode) | null; Footer?: ((p: AnyRecord) => ReactNode) | null; chrome?: { header?: BlockDef; footer?: BlockDef } };
 
@@ -46,11 +46,11 @@ function pageIdOf(file: string) { return file.replace(/^.*\//, "").replace(/\.js
 
 /** The site's pages as design pages, so App/export/nav enumerate them. */
 export function sitePages(): DesignPage[] {
-  const out = Object.entries(pageFiles).map(([file, doc]) => {
-    const id = pageIdOf(file);
-    const route = doc.slug ?? (id === "home" ? "" : id);
-    return { id, route, name: doc.title || id, component: "__site__" };
-  });
+  const docs: Record<string, PageDoc> = {};
+  for (const [file, doc] of Object.entries(pageFiles)) docs[pageIdOf(file)] = doc;
+  // Route = the parent chain's slugs (mirrors site/src/lib/pages.ts).
+  const route = (id: string) => { const parts: string[] = []; let cur: string | undefined = id; let g = 0; while (cur && docs[cur] && g++ < 16) { if (cur === "home") break; parts.unshift(docs[cur].slug ?? cur); cur = docs[cur].parent; } return parts.join("/"); };
+  const out = Object.keys(docs).map((id) => ({ id, route: route(id), name: docs[id].title || id, component: "__site__" }));
   out.sort((a, b) => (a.id === "home" ? -1 : b.id === "home" ? 1 : a.name.localeCompare(b.name)));
   return out;
 }
@@ -96,7 +96,7 @@ export function SitePage({ pageId, onNavigate, view, setView, orientation, setOr
     const href = a.getAttribute("href") || "";
     const anchor = href.match(/^\/?#([A-Za-z0-9_-]+)$/);
     if (anchor) { e.preventDefault(); document.getElementById(anchor[1])?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
-    const internal = href.match(/^\/([A-Za-z0-9_-]*)(?:#([A-Za-z0-9_-]+))?$/);
+    const internal = href.match(/^\/([A-Za-z0-9_\-/]*)(?:#([A-Za-z0-9_-]+))?$/);
     if (internal) {
       const target = pages.find((p) => p.route === internal[1]);
       if (target) {
