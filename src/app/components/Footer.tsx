@@ -42,7 +42,8 @@ export function Footer({ onNavigate }: { onNavigate: (page: string) => void }) {
               else { const last = groups[groups.length - 1]; if (last && !last.heading) last.links.push(it); else groups.push({ links: [it] }); }
               return groups;
             }, []).map((g, i) => (
-              <div key={(g.heading ? g.heading.label : "links") + i} className="flex flex-col gap-2">
+              // A column stacks under its heading; a run of plain links sits side by side in its slot.
+              <div key={(g.heading ? g.heading.label : "links") + i} className={g.heading ? "flex flex-col gap-2" : "flex flex-wrap items-start gap-x-6 gap-y-2"}>
                 {g.heading && (g.heading.href || g.heading.page
                   ? render(g.heading, "font-ta-sans text-[11px] tracking-[0.14em] uppercase text-ta-ink font-semibold cursor-pointer no-underline")
                   : <div className="font-ta-sans text-[11px] tracking-[0.14em] uppercase text-ta-ink font-semibold">{g.heading.label}</div>)}
