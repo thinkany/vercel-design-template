@@ -1572,7 +1572,33 @@ function pruneEmptyProps(v) {
 }
 function validPageId(id) { return typeof id === "string" && /^[a-z0-9][a-z0-9-]*$/.test(id); }
 
+// ---- Trash (.thinkany/trash) --------------------------------------------------
+// Deleting a page, post, entry, form or image moves it here; Settings → Trash lists
+// what's there with Restore and Delete forever. Old items go after 30 days.
+const trash = require("./trash.cjs");
+const trashPurged = new Set(); // projects purged this session
+function purgeTrashOnce(dir) { if (!dir || trashPurged.has(dir)) return; trashPurged.add(dir); try { const n = trash.purgeOld(dir); if (n) console.log(`[trash] ${n} item(s) older than ${trash.TTL_DAYS} days removed`); } catch {} }
+ipcMain.handle("trash:list", () => (currentProject ? { items: trash.list(currentProject) } : { items: [] }));
+ipcMain.handle("trash:restore", (_e, { id } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const r = trash.restore(currentProject, String(id || ""));
+  if (r.error) return { ok: false, error: r.error };
+  return { ok: true, kind: r.item.kind, title: r.item.title, renamed: r.renamed, to: path.relative(currentProject, r.to) };
+});
+ipcMain.handle("trash:delete", (_e, { id } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  return trash.remove(currentProject, String(id || ""));
+});
+ipcMain.handle("trash:empty", () => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  return trash.empty(currentProject);
+});
+
 ipcMain.handle("site:content", () => {
+  purgeTrashOnce(currentProject);
   if (!currentProject) return { ready: false, reason: "no-project", pages: [], blocks: [], site: { nav: [], footerLinks: [] } };
   return readSiteContent(currentProject);
 });
@@ -1701,7 +1727,7 @@ ipcMain.handle("site:deletePage", (_e, { id } = {}) => {
   if (!validPageId(id) || id === "home") return { ok: false, error: "The home page can't be deleted." };
   const kids = Object.values(readPagesIndex(currentProject)).filter((q) => q.parent === id);
   if (kids.length) return { ok: false, error: `This page has ${kids.length === 1 ? "a child page" : `${kids.length} child pages`}. Move or delete them first.` };
-  try { fs.rmSync(pageFile(currentProject, id), { force: true }); return { ok: true }; }
+  try { const byId = readPagesIndex(currentProject); const pg = byId[id]; trash.moveToTrash(currentProject, pageFile(currentProject, id), { kind: "page", title: (pg && pg.title) || id, meta: { id } }); return { ok: true, trashed: true }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
 // Site-level settings: nav + footer links (the pinned design + url are managed by
@@ -1948,7 +1974,7 @@ ipcMain.handle("site:deletePost", (_e, { id } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (!validPageId(id)) return { ok: false, error: "Bad post id." };
-  try { fs.rmSync(postFile(currentProject, id), { force: true }); return { ok: true }; }
+  try { const t = (readTextSafe(postFile(currentProject, id)).match(/^title:\s*"?([^"\n]+)"?/m) || [])[1]; trash.moveToTrash(currentProject, postFile(currentProject, id), { kind: "post", title: (t || id).trim(), meta: { id } }); return { ok: true, trashed: true }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
 
@@ -2068,7 +2094,7 @@ ipcMain.handle("site:deleteEntry", (_e, { key, id } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (!validTypeKey(key) || !validPageId(id)) return { ok: false, error: "Bad type or entry id." };
-  try { fs.rmSync(entryFile(currentProject, key, id), { force: true }); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
+  try { const d = readJsonFile(entryFile(currentProject, key, id)) || {}; const t = readTypes(currentProject).find((x) => x.key === key); trash.moveToTrash(currentProject, entryFile(currentProject, key, id), { kind: "entry", title: d.title || id, meta: { key, id, typeLabel: t ? (t.singular || t.label) : key } }); return { ok: true, trashed: true }; } catch (e) { return { ok: false, error: e.message }; }
 });
 
 // ---- Forms (content/forms/<id>.json) -----------------------------------------
@@ -2238,7 +2264,7 @@ ipcMain.handle("site:deleteForm", (_e, { id } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (!validPageId(id)) return { ok: false, error: "Bad form id." };
-  try { fs.rmSync(formFile(currentProject, id), { force: true }); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
+  try { const d = readJsonFile(formFile(currentProject, id)) || {}; trash.moveToTrash(currentProject, formFile(currentProject, id), { kind: "form", title: d.name || id, meta: { id } }); return { ok: true, trashed: true }; } catch (e) { return { ok: false, error: e.message }; }
 });
 
 // ---- Phone upload (QR code, local network) ------------------------------------
@@ -2461,7 +2487,7 @@ ipcMain.handle("media:delete", (_e, { rel } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (typeof rel !== "string" || rel.includes("..") || path.isAbsolute(rel)) return { ok: false, error: "Bad path." };
-  try { fs.rmSync(path.join(mediaDir(currentProject), rel), { force: true }); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
+  try { trash.moveToTrash(currentProject, path.join(mediaDir(currentProject), rel), { kind: "image", title: path.basename(rel), meta: { rel } }); return { ok: true, trashed: true }; } catch (e) { return { ok: false, error: e.message }; }
 });
 
 // ---- Site IPC ----------------------------------------------------------------

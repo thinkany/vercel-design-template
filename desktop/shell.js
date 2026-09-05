@@ -3192,8 +3192,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
     // Delete only a page without children, so none are orphaned.
     const kids = (renderSitePage.pages || []).filter((x) => x.parent === page.id);
     const del = siteMini(COPY.site.deletePage, async () => {
-      if (!confirm(COPY.site.deleteConfirm(page.title))) return;
-      const res = await window.desktop.deleteSitePage(page.id);
+      const res = await window.desktop.deleteSitePage(page.id); // moves to Trash (Settings), so no confirm
       if (res && res.ok) { siteRailState.selected = null; refresh(); }
       else if (res && res.error) alert(res.error);
     }, { danger: true, disabled: kids.length > 0, title: kids.length ? COPY.site.deletePageHasChildren(kids.length) : "" });
@@ -3257,8 +3256,7 @@ function renderSitePost(post, refresh) {
   flipBtn.addEventListener("click", () => doSave(flipBtn, !draft.draft));
   actions.append(status, saveBtn, flipBtn);
   actions.appendChild(siteMini(S.deletePost, async () => {
-    if (!confirm(S.deletePostConfirm(post.title))) return;
-    const res = await window.desktop.deleteSitePost(post.id);
+    const res = await window.desktop.deleteSitePost(post.id); // moves to Trash
     if (res && res.ok) { siteRailState.selected = null; refresh(); }
   }, { danger: true }));
   card.appendChild(actions);
@@ -3390,8 +3388,7 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   flipBtn.addEventListener("click", () => doSave(flipBtn, !isDraft));
   actions.appendChild(flipBtn);
   actions.appendChild(siteMini(S.deleteEntry, async () => {
-    if (!confirm(S.deleteEntryConfirm(entry.title))) return;
-    const res = await window.desktop.deleteSiteEntry(type.key, entry.id);
+    const res = await window.desktop.deleteSiteEntry(type.key, entry.id); // moves to Trash
     if (res && res.ok) { siteRailState.selected = null; refresh(); }
   }, { danger: true }));
   card.appendChild(actions);
@@ -3870,8 +3867,7 @@ function renderSiteFormEditor(form, ctx, refresh) {
   });
   actions.appendChild(saveBtn);
   actions.appendChild(siteMini(S.deleteForm, async () => {
-    if (!confirm(S.deleteFormConfirm(form.name, used.length))) return;
-    const res = await window.desktop.deleteSiteForm(form.id);
+    const res = await window.desktop.deleteSiteForm(form.id); // moves to Trash
     if (res && res.ok) { siteRailState.selected = null; refresh(); }
   }, { danger: true }));
   card.appendChild(actions);
@@ -3983,8 +3979,7 @@ function openMediaPicker(current) {
         editBtn.addEventListener("click", (e) => { e.stopPropagation(); startRename(); });
         delBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
-          if (!confirm(M.deleteConfirm(it.name))) return;
-          const r = await window.desktop.deleteMedia(it.rel);
+          const r = await window.desktop.deleteMedia(it.rel); // moves to Trash (Settings)
           if (r && r.ok) { items = items.filter((x) => x !== it); if (selected === it.url) { selected = null; useBtn.disabled = true; } paint(); }
         });
         tile.addEventListener("click", () => { if (renaming) return; selected = it.url; useBtn.disabled = false; paint(); });
@@ -4827,9 +4822,52 @@ async function renderSiteSettings(host, data, st) {
     row.appendChild(a); wrap.appendChild(row);
   } else wrap.appendChild(siteEl("div", "sess-desc", COPY.site.previewNote));
 
+  // Trash: everything deleted in the last 30 days, with Restore and Delete forever.
+  wrap.appendChild(siteEl("div", "drawer-sep"));
+  wrap.appendChild(siteEl("div", "sess-label", S.trashHeading));
+  wrap.appendChild(siteEl("div", "sess-desc", S.trashDesc));
+  wrap.appendChild(await renderTrash(S));
+
   wrap.appendChild(siteEl("div", "drawer-sep"));
   wrap.appendChild(enableRow());
   siteAccordionize(wrap);
+}
+
+async function renderTrash(S) {
+  const host = siteEl("div");
+  const paint = async () => {
+    host.innerHTML = "";
+    const { items } = await window.desktop.getTrash().catch(() => ({ items: [] }));
+    if (!items.length) { host.appendChild(siteEl("div", "sess-desc", S.trashEmpty)); return; }
+    const note = siteEl("div", "sess-desc"); note.style.minHeight = "0";
+    items.forEach((it) => {
+      const row = siteEl("div", "site-list-row"); row.style.cursor = "default";
+      const kind = S.trashKinds[it.kind] || S.trashKinds.file;
+      const title = siteEl("div", "site-page-title", it.title); title.style.flex = "1"; title.style.minWidth = "0";
+      let when = ""; try { when = new Date(it.deletedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }); } catch {}
+      const sub = siteEl("div", "site-page-slug", `${kind}${it.meta && it.meta.typeLabel ? " · " + it.meta.typeLabel : ""} · ${S.trashDeleted(when)}`);
+      const restore = siteMini(S.trashRestore, async () => {
+        restore.disabled = true;
+        const r = await window.desktop.restoreTrash(it.id);
+        if (r && r.ok) { note.textContent = r.renamed ? S.trashRestoredRenamed(r.title, r.to.replace(/^.*\//, "")) : S.trashRestored(r.title); await paint(); host.prepend(note); }
+        else { restore.disabled = false; note.textContent = (r && r.error) || "Couldn't restore it."; }
+      });
+      const forever = siteTrashBtn(async () => {
+        if (!confirm(S.trashDeleteForeverConfirm(it.title))) return;
+        await window.desktop.deleteTrash(it.id); await paint();
+      }, S.trashDeleteForever);
+      row.append(title, sub, restore, forever);
+      host.appendChild(row);
+    });
+    const all = siteMini(S.trashEmptyAll, async () => {
+      if (!confirm(S.trashEmptyConfirm(items.length))) return;
+      await window.desktop.emptyTrash(); await paint();
+    }, { danger: true });
+    all.style.marginTop = "6px";
+    host.appendChild(all);
+  };
+  await paint();
+  return host;
 }
 
 // Settings sections fold. Each `.sess-label` heading starts a section (its content
