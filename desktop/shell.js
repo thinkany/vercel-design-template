@@ -3960,6 +3960,99 @@ async function phonePanel({ target, title, lead, note, receivedText, onReceived,
   return { el: wrap, close };
 }
 
+// One image tile, shared by the picker and the Media tab: thumbnail, name and size,
+// rename and delete on hover (rename in place; delete moves to Trash). `it` is
+// mutated on rename so callers keep a live record.
+function mediaTile(it, { selected = false, onSelect, onOpen, onRenamed, onDeleted } = {}) {
+  const M = COPY.site.media;
+  const tile = siteEl("div", "media-tile" + (selected ? " active" : "")); tile.tabIndex = 0; tile.setAttribute("role", "button");
+  const img = document.createElement("img"); img.src = it.file; img.alt = it.name; img.loading = "lazy";
+  const meta = siteEl("div", "media-meta");
+  const nameEl = siteEl("div", "", it.name);
+  meta.appendChild(nameEl);
+  meta.appendChild(siteEl("div", "muted", (it.width ? M.dims(it.width, it.height) + " · " : "") + Math.max(1, Math.round(it.size / 1024)) + " KB"));
+  const acts = siteEl("div", "media-acts");
+  const editBtn = document.createElement("button"); editBtn.type = "button"; editBtn.title = M.rename; editBtn.setAttribute("aria-label", M.rename);
+  editBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+  const delBtn = document.createElement("button"); delBtn.type = "button"; delBtn.className = "danger"; delBtn.title = M.delete; delBtn.setAttribute("aria-label", M.delete);
+  delBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+  acts.append(editBtn, delBtn);
+  tile.append(img, meta, acts);
+  let renaming = false;
+  const startRename = () => {
+    if (renaming) return; renaming = true;
+    const ext = it.name.includes(".") ? it.name.slice(it.name.lastIndexOf(".")) : "";
+    const inp = document.createElement("input"); inp.className = "field"; inp.value = ext ? it.name.slice(0, -ext.length) : it.name; inp.title = M.renameHint;
+    const finish = async (commit) => {
+      if (!renaming) return; renaming = false;
+      const want = inp.value.trim();
+      if (!commit || !want || want + ext === it.name) { nameEl.textContent = it.name; return; }
+      const r = await window.desktop.renameMedia(it.rel, want + ext);
+      if (r && r.ok) { it.rel = r.rel; it.url = r.url; it.name = r.renamedTo; it.file = it.file.replace(/[^/]+$/, encodeURIComponent(r.renamedTo)); nameEl.textContent = it.name; if (onRenamed) onRenamed(r); }
+      else { nameEl.textContent = it.name; alert((r && r.error) || "Couldn't rename it."); }
+    };
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); finish(true); } else if (e.key === "Escape") { e.preventDefault(); finish(false); } e.stopPropagation(); });
+    inp.addEventListener("blur", () => finish(true));
+    inp.addEventListener("click", (e) => e.stopPropagation());
+    nameEl.textContent = ""; nameEl.appendChild(inp); inp.focus(); inp.select();
+  };
+  editBtn.addEventListener("click", (e) => { e.stopPropagation(); startRename(); });
+  delBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (!(await askConfirm({ title: COPY.site.deleteTitle, message: M.deleteConfirm(it.name), okLabel: M.delete, danger: true }))) return;
+    const r = await window.desktop.deleteMedia(it.rel); // moves to Trash (Settings)
+    if (r && r.ok && onDeleted) onDeleted();
+  });
+  if (onSelect) {
+    tile.addEventListener("click", () => { if (!renaming) onSelect(); });
+    tile.addEventListener("keydown", (e) => { if (renaming) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } });
+  }
+  if (onOpen) tile.addEventListener("dblclick", () => { if (!renaming) onOpen(); });
+  return tile;
+}
+
+// The Media tab: the whole library, with add, from-phone, filter, rename and delete.
+async function renderSiteMedia(body) {
+  const M = COPY.site.media;
+  const wrap = siteEl("div"); body.appendChild(wrap);
+  wrap.appendChild(siteEl("div", "sess-desc", COPY.site.mediaTabDesc));
+  const bar = siteEl("div", "site-media-bar");
+  const filterIn = document.createElement("input"); filterIn.className = "field"; filterIn.placeholder = M.filter; filterIn.style.marginBottom = "0";
+  const upBtn = siteEl("button", "panelbtn", M.upload); upBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+  const phoneBtn = siteEl("button", "panelbtn", M.fromPhone); phoneBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+  bar.append(filterIn, upBtn, phoneBtn); wrap.appendChild(bar);
+  const note = siteEl("div", "sess-desc", M.uploadNote); wrap.appendChild(note);
+  const phoneHost = siteEl("div"); wrap.appendChild(phoneHost);
+  const gridHost = siteEl("div"); wrap.appendChild(gridHost);
+  let items = []; let filter = ""; let phone = null;
+  const paint = () => {
+    gridHost.innerHTML = "";
+    const shown = items.filter((it) => !filter || it.name.toLowerCase().includes(filter));
+    if (!items.length) { gridHost.appendChild(siteEl("div", "muted", M.empty)); return; }
+    const grid = siteEl("div", "media-grid");
+    shown.forEach((it) => grid.appendChild(mediaTile(it, {
+      onRenamed: (r) => { note.textContent = M.renamed(r.renamedTo, r.rewritten || 0); },
+      onDeleted: () => { items = items.filter((x) => x !== it); paint(); },
+    })));
+    gridHost.appendChild(grid);
+  };
+  const load = async () => { items = await window.desktop.listMedia().catch(() => []); mediaIndex = items; paint(); };
+  filterIn.addEventListener("input", () => { filter = filterIn.value.trim().toLowerCase(); paint(); });
+  upBtn.addEventListener("click", async () => {
+    upBtn.disabled = true; upBtn.textContent = M.uploading;
+    const r = await window.desktop.uploadMedia();
+    upBtn.disabled = false; upBtn.textContent = M.upload;
+    if (r && r.ok && r.added && r.added.length) await load();
+  });
+  phoneBtn.addEventListener("click", async () => {
+    if (phone) { phone.close(); return; }
+    phoneBtn.disabled = true;
+    phone = await phonePanel({ target: "media", onReceived: () => load(), onClose: () => { phone = null; phoneBtn.disabled = false; } });
+    phoneBtn.disabled = false; phoneHost.appendChild(phone.el);
+  });
+  await load();
+}
+
 /** Open the picker; resolves with { url, name, width, height } or null. */
 function openMediaPicker(current) {
   const M = COPY.site.media;
@@ -3984,50 +4077,13 @@ function openMediaPicker(current) {
       if (!items.length) { mediapickBody.appendChild(siteEl("div", "muted", M.empty)); return; }
       const grid = siteEl("div", "media-grid");
       shown.forEach((it) => {
-        // A div, not a button: the tile holds its own buttons (rename, delete) and an input.
-        const tile = siteEl("div", "media-tile" + (selected === it.url ? " active" : "")); tile.tabIndex = 0; tile.setAttribute("role", "button");
-        const img = document.createElement("img"); img.src = it.file; img.alt = it.name; img.loading = "lazy";
-        const meta = siteEl("div", "media-meta");
-        const nameEl = siteEl("div", "", it.name);
-        meta.appendChild(nameEl);
-        meta.appendChild(siteEl("div", "muted", (it.width ? M.dims(it.width, it.height) + " · " : "") + Math.max(1, Math.round(it.size / 1024)) + " KB"));
-        // Rename in place: the name becomes an input; Enter saves, Escape cancels.
-        const acts = siteEl("div", "media-acts");
-        const editBtn = document.createElement("button"); editBtn.type = "button"; editBtn.title = M.rename; editBtn.setAttribute("aria-label", M.rename);
-        editBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
-        const delBtn = document.createElement("button"); delBtn.type = "button"; delBtn.className = "danger"; delBtn.title = M.delete; delBtn.setAttribute("aria-label", M.delete);
-        delBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
-        acts.append(editBtn, delBtn);
-        tile.append(img, meta, acts);
-        let renaming = false;
-        const startRename = () => {
-          if (renaming) return; renaming = true;
-          const ext = it.name.includes(".") ? it.name.slice(it.name.lastIndexOf(".")) : "";
-          const inp = document.createElement("input"); inp.className = "field"; inp.value = ext ? it.name.slice(0, -ext.length) : it.name; inp.title = M.renameHint;
-          const finish = async (commit) => {
-            if (!renaming) return; renaming = false;
-            const want = inp.value.trim();
-            if (!commit || !want || want + ext === it.name) { nameEl.textContent = it.name; return; }
-            const r = await window.desktop.renameMedia(it.rel, want + ext);
-            if (r && r.ok) { const wasSelected = selected === it.url; it.rel = r.rel; it.url = r.url; it.name = r.renamedTo; it.file = it.file.replace(/[^/]+$/, encodeURIComponent(r.renamedTo)); if (wasSelected) selected = it.url; nameEl.textContent = it.name; mediapickBody.querySelector(".sess-desc").textContent = M.renamed(r.renamedTo, r.rewritten || 0); }
-            else { nameEl.textContent = it.name; alert((r && r.error) || "Couldn't rename it."); }
-          };
-          inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); finish(true); } else if (e.key === "Escape") { e.preventDefault(); finish(false); } e.stopPropagation(); });
-          inp.addEventListener("blur", () => finish(true));
-          inp.addEventListener("click", (e) => e.stopPropagation());
-          nameEl.textContent = ""; nameEl.appendChild(inp); inp.focus(); inp.select();
-        };
-        editBtn.addEventListener("click", (e) => { e.stopPropagation(); startRename(); });
-        delBtn.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          if (!(await askConfirm({ title: COPY.site.deleteTitle, message: M.deleteConfirm(it.name), okLabel: M.delete, danger: true }))) return;
-          const r = await window.desktop.deleteMedia(it.rel); // moves to Trash (Settings)
-          if (r && r.ok) { items = items.filter((x) => x !== it); if (selected === it.url) { selected = null; useBtn.disabled = true; } paint(); }
-        });
-        tile.addEventListener("click", () => { if (renaming) return; selected = it.url; useBtn.disabled = false; paint(); });
-        tile.addEventListener("dblclick", () => { if (!renaming) closeMediaPicker(it); });
-        tile.addEventListener("keydown", (e) => { if (renaming) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selected = it.url; useBtn.disabled = false; paint(); } });
-        grid.appendChild(tile);
+        grid.appendChild(mediaTile(it, {
+          selected: selected === it.url,
+          onSelect: () => { selected = it.url; useBtn.disabled = false; paint(); },
+          onOpen: () => closeMediaPicker(it),
+          onRenamed: (r) => { if (selected === it.url) selected = r.url; mediapickBody.querySelector(".sess-desc").textContent = M.renamed(r.renamedTo, r.rewritten || 0); },
+          onDeleted: () => { items = items.filter((x) => x !== it); if (selected === it.url) { selected = null; useBtn.disabled = true; } paint(); },
+        }));
       });
       mediapickBody.appendChild(grid);
     };
@@ -4983,10 +5039,10 @@ async function renderSite(body) {
   // Off per project until the Settings switch is on: only Settings is reachable then.
   const cms = await window.desktop.getCmsSettings().catch(() => ({ media: { quality: 55, maxWidth: 2400 }, defaults: { media: { quality: 55, maxWidth: 2400 } }, enabled: false }));
   siteFolds = { ...((cms.ui && cms.ui.folds) || {}) };
-  const TABS = ["pages", "posts", "types", "forms", "blocks", "nav", "settings"];
+  const TABS = ["pages", "posts", "types", "forms", "media", "blocks", "nav", "settings"];
   if (!TABS.includes(siteRailState.tab)) siteRailState.tab = "pages";
   if (!cms.enabled) siteRailState.tab = "settings";
-  const counts = { pages: data.pages.length, posts: posts.length, types: ctx.types.length, forms: siteForms.length, blocks: data.blocks.length };
+  const counts = { pages: data.pages.length, posts: posts.length, types: ctx.types.length, forms: siteForms.length, media: mediaIndex.length, blocks: data.blocks.length };
   const tabs = siteEl("div", "site-tabs");
   TABS.forEach((t) => {
     const b = siteEl("button", "site-tab" + (siteRailState.tab === t ? " active" : ""), COPY.site.tabs[t]); b.type = "button";
@@ -5055,6 +5111,8 @@ async function renderSite(body) {
     sitePreviewPath = "/";
     const wrap = siteEl("div"); body.appendChild(wrap); // full width: the Forms fold holds two columns
     renderSiteForms(wrap, ctx, refresh);
+  } else if (siteRailState.tab === "media") {
+    await renderSiteMedia(body);
   } else if (siteRailState.tab === "blocks") {
     const wrap = siteEl("div", "site-single"); body.appendChild(wrap);
     wrap.appendChild(renderSiteBlocks(data));

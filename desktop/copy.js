@@ -397,7 +397,8 @@ window.COPY = {
       "no-home": "The site has no home page yet.",
       "no-project": "Open a project to edit its site.",
     },
-    tabs: { pages: "Pages", posts: "Posts", types: "Types", forms: "Forms", blocks: "Blocks", nav: "Navigation", settings: "Settings" },
+    tabs: { pages: "Pages", posts: "Posts", types: "Types", forms: "Forms", media: "Media", blocks: "Blocks", nav: "Navigation", settings: "Settings" },
+    mediaTabDesc: "Every image in the project, the same library the image fields pick from. Hover an image to rename or delete it.",
     // "Build the site from this design": the one chat-driven step between designing and
     // running the site (/promote-blocks), started from a button here and in Publish.
     build: {
@@ -586,6 +587,14 @@ window.COPY = {
           { h: "Icons", items: ["<b>Browser icon</b>: the tab, bookmark and search-result icon. SVG is best, sharp at every size. For a PNG, the classic sizes are <b>16 × 16</b> (tabs, bookmarks, history), <b>32 × 32</b> (high-resolution screens and taskbars; the one to pick if you supply a single PNG) and <b>48 × 48</b> (older Windows desktop use, optional). Square, and kept as uploaded, never converted.", "<b>Home-screen icon</b>: a 180 × 180 PNG without transparency, for phones that add the site to the home screen. Optional.", "Without an icon of its own, the site shows the template's default."] },
           { h: "Site", items: ["Which design the site is built from, and its live address once published. Publishing happens in the Publish panel."] },
           { h: "Site builder", items: ["The switch at the bottom turns the site builder off for this project: only Settings stays reachable, the Site tab shows a note, and publishing waits. Nothing is deleted; turn it back on any time."] },
+        ],
+      },
+      media: {
+        title: "Media",
+        intro: "The project's image library: everything under the images folder, which is what every image field picks from.",
+        sections: [
+          { h: "Add images", items: ["<b>Add images…</b> picks files from your computer; <b>From your phone…</b> shows a code your phone scans to send photos over Wi‑Fi.", "Added images are optimised for the web automatically (AVIF, up to 2400px wide). SVG, GIF and AVIF files are kept as they are."] },
+          { h: "Manage", items: ["Hover an image for <b>Rename</b> and <b>Delete</b>. A renamed image keeps its extension; a name already in use gets a number added, and every page using it is updated to match.", "Deleting moves the image to the Trash in Settings, restorable for 30 days. Pages using it show a broken image until it's restored or replaced.", "<b>Filter by name</b> narrows the grid."] },
         ],
       },
       forms: {
