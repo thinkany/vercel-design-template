@@ -3307,14 +3307,23 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   h.querySelector(".site-page-title").style.fontSize = "15px";
   card.appendChild(h);
   let saveBtn; const dirty = () => { saveBtn.disabled = false; };
-  const t = siteField(S.pageTitle, entry.title); t.input.addEventListener("input", dirty); card.appendChild(t.wrap);
-  const sl = siteField(S.pageSlug, entry.slug || entry.id); sl.input.addEventListener("input", dirty); card.appendChild(sl.wrap);
-  const controls = type.fields.map((f) => { const c = siteTypeFieldControl(f, entry[f.key], dirty, ctx); card.appendChild(c.wrap); return [f.key, c.get]; });
+  const foldKey = `entry:${type.key}/${entry.id}`;
+
+  // The same shape as a page: settings, content, blocks, then SEO last.
+  const ps = siteFold(S.entrySettings, foldKey + ":settings"); card.appendChild(ps.sec);
+  const t = siteField(S.pageTitle, entry.title); t.input.addEventListener("input", dirty); ps.body.appendChild(t.wrap);
+  const sl = siteField(S.pageSlug, entry.slug || entry.id, { hint: S.pageSlugHint }); sl.input.addEventListener("input", dirty); ps.body.appendChild(sl.wrap);
+
+  const cf = siteFold(S.entryFieldsHeading, foldKey + ":fields"); card.appendChild(cf.sec);
+  if (!type.fields.length) cf.body.appendChild(siteEl("div", "sess-desc", S.fieldsDesc));
+  const controls = type.fields.map((f) => { const c = siteTypeFieldControl(f, entry[f.key], dirty, ctx); cf.body.appendChild(c.wrap); return [f.key, c.get]; });
+
   // Own blocks (a landing page) instead of the template.
+  const bf = siteFold(S.blocksHeading, foldKey + ":blocks"); card.appendChild(bf.sec);
   const blocksDraft = Array.isArray(entry.blocks) ? JSON.parse(JSON.stringify(entry.blocks)) : null;
   const own = siteEl("label", "toggle-row"); const ownCb = document.createElement("input"); ownCb.type = "checkbox"; ownCb.checked = !!blocksDraft;
-  own.append(ownCb, siteEl("span", "", S.entryOwnBlocks)); card.appendChild(own);
-  const ownHost = siteEl("div"); card.appendChild(ownHost);
+  own.append(ownCb, siteEl("span", "", S.entryOwnBlocks)); bf.body.appendChild(own);
+  const ownHost = siteEl("div"); bf.body.appendChild(ownHost);
   let ownBlocks = blocksDraft || [];
   const paintOwn = () => {
     ownHost.innerHTML = "";
@@ -3323,18 +3332,25 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   };
   ownCb.addEventListener("change", () => { dirty(); paintOwn(); });
   paintOwn();
-  card.appendChild(siteEl("div", "sess-label", S.seoHeading)).style.marginTop = "12px";
-  const seo = entry.seo || {};
-  const st = siteField(S.seoTitle, seo.title, { hint: S.seoTitleHint }); st.input.addEventListener("input", dirty); card.appendChild(st.wrap);
-  const sd = siteField(S.seoDescription, seo.description, { textarea: true, hint: S.seoDescriptionHint }); sd.input.addEventListener("input", dirty); card.appendChild(sd.wrap);
-  const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!seo.noindex; nxCb.addEventListener("change", dirty);
-  nx.append(nxCb, siteEl("span", "", S.seoNoindex)); card.appendChild(nx);
+
+  // SEO: the full set pages and posts carry, last.
+  const seo = JSON.parse(JSON.stringify(entry.seo || {}));
+  const sf = siteFold(S.seoHeading, foldKey + ":seo"); card.appendChild(sf.sec);
+  const st = siteField(S.seoTitle, seo.title, { hint: S.seoTitleHint }); st.input.addEventListener("input", () => { seo.title = st.input.value; dirty(); }); sf.body.appendChild(st.wrap);
+  const sd = siteField(S.seoDescription, seo.description, { textarea: true, hint: S.seoDescriptionHint }); sd.input.addEventListener("input", () => { seo.description = sd.input.value; dirty(); }); sf.body.appendChild(sd.wrap);
+  sf.body.appendChild(siteImageControl(seo.image, (next) => { seo.image = next ? next.src : ""; dirty(); }, { label: S.seoImage }));
+  const kp = siteField(S.seoKeyphrase, seo.keyphrase, { hint: S.seoKeyphraseHint }); kp.input.addEventListener("input", () => { seo.keyphrase = kp.input.value; dirty(); }); sf.body.appendChild(kp.wrap);
+  const jl = siteEl("div", "site-kv"); jl.appendChild(siteEl("div", "k", S.seoJsonLd));
+  const jta = document.createElement("textarea"); jta.className = "field site-code"; jta.spellcheck = false; jta.value = seo.jsonld || ""; jta.placeholder = S.seoJsonLdPlaceholder;
+  jta.addEventListener("input", () => { seo.jsonld = jta.value; dirty(); }); jl.appendChild(jta); jl.appendChild(siteEl("div", "sess-desc", S.seoJsonLdHint)); sf.body.appendChild(jl);
+  const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!seo.noindex;
+  nxCb.addEventListener("change", () => { seo.noindex = nxCb.checked; dirty(); }); nx.append(nxCb, siteEl("span", "", S.seoNoindex)); sf.body.appendChild(nx);
 
   const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
   saveBtn = siteEl("button", "panelbtn primary", S.saveEntry); saveBtn.disabled = true; saveBtn.style.margin = "0";
   saveBtn.addEventListener("click", async () => {
     saveBtn.disabled = true; saveBtn.textContent = S.saving;
-    const data = { title: t.input.value, slug: sl.input.value, seo: { title: st.input.value, description: sd.input.value, noindex: nxCb.checked } };
+    const data = { title: t.input.value, slug: sl.input.value, seo: { ...seo } };
     for (const [k, get] of controls) data[k] = get();
     if (ownCb.checked) data.blocks = ownBlocks;
     const res = await window.desktop.saveSiteEntry(type.key, entry.id, data);

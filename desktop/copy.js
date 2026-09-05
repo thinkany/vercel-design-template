@@ -760,6 +760,8 @@ window.COPY = {
     noEntries: "No entries yet.",
     addEntry: (s) => `Add ${s}`,
     newEntryPlaceholder: "Title",
+    entrySettings: "Entry settings",
+    entryFieldsHeading: "Content",
     entryOwnBlocks: "This entry uses its own blocks instead of the template",
     saveEntry: "Save",
     deleteEntry: "Delete",
