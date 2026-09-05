@@ -1970,7 +1970,7 @@ function publishProgressList(container) {
       r = rows[step] = { icon, det };
     }
     r.icon.textContent = status === "done" ? "✓" : status === "error" ? "✗" : status === "warn" ? "!" : "…";
-    r.icon.style.color = status === "done" ? "#17171b" : status === "error" ? "#e5484d" : status === "warn" ? "#b45309" : "#9a9aa2";
+    r.icon.style.color = status === "done" ? "#17171b" : status === "error" ? "#e5484d" : status === "warn" ? "#b45309" : "#74747a";
     if (detail) r.det.textContent = detail;
     if (status === "error") r.det.style.color = "#e5484d";
   };
@@ -4247,7 +4247,7 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
   // moment after the last one. No re-render on save, so typing keeps its focus;
   // the drawer picks the saved menu up next time it opens.
   let saveTimer = null; let status;
-  const setStatus = (text, error) => { status.textContent = text || ""; status.style.color = error ? "#c0261e" : "#999"; };
+  const setStatus = (text, error) => { status.textContent = text || ""; status.style.color = error ? "#c0261e" : "#737373"; };
   const saveNow = async () => {
     setStatus(COPY.site.saving);
     const res = await window.desktop.saveSiteSettings(draft.nav, draft.footerLinks, draft.legal);
