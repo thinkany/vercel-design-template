@@ -7086,7 +7086,17 @@ function paintLensbox() {
   } else if (!images.length) credit.textContent = D.gallerySoon;
   const essay = el("lensbox-essay"); essay.innerHTML = "";
   String(lens.essay || "").split(/\n\s*\n/).map((t) => t.trim()).filter(Boolean).forEach((t) => { const para = document.createElement("p"); para.textContent = t; essay.appendChild(para); });
+  const sc = el("lensbox-scroll"); sc.scrollTop = 0;
+  requestAnimationFrame(updateLensboxMore);
 }
+// The "more below" chevron shows while copy remains under the fold of the scroll area.
+function updateLensboxMore() {
+  const sc = el("lensbox-scroll"); const more = el("lensbox-more");
+  more.hidden = sc.scrollHeight - sc.clientHeight - sc.scrollTop < 12;
+}
+el("lensbox-scroll").addEventListener("scroll", updateLensboxMore);
+el("lensbox-more").addEventListener("click", () => { const sc = el("lensbox-scroll"); sc.scrollBy({ top: sc.clientHeight * 0.8, behavior: "smooth" }); });
+window.addEventListener("resize", () => { if (!lensbox.hidden) updateLensboxMore(); });
 function openLensbox(lens, index) {
   if (!lens) return;
   lensboxState = { lens, index };
