@@ -2920,9 +2920,10 @@ function sitePropsEditor(value, onChange, depth = 0, ctx = {}, at = "") {
         wrap.querySelector(".k").textContent = COPY.site.side.label;
         const seg = siteEl("div", "site-side");
         const mk = (opt, text, icon) => {
-          const b = siteEl("button", "site-side-opt" + (v === opt ? " on" : "")); b.type = "button";
+          const b = siteEl("button", "site-side-opt" + (value[key] === opt ? " on" : "")); b.type = "button";
           b.innerHTML = icon + `<span>${text}</span>`;
-          b.addEventListener("click", () => { value[key] = opt; v = opt; onChange(); seg.querySelectorAll(".site-side-opt").forEach((x) => x.classList.toggle("on", x === b)); });
+          // (v is the loop's const snapshot; read and write the live value instead)
+          b.addEventListener("click", () => { value[key] = opt; seg.querySelectorAll(".site-side-opt").forEach((x) => x.classList.toggle("on", x === b)); onChange(); });
           return b;
         };
         seg.append(
