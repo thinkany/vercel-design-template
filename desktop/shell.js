@@ -3991,6 +3991,7 @@ const EDITOR_ICONS = {
   bold: '<path d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8"/>',
   italic: '<line x1="19" x2="10" y1="4" y2="4"/><line x1="14" x2="5" y1="20" y2="20"/><line x1="15" x2="9" y1="4" y2="20"/>',
   strike: '<path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/>',
+  clear: '<path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/>',
   bullet: '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
   numbered: '<path d="M10 12h11"/><path d="M10 18h11"/><path d="M10 6h11"/><path d="M4 10h2"/><path d="M4 6h1v4"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/>',
   quote: '<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>',
@@ -4052,7 +4053,7 @@ function siteRichEditor(markdown, onChange, { compact } = {}) {
 
   const buttons = [];
   const btn = (key, title, run, isOn, canRun) => {
-    const b = document.createElement("button"); b.type = "button"; b.title = title;
+    const b = document.createElement("button"); b.type = "button"; b.title = title; b.setAttribute("aria-label", title);
     b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${EDITOR_ICONS[key]}</svg>`;
     b.addEventListener("mousedown", (e) => e.preventDefault()); // keep the selection
     b.addEventListener("click", run);
@@ -4062,13 +4063,16 @@ function siteRichEditor(markdown, onChange, { compact } = {}) {
   const chain = () => editor.chain().focus();
 
   // Block type: Text / Heading / Subheading (H1 is the title).
-  const block = document.createElement("select"); block.className = "field";
+  const block = document.createElement("select"); block.className = "field"; block.title = E.blockType; block.setAttribute("aria-label", E.blockType);
   [["p", E.blockText], ["h2", E.blockH2], ["h3", E.blockH3], ["h4", E.blockH4], ["h5", E.blockH5], ["h6", E.blockH6]].forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; block.appendChild(o); });
   block.addEventListener("change", () => { if (block.value === "p") chain().setParagraph().run(); else chain().toggleHeading({ level: Number(block.value.slice(1)) }).run(); });
   bar.appendChild(block); sep();
   btn("bold", E.bold, () => chain().toggleBold().run(), () => editor.isActive("bold"));
   btn("italic", E.italic, () => chain().toggleItalic().run(), () => editor.isActive("italic"));
   btn("strike", E.strike, () => chain().toggleStrike().run(), () => editor.isActive("strike"));
+  // The eraser: strips marks (bold, links, pasted styles) and block types (headings,
+  // lists, quotes) from the selection, leaving plain paragraphs.
+  btn("clear", E.clear, () => chain().clearNodes().unsetAllMarks().run(), () => false);
   sep();
   btn("bullet", E.bullet, () => chain().toggleBulletList().run(), () => editor.isActive("bulletList"));
   btn("numbered", E.numbered, () => chain().toggleOrderedList().run(), () => editor.isActive("orderedList"));

@@ -712,7 +712,8 @@ window.COPY = {
     editor: {
       blockText: "Text", blockH2: "Heading 2", blockH3: "Heading 3", blockH4: "Heading 4", blockH5: "Heading 5", blockH6: "Heading 6",
       alignLeft: "Align left", alignCenter: "Align center", alignRight: "Align right",
-      bold: "Bold", italic: "Italic", strike: "Strikethrough",
+      blockType: "Text style",
+      bold: "Bold", italic: "Italic", strike: "Strikethrough", clear: "Clear formatting (pasted styles, bold, links, headings)",
       bullet: "Bullet list", numbered: "Numbered list", quote: "Quote", code: "Code block",
       link: "Link", image: "Image", rule: "Divider", undo: "Undo", redo: "Redo",
       linkAsk: "Link to", linkPlaceholder: "/about or https://…", linkApply: "Apply", linkRemove: "Remove link",
