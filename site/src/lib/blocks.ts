@@ -93,6 +93,14 @@ export const navItem = navLink.extend({ links: z.array(navLink).default([]), col
 
 export const mediaSide = z.enum(["left", "right"]).default("left").describe("side");
 
+/**
+ * A reference to a form (content/forms/<id>.json, edited in the app's Forms tab).
+ * The CMS shows a form picker for it. Render the definition with the built-in
+ * Form block's fields (site/src/lib/builtin-blocks.tsx) or resolve it with
+ * formById() from ./forms and lay the inputs out in the block's own markup.
+ */
+export const formRef = z.string().describe("form");
+
 export function defineBlock<S extends ZodTypeAny>(def: BlockDef<S>): BlockDef<S> {
   return def;
 }

@@ -207,6 +207,16 @@ async function setEnv(token, teamId, projectId, key, value) {
   throw new Error(await errMessage(res, `Couldn't set ${key}`));
 }
 
+// Remove a project env var if it exists (a cleared setting must not linger).
+async function deleteEnv(token, teamId, projectId, key) {
+  const list = await vercelFetch(token, `/v10/projects/${projectId}/env`, { teamId });
+  const j = await readJson(list);
+  const existing = ((j && (j.envs || j.env)) || []).find((e) => e.key === key);
+  if (!existing) return;
+  const res = await vercelFetch(token, `/v9/projects/${projectId}/env/${existing.id}`, { method: "DELETE", teamId });
+  if (!res.ok) throw new Error(await errMessage(res, `Couldn't remove ${key}`));
+}
+
 // ---- Project + deployment ----------------------------------------------------
 // Reuse an existing project by name, else create one. Build settings mirror the
 // template's vercel.json (vercel.json in the uploaded files still wins at build).
@@ -234,6 +244,8 @@ const TARGETS = {
       framework: null,
       cleanUrls: true,
       trailingSlash: false,
+      // api/forms.js reads content/forms/<id>.json at request time: ship those with it.
+      functions: { "api/forms.js": { includeFiles: "content/forms/**" } },
     }, null, 2) + "\n",
     omit: new Set(["middleware.js", "vercel.json"]),
   },
@@ -397,7 +409,7 @@ function generatePassword() {
 // (Astro, dist-site, no noindex header), no gate (middleware.js is not uploaded, no
 // gate env), and SITE_URL set BEFORE the build (Astro bakes it into canonical links,
 // og:url, sitemap and robots), which means the domain is attached before the deploy.
-async function publishProject({ token, teamId, projectDir, projectName, env, password, customDomain, target = "preview", onProgress }) {
+async function publishProject({ token, teamId, projectDir, projectName, env, siteEnv, password, customDomain, target = "preview", onProgress }) {
   const emit = (step, status, detail) => onProgress && onProgress({ step, status, detail });
   const t = TARGETS[target] || TARGETS.preview;
   const isSite = target === "site";
@@ -431,6 +443,10 @@ async function publishProject({ token, teamId, projectDir, projectName, env, pas
   if (isSite) {
     emit("env", "run", "Setting the site address");
     await setEnv(token, teamId, project.id, "SITE_URL", url);
+    // Form delivery (FORMS_*): set what's configured, remove what was cleared.
+    for (const [k, v] of Object.entries(siteEnv || {})) {
+      if (v) await setEnv(token, teamId, project.id, k, String(v)); else await deleteEnv(token, teamId, project.id, k);
+    }
     emit("env", "done", url.replace(/^https?:\/\//, ""));
   } else {
     emit("env", "run", "Setting the preview gate");

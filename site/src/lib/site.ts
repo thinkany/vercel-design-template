@@ -54,6 +54,16 @@ export const siteSchema = z.object({
     items: z.array(z.object({ slot: z.enum(["header", "headerMobile", "footer", "footerMobile"]), src: z.string() })).default([]),
     wordmark: z.string().optional(),
   }).default({ items: [] }),
+  /**
+   * Form delivery (the Forms tab's Delivery card): which mail provider sends
+   * submissions and as whom. The provider KEY is not here: the app keeps it and
+   * sets it on the site's Vercel project at publish (FORMS_PROVIDER_KEY).
+   */
+  forms: z.object({
+    provider: z.enum(["", "resend", "postmark", "sendgrid"]).default(""),
+    /** The verified sender, "Website <forms@client.com>". */
+    from: z.string().default(""),
+  }).default({ provider: "", from: "" }),
   /** CMS display names per block key (recognition only; the site doesn't use them). */
   blockNames: z.record(z.string()).default({}),
   /** The posts directory: posts are listed at /<path> and served at /<path>/<post>. */

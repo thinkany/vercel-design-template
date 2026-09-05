@@ -122,6 +122,12 @@ const faviconType = /\.svg$/i.test(favicon) ? "image/svg+xml" : /\.png$/i.test(f
         els.forEach((el) => el.classList.add("is-revealed"));
       }
     </script>
+    <script>
+      // Forms (site/src/lib/form-client.ts): JSON submit + the thank-you state for
+      // every form[data-ta-form] on the page. Without JS the form posts natively.
+      import { enhanceForms } from "../lib/form-client";
+      enhanceForms(document);
+    </script>
     <Fragment set:html={extra("bodyEnd")} />
   </body>
 </html>

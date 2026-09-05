@@ -130,6 +130,13 @@ contextBridge.exposeInMainWorld("desktop", {
   saveSiteEntry: (key, id, data) => ipcRenderer.invoke("site:saveEntry", { key, id, data }),
   createSiteEntry: (key, title) => ipcRenderer.invoke("site:createEntry", { key, title }),
   deleteSiteEntry: (key, id) => ipcRenderer.invoke("site:deleteEntry", { key, id }),
+  getSiteForms: () => ipcRenderer.invoke("site:forms"),
+  createSiteForm: (name) => ipcRenderer.invoke("site:createForm", { name }),
+  saveSiteForm: (form) => ipcRenderer.invoke("site:saveForm", { form }),
+  deleteSiteForm: (id) => ipcRenderer.invoke("site:deleteForm", { id }),
+  getFormsDelivery: () => ipcRenderer.invoke("site:formsDelivery"),
+  saveFormsDelivery: (provider, from, key) => ipcRenderer.invoke("site:saveFormsDelivery", { provider, from, key }),
+  testFormsDelivery: (to) => ipcRenderer.invoke("forms:test", { to }),
   // Media: the project's public/images for the image picker.
   listMedia: () => ipcRenderer.invoke("media:list"),
   uploadMedia: () => ipcRenderer.invoke("media:upload"),

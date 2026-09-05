@@ -38,6 +38,9 @@ const pageFiles = import.meta.glob("../../content/pages/*.json", { eager: true, 
 const registryFiles = import.meta.glob("../../site/blocks/index.ts", { eager: true }) as Record<string, { blocks?: Record<string, BlockDef> }>;
 const chromeFiles = import.meta.glob("../../site/blocks/chrome.ts", { eager: true }) as Record<string, ChromeModule>;
 const builtinFiles = import.meta.glob("../../site/src/lib/builtin-blocks.tsx", { eager: true }) as Record<string, { builtinBlocks?: Record<string, BlockDef> }>;
+// site/src/lib/form-client.ts → the forms' submit behaviour, in preview mode here (never sends).
+const formClientFiles = import.meta.glob("../../site/src/lib/form-client.ts", { eager: true }) as Record<string, { enhanceForms?: (root: ParentNode, opts?: { preview?: boolean }) => void }>;
+const enhanceForms = (Object.values(formClientFiles)[0] || {}).enhanceForms;
 const blocks: Record<string, BlockDef> = { ...((Object.values(builtinFiles)[0] || {}).builtinBlocks || {}), ...((Object.values(registryFiles)[0] || {}).blocks || {}) };
 const chromeMod: ChromeModule = Object.values(chromeFiles)[0] || {};
 
@@ -174,6 +177,9 @@ export function SitePage({ pageId, onNavigate, view, setView, orientation, setOr
     return <Block key={i} {...(parsed.data as AnyRecord)} />;
   });
 
+  // Forms on the page submit into their preview state (the design surface has no endpoint).
+  useEffect(() => { if (enhanceForms) enhanceForms(document, { preview: true }); });
+
   return (
     <DesignSurface view={view} setView={setView} orientation={orientation} setOrientation={setOrientation} capture={capture} onNavigate={onNavigate} chrome={false}>
       <div className="flex-1 flex flex-col w-full" onClickCapture={onClick}>
@@ -203,6 +209,7 @@ export function BlockPreview({ type }: { type: string }) {
     w.__taSetBlockProps = (p) => setProps(p && typeof p === "object" ? { ...p } : null);
     return () => { delete w.__taSetBlockProps; };
   }, []);
+  useEffect(() => { if (enhanceForms) enhanceForms(document, { preview: true }); });
   const def = blocks[type];
   if (!def) return <BridgeNote text={`Unknown block "${type}"`} />;
   if (!props) return null;

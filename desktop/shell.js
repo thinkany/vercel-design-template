@@ -1950,7 +1950,7 @@ function publishProgressList(container) {
   const LABELS = { project: "Vercel project", env: "Preview gate", upload: "Uploading files", deploy: "Building on Vercel", domain: "Custom domain", ready: "Live", error: "Problem" };
   // The site publish shares the steps but not the gate: its env step sets the site
   // address, and it runs a local build check first.
-  const SITE_LABELS = { ...LABELS, env: "Site address", check: "Build check" };
+  const SITE_LABELS = { ...LABELS, env: "Site address", check: "Build check", images: "Images", forms: "Forms" };
   return (evt) => {
     const { step, status, detail } = evt;
     const labels = evt.target === "site" ? SITE_LABELS : LABELS;
@@ -1969,8 +1969,8 @@ function publishProgressList(container) {
       container.appendChild(row);
       r = rows[step] = { icon, det };
     }
-    r.icon.textContent = status === "done" ? "✓" : status === "error" ? "✗" : "…";
-    r.icon.style.color = status === "done" ? "#17171b" : status === "error" ? "#e5484d" : "#9a9aa2";
+    r.icon.textContent = status === "done" ? "✓" : status === "error" ? "✗" : status === "warn" ? "!" : "…";
+    r.icon.style.color = status === "done" ? "#17171b" : status === "error" ? "#e5484d" : status === "warn" ? "#b45309" : "#9a9aa2";
     if (detail) r.det.textContent = detail;
     if (status === "error") r.det.style.color = "#e5484d";
   };
@@ -2556,7 +2556,7 @@ function renderSitePublish(body, site, domainRefreshers) {
   lead.style.margin = "0 0 12px";
   lead.textContent = site.ready ? (site.enabled === false ? S.cmsOff : S.lead) : (S.notReady[site.reason] || S.notReady["not-promoted"]);
   body.appendChild(lead);
-  if (!site.ready) return;
+  if (!site.ready) { if (site.reason !== "no-site") siteBuildCta(body, { licensed: site.licensed !== false }); return; }
   if (site.enabled === false) {
     // Off per project (the Settings switch): the button is shown but can't run.
     const off = document.createElement("button"); off.className = "panelbtn primary"; off.disabled = true;
@@ -2622,6 +2622,38 @@ function renderSitePublish(body, site, domainRefreshers) {
 // check on publish is the validator of last resort for block props.
 let siteRailState = { tab: "pages", open: {}, expanded: {}, selected: null }; // active tab, selection, open block editors
 
+// "Build the site from this design": runs /promote-blocks as a chat turn from a button
+// in the CMS drawer (not-ready state) and the Publish panel. While it runs, both show
+// a running note; when the turn ends and the site is ready, the CMS drawer opens.
+let siteBuildTurn = null; // the variation id being promoted, while the turn runs
+let siteBuildFailed = false;
+function siteBuildCta(host, { licensed = true } = {}) {
+  const B = COPY.site.build;
+  const vid = (() => { try { return currentPreviewVariation(); } catch { return null; } })() || design.variationId;
+  if (siteBuildTurn) { host.appendChild(siteEl("div", "muted", B.running(siteBuildTurn))).style.marginTop = "10px"; return; }
+  if (!licensed) { host.appendChild(siteEl("div", "muted", B.needLicense)).style.marginTop = "10px"; return; }
+  if (!design.previewReady || !vid) { host.appendChild(siteEl("div", "muted", B.needDesign)).style.marginTop = "10px"; return; }
+  if (siteBuildFailed) host.appendChild(siteEl("div", "muted", B.failed)).style.cssText = "margin-top:10px;color:#b45309;";
+  const btn = siteEl("button", "panelbtn primary", B.button(vid)); btn.style.cssText = "margin:12px 0 0;width:auto;";
+  btn.disabled = !appHasKey; if (!appHasKey) btn.title = COPY.errors.needKey;
+  btn.addEventListener("click", () => {
+    siteBuildTurn = vid; siteBuildFailed = false;
+    closeModal();
+    runAgent(B.request(vid), B.echo(vid));
+  });
+  host.appendChild(btn);
+  host.appendChild(siteEl("div", "sess-desc", B.note)).style.marginTop = "8px";
+}
+// The promote turn ended: if the site is ready now, open the CMS drawer on it;
+// otherwise re-render whichever of the two surfaces is open so the button returns.
+async function finishSiteBuildTurn(ok) {
+  siteBuildTurn = null; siteBuildFailed = !ok;
+  let st = null; try { st = await window.desktop.getSiteStatus(); } catch {}
+  if (st && st.ready) { siteBuildFailed = false; siteRailState.tab = "pages"; siteRailState.selected = null; openModal("site"); return; }
+  if (RAILS.site.classList.contains("active")) openModal("site");
+  else if (RAILS.publish.classList.contains("active")) openModal("publish");
+}
+
 function siteEl(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -2667,9 +2699,9 @@ function siteFoldSet(key, open) {
     catch (e) { console.warn("[cms] fold state not saved:", e); }
   }, 150);
 }
-function siteFold(title, key) {
-  const isOpen = siteFolds[key] !== false;
-  const sec = siteEl("div", "site-acc" + (isOpen ? " open" : ""));
+function siteFold(title, key, { defaultOpen = true, dark = false } = {}) {
+  const isOpen = key in siteFolds ? siteFolds[key] !== false : defaultOpen;
+  const sec = siteEl("div", "site-acc" + (isOpen ? " open" : "") + (dark ? " dark" : ""));
   const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(isOpen));
   head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
   const body = siteEl("div", "site-acc-body"); body.hidden = !isOpen;
@@ -2902,6 +2934,16 @@ function sitePropsEditor(value, onChange, depth = 0, ctx = {}, at = "") {
         sel.value = v; sel.addEventListener("change", () => { value[key] = sel.value; onChange(); });
         wrap.appendChild(sel);
       }
+      box.appendChild(wrap);
+    } else if (typeof v === "string" && meta && meta.kind === "form") {
+      // A form reference: picked from the Forms tab's forms, never typed.
+      const wrap = siteEl("div", "site-kv"); wrap.appendChild(siteEl("div", "k", label));
+      const sel = document.createElement("select"); sel.className = "field";
+      const o0 = document.createElement("option"); o0.value = ""; o0.textContent = COPY.site.formPickNone; sel.appendChild(o0);
+      siteForms.forEach((f) => { const o = document.createElement("option"); o.value = f.id; o.textContent = f.name; sel.appendChild(o); });
+      if (v && !siteForms.some((f) => f.id === v)) { const o = document.createElement("option"); o.value = v; o.textContent = COPY.site.formPickMissing(v); sel.appendChild(o); }
+      sel.value = v; sel.addEventListener("change", () => { value[key] = sel.value; onChange(); });
+      wrap.appendChild(sel); wrap.appendChild(siteEl("div", "sess-desc", COPY.site.formPickHint));
       box.appendChild(wrap);
     } else if (typeof v === "string" && meta && meta.kind === "code") {
       // A snippet: monospace, whitespace kept, no rich editing.
@@ -3479,6 +3521,292 @@ function renderSiteTypesList(left, right, ctx, refresh) {
     const t = ctx.types.find((x) => x.key === key); const e = t && (ctx.entries[key] || []).find((x) => x.id === id);
     if (t && e) right.appendChild(renderSiteEntry(t, e, ctx, refresh));
   }
+}
+
+// --- Forms tab -------------------------------------------------------------------
+// content/forms/<id>.json, edited as files (site:forms / site:saveForm / …). A form
+// reaches a page through the built-in Form block (or a promoted block with a form
+// field); "Used on" is computed here from the pages' blocks and the field kinds.
+let siteForms = []; // for the props editor's form picker (set when the drawer renders)
+function siteFormUsage(form, ctx) {
+  const byKey = Object.fromEntries((ctx.blocks || []).map((b) => [b.key, b]));
+  const get = (obj, dotted) => dotted.split(".").reduce((o, k) => (o && typeof o === "object" ? o[k] : undefined), obj);
+  return (ctx.pages || []).filter((p) => (p.blocks || []).some((b) => {
+    const def = byKey[b.type]; if (!def) return false;
+    return Object.entries(def.fields || {}).some(([k, m]) => m && m.kind === "form" && get(b.props || {}, k) === form.id);
+  }));
+}
+// The Delivery section (site level), revealed one step at a time: pick the service,
+// paste its key, enter the from address (Save unlocks once it's an address), and
+// once saved and complete, send a test. A saved key never shows again (only its
+// last four) and lives in the app's storage, not the project.
+const FROM_RE = /^(?:[^<>]*<[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>|[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+)$/;
+function renderFormsDelivery(delivery, hasForms) {
+  const D = COPY.site.delivery;
+  const { sec, body } = siteFold(D.title, "forms:delivery", { dark: true });
+  sec.style.maxWidth = "720px";
+  body.appendChild(siteEl("div", "sess-desc", D.intro));
+  let saved = { ...delivery }; // what the app has on disk (the source of "ready")
+  let keyValue = null;         // null = keep the saved key, "" = remove, else a new key
+  const status = siteEl("div", "sess-desc"); status.style.cssText = "margin:6px 0 10px;font-weight:500;";
+  body.appendChild(status);
+
+  // Step 1: the service
+  const provWrap = siteEl("div", "site-kv"); provWrap.appendChild(siteEl("div", "k", D.provider));
+  const prov = document.createElement("select"); prov.className = "field";
+  const o0 = document.createElement("option"); o0.value = ""; o0.textContent = D.providerNone; prov.appendChild(o0);
+  Object.entries(D.providers).forEach(([k, v]) => { const o = document.createElement("option"); o.value = k; o.textContent = v; prov.appendChild(o); });
+  prov.value = delivery.provider || ""; provWrap.appendChild(prov); body.appendChild(provWrap);
+  const steps = siteEl("div"); body.appendChild(steps);
+
+  // Step 2: the key
+  const keyWrap = siteEl("div", "site-kv"); keyWrap.appendChild(siteEl("div", "k", D.key));
+  const keyRow = siteEl("div"); keyRow.style.cssText = "display:flex;gap:6px;align-items:center;";
+  const key = document.createElement("input"); key.className = "field"; key.type = "password"; key.autocomplete = "off"; key.spellcheck = false; key.style.marginBottom = "0";
+  const showBtn = siteMini(D.show, () => { const pw = key.type === "password"; key.type = pw ? "text" : "password"; showBtn.textContent = pw ? D.hide : D.show; });
+  const removeBtn = siteMini(D.removeKey, () => { keyValue = ""; key.value = ""; paint(); }, { danger: true });
+  keyRow.append(key, showBtn, removeBtn); keyWrap.appendChild(keyRow); body.appendChild(keyWrap);
+
+  // Step 3: the from address, then Save
+  const from = siteField(D.from, delivery.from, { placeholder: D.fromPlaceholder, hint: D.fromHint }); body.appendChild(from.wrap);
+  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap;";
+  const saveBtn = siteEl("button", "panelbtn primary", D.save); saveBtn.style.margin = "0";
+  const note = siteEl("div", "muted"); note.style.cssText = "font-size:12px;";
+  actions.append(saveBtn, note); body.appendChild(actions);
+
+  // Step 4: a test, once what's saved is complete
+  const testRow = siteEl("div"); testRow.style.cssText = "display:flex;gap:6px;align-items:center;margin-top:10px;";
+  const testTo = document.createElement("input"); testTo.className = "field"; testTo.type = "email"; testTo.placeholder = D.testPlaceholder; testTo.style.marginBottom = "0"; testTo.setAttribute("aria-label", D.testTo);
+  const testBtn = siteEl("button", "panelbtn", D.test); testBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+  const testNote = siteEl("div", "sess-desc"); testNote.style.marginTop = "4px";
+  testRow.append(testTo, testBtn); body.append(testRow, testNote);
+  body.appendChild(siteEl("div", "sess-desc", D.fallback)).style.marginTop = "10px";
+
+  const hasKey = () => keyValue === null ? !!saved.hasKey : keyValue.trim().length > 0;
+  const fromOk = () => FROM_RE.test(from.input.value.trim());
+  const changed = () => prov.value !== (saved.provider || "") || from.input.value.trim() !== (saved.from || "") || keyValue !== null;
+  const paint = () => {
+    const p = prov.value;
+    // status
+    status.textContent = saved.ready ? D.statusReady(D.providers[saved.provider], saved.from) : D.statusNoKey + (hasForms ? " " + D.statusNoForms : "");
+    status.style.color = saved.ready ? "#17171b" : "#b45309";
+    // steps for the chosen service
+    steps.innerHTML = "";
+    const list = D.steps[p];
+    if (list) {
+      const ol = document.createElement("ol"); ol.className = "sess-desc"; ol.style.cssText = "padding-left:18px;margin:0 0 8px;";
+      list.forEach((t) => { const li = document.createElement("li"); li.textContent = t; li.style.marginBottom = "4px"; ol.appendChild(li); });
+      steps.appendChild(ol);
+      steps.appendChild(siteMini(D.open(D.providers[p]), () => window.desktop.openExternal({ resend: "https://resend.com", postmark: "https://postmarkapp.com", sendgrid: "https://sendgrid.com" }[p])));
+    }
+    // the key, once a service is chosen
+    keyWrap.hidden = !p;
+    key.placeholder = keyValue === null && saved.hasKey ? D.keySaved(saved.keyHint) : D.keyPlaceholder;
+    removeBtn.hidden = !(keyValue === null && saved.hasKey);
+    // the from address, once there's a key
+    const showFrom = !!p && hasKey();
+    from.wrap.hidden = !showFrom;
+    actions.hidden = !showFrom;
+    saveBtn.disabled = !(showFrom && fromOk() && changed());
+    // the test, once what's saved is complete and nothing is pending
+    const showTest = saved.ready && !changed();
+    testRow.hidden = !showTest; testNote.hidden = !showTest;
+  };
+  prov.addEventListener("change", () => { note.textContent = ""; paint(); });
+  key.addEventListener("input", () => { keyValue = key.value; paint(); });
+  from.input.addEventListener("input", paint);
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true; note.textContent = ""; note.style.color = "";
+    const res = await window.desktop.saveFormsDelivery(prov.value, from.input.value.trim(), keyValue);
+    if (res && res.ok) { saved = res; keyValue = null; key.value = ""; from.input.value = res.from || ""; siteFlash(actions, D.saved); paint(); }
+    else { note.textContent = (res && res.error) || "Couldn't save."; note.style.color = "#e5484d"; paint(); }
+  });
+  testBtn.addEventListener("click", async () => {
+    testBtn.disabled = true; testBtn.textContent = D.testing; testNote.textContent = ""; testNote.style.color = "";
+    const res = await window.desktop.testFormsDelivery(testTo.value.trim());
+    testBtn.disabled = false; testBtn.textContent = D.test;
+    testNote.textContent = res && res.ok ? D.testOk(testTo.value.trim()) : D.testFail((res && res.error) || "unknown error");
+    testNote.style.color = res && res.ok ? "" : "#e5484d";
+  });
+  testTo.addEventListener("keydown", (e) => { if (e.key === "Enter") testBtn.click(); });
+  paint();
+  return sec;
+}
+
+// The Forms tab: a collapsible Forms section (the list beside the selected form's
+// editor), then the Delivery section beneath it.
+function renderSiteForms(host, ctx, refresh) {
+  const S = COPY.site;
+  const sel = siteRailState.selected && typeof siteRailState.selected === "object" ? siteRailState.selected : null;
+  const cur = sel && sel.kind === "form" && ctx.forms.some((f) => f.id === sel.id) ? sel : (ctx.forms[0] ? { kind: "form", id: ctx.forms[0].id } : null);
+  const fold = siteFold(S.formsHeading, "forms:list", { dark: true });
+  const cols = siteEl("div", "site-cols"); const left = siteEl("div"); const right = siteEl("div", "site-detail"); cols.append(left, right);
+  fold.body.appendChild(cols); host.appendChild(fold.sec);
+  left.appendChild(siteEl("div", "sess-desc", S.formsDesc));
+  if (!ctx.forms.length) left.appendChild(siteEl("div", "sess-desc", S.noForms));
+  ctx.forms.forEach((f) => {
+    const row = siteEl("div", "site-list-row" + (cur && cur.id === f.id ? " active" : ""));
+    row.append(siteEl("div", "site-page-title", f.name), siteEl("div", "site-page-slug", S.formMeta(f.fields.length, siteFormUsage(f, ctx).length)));
+    row.addEventListener("click", () => { siteRailState.selected = { kind: "form", id: f.id }; refresh(); });
+    left.appendChild(row);
+  });
+  const addRow = siteEl("div"); addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:4px 0 14px;";
+  const inp = document.createElement("input"); inp.className = "field"; inp.placeholder = S.newFormPlaceholder; inp.style.marginBottom = "0";
+  const btn = siteEl("button", "panelbtn", S.create); btn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+  const create = async () => { const v = inp.value.trim(); if (!v) return; const res = await window.desktop.createSiteForm(v); if (res && res.ok) { siteRailState.selected = { kind: "form", id: res.form.id }; refresh(); } };
+  btn.addEventListener("click", create); inp.addEventListener("keydown", (e) => { if (e.key === "Enter") create(); });
+  addRow.append(inp, btn); left.appendChild(addRow);
+  if (cur) right.appendChild(renderSiteFormEditor(ctx.forms.find((f) => f.id === cur.id), ctx, refresh));
+  host.appendChild(renderFormsDelivery(ctx.delivery || { provider: "", from: "", hasKey: false, ready: false }, ctx.forms.length > 0));
+}
+function renderSiteFormEditor(form, ctx, refresh) {
+  const S = COPY.site;
+  const draft = JSON.parse(JSON.stringify(form));
+  draft.fields = (draft.fields || []).map((f) => ({ id: "", type: "text", label: "", required: false, placeholder: "", help: "", options: [], ...f }));
+  draft.submit = draft.submit || { label: "Submit" };
+  draft.after = { mode: "message", message: "", page: null, ...(draft.after || {}) };
+  const slug = (t) => String(t || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const card = siteEl("div");
+  card.appendChild(siteEl("div", "site-page-title", S.editForm + ": " + form.name)).style.cssText = "font-size:15px;margin-bottom:10px;";
+  let saveBtn; const dirty = () => { saveBtn.disabled = false; };
+  const name = siteField(S.formName, draft.name); name.input.addEventListener("input", dirty); card.appendChild(name.wrap);
+
+  // Sections: Fields open by default, the rest folded until opened once (remembered per project).
+  const fieldsFold = siteFold(S.formFieldsHeading, "form:fields", { dark: true }); card.appendChild(fieldsFold.sec);
+  const afterFold = siteFold(S.formAfterHeading, "form:after", { dark: true, defaultOpen: false }); card.appendChild(afterFold.sec);
+  const deliveryFold = siteFold(S.formDeliveryHeading, "form:delivery", { dark: true, defaultOpen: false }); card.appendChild(deliveryFold.sec);
+
+  // Fields: label, type, required; the id (made from the label) behind "Show ID".
+  fieldsFold.body.appendChild(siteEl("div", "sess-desc", S.formFieldsDesc));
+  const fieldsHost = siteEl("div");
+  let paintReplyField = () => {};
+  const showId = {}; // field index → the id row is open
+  const paintFields = () => {
+    fieldsHost.innerHTML = "";
+    draft.fields.forEach((f, i) => {
+      const item = siteEl("div", "site-item");
+      const head = siteEl("div", "site-item-head");
+      const title = siteEl("span", "", "");
+      const retitle = () => { title.textContent = f.label || S.formFieldTypes[f.type] || f.type; };
+      retitle(); head.appendChild(title);
+      const acts = siteEl("span"); acts.style.cssText = "display:inline-flex;gap:4px;align-items:center;";
+      const idRow = siteEl("div"); idRow.hidden = !showId[i]; idRow.style.marginTop = "6px";
+      const idBtn = siteMini(showId[i] ? S.fieldHideId : S.fieldShowId, () => { showId[i] = !showId[i]; idRow.hidden = !showId[i]; idBtn.textContent = showId[i] ? S.fieldHideId : S.fieldShowId; });
+      acts.append(
+        siteMini("↑", () => { [draft.fields[i - 1], draft.fields[i]] = [draft.fields[i], draft.fields[i - 1]]; dirty(); paintFields(); }, { disabled: i === 0, title: S.moveUp }),
+        siteMini("↓", () => { [draft.fields[i + 1], draft.fields[i]] = [draft.fields[i], draft.fields[i + 1]]; dirty(); paintFields(); }, { disabled: i === draft.fields.length - 1, title: S.moveDown }),
+        idBtn,
+        siteTrashBtn(() => { draft.fields.splice(i, 1); delete showId[i]; dirty(); paintFields(); paintReplyField(); }, S.removeItem),
+      );
+      head.appendChild(acts); item.appendChild(head);
+      const grid = siteEl("div"); grid.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:6px;";
+      const fl = document.createElement("input"); fl.className = "field"; fl.placeholder = S.formFieldLabel; fl.value = f.label || "";
+      const fk = document.createElement("input"); fk.className = "field"; fk.placeholder = S.formFieldId; fk.value = f.id || ""; fk.style.marginBottom = "0";
+      fl.addEventListener("input", () => { f.label = fl.value; if (!fk.dataset.touched) { f.id = slug(fl.value); fk.value = f.id; } retitle(); dirty(); paintReplyField(); });
+      fk.addEventListener("input", () => { fk.dataset.touched = "1"; f.id = fk.value.trim().toLowerCase(); dirty(); paintReplyField(); });
+      fk.addEventListener("blur", () => { f.id = slug(fk.value); fk.value = f.id; paintReplyField(); });
+      const type = document.createElement("select"); type.className = "field";
+      Object.entries(S.formFieldTypes).forEach(([k, v]) => { const o = document.createElement("option"); o.value = k; o.textContent = v; type.appendChild(o); });
+      type.value = f.type || "text";
+      const req = siteEl("label", "toggle-row"); const reqCb = document.createElement("input"); reqCb.type = "checkbox"; reqCb.checked = !!f.required;
+      reqCb.addEventListener("change", () => { f.required = reqCb.checked; dirty(); }); req.append(reqCb, siteEl("span", "", S.fieldRequired)); req.style.marginBottom = "0";
+      grid.append(fl, type); item.appendChild(grid);
+      const extra = siteEl("div"); item.appendChild(extra);
+      const paintExtra = () => {
+        extra.innerHTML = "";
+        const g2 = siteEl("div"); g2.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;";
+        if (f.type !== "checkbox") { const ph = document.createElement("input"); ph.className = "field"; ph.placeholder = S.formFieldPlaceholder; ph.value = f.placeholder || ""; ph.addEventListener("input", () => { f.placeholder = ph.value; dirty(); }); g2.appendChild(ph); }
+        const hp = document.createElement("input"); hp.className = "field"; hp.placeholder = S.formFieldHelp; hp.value = f.help || ""; hp.addEventListener("input", () => { f.help = hp.value; dirty(); }); g2.appendChild(hp);
+        extra.appendChild(g2);
+        if (f.type === "select") { const op = document.createElement("input"); op.className = "field"; op.placeholder = S.fieldOptions; op.value = (f.options || []).join(", "); op.style.marginTop = "6px"; op.addEventListener("input", () => { f.options = op.value.split(",").map((x) => x.trim()).filter(Boolean); dirty(); }); extra.appendChild(op); }
+        extra.appendChild(req); req.style.marginTop = "6px";
+      };
+      type.addEventListener("change", () => { f.type = type.value; retitle(); dirty(); paintExtra(); paintReplyField(); });
+      paintExtra();
+      const idLab = siteEl("div", "k", S.formFieldIdLabel); idLab.style.marginBottom = "4px";
+      idRow.append(idLab, fk, siteEl("div", "sess-desc", S.formFieldIdHint)); item.appendChild(idRow);
+      fieldsHost.appendChild(item);
+    });
+    // Add a field: the pick list of types.
+    const add = document.createElement("select"); add.className = "field"; add.style.margin = "6px 0 4px";
+    const o0 = document.createElement("option"); o0.value = ""; o0.textContent = S.formAddField; add.appendChild(o0);
+    Object.entries(S.formFieldTypes).forEach(([k, v]) => { const o = document.createElement("option"); o.value = k; o.textContent = v; add.appendChild(o); });
+    add.addEventListener("change", () => {
+      if (!add.value) return;
+      draft.fields.push({ id: "", type: add.value, label: "", required: false, placeholder: "", help: "", options: [] });
+      add.value = ""; dirty(); paintFields();
+      const last = fieldsHost.querySelectorAll(".site-item"); const li = last[last.length - 1]; const first = li && li.querySelector("input"); if (first) first.focus();
+    });
+    fieldsHost.appendChild(add);
+  };
+  paintFields(); fieldsFold.body.appendChild(fieldsHost);
+  fieldsFold.body.appendChild(siteEl("div", "sess-desc", S.honeypotNote));
+  const sub = siteField(S.formSubmitLabel, draft.submit.label || "Submit"); sub.input.addEventListener("input", dirty); sub.wrap.style.marginTop = "10px"; fieldsFold.body.appendChild(sub.wrap);
+
+  // After submitting: a message in place, or a page of the site.
+  const modeWrap = siteEl("div", "site-kv"); modeWrap.appendChild(siteEl("div", "k", S.formAfterMode));
+  const mode = document.createElement("select"); mode.className = "field";
+  [["message", S.formAfterMessage], ["page", S.formAfterPage]].forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; mode.appendChild(o); });
+  mode.value = draft.after.mode === "page" ? "page" : "message"; modeWrap.appendChild(mode); afterFold.body.appendChild(modeWrap);
+  const afterHost = siteEl("div"); afterFold.body.appendChild(afterHost);
+  // The message is prose (markdown on disk, rendered by <Rich> in place of the form).
+  const msgWrap = siteEl("div", "site-kv"); msgWrap.appendChild(siteEl("div", "k", S.formAfterMessageLabel));
+  const msgRich = siteRichEditor(draft.after.message || "", dirty, { compact: true }); msgWrap.appendChild(msgRich.wrap);
+  const msg = { wrap: msgWrap, value: () => msgRich.getMarkdown() };
+  const pageWrap = siteEl("div", "site-kv"); pageWrap.appendChild(siteEl("div", "k", S.formAfterPageLabel));
+  const pageSel = document.createElement("select"); pageSel.className = "field";
+  const p0 = document.createElement("option"); p0.value = ""; p0.textContent = S.noneOption; pageSel.appendChild(p0);
+  (ctx.pages || []).forEach((p) => { const o = document.createElement("option"); o.value = p.id; o.textContent = p.title + (p.id === "home" ? "" : "  /" + (p.route || p.slug || p.id)); pageSel.appendChild(o); });
+  pageSel.value = draft.after.page || ""; pageSel.addEventListener("change", dirty);
+  pageWrap.appendChild(pageSel); pageWrap.appendChild(siteEl("div", "sess-desc", S.formAfterPageHint));
+  const paintAfter = () => { afterHost.innerHTML = ""; afterHost.appendChild(mode.value === "page" ? pageWrap : msg.wrap); };
+  mode.addEventListener("change", () => { dirty(); paintAfter(); }); paintAfter();
+
+  // Delivery for this form: recipients, reply-to, reply to the submitter, reCAPTCHA.
+  deliveryFold.body.appendChild(siteEl("div", "sess-desc", S.formDeliveryDesc));
+  const rcp = siteField(S.formRecipients, draft.recipients, { placeholder: S.formRecipientsPlaceholder, hint: S.formRecipientsHint }); rcp.input.addEventListener("input", dirty); deliveryFold.body.appendChild(rcp.wrap);
+  const rt = siteField(S.formReplyTo, draft.replyTo, { placeholder: S.formReplyToPlaceholder, hint: S.formReplyToHint }); rt.input.addEventListener("input", dirty); deliveryFold.body.appendChild(rt.wrap);
+  const rtfWrap = siteEl("div", "site-kv"); rtfWrap.appendChild(siteEl("div", "k", S.formReplyToField));
+  const rtf = document.createElement("select"); rtf.className = "field";
+  let rtfValue = draft.replyToField || "";
+  paintReplyField = () => {
+    rtf.innerHTML = "";
+    const o0 = document.createElement("option"); o0.value = ""; o0.textContent = S.formReplyToFieldNone; rtf.appendChild(o0);
+    draft.fields.filter((f) => f.type === "email" && f.id).forEach((f) => { const o = document.createElement("option"); o.value = f.id; o.textContent = f.label || f.id; rtf.appendChild(o); });
+    rtf.value = Array.from(rtf.options).some((o) => o.value === rtfValue) ? rtfValue : "";
+  };
+  rtf.addEventListener("change", () => { rtfValue = rtf.value; dirty(); }); paintReplyField();
+  rtfWrap.appendChild(rtf); rtfWrap.appendChild(siteEl("div", "sess-desc", S.formReplyToFieldHint)); deliveryFold.body.appendChild(rtfWrap);
+  const rc = siteEl("label", "toggle-row"); const rcCb = document.createElement("input"); rcCb.type = "checkbox"; rcCb.checked = !!draft.recaptcha;
+  rcCb.addEventListener("change", dirty); rc.append(rcCb, siteEl("span", "", S.formRecaptcha)); deliveryFold.body.appendChild(rc);
+  deliveryFold.body.appendChild(siteEl("div", "sess-desc", S.formRecaptchaHint));
+
+  // Where it's used
+  const used = siteFormUsage(form, ctx);
+  card.appendChild(siteEl("div", "sess-label", S.formUsedOn)).style.marginTop = "12px";
+  card.appendChild(siteEl("div", "sess-desc", used.length ? used.map((p) => p.title).join(", ") : S.formUsedNowhere));
+
+  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
+  saveBtn = siteEl("button", "panelbtn primary", S.saveForm); saveBtn.disabled = true; saveBtn.style.margin = "0";
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true;
+    const out = {
+      id: form.id, name: name.input.value, fields: draft.fields,
+      submit: { label: sub.input.value }, after: { mode: mode.value, message: msg.value(), page: pageSel.value || null },
+      recipients: rcp.input.value, replyTo: rt.input.value, replyToField: rtf.value, recaptcha: rcCb.checked,
+    };
+    const res = await window.desktop.saveSiteForm(out);
+    if (res && res.ok) { siteRailState.selected = { kind: "form", id: res.form.id }; siteFlash(actions, S.saved); refresh(); }
+    else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
+  });
+  actions.appendChild(saveBtn);
+  actions.appendChild(siteMini(S.deleteForm, async () => {
+    if (!confirm(S.deleteFormConfirm(form.name, used.length))) return;
+    const res = await window.desktop.deleteSiteForm(form.id);
+    if (res && res.ok) { siteRailState.selected = null; refresh(); }
+  }, { danger: true }));
+  card.appendChild(actions);
+  return card;
 }
 
 // --- Media picker + the image control -------------------------------------------
@@ -4404,33 +4732,42 @@ async function renderSite(body) {
   destroyLiveEditors();
   const data = await window.desktop.getSiteContent().catch(() => ({ ready: false, reason: "no-project", pages: [], blocks: [], site: { nav: [], footerLinks: [] } }));
   const refresh = () => { if (RAILS.site.classList.contains("active")) openModal("site"); };
+  // Empty states sit on one card, centred in the drawer, not as lines edge to edge.
+  const emptyCard = (why) => {
+    const wrap = siteEl("div", "site-empty"); const card = siteEl("div", "site-empty-card");
+    card.appendChild(siteEl("div", "site-empty-lead", COPY.site.lead));
+    card.appendChild(siteEl("div", "site-empty-why", why));
+    wrap.appendChild(card); body.appendChild(wrap); return card;
+  };
   if (data.licensed === false) {
     // Part of the Design bundle: without the key the drawer explains, the Site tab still previews.
-    body.appendChild(siteEl("div", "muted", COPY.site.lead)).style.cssText = "font-size:12.5px;margin-bottom:12px;";
-    body.appendChild(siteEl("div", "muted", COPY.site.notLicensed));
+    emptyCard(COPY.site.notLicensed);
     return;
   }
   if (!data.ready) {
-    body.appendChild(siteEl("div", "muted", COPY.site.lead)).style.cssText = "font-size:12.5px;margin-bottom:12px;";
-    body.appendChild(siteEl("div", "muted", COPY.site.notReady[data.reason] || COPY.site.notReady["not-promoted"]));
+    const card = emptyCard(COPY.site.notReady[data.reason] || COPY.site.notReady["not-promoted"]);
+    if (data.reason !== "no-site") siteBuildCta(card, { licensed: data.licensed !== false });
     return;
   }
   const posts = await window.desktop.getSitePosts().catch(() => []);
   const typesData = await window.desktop.getSiteTypes().catch(() => ({ types: [], entries: {} }));
-  const ctx = { types: typesData.types || [], entries: typesData.entries || {}, blocks: data.blocks };
+  const formsData = await window.desktop.getSiteForms().catch(() => ({ forms: [] }));
+  siteForms = formsData.forms || []; // the props editor's form picker reads this
+  const delivery = await window.desktop.getFormsDelivery().catch(() => ({ provider: "", from: "", hasKey: false, ready: false }));
+  const ctx = { types: typesData.types || [], entries: typesData.entries || {}, blocks: data.blocks, forms: siteForms, pages: data.pages, delivery };
   mediaIndex = await window.desktop.listMedia().catch(() => []); // thumbnails for image fields
   siteMarks = data.marks || {};
   siteBlogPath = (data.site && data.site.blogPath) || "blog";
   siteDesignId = data.design || null;
 
-  // ── Tabs: Pages · Posts · Types · Navigation · Settings ──
+  // ── Tabs: Pages · Posts · Types · Forms · Blocks · Navigation · Settings ──
   // Off per project until the Settings switch is on: only Settings is reachable then.
   const cms = await window.desktop.getCmsSettings().catch(() => ({ media: { quality: 55, maxWidth: 2400 }, defaults: { media: { quality: 55, maxWidth: 2400 } }, enabled: false }));
   siteFolds = { ...((cms.ui && cms.ui.folds) || {}) };
-  const TABS = ["pages", "posts", "types", "blocks", "nav", "settings"];
+  const TABS = ["pages", "posts", "types", "forms", "blocks", "nav", "settings"];
   if (!TABS.includes(siteRailState.tab)) siteRailState.tab = "pages";
   if (!cms.enabled) siteRailState.tab = "settings";
-  const counts = { pages: data.pages.length, posts: posts.length, types: ctx.types.length, blocks: data.blocks.length };
+  const counts = { pages: data.pages.length, posts: posts.length, types: ctx.types.length, forms: siteForms.length, blocks: data.blocks.length };
   const tabs = siteEl("div", "site-tabs");
   TABS.forEach((t) => {
     const b = siteEl("button", "site-tab" + (siteRailState.tab === t ? " active" : ""), COPY.site.tabs[t]); b.type = "button";
@@ -4488,6 +4825,9 @@ async function renderSite(body) {
   } else if (siteRailState.tab === "types") {
     const { left, right } = two();
     renderSiteTypesList(left, right, ctx, refresh);
+  } else if (siteRailState.tab === "forms") {
+    const wrap = siteEl("div"); body.appendChild(wrap); // full width: the Forms fold holds two columns
+    renderSiteForms(wrap, ctx, refresh);
   } else if (siteRailState.tab === "blocks") {
     const wrap = siteEl("div", "site-single"); body.appendChild(wrap);
     wrap.appendChild(renderSiteBlocks(data));
@@ -5375,6 +5715,7 @@ window.desktop.onAgentEvent((evt) => {
       if (intakeActive && intakeph.classList.contains("flow")) showBriefComplete();
       endTurnGate(); // release serialization AFTER showBriefComplete decided for this turn
       updateSessionGauge(evt.usage, evt.modelUsage); // refresh the context gauge + maybe nudge
+      if (siteBuildTurn) finishSiteBuildTurn(true); // the promote turn: open the CMS drawer once the site is ready
       // Quiet build finished → reveal the completed design now (both tabs, land on Home) and
       // open the chat for iteration. Nothing showed during the build.
       if (quietBuildActive) { finishQuietBuild(); break; }
@@ -5403,6 +5744,7 @@ window.desktop.onAgentEvent((evt) => {
       clearIntakePending();
       addMsg("error", "✖ " + evt.message);
       endTurnGate(); // release serialization on error too
+      if (siteBuildTurn) finishSiteBuildTurn(false);
       // Even on error, settle-then-reveal so the designer isn't stuck behind a
       // cover (the chat carries the error detail).
       if (quietBuildActive) { finishQuietBuild(); break; } // reveal + open chat (the error is in it)

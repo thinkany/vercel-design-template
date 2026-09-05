@@ -117,7 +117,8 @@ function introspectBlocks(dir, { esbuild } = {}) {
 
 // Field kinds by dotted path (list indices skipped, matching the editor's paths).
 // Leaves: image (the { src, alt } fragment), link ({ label, href }), enum (with
-// options), string, number, boolean. Containers: object, list.
+// options), string (richtext / code / form by .describe()), number, boolean.
+// Containers: object, list.
 function zodFields(schema, out, at, depth, desc) {
   if (!schema || !schema._def || depth > 8) return;
   const d = schema._def;
@@ -148,7 +149,7 @@ function zodFields(schema, out, at, depth, desc) {
       if (at && opts.length && opts.every((o) => o._def && o._def.typeName === "ZodLiteral")) { out[at] = { kind: "enum", options: opts.map((o) => o._def.value) }; return; }
       return inner(opts[0]);
     }
-    case "ZodString": { if (at) out[at] = { kind: desc === "richtext" ? "richtext" : desc === "code" ? "code" : "string" }; return; }
+    case "ZodString": { if (at) out[at] = { kind: desc === "richtext" ? "richtext" : desc === "code" ? "code" : desc === "form" ? "form" : "string" }; return; }
     case "ZodNumber": { if (at) out[at] = { kind: "number" }; return; }
     case "ZodBoolean": { if (at) out[at] = { kind: "boolean" }; return; }
     default: return;
