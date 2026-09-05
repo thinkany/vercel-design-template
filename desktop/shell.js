@@ -5836,7 +5836,7 @@ gauge.addEventListener("keydown", (e) => {
 confirmCancel.addEventListener("click", closeConfirm);
 confirmEl.addEventListener("click", (e) => { if (e.target === confirmEl) closeConfirm(); }); // backdrop
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !confirmEl.hidden) closeConfirm(); });
-confirmOk.addEventListener("click", () => { const a = confirmAction; closeConfirm(); if (a) a(); });
+confirmOk.addEventListener("click", () => { const a = confirmAction; confirmCancelAction = null; closeConfirm(); if (a) a(); }); // OK is not a cancel: clear it before the close fires it
 
 // Render a finished assistant message with lightweight inline markdown:
 // **bold**, `code`, and hex color chips. Built with DOM nodes (never innerHTML)
