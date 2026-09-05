@@ -3405,66 +3405,78 @@ function renderSiteTypeEditor(type, ctx, refresh) {
   const card = siteEl("div");
   card.appendChild(siteEl("div", "site-page-title", isNew ? S.addType : S.editType + ": " + type.label)).style.cssText = "font-size:15px;margin-bottom:10px;";
   let saveBtn; const dirty = () => { saveBtn.disabled = false; };
-  const lab = siteField(S.typeLabel, draft.label); card.appendChild(lab.wrap);
-  const sing = siteField(S.typeSingular, draft.singular); card.appendChild(sing.wrap);
-  const pth = siteField(S.typePath, draft.path, { hint: S.typePathHint }); card.appendChild(pth.wrap);
   const slug = (s) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const foldKey = "type:" + (draft.key || "new");
+
+  // Settings: names, address, the index page.
+  const settings = siteFold(S.typeSettingsHeading, foldKey + ":settings"); card.appendChild(settings.sec);
+  const lab = siteField(S.typeLabel, draft.label); settings.body.appendChild(lab.wrap);
+  const sing = siteField(S.typeSingular, draft.singular); settings.body.appendChild(sing.wrap);
+  const pth = siteField(S.typePath, draft.path, { hint: S.typePathHint }); settings.body.appendChild(pth.wrap);
   lab.input.addEventListener("input", () => { dirty(); if (isNew) { draft.key = slug(lab.input.value); if (!pth.input.dataset.touched) pth.input.value = "/" + draft.key; } });
   pth.input.addEventListener("input", () => { pth.input.dataset.touched = "1"; dirty(); });
   sing.input.addEventListener("input", dirty);
   if (isNew && !pth.input.value) pth.input.value = "/";
-  // index page
   const ix = siteEl("label", "toggle-row"); const ixCb = document.createElement("input"); ixCb.type = "checkbox"; ixCb.checked = !!draft.index;
-  ix.append(ixCb, siteEl("span", "", S.typeIndexToggle)); card.appendChild(ix);
-  const ixHost = siteEl("div"); card.appendChild(ixHost);
+  ix.append(ixCb, siteEl("span", "", S.typeIndexToggle)); settings.body.appendChild(ix);
+  const ixHost = siteEl("div"); settings.body.appendChild(ixHost);
   const ixT = siteField(S.typeIndexTitle, draft.index && draft.index.title); const ixD = siteField(S.typeIndexDescription, draft.index && draft.index.description, { textarea: true });
   ixT.input.addEventListener("input", dirty); ixD.input.addEventListener("input", dirty);
   const paintIx = () => { ixHost.innerHTML = ""; if (ixCb.checked) ixHost.append(ixT.wrap, ixD.wrap); };
   ixCb.addEventListener("change", () => { dirty(); paintIx(); }); paintIx();
 
-  // fields
-  card.appendChild(siteEl("div", "sess-label", S.fieldsHeading)).style.marginTop = "12px";
-  card.appendChild(siteEl("div", "sess-desc", S.fieldsDesc));
-  const fieldsHost = siteEl("div");
+  // Fields: each one collapsible (open by default, remembered while this editor lives)
+  // and draggable to reorder; the trash can removes it.
+  const fieldsFold = siteFold(S.fieldsHeading, foldKey + ":fields"); card.appendChild(fieldsFold.sec);
+  fieldsFold.body.appendChild(siteEl("div", "sess-desc", S.fieldsDesc));
+  const fieldsHost = siteEl("div"); fieldsFold.body.appendChild(fieldsHost);
+  const openState = new WeakMap(); // field object → false when collapsed
+  const isOpen = (f) => openState.get(f) !== false;
   const paintFields = () => {
     fieldsHost.innerHTML = "";
     draft.fields.forEach((f, i) => {
       const item = siteEl("div", "site-item");
       const head = siteEl("div", "site-item-head");
-      head.appendChild(siteEl("span", "", f.key || COPY.site.listItem(i + 1)));
-      const acts = siteEl("span");
-      acts.append(siteMini("↑", () => { if (i > 0) { [draft.fields[i - 1], draft.fields[i]] = [draft.fields[i], draft.fields[i - 1]]; dirty(); paintFields(); } }, { disabled: i === 0 }), " ",
-        siteMini(S.removeItem, () => { draft.fields.splice(i, 1); dirty(); paintFields(); }, { danger: true }));
+      const title = siteEl("span", "site-block-name", (f.label || f.key || S.fieldUntitled(i + 1)) + (f.kind ? "  ·  " + (S.kinds[f.kind] || f.kind) : ""));
+      head.style.cssText = "justify-content:flex-start;gap:8px;cursor:grab;"; title.style.flex = "1"; // grip | title | actions
+      head.appendChild(title);
+      const acts = siteEl("span"); acts.style.cssText = "display:inline-flex;gap:4px;align-items:center;";
+      const body = siteEl("div"); body.hidden = !isOpen(f);
+      const chev = siteMini(isOpen(f) ? "▾" : "▸", () => { openState.set(f, !isOpen(f)); body.hidden = !isOpen(f); chev.textContent = isOpen(f) ? "▾" : "▸"; chev.title = isOpen(f) ? S.fieldCollapseTip : S.fieldExpandTip; }, { title: isOpen(f) ? S.fieldCollapseTip : S.fieldExpandTip });
+      acts.append(chev, siteTrashBtn(() => { draft.fields.splice(i, 1); dirty(); paintFields(); }, S.removeItem));
       head.appendChild(acts); item.appendChild(head);
+      siteMakeDraggable(head, i, (from, to) => { const [m] = draft.fields.splice(from, 1); draft.fields.splice(to, 0, m); dirty(); paintFields(); });
       const grid = siteEl("div"); grid.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:6px;";
       const fl = document.createElement("input"); fl.className = "field"; fl.placeholder = S.fieldLabel; fl.value = f.label || "";
       const fk = document.createElement("input"); fk.className = "field"; fk.placeholder = S.fieldKey; fk.value = f.key || "";
-      fl.addEventListener("input", () => { f.label = fl.value; if (!fk.dataset.touched) { f.key = slug(fl.value).replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase()); fk.value = f.key; } dirty(); });
-      fk.addEventListener("input", () => { fk.dataset.touched = "1"; f.key = fk.value.trim(); dirty(); });
+      const retitle = () => { title.textContent = (f.label || f.key || S.fieldUntitled(i + 1)) + (f.kind ? "  ·  " + (S.kinds[f.kind] || f.kind) : ""); };
+      fl.addEventListener("input", () => { f.label = fl.value; if (!fk.dataset.touched) { f.key = slug(fl.value).replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase()); fk.value = f.key; } retitle(); dirty(); });
+      fk.addEventListener("input", () => { fk.dataset.touched = "1"; f.key = fk.value.trim(); retitle(); dirty(); });
       const kind = document.createElement("select"); kind.className = "field";
       Object.entries(S.kinds).forEach(([k, v]) => { const o = document.createElement("option"); o.value = k; o.textContent = v; kind.appendChild(o); });
       kind.value = f.kind || "text";
       const req = siteEl("label", "toggle-row"); const reqCb = document.createElement("input"); reqCb.type = "checkbox"; reqCb.checked = !!f.required;
       reqCb.addEventListener("change", () => { f.required = reqCb.checked; dirty(); }); req.append(reqCb, siteEl("span", "", S.fieldRequired)); req.style.marginBottom = "0";
-      grid.append(fl, fk, kind, req); item.appendChild(grid);
-      const extra = siteEl("div"); item.appendChild(extra);
+      grid.append(fl, fk, kind, req); body.appendChild(grid);
+      const extra = siteEl("div"); body.appendChild(extra);
       const paintExtra = () => {
         extra.innerHTML = "";
         if (kind.value === "select") { const op = document.createElement("input"); op.className = "field"; op.placeholder = S.fieldOptions; op.value = (f.options || []).join(", "); op.style.marginTop = "6px"; op.addEventListener("input", () => { f.options = op.value.split(",").map((x) => x.trim()).filter(Boolean); dirty(); }); extra.appendChild(op); }
         if (kind.value === "reference") { const rf = document.createElement("select"); rf.className = "field"; rf.style.marginTop = "6px"; const o0 = document.createElement("option"); o0.value = ""; o0.textContent = S.fieldReference; rf.appendChild(o0); ctx.types.forEach((t) => { if (t.key !== draft.key) { const o = document.createElement("option"); o.value = t.key; o.textContent = t.label; rf.appendChild(o); } }); rf.value = f.reference || ""; rf.addEventListener("change", () => { f.reference = rf.value; dirty(); }); extra.appendChild(rf); }
       };
-      kind.addEventListener("change", () => { f.kind = kind.value; dirty(); paintExtra(); });
+      kind.addEventListener("change", () => { f.kind = kind.value; retitle(); dirty(); paintExtra(); });
       paintExtra();
+      item.appendChild(body);
       fieldsHost.appendChild(item);
     });
-    fieldsHost.appendChild(siteMini(S.addField, () => { draft.fields.push({ key: "", label: "", kind: "text", required: false }); dirty(); paintFields(); }));
+    fieldsHost.appendChild(siteMini(S.addField, () => { const f = { key: "", label: "", kind: "text", required: false }; draft.fields.push(f); openState.set(f, true); dirty(); paintFields(); const last = fieldsHost.querySelectorAll(".site-item"); const li = last[last.length - 1]; const first = li && li.querySelector("input"); if (first) first.focus(); }));
   };
-  paintFields(); card.appendChild(fieldsHost);
+  paintFields();
 
-  // template
-  card.appendChild(siteEl("div", "sess-label", S.templateHeading)).style.marginTop = "12px";
-  card.appendChild(siteEl("div", "sess-desc", S.templateDesc));
-  card.appendChild(siteBlocksEditor(draft.template, ctx.blocks, dirty, "type:" + (draft.key || "new")));
+  // Page template: the blocks that render each entry.
+  const tpl = siteFold(S.templateHeading, foldKey + ":template"); card.appendChild(tpl.sec);
+  tpl.body.appendChild(siteEl("div", "sess-desc", S.templateDesc));
+  tpl.body.appendChild(siteBlocksEditor(draft.template, ctx.blocks, dirty, "type:" + (draft.key || "new")));
 
   const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
   saveBtn = siteEl("button", "panelbtn primary", S.saveType); saveBtn.disabled = !isNew; saveBtn.style.margin = "0";
