@@ -7264,7 +7264,7 @@ async function renderDirectionPanel(host, opts = {}) {
     gallery.hidden = !images.length;
     images.forEach((im, i) => {
       const tile = document.createElement("button"); tile.type = "button"; tile.className = "idir-tile"; tile.title = im.alt || "";
-      const img = document.createElement("img"); img.src = im.src; img.alt = im.alt || ""; img.loading = "lazy";
+      const img = document.createElement("img"); img.src = im.thumb || im.src; img.alt = im.alt || ""; img.loading = "lazy";
       tile.appendChild(img);
       if (im.credit) {
         const cr = document.createElement("div"); cr.className = "idir-credit";

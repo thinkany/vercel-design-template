@@ -1,8 +1,9 @@
 // ©2026 thinkany llc. All rights reserved.
 // LENS GALLERY, step 2: turn the curator's picks into the images derive serves. Reads
 // picks.json ({ lensId: [ { title: "File:…" } | { local, credit, creditUrl, license, alt } ] }),
-// fetches each Commons original (or reads the local file), resizes to 1400px wide, writes
-// AVIF to the derive repo's public/lenses/<lens>-<n>.avif, and rewrites
+// fetches each Commons original (or reads the local file), writes AVIF to the derive repo's
+// public/lenses/: <lens>-<n>.avif (1200px, the lightbox) and <lens>-<n>-thumb.avif (520px
+// 4:3 crop, the picker tile), and rewrites
 // derive/direction/lens-gallery.json with the credit, license and file page per image.
 // Then commit + push derive.
 //
@@ -21,7 +22,8 @@ const imgDir = path.join(deriveRepo, "public", "lenses");
 const dataFile = path.join(deriveRepo, "direction", "lens-gallery.json");
 const API = "https://commons.wikimedia.org/w/api.php";
 const UA = "thinkany-design-lens-gallery/1.0 (rob@thinkany.co)";
-const WIDTH = 1400, QUALITY = 50;
+const WIDTH = 1200, QUALITY = 45;   // the lightbox image
+const THUMB = 520, THUMB_QUALITY = 45; // the picker tile
 const strip = (html) => String(html || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
 
 async function commonsInfo(title) {
@@ -57,6 +59,9 @@ async function main() {
         rec = { file, alt: it.alt || info.description, credit: it.credit || info.artist || "Wikimedia Commons", creditUrl: info.pageUrl, license: info.license };
       }
       await sharp(buf).rotate().resize({ width: WIDTH, withoutEnlargement: true }).avif({ quality: QUALITY }).toFile(path.join(imgDir, file));
+      const thumb = `${lens}-${n}-thumb.avif`;
+      await sharp(buf).rotate().resize({ width: THUMB, height: Math.round(THUMB * 0.75), fit: "cover", withoutEnlargement: true }).avif({ quality: THUMB_QUALITY }).toFile(path.join(imgDir, thumb));
+      rec.thumb = thumb;
       out[lens].push(rec);
       console.log(`[gallery] ${file}  ${rec.license}  ${rec.credit}`);
     }
