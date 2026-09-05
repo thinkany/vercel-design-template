@@ -1,6 +1,6 @@
 # Lens gallery: showing a direction, not just naming it
 
-**Status:** BUILT 2026-09-05 (app UI, derive data model, 29 essays, curation tooling). Images pending the curator's picks; general directions also get one self-rendered example each (a later pass).
+**Status:** BUILT 2026-09-05. App UI, derive data model, 29 essays, Commons curation tooling, and 86 credited images live on derive. The self-rendered examples runner is BUILT (Developer menu, dev only) and not yet run: Rob runs it when ready.
 
 ## Goal
 
@@ -52,9 +52,49 @@ what to expect on the page. Designer-facing only: none of it enters a prompt.
   essay beneath. Escape, the close button or a click outside closes it. Arrow keys
   step through the images.
 
+## Self-rendered examples (the runner)
+
+General directions have no public-domain canon, so each gets one example the tool
+built itself. Decisions: one fictional client for every render, so the images teach
+the direction rather than a brand; captured at the tile's own 4:3 above the fold;
+credited "thinkany design", licence "own work".
+
+- **The brief.** `desktop/build/lens-gallery/example-brief.json`: Fieldnote Studio, a
+  small architecture and interiors practice. Neutral enough to be styled every way.
+  Edit it there; every render reads it.
+- **The runner.** `desktop/lens-examples.cjs`, started from the app's **Developer**
+  menu (present only when the app runs unpackaged). Two entries: "one direction (dry
+  run)" renders the first general direction so you can judge the brief and the crop;
+  "all general directions" renders the rest. It needs the Claude key and the Design
+  license (the direction sampler and the /design-brief playbook come from derive).
+- **What it does per direction.** Scaffolds a throwaway project under the app's data
+  folder (`lens-examples/<lens>`), samples the direction with that lens pinned (the
+  same call a direct pick in the picker makes), builds the Get Designing prompt from
+  the brief with the direction block, expands the /design-brief playbook, and runs the
+  agent turn with the project served by Vite. Questions the skill might ask are
+  declined so the build proceeds on defaults. Then it opens
+  `/?v=<variation>&capture=desktop` in the hidden capture window at 1440 by 1080,
+  waits for the capture-ready marker and the fonts, and saves the viewport as PNG.
+- **Output.** `desktop/build/lens-gallery/examples/<lens>.png` and `examples.json`,
+  whose entries are already in picks format (`local`, `credit`, `license`, `alt`).
+  The folder is git-ignored; the pictures are regenerable.
+- **Adding to the picker.** Review the PNGs. For each keeper, paste its entry from
+  `examples.json` into `picks.json` under the lens, as the first image (the
+  self-rendered example leads, the Commons references follow). Run
+  `node desktop/build/lens-gallery/build.mjs`, which converts local files like any
+  other pick, then commit and push derive. Restart the app; the tiles update.
+- **Cost and time.** One design build per direction on the designer's key, roughly
+  five minutes each; seventeen general directions is about an hour and a half
+  unattended. The app is busy for the duration and the previous project is reopened
+  at the end.
+- **Known limits.** The dry run and the full run render into the same folder, so a
+  re-run overwrites. Image sourcing follows the app's Images setting (placeholders
+  when that is on). A failed direction is recorded in `examples.json` with its error
+  and the batch moves on.
+
 ## Follow-ups
 
-- Self-rendered examples for the general directions: build one sample home page
-  per direction with the app, screenshot, add to picks as local files.
+- Run the self-rendered examples batch and fold the keepers into picks.json.
+- A third Pop Art image (the picked one was AI-generated and was dropped).
 - The remaining thin shortlist (Swiss: six candidates) may need a hand-picked file
   or two from museum open-access collections.

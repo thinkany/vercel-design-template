@@ -3996,7 +3996,59 @@ function buildAppMenu() {
     { role: "editMenu" },
     { role: "viewMenu" },
     { role: "windowMenu" },
+    // Dev only: tooling that never ships. Render lens examples = the self-rendered images
+    // for the direction picker's gallery (desktop/lens-examples.cjs).
+    ...(app.isPackaged ? [] : [{ label: "Developer", submenu: [
+      { label: "Render lens examples: one direction (dry run)", click: () => renderLensExamples({ dryRun: true }) },
+      { label: "Render lens examples: all general directions", click: () => renderLensExamples({}) },
+    ] }]),
   ]));
+}
+
+// The lens-examples batch (dev only). Takes the app over: each throwaway project becomes
+// the current project so Vite serves it for the capture; the previous project is reopened
+// at the end. Costs one design build per direction on the designer's key.
+let lensExamplesRunning = false;
+async function renderLensExamples(opts) {
+  if (lensExamplesRunning) return;
+  if (!process.env.ANTHROPIC_API_KEY) { dialog.showMessageBox(mainWindow, { message: "Connect a Claude API key first (Keys & Licenses)." }); return; }
+  const n = opts.dryRun ? "one direction" : "every general direction";
+  const ask = await dialog.showMessageBox(mainWindow, {
+    type: "question", buttons: ["Render", "Cancel"], defaultId: 0, cancelId: 1,
+    message: `Render lens examples for ${n}?`,
+    detail: "Builds the Fieldnote brief with each direction pinned and captures the home page. One design build per direction on your key, about five minutes each. The app is busy until it finishes; the project you have open is reopened at the end.",
+  });
+  if (ask.response !== 0) return;
+  lensExamplesRunning = true;
+  const previous = currentProject;
+  const { runLensExamples } = require("./lens-examples.cjs");
+  const { runCaptureOp } = require("./capture-bridge.cjs");
+  const { runPrompt } = await import(pathToFileURL(path.join(__dirname, "agent.mjs")).href);
+  const log = (m) => console.log(m);
+  process.env.TA_DESIGN_RESEARCH = "off"; process.env.TA_DESIGN_RESEARCH_BROAD = "off";
+  process.env.TA_DESIGN_IMAGES = loadImagesPlaceholder() ? "placeholder" : "on";
+  process.env.TA_DESIGN_A11Y = "off";
+  let out = null, err = null;
+  try {
+    out = await runLensExamples({
+      appRoot, workRoot: path.join(app.getPath("userData"), "lens-examples"),
+      scaffoldProject, detectDesign, directionMeta, sampleDirection, buildDesignPrompt,
+      expandPrompt: (pr) => { const x = skillsClient && skillsClient.expandPrompt(pr); return x ? x.prompt : null; },
+      startViteFor: async (dir) => { currentProject = dir; return startViteFor(dir); },
+      runPrompt: (args) => runPrompt({ ...args, onSuggest: () => {}, model: currentModel, copyVoice: effectiveVoice(args.cwd) }),
+      captureOp: runCaptureOp, log,
+    }, opts);
+  } catch (e) { err = e; }
+  lensExamplesRunning = false;
+  // Put the workspace back.
+  if (previous && fs.existsSync(previous)) { currentProject = previous; try { await startViteFor(previous); } catch {} }
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("agent:event", { type: "result" });
+  const done = out ? Object.values(out.results).filter((r) => !r.error).length : 0;
+  const failed = out ? Object.values(out.results).filter((r) => r.error).length : 0;
+  dialog.showMessageBox(mainWindow, {
+    message: err ? `Lens examples stopped: ${err.message}` : `Lens examples: ${done} rendered${failed ? `, ${failed} failed` : ""}.`,
+    detail: out ? `Images and examples.json are in ${out.outDir}. Review them, paste the entries you want into picks.json, then run build.mjs. Reopen your project if the preview looks stale.` : "",
+  });
 }
 
 app.whenReady().then(async () => {

@@ -51,7 +51,7 @@ async function main() {
       const file = `${lens}-${n}.avif`;
       let buf, rec;
       if (it.local) {
-        buf = fs.readFileSync(it.local);
+        buf = fs.readFileSync(path.isAbsolute(it.local) ? it.local : path.join(here, it.local)); // relative to this folder (examples/<lens>.png)
         rec = { file, alt: it.alt || "", credit: it.credit || "thinkany design", creditUrl: it.creditUrl || "", license: it.license || "own work" };
       } else {
         const info = await commonsInfo(it.title);

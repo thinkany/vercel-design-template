@@ -192,4 +192,7 @@ function stopCaptureBridge() {
   if (server) { try { server.close(); } catch { /* ignore */ } server = null; }
 }
 
-module.exports = { startCaptureBridge, stopCaptureBridge };
+/** Run one op in-process (the lens-examples runner), serialized with the HTTP callers. */
+function runCaptureOp(op) { return enqueue(() => handleOp(op)); }
+
+module.exports = { startCaptureBridge, stopCaptureBridge, runCaptureOp };

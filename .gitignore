@@ -35,3 +35,5 @@ site/.astro/
 
 # lens gallery curation output (contact sheets)
 desktop/build/lens-gallery/out/
+# lens gallery self-rendered examples (regenerable via Developer → Render lens examples)
+desktop/build/lens-gallery/examples/
