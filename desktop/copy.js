@@ -499,8 +499,8 @@ window.COPY = {
       steps: {
         resend: [
           "Create an account at resend.com. The free plan covers a website’s contact forms.",
-          "Domains → Add domain: the client’s domain (client.com). Add the DNS records it lists at the domain’s registrar and wait for it to show Verified.",
           "API Keys → Create API key, with Sending access. Copy it and paste it below; it’s shown once.",
+          "Domains → Add domain: the client’s domain (client.com). Add the DNS records it lists at the domain’s registrar and wait for it to show Verified.",
           "From address: an address at that domain, like Website <forms@client.com>.",
         ],
         postmark: [
