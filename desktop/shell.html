@@ -422,11 +422,11 @@
       }
       #modal-title { font-size: 15px; font-weight: 600; color: #fff; }
       #modal-acts { display: flex; align-items: center; gap: 12px; }
-      /* "Preview in Browser" (the CMS drawer only): a white outlined button beside the close. */
-      #modal-preview { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid rgba(255,255,255,.8); border-radius: 7px; background: transparent; color: #fff; cursor: pointer; padding: 0; opacity: .85; transition: opacity .15s, background .15s; }
-      #modal-preview:hover { opacity: 1; background: rgba(255,255,255,.12); }
+      /* "Preview in Browser" (the CMS drawer only): a plain white icon beside the close, same weight. */
+      #modal-preview { display: flex; align-items: center; justify-content: center; border: none; background: none; color: #fff; cursor: pointer; padding: 0; opacity: .7; transition: opacity .25s linear; }
+      #modal-preview:hover { opacity: 1; }
       #modal-preview[hidden] { display: none; }
-      #modal-preview svg { width: 16px; height: 16px; display: block; }
+      #modal-preview svg { width: 20px; height: 20px; display: block; }
       #modal-close { border: none; background: none; cursor: pointer; color: #fff; line-height: 1; padding: 0; display: flex; opacity: .7; transition: opacity .25s linear; }
       #modal-close:hover { opacity: 1; }
       #modal-close svg { width: 20px; height: 20px; display: block; }   /* matches the rail icons (life-buoy) height */
