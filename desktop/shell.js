@@ -1172,9 +1172,13 @@ async function openModal(kind) {
   const { title, render, wide } = PANELS[kind];
   modalTitle.textContent = title;
   modalBody.innerHTML = "";
-  // Wide panels (the CMS) take most of the window; the rest keep the narrow drawer.
-  // The width switches before the slide so a fresh open animates at its final size.
-  el("modal-card").classList.toggle("wide", !!wide);
+  // Wide panels (the CMS) take most of the window. The rest open as wide as the chat
+  // pane is currently set (its drag width), never narrower than the drawer's own
+  // 360px; they aren't draggable themselves. The width switches before the slide so a
+  // fresh open animates at its final size.
+  const card = el("modal-card");
+  card.classList.toggle("wide", !!wide);
+  card.style.width = wide ? "" : Math.max(360, parseInt(el("chat").style.width, 10) || 400) + "px";
   el("modal-card").dataset.panel = kind; // lets CSS style a panel's controls (the CMS switches)
   Object.values(RAILS).forEach((b) => b.classList.remove("active"));
   RAILS[kind].classList.add("active");
