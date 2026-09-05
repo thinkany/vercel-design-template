@@ -212,7 +212,7 @@
       .idir-tile:hover .idir-credit, .idir-tile:focus-visible .idir-credit { opacity: 1; }
       .idir-tile .idir-credit a { color: #fff; text-decoration: underline; }
       .idir-about { display: inline-block; margin: 8px 0 2px; padding: 0; border: 0; background: none; font: inherit; font-size: 12px; color: #505056; text-decoration: underline; cursor: pointer; }
-      #lensbox { position: fixed; inset: 0; z-index: 220; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.5); }
+      #lensbox { position: fixed; inset: 0; z-index: 7500; /* above the reroll overlay (6000) and its help (7000): the picker opens it from both places */ display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.5); }
       #lensbox[hidden] { display: none; }
       #lensbox-card { width: 860px; max-width: 92vw; height: 88vh; background: #fff; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 18px 60px rgba(0,0,0,.35); }
       #lensbox-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; background: #111; flex: none; }
