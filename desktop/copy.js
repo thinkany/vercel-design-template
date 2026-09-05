@@ -482,7 +482,7 @@ window.COPY = {
       fromHint: "The sender the client sees. It must be at a domain verified with the service (the client’s own domain, not gmail.com); a name in front is optional.",
       key: "API key",
       keyPlaceholder: "Paste the key",
-      keySaved: (hint) => `Saved (ends in ${hint}). Paste a new key to replace it.`,
+      keySaved: (hint) => `**********${hint}`,
       removeKey: "Remove key",
       show: "Show",
       hide: "Hide",

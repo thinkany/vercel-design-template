@@ -3564,7 +3564,7 @@ function renderFormsDelivery(delivery, hasForms) {
   const keyRow = siteEl("div"); keyRow.style.cssText = "display:flex;gap:6px;align-items:center;";
   const key = document.createElement("input"); key.className = "field"; key.type = "password"; key.autocomplete = "off"; key.spellcheck = false; key.style.marginBottom = "0";
   const showBtn = siteMini(D.show, () => { const pw = key.type === "password"; key.type = pw ? "text" : "password"; showBtn.textContent = pw ? D.hide : D.show; });
-  const removeBtn = siteMini(D.removeKey, () => { keyValue = ""; key.value = ""; paint(); }, { danger: true });
+  const removeBtn = siteTrashBtn(() => { keyValue = ""; key.value = ""; paint(); }, D.removeKey);
   keyRow.append(key, showBtn, removeBtn); keyWrap.appendChild(keyRow); body.appendChild(keyWrap);
 
   // Step 3: the from address, then Save
@@ -3603,8 +3603,11 @@ function renderFormsDelivery(delivery, hasForms) {
     }
     // the key, once a service is chosen
     keyWrap.hidden = !p;
-    key.placeholder = keyValue === null && saved.hasKey ? D.keySaved(saved.keyHint) : D.keyPlaceholder;
-    removeBtn.hidden = !(keyValue === null && saved.hasKey);
+    const showingSaved = keyValue === null && saved.hasKey;
+    key.placeholder = showingSaved ? D.keySaved(saved.keyHint) : D.keyPlaceholder;
+    removeBtn.hidden = !showingSaved;
+    showBtn.hidden = !(keyValue && keyValue.length); // Show/Hide only while a new key is being typed
+    if (showBtn.hidden) { key.type = "password"; showBtn.textContent = D.show; }
     // the from address, once there's a key
     const showFrom = !!p && hasKey();
     from.wrap.hidden = !showFrom;
