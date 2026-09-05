@@ -3597,7 +3597,9 @@ function renderFormsDelivery(delivery, hasForms) {
       const ol = document.createElement("ol"); ol.className = "sess-desc"; ol.style.cssText = "padding-left:18px;margin:0 0 8px;";
       list.forEach((t) => { const li = document.createElement("li"); li.textContent = t; li.style.marginBottom = "4px"; ol.appendChild(li); });
       steps.appendChild(ol);
-      steps.appendChild(siteMini(D.open(D.providers[p]), () => window.desktop.openExternal({ resend: "https://resend.com", postmark: "https://postmarkapp.com", sendgrid: "https://sendgrid.com" }[p])));
+      const openBtn = siteMini(D.open(D.providers[p]), () => window.desktop.openExternal({ resend: "https://resend.com", postmark: "https://postmarkapp.com", sendgrid: "https://sendgrid.com" }[p]));
+      openBtn.style.marginBottom = "14px"; // room between the service's steps and the key field
+      steps.appendChild(openBtn);
     }
     // the key, once a service is chosen
     keyWrap.hidden = !p;
