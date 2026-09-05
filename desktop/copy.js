@@ -502,6 +502,7 @@ window.COPY = {
           "API Keys → Create API key, with Sending access. Copy it and paste it below; it’s shown once.",
           "Domains → Add domain: the client’s domain (client.com). Add the DNS records it lists at the domain’s registrar and wait for it to show Verified.",
           "From address: an address at that domain, like Website <forms@client.com>.",
+          "Follow Resend’s instructions for keeping email out of recipients’ spam folders (SPF, DKIM and DMARC records on the domain, a real reply-to address).",
         ],
         postmark: [
           "Sign up at postmarkapp.com. New accounts can send to addresses on their own domain right away; Postmark reviews the account before it sends anywhere else.",
