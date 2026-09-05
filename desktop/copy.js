@@ -543,9 +543,9 @@ window.COPY = {
       },
       types: {
         title: "Types",
-        intro: "Your own kinds of content, like products, team members or landing pages. A type has fields, an address, and a page template built from your blocks; every entry gets a form made from those fields.",
+        intro: "Your own kinds of content, like products, team members or landing pages. A type has fields, an address, and a content template built from your blocks; every entry gets a form made from those fields.",
         sections: [
-          { h: "Create a type", items: ["<b>Add a content type</b>, give it a name (the address is made from it), and add <b>fields</b>: text, long text, rich text, number, yes/no, date, image, choice, list, link, or a reference to another type.", "Tick <b>Show an index page</b> to list every entry at the type’s address.", "In <b>Page template</b>, choose the blocks that render each entry. In any text, <code>{{field}}</code> fills in that field; <code>{{title}}</code> is the entry’s title. A field name alone in an image slot, like <code>{{photo}}</code>, hands over the whole image."] },
+          { h: "Create a type", items: ["<b>Add a content type</b>, give it a name (the address is made from it), and add <b>fields</b>: text, long text, rich text, number, yes/no, date, image, choice, list, link, or a reference to another type.", "Tick <b>Show an index page</b> to list every entry at the type’s address.", "In <b>Content template</b>, choose the blocks that render each entry. In any text, <code>{{field}}</code> fills in that field; <code>{{title}}</code> is the entry’s title. A field name alone in an image slot, like <code>{{photo}}</code>, hands over the whole image."] },
           { h: "Add entries", items: ["Under a type, type a title and <b>Add</b>. The entry’s form has one control per field.", "An entry can use <b>its own blocks</b> instead of the template, which is how a landing page works.", "Entries live at the type’s address plus their own, like /products/blue-widget."] },
           { h: "Change or remove", items: ["Click a type to edit its fields or template; existing entries keep their content.", "<b>Delete type</b> stops publishing its entries but leaves their files in the project."] },
         ],
@@ -726,7 +726,7 @@ window.COPY = {
     draftTag: "draft",
     // content types
     typesHeading: "Content types",
-    typesDesc: "Your own kinds of content, like products or landing pages. Each has fields, a page template built from your blocks, and its own address.",
+    typesDesc: "Your own kinds of content, like products or landing pages. Each has fields, a content template built from your blocks, and its own address.",
     addType: "Add a content type",
     newTypePlaceholder: "Type name, plural (e.g. Products)",
     editType: "Edit type",
@@ -751,7 +751,7 @@ window.COPY = {
     fieldReference: "Refers to",
     addField: "+ Add field",
     kinds: { text: "Text", textarea: "Long text", richtext: "Rich text", number: "Number", boolean: "Yes / no", date: "Date", image: "Image", select: "Choice", list: "List of text", link: "Link", reference: "Reference to another type" },
-    templateHeading: "Page template",
+    templateHeading: "Content template",
     templateDesc: "The blocks that render each entry. In any text, {{field}} fills in that field; {{title}} is the entry’s title. A text field like {{image}} alone hands over the whole image.",
     saveType: "Save type",
     deleteType: "Delete type",
