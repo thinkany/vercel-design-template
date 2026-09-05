@@ -1961,7 +1961,7 @@ function publishProgressList(container) {
       const icon = document.createElement("span");
       icon.style.cssText = "flex:0 0 14px;";
       const label = document.createElement("span");
-      label.style.cssText = "flex:0 0 120px;color:var(--muted,#9a9aa2);";
+      label.style.cssText = "flex:0 0 120px;color:var(--muted,#74747a);";
       label.textContent = labels[step] || step;
       const det = document.createElement("span");
       det.style.cssText = "flex:1;";

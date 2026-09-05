@@ -190,7 +190,7 @@
       .ch-list li { margin-bottom: 4px; }
       .ch-list li b { color: #1a1a1a; font-weight: 600; }
       /* The tab strip's help button: the rail's life-buoy, at the far right. */
-      .site-tabs-help { margin-left: auto; align-self: center; border: none; background: none; cursor: pointer; padding: 4px; color: #8a8a92; display: flex; }
+      .site-tabs-help { margin-left: auto; align-self: center; border: none; background: none; cursor: pointer; padding: 4px; color: #68686e; display: flex; }
       .site-tabs-help:hover { color: #111; }
       .site-tabs-help svg { width: 18px; height: 18px; }
       /* Media picker: the same overlay shape as the publish help, with a thumbnail grid. */
@@ -236,7 +236,7 @@
       .site-side-opt:hover { color: #111; }
       .site-side-opt.on { background: #111; color: #fff; }
       .site-side-opt.on svg { opacity: 1; }
-      .site-mark.add { border-style: dashed; color: #888; }
+      .site-mark.add { border-style: dashed; color: #666666; }
       .site-mark.add:hover { color: #111; }
       .site-mark.add svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
       #pubhelp {
@@ -260,7 +260,7 @@
       #pubhelp-tabs { display: flex; gap: 2px; padding: 0 16px; background: #fafafb; border-bottom: 1px solid #ececf1; }
       .pubhelp-tab {
         border: none; background: none; cursor: pointer; padding: 12px 14px; font-size: 13px; font-weight: 600;
-        color: #8a8a92; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .2s linear;
+        color: #68686e; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .2s linear;
       }
       .pubhelp-tab:hover { color: #333; }
       .pubhelp-tab.active { color: #17171b; border-bottom-color: #17171b; }
@@ -313,7 +313,7 @@
       /* Outlined tabs above a solid black rule: light gray outline at rest, black when
          selected. (The list/editor divider below stays the subdued gray.) */
       .site-tabs { display: flex; gap: 6px; margin: -2px 0 16px; padding-bottom: 10px; border-bottom: 1px solid #111; }
-      .site-tab { border: 1px solid #ececf1; border-radius: 6px; background: #fff; cursor: pointer; padding: 7px 12px; font-size: 13px; font-weight: 600; color: #8a8a92; transition: color .15s linear, border-color .15s linear; }
+      .site-tab { border: 1px solid #ececf1; border-radius: 6px; background: #fff; cursor: pointer; padding: 7px 12px; font-size: 13px; font-weight: 600; color: #68686e; transition: color .15s linear, border-color .15s linear; }
       .site-tab:hover { color: #333; border-color: #cfcfd6; }
       .site-tab.active { color: #17171b; border-color: #111; }
       .site-tab .count { font-weight: 500; color: #b0b0b8; margin-left: 4px; font-size: 11px; }
@@ -350,7 +350,7 @@
       /* The CMS drawer's empty states (not built yet, not licensed): one card, centred in the space. */
       .site-empty { display: flex; align-items: center; justify-content: center; min-height: 100%; }
       .site-empty-card { max-width: 520px; width: 100%; background: #fff; border: 1px solid #e2e2e8; border-radius: 12px; padding: 28px 32px 26px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
-      .site-empty-card .site-empty-lead { font-size: 12.5px; color: #6b6b73; margin-bottom: 14px; }
+      .site-empty-card .site-empty-lead { font-size: 12.5px; color: #505056; margin-bottom: 14px; }
       .site-empty-card .site-empty-why { font-size: 14px; color: #1a1a1a; line-height: 1.5; }
       .site-range { display: flex; align-items: center; gap: 10px; }
       /* Sliders: a 1px black rail with a black round grabber. */
@@ -389,11 +389,11 @@
       }
       .cmdbtn:hover { background: #ececf1; border-color: #111; }
       .cmdbtn:active { transform: translateY(1px); }
-      .cmdbtn .run { color: #888; font-size: 11px; }
+      .cmdbtn .run { color: #666666; font-size: 11px; }
       /* Help drawer footer: version + credit */
       .help-divider { height: 1px; background: #e6e6e6; margin: 22px 0 14px; }
       .help-footer { text-align: center; }
-      .help-version { font-size: 11.5px; color: #999; margin-bottom: 6px; }
+      .help-version { font-size: 11.5px; color: #737373; margin-bottom: 6px; }
       .help-credit { font-size: 12px; color: #666; }
       .help-credit .heart { width: 13px; height: 13px; vertical-align: -2px; margin: 0 1px; }
       .help-link { color: #666; text-decoration: none; cursor: pointer; transition: color .25s linear; }
@@ -401,8 +401,8 @@
       /* Copy-voice drawer */
       .voice-h { margin: 20px 0 8px; padding-bottom: 5px; border-bottom: 1px solid #eee; }
       .voice-h-k { font-size: 13px; font-weight: 600; color: #111; }
-      .voice-h-sub { font-size: 11.5px; color: #999; margin-top: 2px; }
-      .voice-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #999; margin: 12px 0 5px; }
+      .voice-h-sub { font-size: 11.5px; color: #737373; margin-top: 2px; }
+      .voice-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #737373; margin: 12px 0 5px; }
       .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
       .chip { font-size: 11.5px; background: #f5f5f7; border: 1px solid #e3e3e8; color: #555; padding: 4px 9px; border-radius: 999px; cursor: pointer; transition: background .25s linear, border-color .25s linear; }
       .chip:hover { border-color: #111; background: #ececf1; }   /* black hover outline — brand-neutral */
@@ -465,11 +465,11 @@
       /* Section headings in the Claude / Projects drawers — same treatment as .setrow .k
          (bold + a 10px gap beneath) so every drawer's section labels are consistent. */
       .sess-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #2a2a2a; font-weight: 600; margin-bottom: 10px; }
-      .sess-desc { font-size: 11.5px; color: #999; line-height: 1.45; margin: 4px 0 8px; }
+      .sess-desc { font-size: 11.5px; color: #737373; line-height: 1.45; margin: 4px 0 8px; }
       .sess-actions { display: flex; align-items: center; justify-content: space-between; margin: 8px 0; }
       .sess-new { display: inline-block; border: 1px solid #d8d8de; background: #fafafb; color: #333; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: border-color .25s linear, background .25s linear; }
       .sess-new:hover { border-color: #111; }
-      .sess-delall { border: none; background: none; cursor: pointer; color: #999; padding: 2px; display: flex; align-items: center; transition: color .2s linear; }
+      .sess-delall { border: none; background: none; cursor: pointer; color: #737373; padding: 2px; display: flex; align-items: center; transition: color .2s linear; }
       .sess-delall:hover { color: #c0261e; }
       .sess-delall:disabled { opacity: .35; cursor: default; }
       .sess-delall svg { width: 16px; height: 16px; display: block; }
@@ -478,16 +478,16 @@
       .sessrow { position: relative; display: flex; align-items: stretch; border: 1px solid #e3e3e8; background: #fafafb; border-radius: 8px; overflow: hidden; transition: border-color .25s linear; }
       .sessrow:hover { border-color: #111; }
       .sessrow-open { flex: 1; min-width: 0; text-align: left; border: none; background: none; padding: 8px 10px; cursor: pointer; font: inherit; }
-      .sessrow-del { flex-shrink: 0; border: none; background: none; cursor: pointer; color: #999; padding: 0 9px; display: flex; align-items: center; opacity: 0; transform: translateX(8px); transition: opacity .2s ease, transform .2s ease, color .2s linear; }
+      .sessrow-del { flex-shrink: 0; border: none; background: none; cursor: pointer; color: #737373; padding: 0 9px; display: flex; align-items: center; opacity: 0; transform: translateX(8px); transition: opacity .2s ease, transform .2s ease, color .2s linear; }
       .sessrow:hover .sessrow-del { opacity: 1; transform: translateX(0); }
       .sessrow-del:hover { color: #c0261e; }
       .recent-sub { font-size: 12px; color: #555; margin-top: 1px; }
-      .recent-path { font-size: 11px; color: #999; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .recent-path { font-size: 11px; color: #737373; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .projbtns { display: flex; gap: 8px; margin-top: 10px; }
       .projbtns .panelbtn { flex: 1; margin: 0; }
       .sessrow-del svg { width: 15px; height: 15px; display: block; }
       .sess-title { font-size: 12.5px; font-weight: 600; color: #1a1a1a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .sess-date { font-size: 11px; color: #999; margin-top: 2px; }
+      .sess-date { font-size: 11px; color: #737373; margin-top: 2px; }
       .panelbtn {
         border: 1px solid #ccc; background: #fafafb; border-radius: 8px; padding: 8px 12px;
         font-size: 13px; cursor: pointer; margin: 8px 8px 0 0;   /* 8px vertical gap between stacked buttons, matching the .projbtns row gap */
@@ -503,7 +503,7 @@
       /* Same height as the status badge (both driven by line-height:1.55 @ 12px). */
       /* A "?" help button that sits on the right of a drawer status row (across from its
          label) and opens an openHelpOverlay card. */
-      .row-help { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: none; background: transparent; color: #9a9aa2; cursor: pointer; transition: color .12s; }
+      .row-help { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: none; background: transparent; color: #74747a; cursor: pointer; transition: color .12s; }
       .row-help:hover { color: #111; }
       .row-help svg { width: 18px; height: 18px; display: block; }
       .disc-collapse {
@@ -525,7 +525,7 @@
       .badge { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 12px; font-weight: 600; }
       .badge.ok { background: #e6f7ef; color: #0a7; }
       .badge.off { background: #fdecea; color: #c0261e; }
-      .muted { color: #888; font-size: 12px; margin-top: 8px; }
+      .muted { color: #666666; font-size: 12px; margin-top: 8px; }
 
       #chat {
         width: 40%;
@@ -638,7 +638,7 @@
         position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
         display: flex; align-items: center; justify-content: center;
         width: 28px; height: 28px; padding: 0;
-        background: none; border: 0; cursor: pointer; color: #888;
+        background: none; border: 0; cursor: pointer; color: #666666;
       }
       .reveal-btn:hover { color: #333; }
       .reveal-btn svg { width: 16px; height: 16px; }
@@ -676,7 +676,7 @@
       }
       .gate-error { color: #c0261e; font-size: 12px; min-height: 16px; margin: 8px 0 0; }
       .gate-link { display: inline-block; margin-top: 12px; font-size: 12px; color: #2563eb; text-decoration: none; }
-      .gate-note { font-size: 11px; color: #888; margin-top: 14px; }
+      .gate-note { font-size: 11px; color: #666666; margin-top: 14px; }
 
       /* ---- Chat ---- */
       #chatmain { flex: 1; display: flex; flex-direction: column; min-height: 0; }
@@ -712,7 +712,7 @@
          then collapse out so the chat log stays conversation-only. */
       .msg.tool.fade-out { opacity: 0; margin-bottom: 0; }
       .msg.error { color: #c0261e; }
-      .msg.system { color: #888; font-style: italic; }
+      .msg.system { color: #666666; font-style: italic; }
       /* Pulsing dots — shown while Claude is working but nothing is on screen
          (e.g. just after a tool bubble collapsed), so the log never looks idle. */
       .msg.thinking { display: flex; align-items: center; height: 16px; }
@@ -767,7 +767,7 @@
       .site-page { border: 1px solid #e2e2e8; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: #fff; }
       .site-page-head { display: flex; align-items: center; gap: 8px; cursor: pointer; }
       .site-page-title { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: #1a1a1a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .site-page-slug { font-size: 11.5px; color: #999; }
+      .site-page-slug { font-size: 11.5px; color: #737373; }
       .site-block { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid #ececf1; border-radius: 8px; margin-bottom: 6px; background: #fafafb; }
       .site-block-name { flex: 1; min-width: 0; font-size: 12.5px; color: #1a1a1a; }
       .site-mini { border: 1px solid #ddd; background: #fff; border-radius: 6px; font-size: 11px; line-height: 1; padding: 4px 7px; cursor: pointer; color: #333; }
@@ -822,7 +822,7 @@
       .ta-editor textarea.field.raw { border: 0; border-radius: 0; min-height: 260px; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; resize: vertical; }
       .ta-editor-foot { display: flex; justify-content: flex-end; padding: 4px 6px; border-top: 1px solid #eee; background: #fafafa; }
       .site-item { border: 1px dashed #e2e2e8; border-radius: 8px; padding: 8px; margin-bottom: 6px; }
-      .site-item-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 11px; color: #999; }
+      .site-item-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 11px; color: #737373; }
       .site-nav-row { display: grid; grid-template-columns: auto 1fr 1fr; grid-auto-flow: column; grid-auto-columns: auto; gap: 6px; align-items: center; margin-bottom: 6px; border-radius: 6px; }
       .site-nav-row .site-mini { white-space: nowrap; }
       .site-nav-row .site-grip { margin-right: 0; }
@@ -882,7 +882,7 @@
       .adrec-kind-asset { color: #8a5a12; background: #f6eede; }
       .adrec-kind-decision { color: #555; background: #eee; }
       .adrec-dismissed { background: #fafafb; cursor: pointer; }
-      .adrec-dismissed .adrec-title { color: #888; }
+      .adrec-dismissed .adrec-title { color: #666666; }
       .adrec-restore { flex: 0 0 auto; border: 1px solid #d8d8de; background: none; color: #555; border-radius: 6px; padding: 3px 9px; font: inherit; font-size: 11px; cursor: pointer; }
       .adrec-restore:hover { border-color: #111; color: #111; }
       .adrec-done { background: #f6faf7; cursor: pointer; }
@@ -907,13 +907,13 @@
       .a11y-inst { border-left: 2px solid #ececf1; padding: 2px 0 2px 10px; }
       .a11y-inst-sel { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #444; word-break: break-all; }
       .a11y-inst-why { font-size: 12px; color: #777; line-height: 1.45; margin-top: 3px; }
-      .a11y-inst-more { font-size: 12px; color: #999; font-style: italic; }
+      .a11y-inst-more { font-size: 12px; color: #737373; font-style: italic; }
       /* "Show on page" review toolbar — floats over the preview while stepping through the
          highlighted failing elements. */
       #a11y-toolbar, #ad-toolbar { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; align-items: center; gap: 10px; background: #17171b; color: #fff; border-radius: 999px; padding: 6px 8px 6px 16px; box-shadow: 0 6px 20px rgba(0,0,0,.32); font-size: 12.5px; }
       #a11y-toolbar[hidden], #ad-toolbar[hidden] { display: none; }
       .a11y-tb-title { font-weight: 600; max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .a11y-tb-count { color: #9a9aa2; margin-right: 4px; white-space: nowrap; flex-shrink: 0; }
+      .a11y-tb-count { color: #74747a; margin-right: 4px; white-space: nowrap; flex-shrink: 0; }
       #a11y-toolbar .a11y-tb-btn, #ad-toolbar .a11y-tb-btn { flex-shrink: 0; }
       .a11y-tb-btn { border: none; background: #2a2a32; color: #fff; border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; cursor: pointer; transition: background .12s; }
       .a11y-tb-btn:hover { background: #3a3a44; }
@@ -932,7 +932,7 @@
       /* Title truncates within the head; dim it while open so the dropdown heading leads. */
       #ad-toolbar .a11y-tb-title { flex: 0 1 auto; min-width: 0; max-width: none; transition: opacity .28s ease; }
       #ad-toolbar.expanded .a11y-tb-title { opacity: .5; }
-      .ad-tb-caret { flex-shrink: 0; border: none; background: none; color: #9a9aa2; cursor: pointer; padding: 0 2px; display: inline-flex; align-items: center; }
+      .ad-tb-caret { flex-shrink: 0; border: none; background: none; color: #74747a; cursor: pointer; padding: 0 2px; display: inline-flex; align-items: center; }
       .ad-tb-caret:hover { color: #fff; }
       .ad-tb-caret svg { transition: transform .28s ease; }
       .ad-tb-caret.open svg { transform: rotate(180deg); }
@@ -966,9 +966,9 @@
       .a11y-right .adrec-apply-btn { margin-left: 0; }
       .a11y-show-btn { border: none; background: #0a7; color: #fff; border-radius: 8px; padding: 9px 16px; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity .12s; }
       .a11y-show-btn:hover { opacity: .88; }
-      .adrec-modal-tagnote { margin-left: auto; font-size: 12px; color: #8a8a92; }
+      .adrec-modal-tagnote { margin-left: auto; font-size: 12px; color: #68686e; }
       /* Same soft gray + size as the tagnote, but its own paragraph under the description. */
-      .adrec-modal-note { font-size: 12px; color: #8a8a92; line-height: 1.5; margin-top: 10px; }
+      .adrec-modal-note { font-size: 12px; color: #68686e; line-height: 1.5; margin-top: 10px; }
       /* "Make the call" — a secondary/outlined action so it never fights the dark primary
          (e.g. Source imagery) when both appear on a sourceable asset. */
       .adrec-makecall-btn { border: 1px solid #d8d8de; background: none; color: #444; border-radius: 8px; padding: 8px 16px; font: inherit; font-size: 13px; cursor: pointer; transition: border-color .12s, color .12s; }
@@ -992,7 +992,7 @@
       .adrec-makecall-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
       .adrec-upload-btn { flex-shrink: 0; border: 1px solid #d8d8de; background: none; color: #444; border-radius: 8px; padding: 8px 14px; font: inherit; font-size: 13px; cursor: pointer; transition: border-color .12s, color .12s; }
       .adrec-upload-btn:hover { border-color: #111; color: #111; }
-      .adrec-upload-name { flex: 1 1 auto; min-width: 0; font-size: 12px; color: #8a8a92; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .adrec-upload-name { flex: 1 1 auto; min-width: 0; font-size: 12px; color: #68686e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       /* Rail cue: a dot whenever the current design has active recommendations queued. Red
          when any are actionable (code); white when only "needs an asset" / "your call" remain. */
       #rail-artdirector.has-code::before, #rail-a11y.has-code::before,
@@ -1066,7 +1066,7 @@
       .cmdmenu-item { display: block; width: 100%; text-align: left; border: none; background: none; border-radius: 7px; padding: 7px 9px; cursor: pointer; font: inherit; transition: background .15s linear; }
       .cmdmenu-item:hover { background: #f4f4f7; }
       .cmdmenu-item .cmd { font-size: 12.5px; font-weight: 600; color: #1a1a1a; }
-      .cmdmenu-item .desc { font-size: 11.5px; color: #888; margin-top: 1px; line-height: 1.35; }
+      .cmdmenu-item .desc { font-size: 11.5px; color: #666666; margin-top: 1px; line-height: 1.35; }
       #log.dragover { outline: 2px dashed #111; outline-offset: -6px; background: #f4f4f7; }
       #input {
         flex: 1;
@@ -1093,7 +1093,7 @@
       }
       .tab.active { background: #fff; color: #111; }
       .tablabel { overflow: hidden; text-overflow: ellipsis; }
-      .tabclose { border: none; background: none; cursor: pointer; color: #888; font-size: 13px; line-height: 1; padding: 0 2px; }
+      .tabclose { border: none; background: none; cursor: pointer; color: #666666; font-size: 13px; line-height: 1; padding: 0 2px; }
       .tabclose:hover { color: #111; }
       .tabadd { border: none; background: none; cursor: pointer; font-size: 15px; color: #555; padding: 0 8px; }
       #navbar { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: #fff; border-bottom: 1px solid #e6e6ea; }
@@ -1134,7 +1134,7 @@
       #bo-title { font-size: 19px; color: #1a1a1a; margin: 0 0 10px; }
       #bo-text { font-size: 14px; color: #666; margin: 0; line-height: 1.6; text-wrap: balance; }
       #buildoverlay .ph-progress { margin: 18px auto 0; }
-      .bo-hint { font-size: 12.5px; color: #999; margin-top: 16px; }
+      .bo-hint { font-size: 12.5px; color: #737373; margin-top: 16px; }
       /* "Point & comment" toggle — floats over the live preview. */
       #feedback-toggle {
         position: absolute; right: 16px; bottom: 16px; z-index: 10;
@@ -1178,7 +1178,7 @@
       /* Quiet-build narration spine: a determinate "Step N of M" with a segmented bar.
          Filled = done, the active segment carries the calm intra-phase shimmer so a long
          phase still shows life. See docs/quiet-build-narration-spec.md. */
-      .ph-steplabel { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #9a9aa2; margin-bottom: 10px; }
+      .ph-steplabel { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #74747a; margin-bottom: 10px; }
       .ph-steplabel[hidden] { display: none; }
       .ph-steps { display: flex; gap: 6px; width: 260px; margin: 18px auto 0; }
       .ph-steps[hidden] { display: none; }
@@ -1207,7 +1207,7 @@
       .ibrief-title { font-size: 12px; font-weight: 600; color: #111; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 11px; }
       .ibrief-row { display: flex; gap: 10px; font-size: 13px; line-height: 1.5; margin-bottom: 8px; }
       .ibrief-row:last-child { margin-bottom: 0; }
-      .ibrief-key { flex: 0 0 66px; color: #999; }
+      .ibrief-key { flex: 0 0 66px; color: #737373; }
       .ibrief-val { color: #1a1a1a; }
       #intake-stack { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
 
@@ -1261,7 +1261,7 @@
       .iref-lb-open:hover { background: #f0f0f0; }
       .iref-lb-cap { font-size: 13px; color: #eee; text-align: center; word-break: break-all; max-width: 90vw; }
       .iref-palette { display: flex; align-items: center; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
-      .iref-palette-lbl { font-size: 11px; color: #999; margin-right: 2px; }
+      .iref-palette-lbl { font-size: 11px; color: #737373; margin-right: 2px; }
       .iref-swatch { width: 18px; height: 18px; border-radius: 5px; border: 1px solid rgba(20,20,30,.12); }
 
       /* Design-references help: a thin-line "?" in the card's upper-right opens an
@@ -1424,7 +1424,7 @@
       .ifigma-export:hover:not(:disabled) { opacity: .9; }
       .ifigma-export:active:not(:disabled) { transform: translateY(1px); }
       .ifigma-export:disabled { opacity: .45; cursor: default; }
-      .ifigma-skip { margin-top: 2px; background: none; border: none; color: #999; font-size: 12.5px; cursor: pointer; }
+      .ifigma-skip { margin-top: 2px; background: none; border: none; color: #737373; font-size: 12.5px; cursor: pointer; }
       .ifigma-skip:hover { color: #555; text-decoration: underline; }
 
       /* Ingest working state — three pulsing dots. */
@@ -1487,7 +1487,7 @@
         background: #fff; box-shadow: 0 1px 2px rgba(20,20,30,.03);
       }
       .icard-label { font-size: 14px; font-weight: 600; color: #1a1a1a; margin-bottom: 2px; }
-      .icard-help { font-size: 12.5px; color: #888; margin-bottom: 11px; line-height: 1.5; }
+      .icard-help { font-size: 12.5px; color: #666666; margin-bottom: 11px; line-height: 1.5; }
       .icard-label + .icard-body { margin-top: 11px; }
       .icard.skipped { opacity: 0.55; }
 
@@ -1535,8 +1535,8 @@
       .ichip.applied { cursor: default; border: 1px dashed #cfcfd6; color: #666; background: #f7f7f9; }
       .ichip.applied:hover { background: #f7f7f9; }
       /* global-rule pills: pre-selected + toggleable; unselecting one skips it here */
-      .ichip.global:not(.selected) { border-style: dashed; border-color: #cfcfd6; color: #999; text-decoration: line-through; }
-      .voice-applied-note { font-size: 12px; color: #888; margin: 0 0 8px; }
+      .ichip.global:not(.selected) { border-style: dashed; border-color: #cfcfd6; color: #737373; text-decoration: line-through; }
+      .voice-applied-note { font-size: 12px; color: #666666; margin: 0 0 8px; }
 
       /* hero-layout — single-select wireframe chips (black border, SVG + caption below) */
       .ihero { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
@@ -1592,7 +1592,7 @@
       /* reference — up to 3 url + why entries */
       .iref-field { margin-bottom: 9px; }
       .iref-field:last-child { margin-bottom: 0; }
-      .iref-cap { font-size: 12px; color: #888; margin-bottom: 5px; }
+      .iref-cap { font-size: 12px; color: #666666; margin-bottom: 5px; }
       .iref-entry { position: relative; padding: 12px; border: 1px dashed #e0e0e6; border-radius: 9px; margin-bottom: 10px; }
       .iref-entry:first-child { padding: 0; border: none; margin-bottom: 10px; }
       .iref-remove {
@@ -1610,10 +1610,10 @@
       /* per-card skip + per-group continue */
       .icard-skip {
         margin-top: 10px; background: none; border: none; padding: 0; cursor: pointer;
-        font: inherit; font-size: 12px; color: #999; text-decoration: none;
+        font: inherit; font-size: 12px; color: #737373; text-decoration: none;
       }
       .icard-skip:hover { color: #111; text-decoration: underline; }
-      .icard-skip.undo { color: #999; }
+      .icard-skip.undo { color: #737373; }
       .intake-continue {
         align-self: flex-start; border: none; border-radius: 8px; padding: 9px 20px;
         background: #111; color: #fff; font: inherit; font-size: 13.5px; font-weight: 600;
@@ -1651,7 +1651,7 @@
       .idir-host { width: 100%; }
       .idir { position: relative; width: 100%; border: 1px solid #e4e4ea; border-radius: 12px; padding: 16px 18px; background: #fbfbfd; box-sizing: border-box; transition: opacity .12s; }
       .idir.busy { opacity: .55; }
-      .idir-head { font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #9a9aa2; margin-bottom: 6px; }
+      .idir-head { font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #74747a; margin-bottom: 6px; }
       .idir-lens { font-family: var(--admin-font-heading, Georgia, serif); font-size: 19px; font-weight: 700; color: #111; line-height: 1.2; }
       .idir-lens-sel { display: inline-block; border: none; background: none; padding: 0; cursor: pointer; text-align: left; font-family: var(--admin-font-heading, Georgia, serif); }
       .idir-lens-sel:hover { text-decoration: underline; text-underline-offset: 3px; }
@@ -1659,12 +1659,12 @@
       .idir-menu-group { font-size: 9.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #a6a6ae; padding: 8px 8px 4px; }
       .idir-menu-item { display: block; width: 100%; text-align: left; border: none; background: none; padding: 7px 8px; border-radius: 6px; font: inherit; font-size: 13.5px; color: #1a1a1a; cursor: pointer; }
       .idir-menu-item:hover { background: #f2f2f5; }
-      .idir-info { position: absolute; top: 12px; right: 13px; width: 22px; height: 22px; padding: 0; display: flex; align-items: center; justify-content: center; border: none; background: none; color: #9a9aa2; cursor: pointer; transition: color .12s; z-index: 2; }
+      .idir-info { position: absolute; top: 12px; right: 13px; width: 22px; height: 22px; padding: 0; display: flex; align-items: center; justify-content: center; border: none; background: none; color: #74747a; cursor: pointer; transition: color .12s; z-index: 2; }
       .idir-info:hover { color: #111; }
       .idir-info svg { width: 18px; height: 18px; display: block; }
       .idir-desc { font-size: 12.5px; color: #6a6a72; line-height: 1.45; margin-top: 3px; }
       .idir-axes { display: flex; flex-direction: column; gap: 10px; margin: 14px 0 4px; }
-      .idir-axis-label { font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #9a9aa2; margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
+      .idir-axis-label { font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #74747a; margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
       /* "i" info affordance on each LEVER label + its hover/focus tooltip. Distinct from
          .idir-info (the panel's absolute "?" help trigger). Sits slightly above + right of
          the label, like a superscript marker. */
