@@ -3192,7 +3192,8 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
     // Delete only a page without children, so none are orphaned.
     const kids = (renderSitePage.pages || []).filter((x) => x.parent === page.id);
     const del = siteMini(COPY.site.deletePage, async () => {
-      const res = await window.desktop.deleteSitePage(page.id); // moves to Trash (Settings), so no confirm
+      if (!(await askConfirm({ title: COPY.site.deleteTitle, message: COPY.site.deleteConfirm(page.title), okLabel: COPY.site.deletePage, danger: true }))) return;
+      const res = await window.desktop.deleteSitePage(page.id); // moves to Trash (Settings)
       if (res && res.ok) { siteRailState.selected = null; refresh(); }
       else if (res && res.error) alert(res.error);
     }, { danger: true, disabled: kids.length > 0, title: kids.length ? COPY.site.deletePageHasChildren(kids.length) : "" });
@@ -3256,6 +3257,7 @@ function renderSitePost(post, refresh) {
   flipBtn.addEventListener("click", () => doSave(flipBtn, !draft.draft));
   actions.append(status, saveBtn, flipBtn);
   actions.appendChild(siteMini(S.deletePost, async () => {
+    if (!(await askConfirm({ title: S.deleteTitle, message: S.deletePostConfirm(post.title), okLabel: S.deletePost, danger: true }))) return;
     const res = await window.desktop.deleteSitePost(post.id); // moves to Trash
     if (res && res.ok) { siteRailState.selected = null; refresh(); }
   }, { danger: true }));
@@ -3388,6 +3390,7 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   flipBtn.addEventListener("click", () => doSave(flipBtn, !isDraft));
   actions.appendChild(flipBtn);
   actions.appendChild(siteMini(S.deleteEntry, async () => {
+    if (!(await askConfirm({ title: S.deleteTitle, message: S.deleteEntryConfirm(entry.title), okLabel: S.deleteEntry, danger: true }))) return;
     const res = await window.desktop.deleteSiteEntry(type.key, entry.id); // moves to Trash
     if (res && res.ok) { siteRailState.selected = null; refresh(); }
   }, { danger: true }));
@@ -3533,7 +3536,7 @@ function renderSiteTypeEditor(type, ctx, refresh) {
   });
   actions.appendChild(saveBtn);
   if (!isNew) actions.appendChild(siteMini(S.deleteType, async () => {
-    if (!confirm(S.deleteTypeConfirm(type.label))) return;
+    if (!(await askConfirm({ title: S.deleteTitle, message: S.deleteTypeConfirm(type.label), okLabel: S.deleteType, danger: true }))) return;
     const res = await window.desktop.deleteSiteType(type.key);
     if (res && res.ok) { siteRailState.selected = null; refresh(); }
   }, { danger: true }));
@@ -3867,6 +3870,7 @@ function renderSiteFormEditor(form, ctx, refresh) {
   });
   actions.appendChild(saveBtn);
   actions.appendChild(siteMini(S.deleteForm, async () => {
+    if (!(await askConfirm({ title: S.deleteTitle, message: S.deleteFormConfirm(form.name, used.length), okLabel: S.deleteForm, danger: true }))) return;
     const res = await window.desktop.deleteSiteForm(form.id); // moves to Trash
     if (res && res.ok) { siteRailState.selected = null; refresh(); }
   }, { danger: true }));
@@ -3979,6 +3983,7 @@ function openMediaPicker(current) {
         editBtn.addEventListener("click", (e) => { e.stopPropagation(); startRename(); });
         delBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
+          if (!(await askConfirm({ title: COPY.site.deleteTitle, message: M.deleteConfirm(it.name), okLabel: M.delete, danger: true }))) return;
           const r = await window.desktop.deleteMedia(it.rel); // moves to Trash (Settings)
           if (r && r.ok) { items = items.filter((x) => x !== it); if (selected === it.url) { selected = null; useBtn.disabled = true; } paint(); }
         });
@@ -4853,14 +4858,14 @@ async function renderTrash(S) {
         else { restore.disabled = false; note.textContent = (r && r.error) || "Couldn't restore it."; }
       });
       const forever = siteTrashBtn(async () => {
-        if (!confirm(S.trashDeleteForeverConfirm(it.title))) return;
+        if (!(await askConfirm({ title: S.trashDeleteForever, message: S.trashDeleteForeverConfirm(it.title), okLabel: S.trashDeleteForever, danger: true }))) return;
         await window.desktop.deleteTrash(it.id); await paint();
       }, S.trashDeleteForever);
       row.append(title, sub, restore, forever);
       host.appendChild(row);
     });
     const all = siteMini(S.trashEmptyAll, async () => {
-      if (!confirm(S.trashEmptyConfirm(items.length))) return;
+      if (!(await askConfirm({ title: S.trashEmptyAll, message: S.trashEmptyConfirm(items.length), okLabel: S.trashEmptyAll, danger: true }))) return;
       await window.desktop.emptyTrash(); await paint();
     }, { danger: true });
     all.style.marginTop = "6px";
@@ -5747,16 +5752,48 @@ async function maybeAutoRestoreSession() {
 // Generic centered confirm dialog. Reused for the gauge's "new session", and for
 // deleting sessions. Pass a title, message, OK label, danger flag, and an onOk.
 let confirmAction = null;
-function showConfirm({ title, message, okLabel, danger, onOk }) {
+// App tooltips: any element with a title (outside the rail, which draws its own) shows
+// it as the rail does, a small dark tip, instead of the system tooltip. The title moves
+// to data-tip on first hover so the native one never appears; aria-label keeps the name.
+const appTip = (() => { const t = document.createElement("div"); t.id = "apptip"; t.hidden = true; document.body.appendChild(t); return t; })();
+let appTipTarget = null;
+function appTipShow(el) {
+  if (el.hasAttribute("title")) { const v = el.getAttribute("title"); el.removeAttribute("title"); if (v) { el.dataset.tip = v; if (!el.hasAttribute("aria-label")) el.setAttribute("aria-label", v); } }
+  const text = el.dataset.tip; if (!text) return;
+  appTipTarget = el; appTip.textContent = text; appTip.hidden = false;
+  const r = el.getBoundingClientRect(); const tw = appTip.offsetWidth, th = appTip.offsetHeight;
+  let left = r.left + r.width / 2 - tw / 2; left = Math.max(6, Math.min(left, window.innerWidth - tw - 6));
+  let top = r.bottom + 6; if (top + th > window.innerHeight - 6) top = r.top - th - 6;
+  appTip.style.left = left + "px"; appTip.style.top = top + "px";
+}
+function appTipHide() { appTip.hidden = true; appTipTarget = null; }
+document.addEventListener("mouseover", (e) => {
+  const el = e.target.closest ? e.target.closest("[title], [data-tip]") : null;
+  if (!el || el.classList.contains("railbtn") || el.id === "gauge") { if (appTipTarget) appTipHide(); return; }
+  if (el !== appTipTarget) appTipShow(el);
+});
+document.addEventListener("mouseout", (e) => { if (appTipTarget && !appTipTarget.contains(e.relatedTarget)) appTipHide(); });
+document.addEventListener("focusin", (e) => { const el = e.target.closest ? e.target.closest("[title], [data-tip]") : null; if (el && !el.classList.contains("railbtn")) appTipShow(el); });
+document.addEventListener("focusout", appTipHide);
+document.addEventListener("scroll", appTipHide, true);
+document.addEventListener("mousedown", appTipHide, true);
+
+let confirmCancelAction = null;
+function showConfirm({ title, message, okLabel, danger, onOk, onCancel }) {
   confirmTitle.textContent = title || "Are you sure?";
   confirmMsg.textContent = message || "";
   confirmOk.textContent = okLabel || "Confirm";
   confirmOk.className = "cbtn " + (danger ? "danger" : "primary");
   confirmAction = onOk || null;
+  confirmCancelAction = onCancel || null;
   confirmEl.hidden = false;
   confirmOk.focus();
 }
-function closeConfirm() { confirmEl.hidden = true; confirmAction = null; }
+function closeConfirm() { confirmEl.hidden = true; confirmAction = null; const c = confirmCancelAction; confirmCancelAction = null; if (c) c(); }
+/** The app's confirm as a promise: true when confirmed, false when dismissed. */
+function askConfirm(opts) {
+  return new Promise((resolve) => showConfirm({ ...opts, onOk: () => { confirmCancelAction = null; resolve(true); }, onCancel: () => resolve(false) }));
+}
 
 // Clicking the gauge offers to start a new session (which archives the current one).
 function openClearConfirm() {
