@@ -44,7 +44,7 @@ el("modal-preview").addEventListener("click", async () => {
   let st = null; try { st = await window.desktop.getSiteStatus(); } catch {}
   let url = st && st.url;
   if (!url && st && st.ready) { try { const r = await window.desktop.startSite(); if (r && r.ok) url = r.url; } catch {} }
-  if (url) window.desktop.openExternal(url);
+  if (url) window.desktop.openExternal(url.replace(/\/$/, "") + (sitePreviewPath || "/"));
 });
 
 // Gates
@@ -2635,6 +2635,7 @@ function renderSitePublish(body, site, domainRefreshers) {
 // dev server watches content/, so a save shows in the Site tab at once; the build
 // check on publish is the validator of last resort for block props.
 let siteRailState = { tab: "pages", open: {}, expanded: {}, selected: null }; // active tab, selection, open block editors
+let sitePreviewPath = "/"; // the page the drawer is editing, for "Preview in Browser"
 
 // "Build the site from this design": runs /promote-blocks as a chat turn from a button
 // in the CMS drawer (not-ready state) and the Publish panel. While it runs, both show
@@ -4992,20 +4993,27 @@ async function renderSite(body) {
     };
     const home = data.pages.find((p) => p.id === "home"); if (home) pageRow(home, 0);
     walk(null, 0);
+    const curPage = cur && data.pages.find((p) => p.id === cur.id);
+    sitePreviewPath = curPage && curPage.id !== "home" ? "/" + (curPage.route || curPage.slug || curPage.id) : "/";
     left.appendChild(addRow(COPY.site.newPagePlaceholder, COPY.site.create, async (t) => { const res = await window.desktop.createSitePage(t); if (res && res.ok) { siteRailState.selected = { kind: "page", id: res.page.id }; refresh(); } }));
     renderSitePage.pages = data.pages; // for the parent picker
     if (cur) right.appendChild(renderSitePage(data.pages.find((p) => p.id === cur.id), data.blocks, refresh, true));
   } else if (siteRailState.tab === "posts") {
     const { left, right } = two();
     const cur = sel && sel.kind === "post" && posts.some((p) => p.id === sel.id) ? sel : (posts[0] ? { kind: "post", id: posts[0].id } : null);
+    sitePreviewPath = cur ? `/${siteBlogPath}/${cur.id}` : `/${siteBlogPath}`;
     if (!posts.length) left.appendChild(siteEl("div", "sess-desc", COPY.site.noPosts));
     posts.forEach((p) => left.appendChild(listRow(p.title, p.draft ? COPY.site.draftTag : (p.date || ""), cur && cur.id === p.id, () => { siteRailState.selected = { kind: "post", id: p.id }; refresh(); })));
     left.appendChild(addRow(COPY.site.newPostPlaceholder, COPY.site.create, async (t) => { const res = await window.desktop.createSitePost(t); if (res && res.ok) { siteRailState.selected = { kind: "post", id: res.post.id }; refresh(); } }));
     if (cur) right.appendChild(renderSitePost(posts.find((p) => p.id === cur.id), refresh));
   } else if (siteRailState.tab === "types") {
     const { left, right } = two();
+    if (sel && sel.kind === "entry") { const [k, id] = sel.id.split("/"); const t = ctx.types.find((x) => x.key === k); const e = t && (ctx.entries[k] || []).find((x) => x.id === id); sitePreviewPath = t && e ? `${t.path}/${e.slug || e.id}` : "/"; }
+    else if (sel && sel.kind === "type") { const t = ctx.types.find((x) => x.key === sel.id); sitePreviewPath = t && t.index ? t.path : "/"; }
+    else sitePreviewPath = "/";
     renderSiteTypesList(left, right, ctx, refresh);
   } else if (siteRailState.tab === "forms") {
+    sitePreviewPath = "/";
     const wrap = siteEl("div"); body.appendChild(wrap); // full width: the Forms fold holds two columns
     renderSiteForms(wrap, ctx, refresh);
   } else if (siteRailState.tab === "blocks") {
