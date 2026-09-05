@@ -358,6 +358,9 @@
       /* A WIDE drawer (the Pages/CMS panel): most of the window, so a page list and its
          editor sit side by side and the preview stays visible at the edge. */
       #modal-card.wide { width: calc(100vw - var(--rail-w)); max-width: none; }
+      /* The CMS drawer travels the whole window, so it eases into the edge: longer, with a
+         soft landing (fast start, long gentle finish) instead of the short drawer's snap. */
+      #modal.open #modal-card.wide { transition: transform .42s cubic-bezier(.16, 1, .3, 1), left .25s ease; }
       /* CMS tabs: the same look as the publish help tabs, inside the drawer body. */
       /* Outlined tabs above a solid black rule: light gray outline at rest, black when
          selected. (The list/editor divider below stays the subdued gray.) */
