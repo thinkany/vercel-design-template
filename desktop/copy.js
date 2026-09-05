@@ -630,6 +630,8 @@ window.COPY = {
     seoJsonLdHint: "Optional. A JSON object or array added to this page's structured data, for an FAQ, an event, a product. The page already carries WebPage, breadcrumbs and the publisher; a post carries BlogPosting.",
     seoKeyphraseHint: "The phrase this page should be found for. Written into the page's keywords; use it in the title, description and headings.",
     postSettings: "Post settings",
+    postSlug: "Permalink",
+    postSlugHint: "The post's address under the posts directory. Leave it empty to use the title.",
     postContent: "Content",
     postSeoDescriptionHint: "For search results and link previews. Leave empty to use the post's summary.",
     seoDescriptionHint: "One or two sentences for search results and link previews.",

@@ -24,7 +24,7 @@ export async function generatedLlms(siteUrl: URL | undefined) {
     }),
   ];
   if (posts.length) {
-    out.push("", "## Posts", ...posts.map((p) => line(p.data.title, abs(`/${blogPath}/${p.id}`), p.data.description)));
+    out.push("", "## Posts", ...posts.map((p) => line(p.data.title, abs(`/${blogPath}/${p.data.slug || p.id}`), p.data.description)));
   }
   return out.join("\n") + "\n";
 }

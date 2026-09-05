@@ -1899,7 +1899,7 @@ function fmQuote(v) {
 }
 function serializeFrontmatter(data, unknown = []) {
   const lines = [];
-  const ORDER = ["title", "date", "updated", "description", "image", "tags", "draft"];
+  const ORDER = ["title", "slug", "date", "updated", "description", "image", "tags", "draft"];
   for (const k of ORDER) {
     const v = data[k];
     if (v === undefined || v === null || v === "") continue;
@@ -1918,7 +1918,7 @@ function readPosts(dir) {
   const posts = files.map((f) => {
     const id = f.replace(/\.mdx?$/, "");
     const { data, body } = parseFrontmatter(readTextSafe(path.join(postsDir(dir), f)));
-    return { id, file: f, title: data.title || id, date: data.date || "", updated: data.updated || "", description: data.description || "", image: data.image || "", tags: Array.isArray(data.tags) ? data.tags : [], draft: !!data.draft, seo: data.seo || {}, body };
+    return { id, file: f, title: data.title || id, date: data.date || "", updated: data.updated || "", description: data.description || "", image: data.image || "", tags: Array.isArray(data.tags) ? data.tags : [], draft: !!data.draft, slug: typeof data.slug === "string" && data.slug.trim() ? data.slug.trim() : id, seo: data.seo || {}, body };
   });
   posts.sort((a, b) => String(b.date).localeCompare(String(a.date)) || a.title.localeCompare(b.title));
   return posts;
@@ -1938,8 +1938,14 @@ ipcMain.handle("site:savePost", (_e, { id, data } = {}) => {
   if (!data || typeof data.title !== "string" || !data.title.trim()) return { ok: false, error: "A post needs a title." };
   const p = postFile(currentProject, id);
   const existing = fs.existsSync(p) ? parseFrontmatter(readTextSafe(p)) : { unknown: [] };
+  // The permalink: the typed slug, else the title. Must be free among the other posts.
+  const slug = slugifyId(String(data.slug || "").trim()) || slugifyId(data.title) || id;
+  const clash = readPosts(currentProject).find((q) => q.id !== id && (q.slug || q.id) === slug);
+  if (clash) return { ok: false, error: `Another post already uses the permalink "${slug}".` };
+  const prevSlug = (existing.data && typeof existing.data.slug === "string" && existing.data.slug.trim()) || id;
   const fm = {
     title: data.title.trim(),
+    ...(slug !== id ? { slug } : {}),
     date: /^\d{4}-\d{2}-\d{2}$/.test(String(data.date || "")) ? data.date : todayIso(),
     updated: new Date().toISOString(), // last edited: stamped on every save
     description: typeof data.description === "string" ? data.description.trim() : "",
@@ -1953,7 +1959,8 @@ ipcMain.handle("site:savePost", (_e, { id, data } = {}) => {
   try {
     fs.mkdirSync(postsDir(currentProject), { recursive: true });
     fs.writeFileSync(p, serializeFrontmatter(fm, existing.unknown) + "\n" + body);
-    return { ok: true, post: { id, ...fm, body } };
+    if (prevSlug !== slug) { const dir = blogPathOf(siteJsonOf(currentProject)); rewriteNavRoutes(currentProject, `${dir}/${prevSlug}`, `${dir}/${slug}`); } // menu links follow
+    return { ok: true, post: { id, ...fm, slug, body } };
   } catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle("site:createPost", (_e, { title } = {}) => {

@@ -38,6 +38,8 @@ const posts = defineCollection({
   loader: glob({ pattern: "**/*.md", base: "../content/posts" }),
   schema: z.object({
     title: z.string(),
+    /** The permalink segment under the posts directory; defaults to the file name. */
+    slug: z.string().optional(),
     /** Publish date. */
     date: z.coerce.date(),
     /** Last edited (stamped by the app on every save). Feeds the sitemap's lastmod. */

@@ -54,7 +54,8 @@ function noindexPaths() {
     for (const f of fs.readdirSync(postsDir)) {
       if (!/\.mdx?$/.test(f)) continue;
       const fm = (fs.readFileSync(path.join(postsDir, f), "utf8").match(/^---\n([\s\S]*?)\n---/) || [])[1] || "";
-      if (/^seo:\n(?:[ \t]+.*\n)*?[ \t]+noindex:[ \t]*true/m.test(fm) || /^draft:[ \t]*true/m.test(fm)) out.add(`/${blogPath}/` + f.replace(/\.mdx?$/, ""));
+      const slug = ((fm.match(/^slug:[ \t]*"?([^"\n]+)"?/m) || [])[1] || f.replace(/\.mdx?$/, "")).trim();
+      if (/^seo:\n(?:[ \t]+.*\n)*?[ \t]+noindex:[ \t]*true/m.test(fm) || /^draft:[ \t]*true/m.test(fm)) out.add(`/${blogPath}/` + slug);
     }
   } catch { /* no posts dir */ }
   // designer-defined types: entries flagged noindex, under the type's path
@@ -81,7 +82,8 @@ function lastModified() {
       if (!/\.mdx?$/.test(f)) continue;
       const fm = (fs.readFileSync(path.join(repoRoot, "content", "posts", f), "utf8").match(/^---\n([\s\S]*?)\n---/) || [])[1] || "";
       const m = fm.match(/^updated:[ \t]*"?([^"\n]+)"?/m);
-      if (m) { const d = new Date(m[1].trim()); if (!Number.isNaN(d.getTime())) out.set(`/${blogPath}/` + f.replace(/\.mdx?$/, ""), d); }
+      const slug = ((fm.match(/^slug:[ \t]*"?([^"\n]+)"?/m) || [])[1] || f.replace(/\.mdx?$/, "")).trim();
+      if (m) { const d = new Date(m[1].trim()); if (!Number.isNaN(d.getTime())) out.set(`/${blogPath}/` + slug, d); }
     }
   } catch { /* no posts */ }
   return out;

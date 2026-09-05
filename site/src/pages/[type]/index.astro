@@ -39,7 +39,7 @@ const href = (e: (typeof entries)[number]) => `${type.path}/${e.data.slug ?? e.i
       <ul class="list-none p-0 m-0 flex flex-col gap-10">
         {posts.map((p) => (
           <li>
-            <a href={`/${blogPath}/${p.id}`} class="no-underline">
+            <a href={`/${blogPath}/${p.data.slug || p.id}`} class="no-underline">
               <div class="font-ta-sans text-[11px] tracking-[0.14em] uppercase text-ta-muted mb-2">{fmt(p.data.date)}</div>
               <h2 class="font-ta-display text-[26px] text-ta-ink leading-[1.15] mb-2">{p.data.title}</h2>
               {p.data.description && <p class="font-ta-serif text-[16px] text-ta-body leading-[1.6] m-0">{p.data.description}</p>}

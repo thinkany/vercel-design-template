@@ -3239,12 +3239,19 @@ function renderSitePost(post, refresh) {
   h.append(siteEl("div", "site-page-title", post.title), siteEl("div", "site-page-slug", "/" + siteBlogPath + "/" + post.id));
   h.querySelector(".site-page-title").style.fontSize = "15px";
   card.appendChild(h);
-  const draft = JSON.parse(JSON.stringify({ title: post.title, date: post.date, description: post.description, image: post.image, tags: post.tags || [], draft: !!post.draft, seo: post.seo || {}, body: post.body || "" }));
+  const slugOf = (t) => String(t || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const draft = JSON.parse(JSON.stringify({ title: post.title, slug: post.slug || slugOf(post.title) || post.id, date: post.date, description: post.description, image: post.image, tags: post.tags || [], draft: !!post.draft, seo: post.seo || {}, body: post.body || "" }));
   let saveBtn, cancelBtn;
   const dirty = () => { saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
   // Sections, as pages have: Post settings, Content, SEO (last).
   const pf = siteFold(S.postSettings, "post:settings"); card.appendChild(pf.sec);
-  const t = siteField(S.pageTitle, draft.title); t.input.addEventListener("input", () => { draft.title = t.input.value; dirty(); }); pf.body.appendChild(t.wrap);
+  const t = siteField(S.pageTitle, draft.title); pf.body.appendChild(t.wrap);
+  // The permalink starts as the title's slug and follows the title until it's edited by hand.
+  const sl = sitePrefixField(S.postSlug, `/${siteBlogPath}/`, draft.slug, { hint: S.postSlugHint }); pf.body.appendChild(sl.wrap);
+  const slugFollows = post.slug ? post.slug === slugOf(post.title) : true;
+  if (!slugFollows) sl.input.dataset.touched = "1";
+  t.input.addEventListener("input", () => { draft.title = t.input.value; if (!sl.input.dataset.touched) { draft.slug = slugOf(t.input.value); sl.input.value = draft.slug; } dirty(); });
+  sl.input.addEventListener("input", () => { sl.input.dataset.touched = "1"; draft.slug = sl.input.value; dirty(); });
   const d = siteField(S.postDate, draft.date, { type: "date" }); d.input.addEventListener("input", () => { draft.date = d.input.value; dirty(); }); pf.body.appendChild(d.wrap);
   const upd = siteEl("div", "site-kv"); upd.appendChild(siteEl("div", "k", S.postUpdated));
   let updText = S.postNeverSaved;
@@ -4333,7 +4340,7 @@ function siteLinkOptions(data, posts, ctx) {
   (data.site.nav || []).forEach((l) => { const m = (l.href || "").match(/^\/#([a-z0-9-]+)$/); if (m) addAnchor(m[1], l.label); (l.links || []).forEach((s) => { const n = (s.href || "").match(/^\/#([a-z0-9-]+)$/); if (n) addAnchor(n[1], s.label); }); });
   const blog = "/" + ((data.site && data.site.blogPath) || "blog");
   if (posts.length) out.push({ group: "posts", label: COPY.site.tabs.posts, href: blog });
-  posts.filter((p) => !p.draft).forEach((p) => out.push({ group: "posts", label: p.title, href: blog + "/" + p.id }));
+  posts.filter((p) => !p.draft).forEach((p) => out.push({ group: "posts", label: p.title, href: blog + "/" + (p.slug || p.id) }));
   ctx.types.forEach((t) => {
     if (t.index) out.push({ group: "indexes", label: t.label, href: t.path });
     (ctx.entries[t.key] || []).forEach((e) => out.push({ group: "types", label: `${e.title} (${t.singular || t.label})`, href: `${t.path}/${e.slug || e.id}` }));
@@ -5032,7 +5039,8 @@ async function renderSite(body) {
   } else if (siteRailState.tab === "posts") {
     const { left, right } = two();
     const cur = sel && sel.kind === "post" && posts.some((p) => p.id === sel.id) ? sel : (posts[0] ? { kind: "post", id: posts[0].id } : null);
-    sitePreviewPath = cur ? `/${siteBlogPath}/${cur.id}` : `/${siteBlogPath}`;
+    const curPost = cur && posts.find((p) => p.id === cur.id);
+    sitePreviewPath = curPost ? `/${siteBlogPath}/${curPost.slug || curPost.id}` : `/${siteBlogPath}`;
     if (!posts.length) left.appendChild(siteEl("div", "sess-desc", COPY.site.noPosts));
     posts.forEach((p) => left.appendChild(listRow(p.title, p.draft ? COPY.site.draftTag : (p.date || ""), cur && cur.id === p.id, () => { siteRailState.selected = { kind: "post", id: p.id }; refresh(); })));
     left.appendChild(addRow(COPY.site.newPostPlaceholder, COPY.site.create, async (t) => { const res = await window.desktop.createSitePost(t); if (res && res.ok) { siteRailState.selected = { kind: "post", id: res.post.id }; refresh(); } }));
