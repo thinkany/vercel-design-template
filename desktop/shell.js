@@ -7065,6 +7065,52 @@ function exitReview() {
 // lever label to hang a hover tooltip off of.
 const INFO_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/></svg>';
 
+// The direction lightbox: one image large (with prev/next through the lens's gallery),
+// its credit and source link, and the essay beneath. index -1 = essay only.
+const lensbox = el("lensbox");
+let lensboxState = null; // { lens, index }
+function paintLensbox() {
+  if (!lensboxState) return;
+  const { lens, index } = lensboxState;
+  const D = COPY.intake.direction;
+  const images = Array.isArray(lens.gallery) ? lens.gallery.slice(0, 3) : [];
+  const im = index >= 0 ? images[index] : null;
+  el("lensbox-title").textContent = lens.label || lens.id;
+  const stage = el("lensbox-stage"); stage.hidden = !im;
+  if (im) { const img = el("lensbox-img"); img.src = im.src; img.alt = im.alt || ""; }
+  el("lensbox-prev").hidden = !(im && images.length > 1); el("lensbox-next").hidden = !(im && images.length > 1);
+  const credit = el("lensbox-credit"); credit.innerHTML = "";
+  if (im && im.credit) {
+    credit.appendChild(document.createTextNode(D.imageCredit(im.credit, im.license)));
+    if (im.creditUrl) { const a = document.createElement("a"); a.href = im.creditUrl; a.textContent = " " + D.imageSource; a.addEventListener("click", (e) => { e.preventDefault(); window.desktop.openExternal(im.creditUrl); }); credit.appendChild(a); }
+  } else if (!images.length) credit.textContent = D.gallerySoon;
+  const essay = el("lensbox-essay"); essay.innerHTML = "";
+  String(lens.essay || "").split(/\n\s*\n/).map((t) => t.trim()).filter(Boolean).forEach((t) => { const para = document.createElement("p"); para.textContent = t; essay.appendChild(para); });
+}
+function openLensbox(lens, index) {
+  if (!lens) return;
+  lensboxState = { lens, index };
+  paintLensbox();
+  lensbox.hidden = false;
+  el("lensbox-close").focus();
+}
+function closeLensbox() { lensbox.hidden = true; lensboxState = null; }
+function stepLensbox(d) {
+  if (!lensboxState || lensboxState.index < 0) return;
+  const n = Math.min(3, (lensboxState.lens.gallery || []).length); if (n < 2) return;
+  lensboxState.index = (lensboxState.index + d + n) % n; paintLensbox();
+}
+el("lensbox-close").addEventListener("click", closeLensbox);
+el("lensbox-prev").addEventListener("click", () => stepLensbox(-1));
+el("lensbox-next").addEventListener("click", () => stepLensbox(1));
+lensbox.addEventListener("click", (e) => { if (e.target === lensbox) closeLensbox(); });
+document.addEventListener("keydown", (e) => {
+  if (lensbox.hidden) return;
+  if (e.key === "Escape") { closeLensbox(); e.stopPropagation(); }
+  else if (e.key === "ArrowLeft") stepLensbox(-1);
+  else if (e.key === "ArrowRight") stepLensbox(1);
+}, true);
+
 let _directionMeta = null;
 async function getDirectionMeta() {
   if (_directionMeta) return _directionMeta;
@@ -7106,10 +7152,16 @@ async function renderDirectionPanel(host, opts = {}) {
   lensSel.className = "idir-lens idir-lens-sel";
   const lensDesc = document.createElement("div");
   lensDesc.className = "idir-desc";
+  // The gallery: up to three example images for the picked lens (served by derive), each
+  // opening the lightbox; "About this direction" opens it on the essay alone.
+  const gallery = document.createElement("div");
+  gallery.className = "idir-gallery";
+  const about = document.createElement("button");
+  about.type = "button"; about.className = "idir-about"; about.textContent = COPY.intake.direction.about;
   const menu = document.createElement("div");
   menu.className = "idir-menu";
   menu.hidden = true;
-  panel.append(head, lensSel, lensDesc, menu);
+  panel.append(head, lensSel, lensDesc, gallery, about, menu);
 
   const pinned = {};      // axes the designer has steered
   let pinnedLens = null;  // a directly-picked lens (from the selector)
@@ -7207,6 +7259,24 @@ async function renderDirectionPanel(host, opts = {}) {
     const lens = (meta.lenses || []).find((l) => l.id === current.lens);
     lensSel.textContent = (lens ? lens.label : current.lens) + "  ▾";
     lensDesc.textContent = lens ? lens.description : "";
+    gallery.innerHTML = "";
+    const images = (lens && Array.isArray(lens.gallery)) ? lens.gallery.slice(0, 3) : [];
+    gallery.hidden = !images.length;
+    images.forEach((im, i) => {
+      const tile = document.createElement("button"); tile.type = "button"; tile.className = "idir-tile"; tile.title = im.alt || "";
+      const img = document.createElement("img"); img.src = im.src; img.alt = im.alt || ""; img.loading = "lazy";
+      tile.appendChild(img);
+      if (im.credit) {
+        const cr = document.createElement("div"); cr.className = "idir-credit";
+        cr.textContent = COPY.intake.direction.imageCredit(im.credit, im.license);
+        if (im.creditUrl) { const a = document.createElement("a"); a.href = im.creditUrl; a.textContent = " " + COPY.intake.direction.imageSource; a.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); window.desktop.openExternal(im.creditUrl); }); cr.appendChild(a); }
+        tile.appendChild(cr);
+      }
+      tile.addEventListener("click", () => openLensbox(lens, i));
+      gallery.appendChild(tile);
+    });
+    about.hidden = !(lens && (lens.essay || images.length));
+    about.onclick = () => openLensbox(lens, images.length ? 0 : -1);
     for (const name of axisNames) {
       const active = name in pinned ? pinned[name] : current.axes[name];
       rows[name].forEach((b) => b.classList.toggle("active", b.textContent === active));

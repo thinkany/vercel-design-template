@@ -32,3 +32,6 @@ dist-site/
 # (site/src/lib/self-host-fonts.mjs); regenerated on every build, Vercel's included.
 public/fonts/
 site/.astro/
+
+# lens gallery curation output (contact sheets)
+desktop/build/lens-gallery/out/

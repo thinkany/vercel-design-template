@@ -1292,6 +1292,12 @@ window.COPY = {
       },
       groupDirections: "Directions",
       groupMovements: "Movements",
+      // The gallery: three example images under the picked direction, and the lightbox
+      // (image, credit, a fuller read on the direction).
+      about: "About this direction",
+      imageCredit: (credit, license) => `Image: ${credit}${license ? ` (${license})` : ""}`,
+      imageSource: "source",
+      gallerySoon: "Example images for this direction are on their way.",
       helpTitle: "How the design direction works",
       // The "?" overlay on the direction picker (static HTML card body).
       helpHtml: `
