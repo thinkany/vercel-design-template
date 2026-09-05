@@ -7,12 +7,17 @@
 // derive/direction/lens-gallery.json with the credit, license and file page per image.
 // Then commit + push derive.
 //
-//   node desktop/build/lens-gallery/build.mjs
+//   node desktop/build/lens-gallery/build.mjs                  # every lens in picks.json
+//   node desktop/build/lens-gallery/build.mjs editorial        # one lens; the others keep their records
 //   DERIVE_REPO=/path/to/derive node desktop/build/lens-gallery/build.mjs
+//
+// Each record carries `v`, a short hash of the AVIF bytes, which the app appends to the
+// URL, so a replaced image (same file name) is never served from a browser cache.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import crypto from "node:crypto";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, "..", "..", "..");
@@ -40,10 +45,14 @@ async function commonsInfo(title) {
 }
 
 async function main() {
+  const only = process.argv[2] || null;
   const picks = JSON.parse(fs.readFileSync(path.join(here, "picks.json"), "utf8"));
+  if (only && !picks[only]) throw new Error(`no picks for "${only}"`);
   fs.mkdirSync(imgDir, { recursive: true });
-  const out = {};
+  // One lens: start from the existing records so the rest are untouched.
+  const out = only ? (JSON.parse(fs.readFileSync(dataFile, "utf8")) || {}) : {};
   for (const [lens, items] of Object.entries(picks)) {
+    if (only && lens !== only) continue;
     out[lens] = [];
     let n = 0;
     for (const it of items.slice(0, 3)) {
@@ -62,6 +71,7 @@ async function main() {
       const thumb = `${lens}-${n}-thumb.avif`;
       await sharp(buf).rotate().resize({ width: THUMB, height: Math.round(THUMB * 0.75), fit: "cover", withoutEnlargement: true }).avif({ quality: THUMB_QUALITY }).toFile(path.join(imgDir, thumb));
       rec.thumb = thumb;
+      rec.v = crypto.createHash("sha1").update(fs.readFileSync(path.join(imgDir, file))).digest("hex").slice(0, 8);
       out[lens].push(rec);
       console.log(`[gallery] ${file}  ${rec.license}  ${rec.credit}`);
     }
