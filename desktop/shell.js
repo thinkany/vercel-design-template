@@ -3860,12 +3860,38 @@ let mediaPickResolve = null;
 
 function closeMediaPicker(result) {
   mediapick.hidden = true;
+  window.desktop.phoneStop().catch(() => {}); // a phone session open in the picker ends with it
   const r = mediaPickResolve; mediaPickResolve = null;
   if (r) r(result || null);
 }
 el("mediapick-close").addEventListener("click", () => closeMediaPicker(null));
 mediapick.addEventListener("click", (e) => { if (e.target === mediapick) closeMediaPicker(null); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !mediapick.hidden) { closeMediaPicker(null); e.stopPropagation(); } }, true);
+
+// The phone-upload panel: starts a session on the Mac, shows the QR, counts what arrives.
+// `onReceived(payload)` runs per file; the panel stops the session when it closes.
+async function phonePanel({ target, title, lead, note, receivedText, onReceived, onClose }) {
+  const M = COPY.site.media.phone;
+  const wrap = siteEl("div", "phone-panel");
+  const img = document.createElement("img"); img.alt = ""; img.hidden = true;
+  const text = siteEl("div", "phone-text");
+  const b = document.createElement("b"); b.textContent = title || M.title;
+  const p = siteEl("div", "", lead || M.lead);
+  const status = siteEl("div", "phone-status");
+  const url = siteEl("div", "phone-url");
+  const noteEl = siteEl("div", "sess-desc", note || M.note);
+  const done = siteMini(M.done, () => close());
+  text.append(b, p, status, url, noteEl, done);
+  wrap.append(img, text);
+  let count = 0; let offReceived = () => {}; let offExpired = () => {};
+  const close = () => { offReceived(); offExpired(); window.desktop.phoneStop().catch(() => {}); wrap.remove(); if (onClose) onClose(count); };
+  const res = await window.desktop.phoneStart(target).catch((e) => ({ ok: false, error: String(e) }));
+  if (!res || !res.ok) { status.textContent = (res && res.error) || M.noNetwork; status.style.color = "#b45309"; return { el: wrap, close }; }
+  img.src = res.qr; img.hidden = false; url.textContent = res.url;
+  offReceived = window.desktop.onPhoneReceived((payload) => { if (payload.target !== target) return; count++; status.textContent = (receivedText || M.received)(count); if (onReceived) onReceived(payload); });
+  offExpired = window.desktop.onPhoneExpired((payload) => { if (payload.target !== target) return; status.textContent = M.expired; status.style.color = "#b45309"; img.style.opacity = ".3"; });
+  return { el: wrap, close };
+}
 
 /** Open the picker; resolves with { url, name, width, height } or null. */
 function openMediaPicker(current) {
@@ -3878,11 +3904,14 @@ function openMediaPicker(current) {
     mediapickBar.innerHTML = ""; mediapickBody.innerHTML = "";
     const filterIn = document.createElement("input"); filterIn.className = "field"; filterIn.placeholder = M.filter;
     const upBtn = siteEl("button", "panelbtn", M.upload); upBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+    const phoneBtn = siteEl("button", "panelbtn", M.fromPhone); phoneBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
     const useBtn = siteEl("button", "panelbtn primary", M.use); useBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;"; useBtn.disabled = true;
-    mediapickBar.append(filterIn, upBtn, useBtn);
+    mediapickBar.append(filterIn, upBtn, phoneBtn, useBtn);
+    let phone = null; // the open phone panel, if any (rendered at the top of the body by paint)
     upBtn.title = M.uploadNote;
     const paint = () => {
       mediapickBody.innerHTML = "";
+      if (phone) mediapickBody.appendChild(phone.el);
       const shown = items.filter((it) => !filter || it.name.toLowerCase().includes(filter));
       mediapickBody.appendChild(siteEl("div", "sess-desc", M.uploadNote));
       if (!items.length) { mediapickBody.appendChild(siteEl("div", "muted", M.empty)); return; }
@@ -3915,6 +3944,12 @@ function openMediaPicker(current) {
       if (r && r.ok && r.added && r.added.length) { selected = r.added[0]; await load(); }
     });
     useBtn.addEventListener("click", () => { const it = items.find((i) => i.url === selected); closeMediaPicker(it || (selected ? { url: selected } : null)); });
+    phoneBtn.addEventListener("click", async () => {
+      if (phone) { phone.close(); return; }
+      phoneBtn.disabled = true;
+      phone = await phonePanel({ target: "media", onReceived: async (payload) => { if (payload.added && payload.added.length) selected = payload.added[payload.added.length - 1]; await load(); }, onClose: () => { phone = null; phoneBtn.disabled = false; paint(); } });
+      phoneBtn.disabled = false; paint();
+    });
     load();
   });
 }
@@ -5980,6 +6015,22 @@ function renderQuestionCard(id, questions) {
         } catch (e) { uploadNote.textContent = String(e); }
       }
       uploadBtn.addEventListener("click", () => ingestFromCard(window.desktop.addReferences()));
+      // "Send from your phone": the QR panel under the upload button; each file that
+      // arrives has already been added + ingested on the main side, so the card just
+      // waits for the digest the way a picker upload does.
+      const phoneLink = document.createElement("button"); phoneLink.type = "button"; phoneLink.className = "site-link"; phoneLink.textContent = COPY.intake.uploadFromPhone; phoneLink.style.cssText = "margin:6px 0 0;";
+      const phoneHost = document.createElement("div");
+      let phoneOpen = null;
+      phoneLink.addEventListener("click", async () => {
+        if (phoneOpen) { phoneOpen.close(); return; }
+        phoneLink.disabled = true;
+        phoneOpen = await phonePanel({
+          target: "references", title: COPY.intake.uploadFromPhone, lead: COPY.intake.uploadFromPhoneLead, receivedText: COPY.intake.uploadFromPhoneReceived,
+          onReceived: (payload) => ingestFromCard(Promise.resolve({ ok: true, added: payload.added || [], skipped: payload.skipped || [], assets: payload.assets, digest: payload.digest, analyzing: payload.analyzing })),
+          onClose: () => { phoneOpen = null; phoneLink.disabled = false; },
+        });
+        phoneLink.disabled = false; phoneHost.appendChild(phoneOpen.el);
+      });
       ["dragenter", "dragover"].forEach((t) => uploadBtn.addEventListener(t, (e) => {
         e.preventDefault(); e.stopPropagation(); uploadBtn.classList.add("drag");
       }));
@@ -5995,7 +6046,7 @@ function renderQuestionCard(id, questions) {
         if (paths.length) ingestFromCard(window.desktop.addReferencePaths(paths));
       });
       uploadRefs[qi] = { uploadBtn, uploadNote };
-      block.append(uploadBtn, uploadNote);
+      block.append(uploadBtn, uploadNote, phoneLink, phoneHost);
     } else if (isFileQuestion(q)) {
       const uploadBtn = document.createElement("button");
       uploadBtn.className = "qopt qupload";

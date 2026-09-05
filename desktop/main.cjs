@@ -2238,6 +2238,42 @@ ipcMain.handle("site:deleteForm", (_e, { id } = {}) => {
   try { fs.rmSync(formFile(currentProject, id), { force: true }); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
 });
 
+// ---- Phone upload (QR code, local network) ------------------------------------
+// One listener, one live session at a time: "media" lands in public/images through
+// importMediaFiles; "references" lands in the intake references through the same
+// addAssets + ingest path the picker uses. Each received file is announced to the
+// renderer (phone:received) so the picker or the card can refresh.
+const phoneUpload = require("./phone-upload.cjs");
+ipcMain.handle("phone:start", async (event, { target } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const t = target === "references" ? "references" : "media";
+  if (t === "media" && !siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  const send = (payload) => { if (!event.sender.isDestroyed()) event.sender.send("phone:received", payload); };
+  const res = await phoneUpload.startSession({
+    target: t,
+    tmpDir: path.join(app.getPath("temp"), "thinkany-phone"),
+    copy: { title: "Send to thinkany design", heading: t === "references" ? "Send design references" : "Send photos to the project", lead: t === "references" ? "Photos, screenshots or PDFs you pick here go straight into the project's references on your computer, over your Wi‑Fi." : "Photos you pick here go straight into the project's images on your computer, over your Wi‑Fi.", take: "Take a photo", choose: "Choose from your library", sending: "Sending…", sent: "Sent", failed: "Not sent" },
+    onFile: async (tmp, meta) => {
+      if (t === "media") {
+        const r = await importMediaFiles([tmp]);
+        if (!r.ok) throw new Error(r.error || "Couldn't add it.");
+        send({ target: t, added: r.added, name: meta.name });
+        return { added: r.added };
+      }
+      const { added, skipped } = references.addAssets(currentProject, [tmp]);
+      if (added.length) ingestReferences(currentProject, added.map((a) => a.id));
+      broadcastReferences();
+      send({ target: t, added, skipped, name: meta.name, ...referencesPayload(currentProject) });
+      return { added: added.length };
+    },
+    onExpire: () => { if (!event.sender.isDestroyed()) event.sender.send("phone:expired", { target: t }); },
+  });
+  if (res.error === "no-network") return { ok: false, error: "This Mac isn't on a network the phone could reach. Join a Wi‑Fi network and try again." };
+  return { ok: true, url: res.url, qr: res.qr, expires: res.expires };
+});
+ipcMain.handle("phone:stop", () => { phoneUpload.stopSession(); return { ok: true }; });
+app.on("will-quit", () => { try { phoneUpload.stopServer(); } catch {} });
+
 // ---- Media (public/images) ---------------------------------------------------
 // The project's images, as the CMS image picker sees them: every file under
 // public/images (the folder the design's assets already live in), with size and
