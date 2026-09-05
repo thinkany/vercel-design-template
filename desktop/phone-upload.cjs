@@ -38,22 +38,27 @@ function page(session, copy) {
 <title>${esc(c.title || "Send to thinkany design")}</title>
 <style>
   :root { color-scheme: light; }
-  body { margin: 0; font: 16px/1.45 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; background: #f4f4f7; color: #17171b; padding: max(24px, env(safe-area-inset-top)) 20px 40px; }
+  html, body { height: 100%; }
+  body { margin: 0; font: 16px/1.45 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; background: #f4f4f7; color: #17171b; padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom)); box-sizing: border-box; min-height: 100dvh; display: flex; flex-direction: column; }
+  main { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; width: 100%; max-width: 420px; margin: 0 auto; }
   h1 { font-size: 20px; margin: 0 0 6px; }
   p { margin: 0 0 22px; color: #505056; font-size: 14px; }
-  label.btn { display: block; padding: 18px; margin: 0 0 12px; border-radius: 12px; background: #111; color: #fff; text-align: center; font-weight: 600; font-size: 17px; }
+  label.btn { display: block; width: 100%; box-sizing: border-box; padding: 18px; margin: 0 0 12px; border-radius: 12px; background: #111; color: #fff; text-align: center; font-weight: 600; font-size: 17px; }
   label.btn.alt { background: #fff; color: #111; border: 1px solid #d6d6de; }
   input[type=file] { display: none; }
-  ul { list-style: none; padding: 0; margin: 20px 0 0; }
+  ul { list-style: none; padding: 0; margin: 20px auto 0; width: 100%; max-width: 420px; text-align: left; }
+  ul:empty { display: none; }
   li { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid #e2e2e8; font-size: 14px; }
   li img { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; background: #ddd; }
   li .s { margin-left: auto; color: #505056; font-size: 12px; }
   li.ok .s { color: #1a7f37; } li.err .s { color: #c0261e; }
 </style></head><body>
+<main>
 <h1>${esc(c.heading || "Send to thinkany design")}</h1>
 <p>${esc(c.lead || "Photos you pick here go straight to the project on your computer, over your Wi‑Fi.")}</p>
 <label class="btn">${esc(c.take || "Take a photo")}<input type="file" accept="image/jpeg,image/png" capture="environment" id="cam"></label>
 <label class="btn alt">${esc(c.choose || "Choose from your library")}<input type="file" accept="${accept}" multiple id="lib"></label>
+</main>
 <ul id="list"></ul>
 <script>
   const url = location.pathname;
