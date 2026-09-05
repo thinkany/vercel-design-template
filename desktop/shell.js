@@ -3169,22 +3169,36 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
     addRow.appendChild(sel); bf.body.appendChild(addRow); bf.body.appendChild(dz);
   }
 
-  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
-  const saveBtn = siteEl("button", "panelbtn primary", COPY.site.save); saveBtn.disabled = true; saveBtn.style.margin = "0";
-  saveBtn.addEventListener("click", async () => {
-    saveBtn.disabled = true; saveBtn.textContent = COPY.site.saving;
-    const res = await window.desktop.saveSitePage(page.id, draft);
-    saveBtn.textContent = COPY.site.save;
+  const actions = siteEl("div", "site-actions");
+  // Status + actions: a draft is previewed here and left out of the published site;
+  // Publish flips it on save. The row sticks to the bottom of the drawer.
+  actions.className = "site-actions";
+  const isDraft = page.id !== "home" && !!page.draft;
+  if (page.id !== "home") actions.appendChild(siteEl("span", "site-status" + (isDraft ? " draft" : ""), isDraft ? COPY.site.statusDraft : COPY.site.statusPublished));
+  const doSave = async (btn, asDraft) => {
+    const label = btn.textContent; btn.disabled = true; btn.textContent = COPY.site.saving;
+    const res = await window.desktop.saveSitePage(page.id, { ...draft, draft: asDraft });
+    btn.textContent = label;
     if (res && res.ok) { dirty = false; siteFlash(actions, COPY.site.saved); refresh(); }
-    else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
-  });
+    else { btn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
+  };
+  const saveBtn = siteEl("button", "panelbtn primary", isDraft ? COPY.site.savePageDraft : COPY.site.save); saveBtn.disabled = true; saveBtn.style.margin = "0";
+  saveBtn.addEventListener("click", () => doSave(saveBtn, isDraft));
   actions.appendChild(saveBtn);
   if (page.id !== "home") {
-    actions.appendChild(siteMini(COPY.site.deletePage, async () => {
+    const flipBtn = siteEl("button", "panelbtn", isDraft ? COPY.site.publish : COPY.site.unpublish); flipBtn.style.margin = "0"; flipBtn.style.width = "auto";
+    flipBtn.addEventListener("click", () => doSave(flipBtn, !isDraft));
+    actions.appendChild(flipBtn);
+    // Delete only a page without children, so none are orphaned.
+    const kids = (renderSitePage.pages || []).filter((x) => x.parent === page.id);
+    const del = siteMini(COPY.site.deletePage, async () => {
       if (!confirm(COPY.site.deleteConfirm(page.title))) return;
       const res = await window.desktop.deleteSitePage(page.id);
       if (res && res.ok) { siteRailState.selected = null; refresh(); }
-    }, { danger: true }));
+      else if (res && res.error) alert(res.error);
+    }, { danger: true, disabled: kids.length > 0, title: kids.length ? COPY.site.deletePageHasChildren(kids.length) : "" });
+    actions.appendChild(del);
+    if (kids.length) actions.appendChild(siteEl("span", "sess-desc", COPY.site.deletePageHasChildren(kids.length))).style.margin = "0";
   }
   body.appendChild(sf.sec); // SEO last
   body.appendChild(actions);
@@ -3228,7 +3242,7 @@ function renderSitePost(post, refresh) {
   nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; dirty(); }); nx.append(nxCb, siteEl("span", "", S.seoNoindex)); sf.body.appendChild(nx);
 
   // Status + actions. A draft is never built; Publish flips it live on save.
-  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;";
+  const actions = siteEl("div", "site-actions");
   const status = siteEl("span", "site-status" + (draft.draft ? " draft" : ""), draft.draft ? S.statusDraft : S.statusPublished);
   const doSave = async (btn, asDraft) => {
     const label = btn.textContent; btn.disabled = true; btn.textContent = S.saving;
@@ -3356,19 +3370,25 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!seo.noindex;
   nxCb.addEventListener("change", () => { seo.noindex = nxCb.checked; dirty(); }); nx.append(nxCb, siteEl("span", "", S.seoNoindex)); sf.body.appendChild(nx);
 
-  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
-  saveBtn = siteEl("button", "panelbtn primary", S.saveEntry); saveBtn.disabled = true; saveBtn.style.margin = "0";
-  saveBtn.addEventListener("click", async () => {
-    saveBtn.disabled = true; saveBtn.textContent = S.saving;
-    const data = { title: t.input.value, slug: sl.input.value, seo: { ...seo } };
+  const actions = siteEl("div", "site-actions");
+  const isDraft = !!entry.draft;
+  actions.appendChild(siteEl("span", "site-status" + (isDraft ? " draft" : ""), isDraft ? S.statusDraft : S.statusPublished));
+  const doSave = async (btn, asDraft) => {
+    const label = btn.textContent; btn.disabled = true; btn.textContent = S.saving;
+    const data = { title: t.input.value, slug: sl.input.value, draft: asDraft, seo: { ...seo } };
     for (const [k, get] of controls) data[k] = get();
     if (ownCb.checked) data.blocks = ownBlocks;
     const res = await window.desktop.saveSiteEntry(type.key, entry.id, data);
-    saveBtn.textContent = S.saveEntry;
+    btn.textContent = label;
     if (res && res.ok) { siteFlash(actions, S.saved); refresh(); }
-    else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
-  });
+    else { btn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
+  };
+  saveBtn = siteEl("button", "panelbtn primary", isDraft ? S.saveEntryDraft : S.saveEntry); saveBtn.disabled = true; saveBtn.style.margin = "0";
+  saveBtn.addEventListener("click", () => doSave(saveBtn, isDraft));
   actions.appendChild(saveBtn);
+  const flipBtn = siteEl("button", "panelbtn", isDraft ? S.publish : S.unpublish); flipBtn.style.margin = "0"; flipBtn.style.width = "auto";
+  flipBtn.addEventListener("click", () => doSave(flipBtn, !isDraft));
+  actions.appendChild(flipBtn);
   actions.appendChild(siteMini(S.deleteEntry, async () => {
     if (!confirm(S.deleteEntryConfirm(entry.title))) return;
     const res = await window.desktop.deleteSiteEntry(type.key, entry.id);
@@ -3504,7 +3524,7 @@ function renderSiteTypeEditor(type, ctx, refresh) {
   tpl.body.appendChild(siteEl("div", "sess-desc", S.templateDesc));
   tpl.body.appendChild(siteBlocksEditor(draft.template, ctx.blocks, dirty, "type:" + (draft.key || "new")));
 
-  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
+  const actions = siteEl("div", "site-actions");
   saveBtn = siteEl("button", "panelbtn primary", S.saveType); saveBtn.disabled = !isNew; saveBtn.style.margin = "0";
   saveBtn.addEventListener("click", async () => {
     saveBtn.disabled = true;
@@ -3541,7 +3561,7 @@ function renderSiteTypesList(left, right, ctx, refresh) {
     (ctx.entries[t.key] || []).forEach((e) => {
       const er = siteEl("div", "site-list-row" + (sel && sel.kind === "entry" && sel.id === t.key + "/" + e.id ? " active" : ""));
       er.style.padding = "6px 10px";
-      er.append(siteEl("div", "site-page-title", e.title), siteEl("div", "site-page-slug", "/" + (e.slug || e.id)));
+      er.append(siteEl("div", "site-page-title", e.title), siteEl("div", "site-page-slug", "/" + (e.slug || e.id) + (e.draft ? "  ·  " + S.draftTag : "")));
       er.addEventListener("click", () => { siteRailState.selected = { kind: "entry", id: t.key + "/" + e.id }; refresh(); });
       list.appendChild(er);
     });
@@ -3835,7 +3855,7 @@ function renderSiteFormEditor(form, ctx, refresh) {
   card.appendChild(siteEl("div", "sess-label", S.formUsedOn)).style.marginTop = "12px";
   card.appendChild(siteEl("div", "sess-desc", used.length ? used.map((p) => p.title).join(", ") : S.formUsedNowhere));
 
-  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:10px;";
+  const actions = siteEl("div", "site-actions");
   saveBtn = siteEl("button", "panelbtn primary", S.saveForm); saveBtn.disabled = true; saveBtn.style.margin = "0";
   saveBtn.addEventListener("click", async () => {
     saveBtn.disabled = true;
@@ -4922,7 +4942,7 @@ async function renderSite(body) {
     const kids = (pid) => data.pages.filter((p) => (p.parent || null) === pid && p.id !== "home").sort((a, b) => ((a.order ?? 1e9) - (b.order ?? 1e9)) || a.title.localeCompare(b.title));
     const walk = (pid, depth) => kids(pid).forEach((p) => { pageRow(p, depth); walk(p.id, depth + 1); });
     const pageRow = (p, depth) => {
-      const row = listRow(p.title, p.id === "home" ? COPY.site.homeSlug : "/" + (p.route || p.slug || p.id), cur && cur.id === p.id, () => { siteRailState.selected = { kind: "page", id: p.id }; refresh(); });
+      const row = listRow(p.title, (p.id === "home" ? COPY.site.homeSlug : "/" + (p.route || p.slug || p.id)) + (p.draft ? "  ·  " + COPY.site.draftTag : ""), cur && cur.id === p.id, () => { siteRailState.selected = { kind: "page", id: p.id }; refresh(); });
       row.style.marginLeft = depth * PAGE_INDENT + "px";
       sitePageDraggable(row, p, data.pages, refresh, depth);
       left.appendChild(row);

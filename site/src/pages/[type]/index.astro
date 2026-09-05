@@ -26,7 +26,7 @@ export async function getStaticPaths() {
 const { type, blog } = Astro.props;
 const fmt = (d: Date) => d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
 const posts = blog ? (await getCollection("posts", ({ data }) => !data.draft)).sort((a, b) => b.data.date.getTime() - a.data.date.getTime()) : [];
-const entries = (blog ? [] : await getCollection(type.key as never)) as { id: string; data: Record<string, unknown> & { title: string; slug?: string; seo?: { description?: string; noindex?: boolean } } }[];
+const entries = (blog ? [] : await getCollection(type.key as never, (({ data }: { data: { draft?: boolean } }) => import.meta.env.DEV || !data.draft) as never)) as { id: string; data: Record<string, unknown> & { title: string; slug?: string; seo?: { description?: string; noindex?: boolean } } }[];
 entries.sort((a, b) => a.data.title.localeCompare(b.data.title));
 const imageField = blog ? undefined : type.fields.find((f) => f.kind === "image");
 const summaryField = blog ? undefined : type.fields.find((f) => f.kind === "textarea" || f.kind === "text");

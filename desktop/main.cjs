@@ -1485,7 +1485,7 @@ function readSiteContent(dir) {
     pages = fs.readdirSync(pagesDir).filter((f) => f.endsWith(".json")).sort().map((f) => {
       const id = f.replace(/\.json$/, "");
       const data = readJsonFile(path.join(pagesDir, f)) || {};
-      return { id, title: data.title || id, slug: data.slug ?? (id === "home" ? "" : id), parent: typeof data.parent === "string" ? data.parent : null, order: Number.isFinite(data.order) ? data.order : null, seo: data.seo || {}, blocks: Array.isArray(data.blocks) ? data.blocks : [] };
+      return { id, title: data.title || id, slug: data.slug ?? (id === "home" ? "" : id), parent: typeof data.parent === "string" ? data.parent : null, order: Number.isFinite(data.order) ? data.order : null, draft: !!data.draft && id !== "home", seo: data.seo || {}, blocks: Array.isArray(data.blocks) ? data.blocks : [] };
     });
   } catch { /* no pages dir */ }
   // Full routes from the parent chain; a parent that doesn't exist is ignored.
@@ -1661,6 +1661,7 @@ ipcMain.handle("site:savePage", (_e, { id, data } = {}) => {
     slug: id === "home" ? "" : slugifyId(data.slug ?? id),
     ...(parent ? { parent } : {}),
     ...(Number.isFinite(prevOrder) && (byId[id].parent || null) === parent ? { order: prevOrder } : {}), // a new parent → last among its children
+    ...(data.draft && id !== "home" ? { draft: true } : {}), // a draft previews in dev and stays out of the published site
     seo: data.seo && typeof data.seo === "object" ? data.seo : {},
     blocks: Array.isArray(data.blocks) ? data.blocks.filter((b) => b && typeof b.type === "string").map((b) => ({ type: b.type, props: pruneEmptyProps(b.props && typeof b.props === "object" ? b.props : {}) })) : [],
   };
@@ -1687,7 +1688,7 @@ ipcMain.handle("site:createPage", (_e, { title } = {}) => {
   let n = 2; const base = id;
   while (fs.existsSync(pageFile(currentProject, id))) id = `${base}-${n++}`;
   const top = pageSiblings(readPagesIndex(currentProject), null, null);
-  const doc = { title: t, slug: id, order: top.length ? Math.max(...top.map((q) => (Number.isFinite(q.order) ? q.order : -1))) + 1 : 0, seo: {}, blocks: [] };
+  const doc = { title: t, slug: id, order: top.length ? Math.max(...top.map((q) => (Number.isFinite(q.order) ? q.order : -1))) + 1 : 0, draft: true, seo: {}, blocks: [] };
   try {
     fs.mkdirSync(path.dirname(pageFile(currentProject, id)), { recursive: true });
     fs.writeFileSync(pageFile(currentProject, id), JSON.stringify(doc, null, 2) + "\n");
@@ -1698,6 +1699,8 @@ ipcMain.handle("site:deletePage", (_e, { id } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (!validPageId(id) || id === "home") return { ok: false, error: "The home page can't be deleted." };
+  const kids = Object.values(readPagesIndex(currentProject)).filter((q) => q.parent === id);
+  if (kids.length) return { ok: false, error: `This page has ${kids.length === 1 ? "a child page" : `${kids.length} child pages`}. Move or delete them first.` };
   try { fs.rmSync(pageFile(currentProject, id), { force: true }); return { ok: true }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
@@ -2033,7 +2036,7 @@ ipcMain.handle("site:saveEntry", (_e, { key, id, data } = {}) => {
   if (!data || typeof data.title !== "string" || !data.title.trim()) return { ok: false, error: "An entry needs a title." };
   const t = readTypes(currentProject).find((x) => x.key === key);
   if (!t) return { ok: false, error: "Unknown type." };
-  const doc = { title: data.title.trim(), slug: slugifyId(data.slug || id) || id };
+  const doc = { title: data.title.trim(), slug: slugifyId(data.slug || id) || id, ...(data.draft ? { draft: true } : {}) };
   if (data.seo && typeof data.seo === "object") { doc.seo = {}; for (const [k, v] of Object.entries(data.seo)) if (v !== "" && v != null && v !== false) doc.seo[k] = v; if (!Object.keys(doc.seo).length) delete doc.seo; }
   for (const f of t.fields) {
     let v = data[f.key];
@@ -2057,7 +2060,7 @@ ipcMain.handle("site:createEntry", (_e, { key, title } = {}) => {
   const t = String(title || "").trim(); if (!t) return { ok: false, error: "Give it a title." };
   let id = slugifyId(t) || "entry"; const base = id; let n = 2;
   while (fs.existsSync(entryFile(currentProject, key, id))) id = `${base}-${n++}`;
-  const doc = { title: t, slug: id };
+  const doc = { title: t, slug: id, draft: true };
   try { fs.mkdirSync(entryDir(currentProject, key), { recursive: true }); fs.writeFileSync(entryFile(currentProject, key, id), JSON.stringify(doc, null, 2) + "\n"); return { ok: true, entry: { id, ...doc } }; }
   catch (e) { return { ok: false, error: e.message }; }
 });

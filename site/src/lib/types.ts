@@ -67,6 +67,8 @@ export function entrySchema(t: TypeDef) {
   return z.object({
     title: z.string(),
     slug: z.string().optional(),
+    /** A draft is previewed in dev and left out of the published site. */
+    draft: z.boolean().default(false),
     seo: seoFields.default({}),
     /** Own blocks (a landing page); when present the type's template is not used. */
     blocks: z.array(blockInstance).optional(),

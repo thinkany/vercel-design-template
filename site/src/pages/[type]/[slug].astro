@@ -19,7 +19,7 @@ export async function getStaticPaths() {
   const { types } = typesFile.parse(rawTypes);
   const out: { params: { type: string; slug: string }; props: Record<string, unknown> }[] = [];
   for (const t of types) {
-    const entries = await getCollection(t.key as never);
+    const entries = await getCollection(t.key as never, (({ data }: { data: { draft?: boolean } }) => import.meta.env.DEV || !data.draft) as never);
     for (const e of entries as { id: string; data: { slug?: string } }[]) {
       out.push({ params: { type: t.path.replace(/^\//, ""), slug: e.data.slug ?? e.id }, props: { type: t, entry: e } });
     }

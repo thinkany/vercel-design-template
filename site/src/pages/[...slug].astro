@@ -17,7 +17,8 @@ import { blocks } from "../../blocks";
 import { withBuiltins } from "../lib/builtin-blocks";
 
 export async function getStaticPaths() {
-  const pages = await getCollection("pages");
+  // Drafts are previewed in dev and never built for the published site.
+  const pages = await getCollection("pages", ({ data }) => import.meta.env.DEV || !data.draft);
   return pages.map((page) => {
     const slug = pageRoute(page, pages); // parent chain: "about/island-guide"
     // Breadcrumbs: Home, then each ancestor, then this page.

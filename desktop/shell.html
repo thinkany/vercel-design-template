@@ -415,6 +415,10 @@
       .site-list-row.active { border-color: #111; background: #f4f4f7; }
       .site-list-row .site-page-title { font-weight: 500; }
       .site-detail { border-left: 1px solid #ececf1; padding-left: 20px; min-height: 240px; }
+      /* The Save row of an editor sticks to the bottom of the drawer while its content scrolls,
+         so Save (enabled only once something changed) is always in reach. */
+      .site-actions { position: sticky; bottom: -16px; z-index: 3; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; padding: 10px 0 12px; background: #fff; border-top: 1px solid #ececf1; }
+      .site-actions .site-status { margin-right: 2px; }
       #modal-head {
         display: flex; align-items: center; justify-content: space-between;
         padding: 14px 16px 13px;   /* -1px so its bottom edge lines up with the #bar (51px) */

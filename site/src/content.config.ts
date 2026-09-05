@@ -27,6 +27,8 @@ const pages = defineCollection({
     parent: z.string().optional(),
     /** Position among its siblings in the page outline (the CMS sets it by drag-and-drop). */
     order: z.number().optional(),
+    /** A draft is previewed in dev and left out of the published site (the CMS's Publish flips it). */
+    draft: z.boolean().default(false),
     seo: seoFields.default({}),
     blocks: z.array(blockInstance).default([]),
   }),
