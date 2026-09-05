@@ -838,6 +838,10 @@
       .site-kv .field { margin-bottom: 0; }
       .site-kv textarea.field { min-height: 56px; resize: vertical; }
       /* Rich text editor (TipTap): a bordered field with a toolbar on top. */
+      /* An icon never takes the pointer: Chromium looks for a tooltip on the SVG itself
+         (its own <title>), not on the button around it, so hovering the icon showed
+         nothing and hovering the button's padding did. This makes the button the target. */
+      button > svg, button svg { pointer-events: none; }
       .ta-editor { border: 1px solid #ccc; border-radius: 8px; background: #fff; overflow: hidden; }
       .ta-editor:focus-within { border-color: #111; }
       .ta-editor-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 5px 6px; border-bottom: 1px solid #e6e6e6; background: #fafafa; }
