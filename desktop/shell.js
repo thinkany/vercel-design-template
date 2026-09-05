@@ -2699,9 +2699,9 @@ function siteFoldSet(key, open) {
     catch (e) { console.warn("[cms] fold state not saved:", e); }
   }, 150);
 }
-function siteFold(title, key, { defaultOpen = true, dark = false } = {}) {
+function siteFold(title, key, { defaultOpen = true } = {}) {
   const isOpen = key in siteFolds ? siteFolds[key] !== false : defaultOpen;
-  const sec = siteEl("div", "site-acc" + (isOpen ? " open" : "") + (dark ? " dark" : ""));
+  const sec = siteEl("div", "site-acc" + (isOpen ? " open" : ""));
   const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(isOpen));
   head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
   const body = siteEl("div", "site-acc-body"); body.hidden = !isOpen;
@@ -3543,7 +3543,7 @@ function siteFormUsage(form, ctx) {
 const FROM_RE = /^(?:[^<>]*<[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>|[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+)$/;
 function renderFormsDelivery(delivery, hasForms) {
   const D = COPY.site.delivery;
-  const { sec, body } = siteFold(D.title, "forms:delivery", { dark: true });
+  const { sec, body } = siteFold(D.title, "forms:delivery");
   sec.style.maxWidth = "720px";
   body.appendChild(siteEl("div", "sess-desc", D.intro));
   let saved = { ...delivery }; // what the app has on disk (the source of "ready")
@@ -3640,7 +3640,7 @@ function renderSiteForms(host, ctx, refresh) {
   const S = COPY.site;
   const sel = siteRailState.selected && typeof siteRailState.selected === "object" ? siteRailState.selected : null;
   const cur = sel && sel.kind === "form" && ctx.forms.some((f) => f.id === sel.id) ? sel : (ctx.forms[0] ? { kind: "form", id: ctx.forms[0].id } : null);
-  const fold = siteFold(S.formsHeading, "forms:list", { dark: true });
+  const fold = siteFold(S.formsHeading, "forms:list");
   const cols = siteEl("div", "site-cols"); const left = siteEl("div"); const right = siteEl("div", "site-detail"); cols.append(left, right);
   fold.body.appendChild(cols); host.appendChild(fold.sec);
   left.appendChild(siteEl("div", "sess-desc", S.formsDesc));
@@ -3673,9 +3673,9 @@ function renderSiteFormEditor(form, ctx, refresh) {
   const name = siteField(S.formName, draft.name); name.input.addEventListener("input", dirty); card.appendChild(name.wrap);
 
   // Sections: Fields open by default, the rest folded until opened once (remembered per project).
-  const fieldsFold = siteFold(S.formFieldsHeading, "form:fields", { dark: true }); card.appendChild(fieldsFold.sec);
-  const afterFold = siteFold(S.formAfterHeading, "form:after", { dark: true, defaultOpen: false }); card.appendChild(afterFold.sec);
-  const deliveryFold = siteFold(S.formDeliveryHeading, "form:delivery", { dark: true, defaultOpen: false }); card.appendChild(deliveryFold.sec);
+  const fieldsFold = siteFold(S.formFieldsHeading, "form:fields"); card.appendChild(fieldsFold.sec);
+  const afterFold = siteFold(S.formAfterHeading, "form:after", { defaultOpen: false }); card.appendChild(afterFold.sec);
+  const deliveryFold = siteFold(S.formDeliveryHeading, "form:delivery", { defaultOpen: false }); card.appendChild(deliveryFold.sec);
 
   // Fields: label, type, required; the id (made from the label) behind "Show ID".
   fieldsFold.body.appendChild(siteEl("div", "sess-desc", S.formFieldsDesc));
