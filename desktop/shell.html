@@ -246,7 +246,15 @@
       #lensbox-more svg { width: 22px; height: 22px; animation: lensbox-nudge 1.6s ease-in-out infinite; }
       @keyframes lensbox-nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(4px); } }
       .media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }
-      .media-tile { border: 1px solid #e2e2e8; border-radius: 8px; overflow: hidden; cursor: pointer; background: #fafafb; text-align: left; padding: 0; }
+      .media-tile { position: relative; border: 1px solid #e2e2e8; border-radius: 8px; overflow: hidden; cursor: pointer; background: #fafafb; text-align: left; padding: 0; }
+      /* Rename + delete, shown on hover in the tile's top-right corner. */
+      .media-acts { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+      .media-tile:hover .media-acts, .media-tile:focus-within .media-acts { opacity: 1; }
+      .media-acts button { width: 26px; height: 26px; border-radius: 6px; border: 1px solid rgba(0,0,0,.12); background: rgba(255,255,255,.94); color: #111; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; }
+      .media-acts button:hover { background: #fff; border-color: #111; }
+      .media-acts button.danger { color: #c0261e; }
+      .media-acts svg { width: 14px; height: 14px; }
+      .media-meta input.field { margin: 0; padding: 3px 6px; font-size: 11px; }
       .media-tile:hover { border-color: #111; }
       .media-tile.active { outline: 2px solid #111; outline-offset: -2px; }
       .media-tile img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: repeating-conic-gradient(#eee 0 25%, #fff 0 50%) 0 0 / 16px 16px; }

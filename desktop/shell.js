@@ -3917,20 +3917,49 @@ function openMediaPicker(current) {
       if (!items.length) { mediapickBody.appendChild(siteEl("div", "muted", M.empty)); return; }
       const grid = siteEl("div", "media-grid");
       shown.forEach((it) => {
-        const tile = siteEl("button", "media-tile" + (selected === it.url ? " active" : "")); tile.type = "button";
+        // A div, not a button: the tile holds its own buttons (rename, delete) and an input.
+        const tile = siteEl("div", "media-tile" + (selected === it.url ? " active" : "")); tile.tabIndex = 0; tile.setAttribute("role", "button");
         const img = document.createElement("img"); img.src = it.file; img.alt = it.name; img.loading = "lazy";
         const meta = siteEl("div", "media-meta");
-        meta.appendChild(siteEl("div", "", it.name));
+        const nameEl = siteEl("div", "", it.name);
+        meta.appendChild(nameEl);
         meta.appendChild(siteEl("div", "muted", (it.width ? M.dims(it.width, it.height) + " · " : "") + Math.max(1, Math.round(it.size / 1024)) + " KB"));
-        tile.append(img, meta);
-        tile.addEventListener("click", () => { selected = it.url; useBtn.disabled = false; paint(); });
-        tile.addEventListener("dblclick", () => { closeMediaPicker(it); });
-        tile.addEventListener("contextmenu", async (e) => {
-          e.preventDefault();
+        // Rename in place: the name becomes an input; Enter saves, Escape cancels.
+        const acts = siteEl("div", "media-acts");
+        const editBtn = document.createElement("button"); editBtn.type = "button"; editBtn.title = M.rename; editBtn.setAttribute("aria-label", M.rename);
+        editBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+        const delBtn = document.createElement("button"); delBtn.type = "button"; delBtn.className = "danger"; delBtn.title = M.delete; delBtn.setAttribute("aria-label", M.delete);
+        delBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+        acts.append(editBtn, delBtn);
+        tile.append(img, meta, acts);
+        let renaming = false;
+        const startRename = () => {
+          if (renaming) return; renaming = true;
+          const ext = it.name.includes(".") ? it.name.slice(it.name.lastIndexOf(".")) : "";
+          const inp = document.createElement("input"); inp.className = "field"; inp.value = ext ? it.name.slice(0, -ext.length) : it.name; inp.title = M.renameHint;
+          const finish = async (commit) => {
+            if (!renaming) return; renaming = false;
+            const want = inp.value.trim();
+            if (!commit || !want || want + ext === it.name) { nameEl.textContent = it.name; return; }
+            const r = await window.desktop.renameMedia(it.rel, want + ext);
+            if (r && r.ok) { const wasSelected = selected === it.url; it.rel = r.rel; it.url = r.url; it.name = r.renamedTo; it.file = it.file.replace(/[^/]+$/, encodeURIComponent(r.renamedTo)); if (wasSelected) selected = it.url; nameEl.textContent = it.name; mediapickBody.querySelector(".sess-desc").textContent = M.renamed(r.renamedTo, r.rewritten || 0); }
+            else { nameEl.textContent = it.name; alert((r && r.error) || "Couldn't rename it."); }
+          };
+          inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); finish(true); } else if (e.key === "Escape") { e.preventDefault(); finish(false); } e.stopPropagation(); });
+          inp.addEventListener("blur", () => finish(true));
+          inp.addEventListener("click", (e) => e.stopPropagation());
+          nameEl.textContent = ""; nameEl.appendChild(inp); inp.focus(); inp.select();
+        };
+        editBtn.addEventListener("click", (e) => { e.stopPropagation(); startRename(); });
+        delBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
           if (!confirm(M.deleteConfirm(it.name))) return;
           const r = await window.desktop.deleteMedia(it.rel);
           if (r && r.ok) { items = items.filter((x) => x !== it); if (selected === it.url) { selected = null; useBtn.disabled = true; } paint(); }
         });
+        tile.addEventListener("click", () => { if (renaming) return; selected = it.url; useBtn.disabled = false; paint(); });
+        tile.addEventListener("dblclick", () => { if (!renaming) closeMediaPicker(it); });
+        tile.addEventListener("keydown", (e) => { if (renaming) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selected = it.url; useBtn.disabled = false; paint(); } });
         grid.appendChild(tile);
       });
       mediapickBody.appendChild(grid);

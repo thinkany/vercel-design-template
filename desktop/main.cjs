@@ -2428,6 +2428,32 @@ ipcMain.handle("media:import", (_e, { paths, raw } = {}) => {
   if (!list.length) return { ok: true, added: [] };
   return importMediaFiles(list, { raw: !!raw });
 });
+// Rename an image. The extension stays; the base is slugified; a name already taken
+// gets "-N" with the next free number. Every reference in content/ (pages, posts,
+// entries, site.json) follows the file, so nothing on the site breaks.
+ipcMain.handle("media:rename", (_e, { rel, name } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (typeof rel !== "string" || rel.includes("..") || path.isAbsolute(rel)) return { ok: false, error: "Bad path." };
+  const from = path.join(mediaDir(currentProject), rel);
+  if (!fs.existsSync(from)) return { ok: false, error: "That file is gone." };
+  const ext = path.extname(rel).toLowerCase();
+  const wanted = String(name || "").trim().replace(new RegExp(ext.replace(".", "\\.") + "$", "i"), "");
+  const base = slugifyId(wanted);
+  if (!base) return { ok: false, error: "Give it a name." };
+  if (base + ext === rel) return { ok: true, rel, url: `/images/${rel}`, renamedTo: rel };
+  const sub = path.dirname(rel) === "." ? "" : path.dirname(rel) + "/";
+  let next = base + ext; let n = 2;
+  while (fs.existsSync(path.join(mediaDir(currentProject), sub + next))) next = `${base}-${n++}${ext}`;
+  const to = path.join(mediaDir(currentProject), sub + next);
+  try { fs.renameSync(from, to); } catch (e) { return { ok: false, error: e.message }; }
+  // Follow the rename through the content files.
+  const oldUrl = `/images/${rel}`, newUrl = `/images/${sub}${next}`;
+  let rewritten = 0;
+  const walk = (d) => { let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; } for (const e of es) { const a = path.join(d, e.name); if (e.isDirectory()) walk(a); else if (/\.(json|md|mdx)$/.test(e.name)) { try { const t = fs.readFileSync(a, "utf8"); if (t.includes(oldUrl)) { fs.writeFileSync(a, t.split(oldUrl).join(newUrl)); rewritten++; } } catch {} } } };
+  walk(siteContentDir(currentProject));
+  return { ok: true, rel: sub + next, url: newUrl, renamedTo: next, rewritten };
+});
 ipcMain.handle("media:delete", (_e, { rel } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
