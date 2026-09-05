@@ -2687,6 +2687,19 @@ function siteField(labelText, value, { textarea, placeholder, hint, type } = {})
   if (hint) wrap.appendChild(siteEl("div", "sess-desc", hint));
   return { wrap, input };
 }
+// A field with a fixed lead-in the designer can't edit: the site address before a
+// type's path, or the type's path before an entry's slug.
+function sitePrefixField(labelText, prefix, value, { hint, placeholder } = {}) {
+  const wrap = siteEl("div", "site-kv");
+  wrap.appendChild(siteEl("div", "k", labelText));
+  const row = siteEl("div", "site-prefix");
+  const lead = siteEl("span", "site-prefix-lead", prefix);
+  const input = document.createElement("input"); input.className = "field"; input.type = "text"; input.value = value == null ? "" : String(value);
+  if (placeholder) input.placeholder = placeholder;
+  row.append(lead, input); wrap.appendChild(row);
+  if (hint) wrap.appendChild(siteEl("div", "sess-desc", hint));
+  return { wrap, input, lead };
+}
 function siteMini(label, onClick, { danger, title, disabled } = {}) {
   const b = siteEl("button", "site-mini" + (danger ? " danger" : ""), label);
   b.type = "button";
@@ -3350,7 +3363,7 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   // The same shape as a page: settings, content, blocks, then SEO last.
   const ps = siteFold(S.entrySettings, foldKey + ":settings"); card.appendChild(ps.sec);
   const t = siteField(S.pageTitle, entry.title); t.input.addEventListener("input", dirty); ps.body.appendChild(t.wrap);
-  const sl = siteField(S.pageSlug, entry.slug || entry.id, { hint: S.pageSlugHint }); sl.input.addEventListener("input", dirty); ps.body.appendChild(sl.wrap);
+  const sl = sitePrefixField(S.pageSlug, `${type.path}/`, entry.slug || entry.id, { hint: S.pageSlugHint }); sl.input.addEventListener("input", dirty); ps.body.appendChild(sl.wrap);
 
   const cf = siteFold(S.entryFieldsHeading, foldKey + ":fields"); card.appendChild(cf.sec);
   if (!type.fields.length) cf.body.appendChild(siteEl("div", "sess-desc", S.fieldsDesc));
@@ -3473,11 +3486,11 @@ function renderSiteTypeEditor(type, ctx, refresh) {
   const settings = siteFold(S.typeSettingsHeading, foldKey + ":settings"); card.appendChild(settings.sec);
   const lab = siteField(S.typeLabel, draft.label); settings.body.appendChild(lab.wrap);
   const sing = siteField(S.typeSingular, draft.singular); settings.body.appendChild(sing.wrap);
-  const pth = siteField(S.typePath, draft.path, { hint: S.typePathHint }); settings.body.appendChild(pth.wrap);
-  lab.input.addEventListener("input", () => { dirty(); if (isNew) { draft.key = slug(lab.input.value); if (!pth.input.dataset.touched) pth.input.value = "/" + draft.key; } });
+  const pth = sitePrefixField(S.typePath, (ctx.siteUrl || COPY.site.siteUrlPlaceholder) + "/", String(draft.path || "").replace(/^\/+/, ""), { hint: S.typePathHint }); settings.body.appendChild(pth.wrap);
+  lab.input.addEventListener("input", () => { dirty(); if (isNew) { draft.key = slug(lab.input.value); if (!pth.input.dataset.touched) pth.input.value = draft.key; } });
   pth.input.addEventListener("input", () => { pth.input.dataset.touched = "1"; dirty(); });
   sing.input.addEventListener("input", dirty);
-  if (isNew && !pth.input.value) pth.input.value = "/";
+  const pathValue = () => "/" + slug(pth.input.value.replace(/^\/+/, "")); // stored with its leading slash
   const ix = siteEl("label", "toggle-row"); const ixCb = document.createElement("input"); ixCb.type = "checkbox"; ixCb.checked = !!draft.index;
   ix.append(ixCb, siteEl("span", "", S.typeIndexToggle)); settings.body.appendChild(ix);
   const ixHost = siteEl("div"); settings.body.appendChild(ixHost);
@@ -3543,7 +3556,7 @@ function renderSiteTypeEditor(type, ctx, refresh) {
   saveBtn = siteEl("button", "panelbtn primary", S.saveType); saveBtn.disabled = !isNew; saveBtn.style.margin = "0";
   saveBtn.addEventListener("click", async () => {
     saveBtn.disabled = true;
-    const out = { key: draft.key || slug(lab.input.value), label: lab.input.value, singular: sing.input.value, path: pth.input.value || ("/" + (draft.key || slug(lab.input.value))), fields: draft.fields, template: draft.template };
+    const out = { key: draft.key || slug(lab.input.value), label: lab.input.value, singular: sing.input.value, path: pth.input.value.trim() ? pathValue() : ("/" + (draft.key || slug(lab.input.value))), fields: draft.fields, template: draft.template };
     if (ixCb.checked) out.index = { title: ixT.input.value, description: ixD.input.value };
     const res = await window.desktop.saveSiteType(out);
     if (res && res.ok) { siteRailState.selected = { kind: "type", id: res.type.key }; siteFlash(actions, S.saved); refresh(); }
@@ -4951,7 +4964,9 @@ async function renderSite(body) {
   const formsData = await window.desktop.getSiteForms().catch(() => ({ forms: [] }));
   siteForms = formsData.forms || []; // the props editor's form picker reads this
   const delivery = await window.desktop.getFormsDelivery().catch(() => ({ provider: "", from: "", hasKey: false, ready: false }));
-  const ctx = { types: typesData.types || [], entries: typesData.entries || {}, blocks: data.blocks, forms: siteForms, pages: data.pages, delivery };
+  const configured = data.site && data.site.url && !/example\.com/.test(data.site.url) ? data.site.url : null;
+  const siteUrl = (data.liveUrl || configured || COPY.site.siteUrlPlaceholder).replace(/\/$/, "");
+  const ctx = { types: typesData.types || [], entries: typesData.entries || {}, blocks: data.blocks, forms: siteForms, pages: data.pages, delivery, siteUrl };
   mediaIndex = await window.desktop.listMedia().catch(() => []); // thumbnails for image fields
   siteMarks = data.marks || {};
   siteBlogPath = (data.site && data.site.blogPath) || "blog";

@@ -852,6 +852,10 @@
       .site-kv { margin-bottom: 8px; }
       .site-kv > .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: #666; margin-bottom: 4px; font-weight: 600; }
       .site-kv .field { margin-bottom: 0; }
+      /* A field with a fixed lead-in (the site address before a path, the path before a slug). */
+      .site-prefix { display: flex; align-items: stretch; }
+      .site-prefix .site-prefix-lead { display: flex; align-items: center; padding: 0 2px 0 10px; border: 1px solid #ccc; border-right: 0; border-radius: 8px 0 0 8px; background: #f4f4f7; color: #505056; font-size: 12.5px; white-space: nowrap; }
+      .site-prefix .field { border-radius: 0 8px 8px 0; flex: 1; min-width: 0; }
       .site-kv textarea.field { min-height: 56px; resize: vertical; }
       /* Rich text editor (TipTap): a bordered field with a toolbar on top. */
       /* The app tooltip (every title outside the rail): the rail icons' tip, placed by script. */
