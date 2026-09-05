@@ -669,6 +669,8 @@ window.COPY = {
     save: "Save page",
     saved: "Saved",
     saving: "Saving…",
+    cancelEdits: "Cancel",
+    cancelEditsTip: "Drop the changes since the last save",
     deleteTitle: "Move to Trash?",
     deletePage: "Delete page",
     deletePageHasChildren: (n) => n === 1 ? "Has a child page. Move or delete it first." : `Has ${n} child pages. Move or delete them first.`,

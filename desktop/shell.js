@@ -2776,6 +2776,13 @@ function siteTrashBtn(onClick, title) {
   b.addEventListener("click", onClick);
   return b;
 }
+// Cancel beside Save: enabled once something changed, reverts to the last save by
+// re-rendering the editor from disk (the draft is a working copy, never written).
+function siteCancelBtn(refresh) {
+  const b = siteEl("button", "panelbtn outline", COPY.site.cancelEdits); b.type = "button"; b.disabled = true; b.style.margin = "0"; b.title = COPY.site.cancelEditsTip;
+  b.addEventListener("click", () => refresh());
+  return b;
+}
 function siteFlash(host, text) {
   const s = siteEl("span", "site-saved", text);
   host.appendChild(s);
@@ -3060,7 +3067,8 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
   // Working copy; Save writes it. Deep-cloned so a cancelled edit changes nothing.
   const draft = JSON.parse(JSON.stringify({ title: page.title, slug: page.slug, parent: page.parent || null, seo: page.seo || {}, blocks: page.blocks || [] }));
   let dirty = false;
-  const markDirty = () => { dirty = true; saveBtn.disabled = false; };
+  let cancelBtn = null;
+  const markDirty = () => { dirty = true; saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
   const body = siteEl("div"); body.style.marginTop = "10px";
 
   const ps = siteFold(COPY.site.pageSettings, "page-settings:" + page.id); body.appendChild(ps.sec);
@@ -3185,7 +3193,8 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
   };
   const saveBtn = siteEl("button", "panelbtn primary", isDraft ? COPY.site.savePageDraft : COPY.site.save); saveBtn.disabled = true; saveBtn.style.margin = "0";
   saveBtn.addEventListener("click", () => doSave(saveBtn, isDraft));
-  actions.appendChild(saveBtn);
+  cancelBtn = siteCancelBtn(refresh);
+  actions.append(saveBtn, cancelBtn);
   if (page.id !== "home") {
     const flipBtn = siteEl("button", "panelbtn", isDraft ? COPY.site.publish : COPY.site.unpublish); flipBtn.style.margin = "0"; flipBtn.style.width = "auto";
     flipBtn.addEventListener("click", () => doSave(flipBtn, !isDraft));
@@ -3215,8 +3224,8 @@ function renderSitePost(post, refresh) {
   h.querySelector(".site-page-title").style.fontSize = "15px";
   card.appendChild(h);
   const draft = JSON.parse(JSON.stringify({ title: post.title, date: post.date, description: post.description, image: post.image, tags: post.tags || [], draft: !!post.draft, seo: post.seo || {}, body: post.body || "" }));
-  let saveBtn;
-  const dirty = () => { saveBtn.disabled = false; };
+  let saveBtn, cancelBtn;
+  const dirty = () => { saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
   // Sections, as pages have: Post settings, Content, SEO (last).
   const pf = siteFold(S.postSettings, "post-settings:" + post.id); card.appendChild(pf.sec);
   const t = siteField(S.pageTitle, draft.title); t.input.addEventListener("input", () => { draft.title = t.input.value; dirty(); }); pf.body.appendChild(t.wrap);
@@ -3254,9 +3263,10 @@ function renderSitePost(post, refresh) {
   };
   saveBtn = siteEl("button", "panelbtn primary", draft.draft ? S.saveDraft : S.savePost); saveBtn.disabled = true; saveBtn.style.margin = "0";
   saveBtn.addEventListener("click", () => doSave(saveBtn, draft.draft));
+  cancelBtn = siteCancelBtn(refresh);
   const flipBtn = siteEl("button", "panelbtn", draft.draft ? S.publish : S.unpublish); flipBtn.style.margin = "0"; flipBtn.style.width = "auto";
   flipBtn.addEventListener("click", () => doSave(flipBtn, !draft.draft));
-  actions.append(status, saveBtn, flipBtn);
+  actions.append(status, saveBtn, cancelBtn, flipBtn);
   actions.appendChild(siteMini(S.deletePost, async () => {
     if (!(await askConfirm({ title: S.deleteTitle, message: S.deletePostConfirm(post.title), okLabel: S.deletePost, danger: true }))) return;
     const res = await window.desktop.deleteSitePost(post.id); // moves to Trash
@@ -3331,7 +3341,7 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   h.append(siteEl("div", "site-page-title", entry.title), siteEl("div", "site-page-slug", `${type.path}/${entry.slug || entry.id}`));
   h.querySelector(".site-page-title").style.fontSize = "15px";
   card.appendChild(h);
-  let saveBtn; const dirty = () => { saveBtn.disabled = false; };
+  let saveBtn, cancelBtn; const dirty = () => { saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
   const foldKey = `entry:${type.key}/${entry.id}`;
 
   // The same shape as a page: settings, content, blocks, then SEO last.
@@ -3386,7 +3396,8 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   };
   saveBtn = siteEl("button", "panelbtn primary", isDraft ? S.saveEntryDraft : S.saveEntry); saveBtn.disabled = true; saveBtn.style.margin = "0";
   saveBtn.addEventListener("click", () => doSave(saveBtn, isDraft));
-  actions.appendChild(saveBtn);
+  cancelBtn = siteCancelBtn(refresh);
+  actions.append(saveBtn, cancelBtn);
   const flipBtn = siteEl("button", "panelbtn", isDraft ? S.publish : S.unpublish); flipBtn.style.margin = "0"; flipBtn.style.width = "auto";
   flipBtn.addEventListener("click", () => doSave(flipBtn, !isDraft));
   actions.appendChild(flipBtn);
@@ -3451,7 +3462,7 @@ function renderSiteTypeEditor(type, ctx, refresh) {
   const draft = JSON.parse(JSON.stringify({ key: type.key || "", label: type.label || "", singular: type.singular || "", path: type.path || "", fields: type.fields || [], template: type.template || [], index: type.index || null }));
   const card = siteEl("div");
   card.appendChild(siteEl("div", "site-page-title", isNew ? S.addType : S.editType + ": " + type.label)).style.cssText = "font-size:15px;margin-bottom:10px;";
-  let saveBtn; const dirty = () => { saveBtn.disabled = false; };
+  let saveBtn, cancelBtn; const dirty = () => { saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
   const slug = (s) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const foldKey = "type:" + (draft.key || "new");
 
@@ -3535,7 +3546,8 @@ function renderSiteTypeEditor(type, ctx, refresh) {
     if (res && res.ok) { siteRailState.selected = { kind: "type", id: res.type.key }; siteFlash(actions, S.saved); refresh(); }
     else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
   });
-  actions.appendChild(saveBtn);
+  cancelBtn = siteCancelBtn(refresh); if (isNew) cancelBtn.disabled = false; // a new, unsaved type: Cancel discards it
+  actions.append(saveBtn, cancelBtn);
   if (!isNew) actions.appendChild(siteMini(S.deleteType, async () => {
     if (!(await askConfirm({ title: S.deleteTitle, message: S.deleteTypeConfirm(type.label), okLabel: S.deleteType, danger: true }))) return;
     const res = await window.desktop.deleteSiteType(type.key);
@@ -3738,7 +3750,7 @@ function renderSiteFormEditor(form, ctx, refresh) {
   const slug = (t) => String(t || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const card = siteEl("div");
   card.appendChild(siteEl("div", "site-page-title", S.editForm + ": " + form.name)).style.cssText = "font-size:15px;margin-bottom:10px;";
-  let saveBtn; const dirty = () => { saveBtn.disabled = false; };
+  let saveBtn, cancelBtn; const dirty = () => { saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
   const name = siteField(S.formName, draft.name); name.input.addEventListener("input", dirty); card.appendChild(name.wrap);
 
   // Sections: Fields open by default, the rest folded until opened once (remembered per project).
@@ -3869,7 +3881,8 @@ function renderSiteFormEditor(form, ctx, refresh) {
     if (res && res.ok) { siteRailState.selected = { kind: "form", id: res.form.id }; siteFlash(actions, S.saved); refresh(); }
     else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
   });
-  actions.appendChild(saveBtn);
+  cancelBtn = siteCancelBtn(refresh);
+  actions.append(saveBtn, cancelBtn);
   actions.appendChild(siteMini(S.deleteForm, async () => {
     if (!(await askConfirm({ title: S.deleteTitle, message: S.deleteFormConfirm(form.name, used.length), okLabel: S.deleteForm, danger: true }))) return;
     const res = await window.desktop.deleteSiteForm(form.id); // moves to Trash

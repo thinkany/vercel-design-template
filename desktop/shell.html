@@ -553,6 +553,9 @@
         transition: background .25s linear, border-color .25s linear;
       }
       .panelbtn:hover { border-color: #111; background: #f4f4f7; }
+      .panelbtn.outline { background: #fff; color: #111; border-color: #111; }   /* Cancel beside Save: same size, black outline */
+      .panelbtn.outline:hover { background: #f4f4f7; }
+      .panelbtn.outline:disabled { opacity: .4; cursor: default; background: #fff; }
       .panelbtn.primary { background: #111; color: #fff; border-color: #111; }
       .panelbtn.primary:hover { background: #2a2a2a; border-color: #2a2a2a; }   /* keep the dark button dark on hover */
       .panelbtn.danger { color: #c0261e; border-color: #e7b7b3; }
