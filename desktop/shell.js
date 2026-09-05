@@ -3074,7 +3074,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
   const markDirty = () => { dirty = true; saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
   const body = siteEl("div"); body.style.marginTop = "10px";
 
-  const ps = siteFold(COPY.site.pageSettings, "page-settings:" + page.id); body.appendChild(ps.sec);
+  const ps = siteFold(COPY.site.pageSettings, "page:settings"); body.appendChild(ps.sec);
   const t = siteField(COPY.site.pageTitle, draft.title); t.input.addEventListener("input", () => { draft.title = t.input.value; markDirty(); }); ps.body.appendChild(t.wrap);
   if (page.id !== "home") {
     const sl = siteField(COPY.site.pageSlug, draft.slug || page.id, { hint: COPY.site.pageSlugHint }); sl.input.addEventListener("input", () => { draft.slug = sl.input.value; markDirty(); }); ps.body.appendChild(sl.wrap);
@@ -3090,7 +3090,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
   }
 
   // SEO: its own section, the LAST one (appended after Blocks, below).
-  const sf = siteFold(COPY.site.seoHeading, "seo:" + page.id);
+  const sf = siteFold(COPY.site.seoHeading, "page:seo");
   const st = siteField(COPY.site.seoTitle, draft.seo.title, { hint: COPY.site.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; markDirty(); }); sf.body.appendChild(st.wrap);
   const sd = siteField(COPY.site.seoDescription, draft.seo.description, { textarea: true, hint: COPY.site.seoDescriptionHint }); sd.input.addEventListener("input", () => { draft.seo.description = sd.input.value; markDirty(); }); sf.body.appendChild(sd.wrap);
   sf.body.appendChild(siteImageControl(draft.seo.image, (next) => { draft.seo.image = next ? next.src : ""; markDirty(); }, { label: COPY.site.seoImage }));
@@ -3101,7 +3101,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
   const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!draft.seo.noindex;
   nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; markDirty(); }); nx.append(nxCb, siteEl("span", "", COPY.site.seoNoindex)); sf.body.appendChild(nx);
 
-  const bf = siteFold(COPY.site.blocksHeading, "blocks:" + page.id); body.appendChild(bf.sec);
+  const bf = siteFold(COPY.site.blocksHeading, "page:blocks"); body.appendChild(bf.sec);
   const blockList = siteEl("div");
   const byKey = Object.fromEntries(blocks.map((b) => [b.key, b]));
   const paintBlocks = () => {
@@ -3230,7 +3230,7 @@ function renderSitePost(post, refresh) {
   let saveBtn, cancelBtn;
   const dirty = () => { saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
   // Sections, as pages have: Post settings, Content, SEO (last).
-  const pf = siteFold(S.postSettings, "post-settings:" + post.id); card.appendChild(pf.sec);
+  const pf = siteFold(S.postSettings, "post:settings"); card.appendChild(pf.sec);
   const t = siteField(S.pageTitle, draft.title); t.input.addEventListener("input", () => { draft.title = t.input.value; dirty(); }); pf.body.appendChild(t.wrap);
   const d = siteField(S.postDate, draft.date, { type: "date" }); d.input.addEventListener("input", () => { draft.date = d.input.value; dirty(); }); pf.body.appendChild(d.wrap);
   const upd = siteEl("div", "site-kv"); upd.appendChild(siteEl("div", "k", S.postUpdated));
@@ -3240,10 +3240,10 @@ function renderSitePost(post, refresh) {
   const ds = siteField(S.postDescription, draft.description, { textarea: true, hint: S.postDescriptionHint }); ds.input.addEventListener("input", () => { draft.description = ds.input.value; dirty(); }); pf.body.appendChild(ds.wrap);
   pf.body.appendChild(siteImageControl(draft.image, (next) => { draft.image = next ? next.src : ""; dirty(); }, { label: S.postImage }));
   const tg = siteField(S.postTags, draft.tags.join(", "), { hint: S.postTagsHint }); tg.input.addEventListener("input", () => { draft.tags = tg.input.value.split(",").map((x) => x.trim()).filter(Boolean); dirty(); }); pf.body.appendChild(tg.wrap);
-  const cf = siteFold(S.postContent, "post-content:" + post.id); card.appendChild(cf.sec);
+  const cf = siteFold(S.postContent, "post:content"); card.appendChild(cf.sec);
   const rich = siteRichEditor(draft.body, () => { draft.body = rich.getMarkdown(); dirty(); });
   cf.body.appendChild(rich.wrap); cf.body.appendChild(siteEl("div", "sess-desc", S.postBodyHint));
-  const sf = siteFold(S.seoHeading, "seo-post:" + post.id); card.appendChild(sf.sec);
+  const sf = siteFold(S.seoHeading, "post:seo"); card.appendChild(sf.sec);
   const st = siteField(S.seoTitle, draft.seo.title, { hint: S.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; dirty(); }); sf.body.appendChild(st.wrap);
   const sd = siteField(S.seoDescription, draft.seo.description, { textarea: true, hint: S.postSeoDescriptionHint }); sd.input.addEventListener("input", () => { draft.seo.description = sd.input.value; dirty(); }); sf.body.appendChild(sd.wrap);
   sf.body.appendChild(siteImageControl(draft.seo.image, (next) => { draft.seo.image = next ? next.src : ""; dirty(); }, { label: S.seoImage }));
@@ -3345,7 +3345,7 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   h.querySelector(".site-page-title").style.fontSize = "15px";
   card.appendChild(h);
   let saveBtn, cancelBtn; const dirty = () => { saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
-  const foldKey = `entry:${type.key}/${entry.id}`;
+  const foldKey = "entry"; // one open/closed state for every entry of every type
 
   // The same shape as a page: settings, content, blocks, then SEO last.
   const ps = siteFold(S.entrySettings, foldKey + ":settings"); card.appendChild(ps.sec);
@@ -3467,7 +3467,7 @@ function renderSiteTypeEditor(type, ctx, refresh) {
   card.appendChild(siteEl("div", "site-page-title", isNew ? S.addType : S.editType + ": " + type.label)).style.cssText = "font-size:15px;margin-bottom:10px;";
   let saveBtn, cancelBtn; const dirty = () => { saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
   const slug = (s) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  const foldKey = "type:" + (draft.key || "new");
+  const foldKey = "type"; // shared by every content type
 
   // Settings: names, address, the index page.
   const settings = siteFold(S.typeSettingsHeading, foldKey + ":settings"); card.appendChild(settings.sec);
