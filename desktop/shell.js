@@ -3606,11 +3606,12 @@ function renderFormsDelivery(delivery, hasForms) {
     // the from address, once there's a key
     const showFrom = !!p && hasKey();
     from.wrap.hidden = !showFrom;
-    actions.hidden = !showFrom;
+    // (these rows have an inline display:flex, which beats the hidden attribute)
+    actions.style.display = showFrom ? "flex" : "none";
     saveBtn.disabled = !(showFrom && fromOk() && changed());
     // the test, once what's saved is complete and nothing is pending
     const showTest = saved.ready && !changed();
-    testRow.hidden = !showTest; testNote.hidden = !showTest;
+    testRow.style.display = showTest ? "flex" : "none"; testNote.hidden = !showTest;
   };
   prov.addEventListener("change", () => { note.textContent = ""; paint(); });
   key.addEventListener("input", () => { keyValue = key.value; paint(); });
