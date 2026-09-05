@@ -2778,9 +2778,12 @@ function siteTrashBtn(onClick, title) {
 }
 // Cancel beside Save: enabled once something changed, reverts to the last save by
 // re-rendering the editor from disk (the draft is a working copy, never written).
-function siteCancelBtn(refresh) {
+function siteCancelBtn(refresh, kind) {
   const b = siteEl("button", "panelbtn outline", COPY.site.cancelEdits); b.type = "button"; b.disabled = true; b.style.margin = "0"; b.title = COPY.site.cancelEditsTip;
-  b.addEventListener("click", () => refresh());
+  b.addEventListener("click", async () => {
+    if (!(await askConfirm({ title: COPY.site.revertTitle, message: COPY.site.revertConfirm(kind || COPY.site.kindPage), okLabel: COPY.site.revertOk, danger: true }))) return;
+    refresh();
+  });
   return b;
 }
 function siteFlash(host, text) {
@@ -3193,7 +3196,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
   };
   const saveBtn = siteEl("button", "panelbtn primary", isDraft ? COPY.site.savePageDraft : COPY.site.save); saveBtn.disabled = true; saveBtn.style.margin = "0";
   saveBtn.addEventListener("click", () => doSave(saveBtn, isDraft));
-  cancelBtn = siteCancelBtn(refresh);
+  cancelBtn = siteCancelBtn(refresh, COPY.site.kindPage);
   actions.append(saveBtn, cancelBtn);
   if (page.id !== "home") {
     const flipBtn = siteEl("button", "panelbtn", isDraft ? COPY.site.publish : COPY.site.unpublish); flipBtn.style.margin = "0"; flipBtn.style.width = "auto";
@@ -3263,7 +3266,7 @@ function renderSitePost(post, refresh) {
   };
   saveBtn = siteEl("button", "panelbtn primary", draft.draft ? S.saveDraft : S.savePost); saveBtn.disabled = true; saveBtn.style.margin = "0";
   saveBtn.addEventListener("click", () => doSave(saveBtn, draft.draft));
-  cancelBtn = siteCancelBtn(refresh);
+  cancelBtn = siteCancelBtn(refresh, S.kindPost);
   const flipBtn = siteEl("button", "panelbtn", draft.draft ? S.publish : S.unpublish); flipBtn.style.margin = "0"; flipBtn.style.width = "auto";
   flipBtn.addEventListener("click", () => doSave(flipBtn, !draft.draft));
   actions.append(status, saveBtn, cancelBtn, flipBtn);
@@ -3396,7 +3399,7 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   };
   saveBtn = siteEl("button", "panelbtn primary", isDraft ? S.saveEntryDraft : S.saveEntry); saveBtn.disabled = true; saveBtn.style.margin = "0";
   saveBtn.addEventListener("click", () => doSave(saveBtn, isDraft));
-  cancelBtn = siteCancelBtn(refresh);
+  cancelBtn = siteCancelBtn(refresh, (type.singular || S.kindEntry).toLowerCase());
   actions.append(saveBtn, cancelBtn);
   const flipBtn = siteEl("button", "panelbtn", isDraft ? S.publish : S.unpublish); flipBtn.style.margin = "0"; flipBtn.style.width = "auto";
   flipBtn.addEventListener("click", () => doSave(flipBtn, !isDraft));
@@ -3546,7 +3549,7 @@ function renderSiteTypeEditor(type, ctx, refresh) {
     if (res && res.ok) { siteRailState.selected = { kind: "type", id: res.type.key }; siteFlash(actions, S.saved); refresh(); }
     else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
   });
-  cancelBtn = siteCancelBtn(refresh); if (isNew) cancelBtn.disabled = false; // a new, unsaved type: Cancel discards it
+  cancelBtn = siteCancelBtn(refresh, S.kindType); if (isNew) cancelBtn.disabled = false; // a new, unsaved type: Cancel discards it
   actions.append(saveBtn, cancelBtn);
   if (!isNew) actions.appendChild(siteMini(S.deleteType, async () => {
     if (!(await askConfirm({ title: S.deleteTitle, message: S.deleteTypeConfirm(type.label), okLabel: S.deleteType, danger: true }))) return;
@@ -3881,7 +3884,7 @@ function renderSiteFormEditor(form, ctx, refresh) {
     if (res && res.ok) { siteRailState.selected = { kind: "form", id: res.form.id }; siteFlash(actions, S.saved); refresh(); }
     else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
   });
-  cancelBtn = siteCancelBtn(refresh);
+  cancelBtn = siteCancelBtn(refresh, S.kindForm);
   actions.append(saveBtn, cancelBtn);
   actions.appendChild(siteMini(S.deleteForm, async () => {
     if (!(await askConfirm({ title: S.deleteTitle, message: S.deleteFormConfirm(form.name, used.length), okLabel: S.deleteForm, danger: true }))) return;
