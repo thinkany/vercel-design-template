@@ -37,6 +37,15 @@ const modal = el("modal");
 const modalTitle = el("modal-title");
 const modalBody = el("modal-body");
 const modalClose = el("modal-close");
+// The CMS drawer's "Preview in Browser": the site preview (Astro dev) in the default
+// browser, so the designer edits here and watches there. Starts the preview if it
+// isn't running yet.
+el("modal-preview").addEventListener("click", async () => {
+  let st = null; try { st = await window.desktop.getSiteStatus(); } catch {}
+  let url = st && st.url;
+  if (!url && st && st.ready) { try { const r = await window.desktop.startSite(); if (r && r.ok) url = r.url; } catch {} }
+  if (url) window.desktop.openExternal(url);
+});
 
 // Gates
 const keygate = el("keygate");
@@ -1180,6 +1189,7 @@ async function openModal(kind) {
   card.classList.toggle("wide", !!wide);
   card.style.width = wide ? "" : Math.max(360, parseInt(el("chat").style.width, 10) || 400) + "px";
   el("modal-card").dataset.panel = kind; // lets CSS style a panel's controls (the CMS switches)
+  el("modal-preview").hidden = kind !== "site"; // "Preview in Browser" belongs to the CMS drawer
   Object.values(RAILS).forEach((b) => b.classList.remove("active"));
   RAILS[kind].classList.add("active");
   // Slide in on a fresh open (or if interrupted mid-close). When a drawer is

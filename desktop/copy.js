@@ -204,6 +204,7 @@ window.COPY = {
     expandSidebar: "Expand sidebar",
     collapseSidebar: "Collapse sidebar",
     close: "Close",
+    previewInBrowser: "Preview in Browser",
     dragResize: "Drag to resize the chat",
   },
 

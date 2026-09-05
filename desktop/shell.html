@@ -357,7 +357,7 @@
       #modal.open #modal-card { transform: translateX(0); }    /* slide out */
       /* A WIDE drawer (the Pages/CMS panel): most of the window, so a page list and its
          editor sit side by side and the preview stays visible at the edge. */
-      #modal-card.wide { width: min(1040px, calc(100vw - var(--rail-w) - 48px)); }
+      #modal-card.wide { width: calc(100vw - var(--rail-w)); max-width: none; }
       /* CMS tabs: the same look as the publish help tabs, inside the drawer body. */
       /* Outlined tabs above a solid black rule: light gray outline at rest, black when
          selected. (The list/editor divider below stays the subdued gray.) */
@@ -421,6 +421,12 @@
         background: #17171b;   /* match the sidebar so the header reads as part of the rail */
       }
       #modal-title { font-size: 15px; font-weight: 600; color: #fff; }
+      #modal-acts { display: flex; align-items: center; gap: 12px; }
+      /* "Preview in Browser" (the CMS drawer only): a white outlined button beside the close. */
+      #modal-preview { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid rgba(255,255,255,.8); border-radius: 7px; background: transparent; color: #fff; cursor: pointer; padding: 0; opacity: .85; transition: opacity .15s, background .15s; }
+      #modal-preview:hover { opacity: 1; background: rgba(255,255,255,.12); }
+      #modal-preview[hidden] { display: none; }
+      #modal-preview svg { width: 16px; height: 16px; display: block; }
       #modal-close { border: none; background: none; cursor: pointer; color: #fff; line-height: 1; padding: 0; display: flex; opacity: .7; transition: opacity .25s linear; }
       #modal-close:hover { opacity: 1; }
       #modal-close svg { width: 20px; height: 20px; display: block; }   /* matches the rail icons (life-buoy) height */
@@ -1957,9 +1963,14 @@
       <div id="modal-card">
         <div id="modal-head">
           <span id="modal-title"></span>
-          <button id="modal-close" data-copy-title="chrome.close" data-copy-aria="chrome.close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><path d="M5 5 L19 19 M19 5 L5 19"/></svg>
-          </button>
+          <div id="modal-acts">
+            <button id="modal-preview" data-copy-title="chrome.previewInBrowser" data-copy-aria="chrome.previewInBrowser" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+            </button>
+            <button id="modal-close" data-copy-title="chrome.close" data-copy-aria="chrome.close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><path d="M5 5 L19 19 M19 5 L5 19"/></svg>
+            </button>
+          </div>
         </div>
         <div id="modal-body"></div>
       </div>
