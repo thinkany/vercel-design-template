@@ -337,6 +337,21 @@ file only when you're about to **change** it:
    errors and costs a self-correction. (The shadcn `ui/*` files use `React.` only
    because they `import * as React`, don't copy that into a page/chrome component.)
 
+7. **Image beside copy anchors to the centred container, both sides.** A two-column
+   section (photo next to text, alternating rows) is one grid on the section whose
+   lines are the container's halves: `grid-cols-[minmax(4rem,1fr)_minmax(0,580px)_minmax(0,580px)_minmax(4rem,1fr)]`
+   for an 1160px container (edge | half | half | edge). The photo takes `col-[1/3]`
+   (left, bleeding to the viewport edge) or `col-[3/5]` (right); the copy takes the
+   other half, `col-[3/4]` or `col-[2/3]`, flush to the container edge, with the gap as
+   fixed padding on the copy cell facing the photo (`pl-20` / `pr-20`), and both cells
+   `row-start-1`. The centre line is a grid line, so the photo can never cross it and
+   only ever grows outward; the copy column and the gap never move at any width. A
+   contained photo (no bleed) uses `col-[2/3]` / `col-[3/4]` instead. Never size a
+   bleeding photo in `vw`/`cqw` or pull it with a negative margin beside copy, and
+   never use `fr` columns for the pair: those put the photo and the copy on different
+   references, so one of them drifts as the viewport changes. Below `@lg` the pair
+   stacks in one column with the section's own `px-8`.
+
 ## 4a. Honor the Design direction (when the prompt carries one)
 
 Get-Designing builds inject a **`## Design direction`** block into the prompt: a sampled

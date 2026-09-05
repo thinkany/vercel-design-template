@@ -103,6 +103,10 @@ section's `data-block` in the design.
    structure flipped (alternating feature rows), promote ONE block and set `side`
    per instance, not two blocks. The CMS shows Image left / Image right and
    alternates new blocks automatically.
+   Keep the anchored grid exactly as designed (the container-halves columns, `col-[…]`
+   placement, `row-start-1`, the fixed gap padding on the copy cell): `side` swaps only
+   which half each cell takes; it never reintroduces `fr` columns, `order-*`, or a
+   viewport-sized bleed.
 2. **A block whose content IS a schema.org thing declares it.** `defineBlock` takes
    an optional `schema: (props) => entity | entity[]` returning schema.org objects
    (no `@context`). The page gathers every block's entities into its JSON-LD graph,
