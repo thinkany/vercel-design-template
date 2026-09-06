@@ -259,6 +259,18 @@
       .media-tile.active { outline: 2px solid #111; outline-offset: -2px; }
       .media-tile img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: repeating-conic-gradient(#eee 0 25%, #fff 0 50%) 0 0 / 16px 16px; }
       .media-meta { padding: 6px 8px; font-size: 11px; color: #333; line-height: 1.35; }
+      /* Media folders: the tag list on the left; a row lights up while an image is dragged over it. */
+      .media-folder { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid #e2e2e8; border-radius: 8px; margin-bottom: 6px; cursor: pointer; background: #fff; }
+      .media-folder:hover { border-color: #bcbcc6; }
+      .media-folder.active { border-color: #111; background: #f4f4f7; }
+      .media-folder.drop { border-color: #111; background: #e8e8ee; }
+      .media-folder .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+      .media-folder .count { font-size: 11px; color: #737373; }
+      .media-folder .acts { display: none; gap: 2px; }
+      .media-folder:hover .acts { display: inline-flex; }
+      .media-folder .acts .site-mini { padding: 2px 5px; }
+      .media-folder input.field { margin: 0; padding: 3px 6px; font-size: 12px; }
+      .media-tile.dragging { opacity: .5; }
       .site-media-bar { display: flex; gap: 8px; align-items: center; margin: 8px 0 6px; }
       .site-media-bar .field { flex: 1; }
       .media-meta .muted { font-size: 10.5px; }

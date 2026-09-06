@@ -2472,6 +2472,42 @@ function readMediaMeta(dir) { const j = readJsonFile(mediaMetaPath(dir)); return
 function writeMediaMeta(dir, meta) { fs.mkdirSync(siteContentDir(dir), { recursive: true }); fs.writeFileSync(mediaMetaPath(dir), JSON.stringify(meta, null, 2) + "\n"); }
 function cleanTags(tags) { const out = []; for (const t of Array.isArray(tags) ? tags : []) { const v = String(t || "").trim().replace(/\s+/g, " ").slice(0, 40); if (v && !out.some((x) => x.toLowerCase() === v.toLowerCase())) out.push(v); } return out; }
 ipcMain.handle("media:meta", () => (currentProject ? { meta: readMediaMeta(currentProject) } : { meta: {} }));
+// Tag folders: every tag in use plus the ones made empty in the library (media.json `_tags`).
+function allMediaTags(dir) {
+  const meta = readMediaMeta(dir); const out = new Map();
+  for (const t of cleanTags(meta._tags)) out.set(t.toLowerCase(), t);
+  for (const [k, v] of Object.entries(meta)) { if (k.startsWith("_") || !v || typeof v !== "object") continue; for (const t of cleanTags(v.tags)) if (!out.has(t.toLowerCase())) out.set(t.toLowerCase(), t); }
+  return Array.from(out.values()).sort((a, b) => a.localeCompare(b));
+}
+ipcMain.handle("media:tags", () => (currentProject ? { tags: allMediaTags(currentProject) } : { tags: [] }));
+ipcMain.handle("media:addTag", (_e, { name } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const [t] = cleanTags([name]); if (!t) return { ok: false, error: "Give the folder a name." };
+  const meta = readMediaMeta(currentProject);
+  if (allMediaTags(currentProject).some((x) => x.toLowerCase() === t.toLowerCase())) return { ok: true, tag: t, existed: true };
+  meta._tags = cleanTags([...(meta._tags || []), t]);
+  try { writeMediaMeta(currentProject, meta); return { ok: true, tag: t }; } catch (e) { return { ok: false, error: e.message }; }
+});
+// Rename a tag everywhere it's used; delete removes it from every image.
+ipcMain.handle("media:renameTag", (_e, { from, to } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const [next] = cleanTags([to]); const prev = String(from || "").trim(); if (!prev || !next) return { ok: false, error: "Give the folder a name." };
+  const meta = readMediaMeta(currentProject); const same = (a, b) => a.toLowerCase() === b.toLowerCase();
+  meta._tags = cleanTags((meta._tags || []).map((t) => (same(t, prev) ? next : t)));
+  for (const [k, v] of Object.entries(meta)) { if (k.startsWith("_") || !v || !Array.isArray(v.tags)) continue; v.tags = cleanTags(v.tags.map((t) => (same(t, prev) ? next : t))); }
+  try { writeMediaMeta(currentProject, meta); return { ok: true, tag: next }; } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle("media:deleteTag", (_e, { name } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const prev = String(name || "").trim(); if (!prev) return { ok: false, error: "Bad tag." };
+  const meta = readMediaMeta(currentProject); const same = (a, b) => a.toLowerCase() === b.toLowerCase();
+  meta._tags = cleanTags((meta._tags || []).filter((t) => !same(t, prev))); if (!meta._tags.length) delete meta._tags;
+  for (const k of Object.keys(meta)) { const v = meta[k]; if (k.startsWith("_") || !v || !Array.isArray(v.tags)) continue; v.tags = v.tags.filter((t) => !same(t, prev)); if (!v.tags.length) { delete v.tags; if (!Object.keys(v).length) delete meta[k]; } }
+  try { writeMediaMeta(currentProject, meta); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
+});
 ipcMain.handle("media:setTags", (_e, { rel, tags } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };

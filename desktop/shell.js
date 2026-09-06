@@ -4100,35 +4100,100 @@ function openMediaDetail(it, { allTags, onTags, onClose } = {}) {
   return { close };
 }
 
-// The Media tab: the whole library, with add, from-phone, filter, rename and delete.
+// The Media tab: folders (the tags) on the left, the library on the right, with add,
+// from-phone, filter, rename and delete. An image sits in every folder it's tagged
+// with; dragging a tile onto a folder adds that tag.
 async function renderSiteMedia(body) {
-  const M = COPY.site.media;
-  const wrap = siteEl("div"); body.appendChild(wrap);
-  wrap.appendChild(siteEl("div", "sess-desc", COPY.site.mediaTabDesc));
+  const M = COPY.site.media; const F = M.folders;
+  const cols = siteEl("div", "site-cols"); const left = siteEl("div"); const right = siteEl("div", "site-detail"); cols.append(left, right); body.appendChild(cols);
+  if (!("mediaFolder" in siteRailState)) siteRailState.mediaFolder = null; // null = all, "__untagged", or a tag
+  let items = []; let tags = []; let filter = ""; let phone = null; let dragging = null;
+  const same = (a, b) => a.toLowerCase() === b.toLowerCase();
+  const inFolder = (it) => siteRailState.mediaFolder === null ? true : siteRailState.mediaFolder === "__untagged" ? !(it.tags || []).length : (it.tags || []).some((t) => same(t, siteRailState.mediaFolder));
+
+  // ── Folders ──
+  left.appendChild(siteEl("div", "sess-label", F.heading)).style.marginTop = "12px";
+  left.appendChild(siteEl("div", "sess-desc", F.desc));
+  const folderHost = siteEl("div"); left.appendChild(folderHost);
+  const addRow = siteEl("div"); addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:4px 0 14px;";
+  const addIn = document.createElement("input"); addIn.className = "field"; addIn.placeholder = F.addPlaceholder; addIn.style.marginBottom = "0";
+  const addBtn = siteEl("button", "panelbtn", F.add); addBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+  const addFolder = async () => { const v = addIn.value.trim(); if (!v) return; const r = await window.desktop.addMediaTag(v); if (r && r.ok) { addIn.value = ""; siteRailState.mediaFolder = r.tag; await loadTags(); paintFolders(); paintGrid(); } };
+  addBtn.addEventListener("click", addFolder); addIn.addEventListener("keydown", (e) => { if (e.key === "Enter") addFolder(); });
+  addRow.append(addIn, addBtn); left.appendChild(addRow);
+
+  const folderRow = (key, label, count, { tag } = {}) => {
+    const row = siteEl("div", "media-folder" + (siteRailState.mediaFolder === key ? " active" : ""));
+    const name = siteEl("span", "name", label); const n = siteEl("span", "count", String(count));
+    row.append(name, n);
+    row.addEventListener("click", () => { siteRailState.mediaFolder = key; paintFolders(); paintGrid(); });
+    if (tag) {
+      const acts = siteEl("span", "acts");
+      acts.appendChild(siteMini("✎", (e) => {
+        e.stopPropagation();
+        const inp = document.createElement("input"); inp.className = "field"; inp.value = tag;
+        const finish = async (commit) => { if (!inp.isConnected) return; const v = inp.value.trim(); inp.replaceWith(name); if (!commit || !v || v === tag) return; const r = await window.desktop.renameMediaTag(tag, v); if (r && r.ok) { if (siteRailState.mediaFolder === tag) siteRailState.mediaFolder = r.tag; await load(); } };
+        inp.addEventListener("keydown", (ev) => { ev.stopPropagation(); if (ev.key === "Enter") finish(true); else if (ev.key === "Escape") finish(false); });
+        inp.addEventListener("blur", () => finish(true)); inp.addEventListener("click", (ev) => ev.stopPropagation());
+        name.replaceWith(inp); inp.focus(); inp.select();
+      }, { title: F.rename }));
+      acts.appendChild(siteTrashBtn(async (e) => {
+        e.stopPropagation();
+        if (!(await askConfirm({ title: F.remove, message: F.removeConfirm(tag, count), okLabel: F.remove, danger: true }))) return;
+        const r = await window.desktop.deleteMediaTag(tag); if (r && r.ok) { if (siteRailState.mediaFolder === tag) siteRailState.mediaFolder = null; await load(); }
+      }, F.remove));
+      row.appendChild(acts);
+      // Drop an image here to tag it.
+      row.addEventListener("dragover", (e) => { if (!dragging) return; e.preventDefault(); row.classList.add("drop"); row.title = F.dropHint(tag); });
+      row.addEventListener("dragleave", () => row.classList.remove("drop"));
+      row.addEventListener("drop", async (e) => {
+        e.preventDefault(); row.classList.remove("drop"); const it = dragging; dragging = null; if (!it) return;
+        if ((it.tags || []).some((t) => same(t, tag))) return;
+        const r = await window.desktop.setMediaTags(it.rel, [...(it.tags || []), tag]);
+        if (r && r.ok) { it.tags = r.tags; paintFolders(); paintGrid(); }
+      });
+    }
+    return row;
+  };
+  const paintFolders = () => {
+    folderHost.innerHTML = "";
+    folderHost.appendChild(folderRow(null, F.all, items.length));
+    folderHost.appendChild(folderRow("__untagged", F.untagged, items.filter((it) => !(it.tags || []).length).length));
+    tags.forEach((t) => folderHost.appendChild(folderRow(t, t, items.filter((it) => (it.tags || []).some((x) => same(x, t))).length, { tag: t })));
+  };
+
+  // ── Library ──
+  right.appendChild(siteEl("div", "sess-desc", COPY.site.mediaTabDesc));
   const bar = siteEl("div", "site-media-bar");
   const filterIn = document.createElement("input"); filterIn.className = "field"; filterIn.placeholder = M.filter; filterIn.style.marginBottom = "0";
   const upBtn = siteEl("button", "panelbtn", M.upload); upBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
   const phoneBtn = siteEl("button", "panelbtn", M.fromPhone); phoneBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
-  bar.append(filterIn, upBtn, phoneBtn); wrap.appendChild(bar);
-  const note = siteEl("div", "sess-desc", M.uploadNote); wrap.appendChild(note);
-  const phoneHost = siteEl("div"); wrap.appendChild(phoneHost);
-  const gridHost = siteEl("div"); wrap.appendChild(gridHost);
-  let items = []; let filter = ""; let phone = null;
-  const paint = () => {
+  bar.append(filterIn, upBtn, phoneBtn); right.appendChild(bar);
+  const note = siteEl("div", "sess-desc", M.uploadNote); right.appendChild(note);
+  const phoneHost = siteEl("div"); right.appendChild(phoneHost);
+  const gridHost = siteEl("div"); right.appendChild(gridHost);
+  const paintGrid = () => {
     gridHost.innerHTML = "";
-    const shown = items.filter((it) => !filter || it.name.toLowerCase().includes(filter) || (it.tags || []).some((t) => t.toLowerCase().includes(filter)));
     if (!items.length) { gridHost.appendChild(siteEl("div", "muted", M.empty)); return; }
+    const shown = items.filter(inFolder).filter((it) => !filter || it.name.toLowerCase().includes(filter) || (it.tags || []).some((t) => t.toLowerCase().includes(filter)));
+    if (!shown.length) { gridHost.appendChild(siteEl("div", "sess-desc", siteRailState.mediaFolder ? F.emptyFolder : M.empty)); return; }
     const grid = siteEl("div", "media-grid");
-    const allTags = () => { const set = new Map(); items.forEach((x) => (x.tags || []).forEach((t) => set.set(t.toLowerCase(), t))); return Array.from(set.values()).sort((a, b) => a.localeCompare(b)); };
-    shown.forEach((it) => grid.appendChild(mediaTile(it, {
-      onSelect: () => openMediaDetail(it, { allTags: allTags(), onTags: () => paint() }),
-      onRenamed: (r) => { note.textContent = M.renamed(r.renamedTo, r.rewritten || 0); },
-      onDeleted: () => { items = items.filter((x) => x !== it); paint(); },
-    })));
+    shown.forEach((it) => {
+      const tile = mediaTile(it, {
+        onSelect: () => openMediaDetail(it, { allTags: [...tags], onTags: async () => { await loadTags(); paintFolders(); paintGrid(); } }),
+        onRenamed: (r) => { note.textContent = M.renamed(r.renamedTo, r.rewritten || 0); },
+        onDeleted: () => { items = items.filter((x) => x !== it); paintFolders(); paintGrid(); },
+      });
+      tile.draggable = true;
+      tile.addEventListener("dragstart", (e) => { dragging = it; tile.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "copy"; e.dataTransfer.setData("text/plain", it.url); } catch {} });
+      tile.addEventListener("dragend", () => { dragging = null; tile.classList.remove("dragging"); folderHost.querySelectorAll(".drop").forEach((r) => r.classList.remove("drop")); });
+      grid.appendChild(tile);
+    });
     gridHost.appendChild(grid);
   };
-  const load = async () => { items = await window.desktop.listMedia().catch(() => []); mediaIndex = items; paint(); };
-  filterIn.addEventListener("input", () => { filter = filterIn.value.trim().toLowerCase(); paint(); });
+  const loadTags = async () => { tags = ((await window.desktop.getMediaTags().catch(() => ({ tags: [] }))).tags) || []; if (siteRailState.mediaFolder && siteRailState.mediaFolder !== "__untagged" && !tags.some((t) => same(t, siteRailState.mediaFolder))) siteRailState.mediaFolder = null; };
+  const load = async () => { items = await window.desktop.listMedia().catch(() => []); mediaIndex = items; await loadTags(); paintFolders(); paintGrid(); };
+  filterIn.addEventListener("input", () => { filter = filterIn.value.trim().toLowerCase(); paintGrid(); });
   upBtn.addEventListener("click", async () => {
     upBtn.disabled = true; upBtn.textContent = M.uploading;
     const r = await window.desktop.uploadMedia();
