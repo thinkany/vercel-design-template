@@ -5111,7 +5111,8 @@ function openRedirectsModal(initial, onChange) {
   helpBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/><circle cx="12" cy="12" r="4"/></svg>';
   helpBtn.addEventListener("click", () => openCmsHelp("redirects"));
   const done = siteEl("button", "panelbtn", R.close); done.style.cssText = "margin:0;width:auto;";
-  acts.append(helpBtn, done); head.appendChild(acts);
+  helpBtn.style.marginLeft = "8px"; // Import · Done · (twice the gap) · Help, the help in the corner like the tabs
+  acts.append(done, helpBtn); head.appendChild(acts);
   const body = siteEl("div", "blockedit-fields"); body.style.cssText = "flex:1;overflow:auto;padding:16px 20px;";
   body.appendChild(siteEl("div", "sess-desc", R.intro));
   // Add row
