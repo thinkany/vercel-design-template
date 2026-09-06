@@ -3360,6 +3360,17 @@ ipcMain.handle("log:save", async () => {
   if (res.canceled || !res.filePath) return { ok: false, canceled: true };
   try { fs.copyFileSync(cur, res.filePath); return { ok: true, path: res.filePath }; } catch (e) { return { ok: false, error: e.message }; }
 });
+// Today's log as text for the clipboard: the last 200 KB when it's longer, so a paste stays sane.
+ipcMain.handle("log:read", () => {
+  const cur = appLog.currentFile();
+  if (!cur || !fs.existsSync(cur)) return { ok: false, error: "Nothing logged yet today." };
+  try {
+    const st = fs.statSync(cur); const MAX = 200 * 1024;
+    if (st.size <= MAX) return { ok: true, text: fs.readFileSync(cur, "utf8") };
+    const fd = fs.openSync(cur, "r"); const buf = Buffer.alloc(MAX); fs.readSync(fd, buf, 0, MAX, st.size - MAX); fs.closeSync(fd);
+    return { ok: true, text: "[… earlier lines omitted …]\n" + buf.toString("utf8"), truncated: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
 ipcMain.handle("log:reveal", () => { const d = appLog.logsDir(); if (d) { fs.mkdirSync(d, { recursive: true }); shell.openPath(d); } return { ok: true }; });
 ipcMain.handle("narrate:get", () => ({ enabled: narrateEnabled() }));
 ipcMain.handle("narrate:set", (_e, { enabled } = {}) => { setUiState({ buildNarrate: !!enabled }); return { ok: true, enabled: !!enabled }; });

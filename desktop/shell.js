@@ -4207,7 +4207,7 @@ async function renderSiteMedia(body) {
   };
   const paintFolders = () => {
     folderHost.innerHTML = "";
-    folderHost.appendChild(folderRow(null, F.all, items.length));
+    folderHost.appendChild(folderRow(null, isFiles ? F.allFiles : F.all, items.length));
     folderHost.appendChild(folderRow("__untagged", F.untagged, items.filter((it) => !(it.tags || []).length).length));
     tags.forEach((t) => folderHost.appendChild(folderRow(t, t, items.filter((it) => (it.tags || []).some((x) => same(x, t))).length, { tag: t })));
   };
@@ -5755,7 +5755,13 @@ async function renderClaude(body) {
   const logReveal = siteMini(COPY.claude.loggingReveal, () => window.desktop.revealLogs());
   const logNote = siteEl("span", "sess-desc"); logNote.style.margin = "0";
   logSave.addEventListener("click", async () => { const r = await window.desktop.saveLog(); if (r && r.ok) logNote.textContent = COPY.claude.loggingSaved(r.path); else if (r && !r.canceled) logNote.textContent = r.error || ""; });
-  logActs.append(logSave, logReveal, logNote); body.appendChild(logActs);
+  // Copy: today's log (the last part when it's long) onto the clipboard, ready to paste into a message.
+  const logCopy = siteMini(COPY.claude.loggingCopy, async () => {
+    const r = await window.desktop.readLog();
+    if (!r || !r.ok || !r.text) { logNote.textContent = (r && r.error) || COPY.claude.loggingEmpty; return; }
+    try { await navigator.clipboard.writeText(r.text); logNote.textContent = COPY.claude.loggingCopied; } catch { logNote.textContent = "Couldn't copy."; }
+  });
+  logActs.append(logSave, logCopy, logReveal, logNote); body.appendChild(logActs);
 
   // ── Research the field (licensed enhancement — only rendered when licensed) ──
   const research = await window.desktop.getResearch();
