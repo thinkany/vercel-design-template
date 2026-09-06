@@ -48,6 +48,7 @@ app.setPath("userData", path.join(app.getPath("appData"), USER_DATA_ID));
 const { TEMPLATE_EXCLUDE } = require("./template-exclude.cjs");
 const { startCaptureBridge, stopCaptureBridge } = require("./capture-bridge.cjs");
 const vercel = require("./publish.cjs");
+const appLog = require("./logger.cjs"); // Settings → Logging (off by default)
 const { validateCards } = require("./intake/cards.cjs");
 const { createEmptyBrief, applyAnswers } = require("./intake/brief.cjs");
 // Design-variety: the curated lens deck + sampler run SERVER-side (derive.thinkany.design/
@@ -1211,6 +1212,13 @@ function createWindow() {
       additionalArguments: app.isPackaged ? [] : ["--ta-dev"],
     },
   });
+  // The renderer's console rides the app log too (Settings → Logging).
+  mainWindow.webContents.on("console-message", (event, legacyLevel, legacyMessage) => {
+    // Electron ≥ 32 passes one details object; older builds pass (event, level, message).
+    const details = event && typeof event === "object" && "message" in event ? event : { level: legacyLevel, message: legacyMessage };
+    const lvl = typeof details.level === "string" ? details.level : ({ 0: "log", 1: "warn", 2: "error", 3: "error" }[details.level] || "log");
+    appLog.write(lvl, "renderer", String(details.message || ""));
+  });
   mainWindow.loadFile(path.join(__dirname, "shell.html"));
 }
 
@@ -1376,8 +1384,16 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode, mo
   if (expanded) prompt = expanded.prompt;
   const { runPrompt } = await import(pathToFileURL(path.join(__dirname, "agent.mjs")).href);
   const onEvent = (evt) => {
+    if (appLog.isEnabled() && evt && evt.type !== "text") {
+      if (evt.type === "tool") appLog.write("info", "agent", `tool ${evt.name}`);
+      else if (evt.type === "activity") appLog.write("info", "agent", `activity ${evt.name || ""} ${evt.target || ""}`.trim());
+      else if (evt.type === "error") appLog.write("error", "agent", evt.message || "");
+      else if (evt.type === "result") appLog.write("info", "agent", `result${evt.usage ? ` in=${evt.usage.input_tokens || 0} out=${evt.usage.output_tokens || 0}` : ""}`);
+      else appLog.write("info", "agent", evt.type);
+    }
     if (!event.sender.isDestroyed()) event.sender.send("agent:event", evt);
   };
+  appLog.write("info", "agent", `turn start${reviewMode ? " (review)" : ""}: ${String(prompt).slice(0, 200).replace(/\s+/g, " ")}`);
   // Bridge: send the questions to the renderer, resolve when it answers.
   const askQuestion = (questions) =>
     new Promise((resolve, reject) => {
@@ -3334,6 +3350,17 @@ ipcMain.handle("a11y:setAuto", (_e, { auto } = {}) => { setUiState({ buildA11yAu
 // cheap Haiku call. Default-ON; a ui-state toggle disables it. Additive — the renderer keeps
 // its curated line on any failure/timeout, so this never blocks or breaks the build spine.
 function narrateEnabled() { const v = loadUiState().buildNarrate; return v === undefined ? true : !!v; }
+// Logging (Settings): on/off, the day's file, save a copy, reveal the folder.
+ipcMain.handle("log:status", () => ({ enabled: appLog.isEnabled(), file: appLog.currentFile(), dir: appLog.logsDir() }));
+ipcMain.handle("log:set", (_e, { enabled } = {}) => { setUiState({ logging: !!enabled }); appLog.configure({ logsDir: path.join(app.getPath("userData"), "logs"), on: !!enabled }); return { ok: true, enabled: !!enabled }; });
+ipcMain.handle("log:save", async () => {
+  const cur = appLog.currentFile();
+  if (!cur || !fs.existsSync(cur)) return { ok: false, error: "There's no log yet. Turn logging on, reproduce the problem, then save." };
+  const res = await dialog.showSaveDialog(mainWindow, { title: "Save log file", defaultPath: path.join(app.getPath("downloads"), `thinkany-design-log-${new Date().toISOString().slice(0, 10)}.txt`) });
+  if (res.canceled || !res.filePath) return { ok: false, canceled: true };
+  try { fs.copyFileSync(cur, res.filePath); return { ok: true, path: res.filePath }; } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle("log:reveal", () => { const d = appLog.logsDir(); if (d) { fs.mkdirSync(d, { recursive: true }); shell.openPath(d); } return { ok: true }; });
 ipcMain.handle("narrate:get", () => ({ enabled: narrateEnabled() }));
 ipcMain.handle("narrate:set", (_e, { enabled } = {}) => { setUiState({ buildNarrate: !!enabled }); return { ok: true, enabled: !!enabled }; });
 ipcMain.handle("narrate:line", async (_e, { phase, title, bits } = {}) => {
@@ -4350,6 +4377,7 @@ async function renderLensExamples(opts) {
 }
 
 app.whenReady().then(async () => {
+  appLog.configure({ logsDir: path.join(app.getPath("userData"), "logs"), on: !!loadUiState().logging });
   buildAppMenu();
   loadEnvLocal(); // dev fallback
   const stored = loadStoredKey(); // in-app key wins if present

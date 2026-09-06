@@ -5737,6 +5737,26 @@ async function renderClaude(body) {
   narCb.addEventListener("change", () => { window.desktop.setNarrate(narCb.checked); });
   body.appendChild(narRow);
 
+  // ── Logging (testing & feedback): a daily log file, off by default ────────────
+  const logSep = document.createElement("div"); logSep.className = "drawer-sep"; body.appendChild(logSep);
+  const logLabel = document.createElement("div"); logLabel.className = "sess-label"; logLabel.textContent = COPY.claude.loggingLabel; body.appendChild(logLabel);
+  const logDesc = document.createElement("div"); logDesc.className = "sess-desc"; logDesc.textContent = COPY.claude.loggingDesc; body.appendChild(logDesc);
+  const logState = await window.desktop.getLogging().catch(() => ({ enabled: false }));
+  const logRow = document.createElement("label"); logRow.className = "toggle-row";
+  const logCb = document.createElement("input"); logCb.type = "checkbox"; logCb.checked = !!logState.enabled;
+  const logTxt = document.createElement("span"); logTxt.textContent = COPY.claude.loggingToggle;
+  logRow.append(logCb, logTxt); body.appendChild(logRow);
+  const logWhere = document.createElement("div"); logWhere.className = "sess-desc"; body.appendChild(logWhere);
+  const paintLog = (st) => { logWhere.textContent = st.enabled && st.file ? COPY.claude.loggingWhere(st.file) : COPY.claude.loggingOff; };
+  paintLog(logState);
+  logCb.addEventListener("change", async () => { const r = await window.desktop.setLogging(logCb.checked); paintLog(await window.desktop.getLogging().catch(() => ({ enabled: r && r.enabled }))); });
+  const logActs = document.createElement("div"); logActs.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;";
+  const logSave = siteEl("button", "panelbtn", COPY.claude.loggingSave); logSave.style.cssText = "margin:0;width:auto;";
+  const logReveal = siteMini(COPY.claude.loggingReveal, () => window.desktop.revealLogs());
+  const logNote = siteEl("span", "sess-desc"); logNote.style.margin = "0";
+  logSave.addEventListener("click", async () => { const r = await window.desktop.saveLog(); if (r && r.ok) logNote.textContent = COPY.claude.loggingSaved(r.path); else if (r && !r.canceled) logNote.textContent = r.error || ""; });
+  logActs.append(logSave, logReveal, logNote); body.appendChild(logActs);
+
   // ── Research the field (licensed enhancement — only rendered when licensed) ──
   const research = await window.desktop.getResearch();
   if (research.licensed) {
