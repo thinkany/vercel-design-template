@@ -2410,10 +2410,19 @@ app.on("will-quit", () => { try { phoneUpload.stopServer(); } catch {} });
 // copy a chosen file in under a safe, unique name; no external service (the Blob
 // adapter is a later phase).
 const MEDIA_EXT = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".svg"]);
+// Files (documents) live beside the images, in public/files, served at /files/<name>:
+// copied as they are, never converted. Their tags key as "files/<rel>" in media.json.
+const FILE_EXT = new Set([".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".csv", ".txt", ".zip", ".mp3", ".mp4", ".m4a", ".mov", ".wav"]);
 function mediaDir(dir) { return path.join(dir, "public", "images"); }
-function listMedia(dir) {
+function filesDir(dir) { return path.join(dir, "public", "files"); }
+function mediaKindDir(dir, kind) { return kind === "file" ? filesDir(dir) : mediaDir(dir); }
+function mediaMetaKey(kind, rel) { return kind === "file" ? `files/${rel}` : rel; }
+function validRel(rel) { return typeof rel === "string" && rel && !rel.includes("..") && !path.isAbsolute(rel); }
+function listMedia(dir, kind = "image") {
   const mediaTags = readMediaMeta(dir);
-  const root = mediaDir(dir);
+  const isFile = kind === "file";
+  const root = mediaKindDir(dir, kind);
+  const exts = isFile ? FILE_EXT : MEDIA_EXT;
   const out = [];
   const walk = (d, rel) => {
     let entries = [];
@@ -2422,17 +2431,49 @@ function listMedia(dir) {
       if (e.name.startsWith(".")) continue;
       const abs = path.join(d, e.name); const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) { walk(abs, r); continue; }
-      if (!MEDIA_EXT.has(path.extname(e.name).toLowerCase())) continue;
+      const ext = path.extname(e.name).toLowerCase();
+      if (!exts.has(ext)) continue;
       let size = 0, width = 0, height = 0, mtime = 0;
       try { const st = fs.statSync(abs); size = st.size; mtime = st.mtimeMs; } catch {}
-      if (!/\.svg$/i.test(e.name)) { try { const sz = nativeImage.createFromPath(abs).getSize(); width = sz.width; height = sz.height; } catch {} }
-      out.push({ rel: r, name: e.name, url: `/images/${r}`, file: pathToFileURL(abs).href, size, width, height, mtime, tags: (mediaTags[r] && mediaTags[r].tags) || [] });
+      if (!isFile && !/\.svg$/i.test(e.name)) { try { const sz = nativeImage.createFromPath(abs).getSize(); width = sz.width; height = sz.height; } catch {} }
+      const meta = mediaTags[mediaMetaKey(kind, r)];
+      out.push({ kind, rel: r, name: e.name, ext: ext.slice(1), url: `/${isFile ? "files" : "images"}/${r}`, file: pathToFileURL(abs).href, size, width, height, mtime, tags: (meta && meta.tags) || [] });
     }
   };
   walk(root, "");
   out.sort((a, b) => b.mtime - a.mtime);
   return out;
 }
+// A file name safe for a URL and unique in the files folder (same rule as images).
+function fileName(dir, original) {
+  const ext = path.extname(original).toLowerCase();
+  const base = slugifyId(path.basename(original, path.extname(original))) || "file";
+  let name = base + ext; let n = 2;
+  while (fs.existsSync(path.join(filesDir(dir), name))) name = `${base}-${n++}${ext}`;
+  return name;
+}
+function importDocumentFiles(paths) {
+  fs.mkdirSync(filesDir(currentProject), { recursive: true });
+  const added = [];
+  for (const src of paths) {
+    const ext = path.extname(src).toLowerCase();
+    if (!FILE_EXT.has(ext)) continue;
+    try { const name = fileName(currentProject, path.basename(src)); fs.copyFileSync(src, path.join(filesDir(currentProject), name)); added.push(name); }
+    catch (e) { return { ok: false, error: e.message, added: added.map((n) => `/files/${n}`) }; }
+  }
+  return { ok: true, added: added.map((n) => `/files/${n}`) };
+}
+ipcMain.handle("media:uploadFiles", async () => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: "Add files",
+    properties: ["openFile", "multiSelections"],
+    filters: [{ name: "Files", extensions: Array.from(FILE_EXT).map((e) => e.slice(1)) }],
+  });
+  if (res.canceled || !res.filePaths.length) return { ok: true, added: [] };
+  return importDocumentFiles(res.filePaths);
+});
 // A file name safe for a URL and unique in the folder ("My Photo (1).JPG" → my-photo-1.jpg).
 function mediaName(dir, original) {
   const ext = path.extname(original).toLowerCase();
@@ -2441,7 +2482,7 @@ function mediaName(dir, original) {
   while (fs.existsSync(path.join(mediaDir(dir), name))) name = `${base}-${n++}${ext}`;
   return name;
 }
-ipcMain.handle("media:list", () => (currentProject ? listMedia(currentProject) : []));
+ipcMain.handle("media:list", (_e, { kind } = {}) => (currentProject ? listMedia(currentProject, kind === "file" ? "file" : "image") : []));
 // Uploads become AVIF (auto-oriented, metadata stripped, at most MEDIA_MAX_WIDTH
 // wide, never upscaled) via the conversion worker; a designer never has to know
 // what a file format is. sharp's shipped libvips encodes AVIF (and decodes HEIC),
@@ -2566,83 +2607,94 @@ function writeMediaMeta(dir, meta) { fs.mkdirSync(siteContentDir(dir), { recursi
 function cleanTags(tags) { const out = []; for (const t of Array.isArray(tags) ? tags : []) { const v = String(t || "").trim().replace(/\s+/g, " ").slice(0, 40); if (v && !out.some((x) => x.toLowerCase() === v.toLowerCase())) out.push(v); } return out; }
 ipcMain.handle("media:meta", () => (currentProject ? { meta: readMediaMeta(currentProject) } : { meta: {} }));
 // Tag folders: every tag in use plus the ones made empty in the library (media.json `_tags`).
-function allMediaTags(dir) {
+// Folders are per kind: images use `_tags` and the image keys; files use `_fileTags` and
+// the "files/…" keys, so the two libraries never share a folder.
+function kindOfKey(k) { return k.startsWith("files/") ? "file" : "image"; }
+function tagListKey(kind) { return kind === "file" ? "_fileTags" : "_tags"; }
+function allMediaTags(dir, kind = "image") {
   const meta = readMediaMeta(dir); const out = new Map();
-  for (const t of cleanTags(meta._tags)) out.set(t.toLowerCase(), t);
-  for (const [k, v] of Object.entries(meta)) { if (k.startsWith("_") || !v || typeof v !== "object") continue; for (const t of cleanTags(v.tags)) if (!out.has(t.toLowerCase())) out.set(t.toLowerCase(), t); }
+  for (const t of cleanTags(meta[tagListKey(kind)])) out.set(t.toLowerCase(), t);
+  for (const [k, v] of Object.entries(meta)) { if (k.startsWith("_") || !v || typeof v !== "object" || kindOfKey(k) !== kind) continue; for (const t of cleanTags(v.tags)) if (!out.has(t.toLowerCase())) out.set(t.toLowerCase(), t); }
   return Array.from(out.values()).sort((a, b) => a.localeCompare(b));
 }
-ipcMain.handle("media:tags", () => (currentProject ? { tags: allMediaTags(currentProject) } : { tags: [] }));
-ipcMain.handle("media:addTag", (_e, { name } = {}) => {
+const kindOf = (kind) => (kind === "file" ? "file" : "image");
+ipcMain.handle("media:tags", (_e, { kind } = {}) => (currentProject ? { tags: allMediaTags(currentProject, kindOf(kind)) } : { tags: [] }));
+ipcMain.handle("media:addTag", (_e, { name, kind } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
+  const k = kindOf(kind); const lk = tagListKey(k);
   const [t] = cleanTags([name]); if (!t) return { ok: false, error: "Give the folder a name." };
   const meta = readMediaMeta(currentProject);
-  if (allMediaTags(currentProject).some((x) => x.toLowerCase() === t.toLowerCase())) return { ok: true, tag: t, existed: true };
-  meta._tags = cleanTags([...(meta._tags || []), t]);
+  if (allMediaTags(currentProject, k).some((x) => x.toLowerCase() === t.toLowerCase())) return { ok: true, tag: t, existed: true };
+  meta[lk] = cleanTags([...(meta[lk] || []), t]);
   try { writeMediaMeta(currentProject, meta); return { ok: true, tag: t }; } catch (e) { return { ok: false, error: e.message }; }
 });
-// Rename a tag everywhere it's used; delete removes it from every image.
-ipcMain.handle("media:renameTag", (_e, { from, to } = {}) => {
+// Rename a tag everywhere it's used in its kind; delete removes it from every item of that kind.
+ipcMain.handle("media:renameTag", (_e, { from, to, kind } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
+  const k = kindOf(kind); const lk = tagListKey(k);
   const [next] = cleanTags([to]); const prev = String(from || "").trim(); if (!prev || !next) return { ok: false, error: "Give the folder a name." };
   const meta = readMediaMeta(currentProject); const same = (a, b) => a.toLowerCase() === b.toLowerCase();
-  meta._tags = cleanTags((meta._tags || []).map((t) => (same(t, prev) ? next : t)));
-  for (const [k, v] of Object.entries(meta)) { if (k.startsWith("_") || !v || !Array.isArray(v.tags)) continue; v.tags = cleanTags(v.tags.map((t) => (same(t, prev) ? next : t))); }
+  meta[lk] = cleanTags((meta[lk] || []).map((t) => (same(t, prev) ? next : t)));
+  for (const [key, v] of Object.entries(meta)) { if (key.startsWith("_") || !v || !Array.isArray(v.tags) || kindOfKey(key) !== k) continue; v.tags = cleanTags(v.tags.map((t) => (same(t, prev) ? next : t))); }
   try { writeMediaMeta(currentProject, meta); return { ok: true, tag: next }; } catch (e) { return { ok: false, error: e.message }; }
 });
-ipcMain.handle("media:deleteTag", (_e, { name } = {}) => {
+ipcMain.handle("media:deleteTag", (_e, { name, kind } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
+  const k = kindOf(kind); const lk = tagListKey(k);
   const prev = String(name || "").trim(); if (!prev) return { ok: false, error: "Bad tag." };
   const meta = readMediaMeta(currentProject); const same = (a, b) => a.toLowerCase() === b.toLowerCase();
-  meta._tags = cleanTags((meta._tags || []).filter((t) => !same(t, prev))); if (!meta._tags.length) delete meta._tags;
-  for (const k of Object.keys(meta)) { const v = meta[k]; if (k.startsWith("_") || !v || !Array.isArray(v.tags)) continue; v.tags = v.tags.filter((t) => !same(t, prev)); if (!v.tags.length) { delete v.tags; if (!Object.keys(v).length) delete meta[k]; } }
+  meta[lk] = cleanTags((meta[lk] || []).filter((t) => !same(t, prev))); if (!meta[lk].length) delete meta[lk];
+  for (const key of Object.keys(meta)) { const v = meta[key]; if (key.startsWith("_") || !v || !Array.isArray(v.tags) || kindOfKey(key) !== k) continue; v.tags = v.tags.filter((t) => !same(t, prev)); if (!v.tags.length) { delete v.tags; if (!Object.keys(v).length) delete meta[key]; } }
   try { writeMediaMeta(currentProject, meta); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
 });
-ipcMain.handle("media:setTags", (_e, { rel, tags } = {}) => {
+ipcMain.handle("media:setTags", (_e, { rel, tags, kind } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
-  if (typeof rel !== "string" || rel.includes("..") || path.isAbsolute(rel)) return { ok: false, error: "Bad path." };
+  if (!validRel(rel)) return { ok: false, error: "Bad path." };
+  const key = mediaMetaKey(kind === "file" ? "file" : "image", rel);
   const meta = readMediaMeta(currentProject);
   const clean = cleanTags(tags);
-  if (clean.length) meta[rel] = { ...(meta[rel] || {}), tags: clean }; else if (meta[rel]) { delete meta[rel].tags; if (!Object.keys(meta[rel]).length) delete meta[rel]; }
+  if (clean.length) meta[key] = { ...(meta[key] || {}), tags: clean }; else if (meta[key]) { delete meta[key].tags; if (!Object.keys(meta[key]).length) delete meta[key]; }
   try { writeMediaMeta(currentProject, meta); return { ok: true, tags: clean }; } catch (e) { return { ok: false, error: e.message }; }
 });
 
 // Rename an image. The extension stays; the base is slugified; a name already taken
 // gets "-N" with the next free number. Every reference in content/ (pages, posts,
 // entries, site.json) follows the file, so nothing on the site breaks.
-ipcMain.handle("media:rename", (_e, { rel, name } = {}) => {
+ipcMain.handle("media:rename", (_e, { rel, name, kind } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
-  if (typeof rel !== "string" || rel.includes("..") || path.isAbsolute(rel)) return { ok: false, error: "Bad path." };
-  const from = path.join(mediaDir(currentProject), rel);
+  if (!validRel(rel)) return { ok: false, error: "Bad path." };
+  const k = kind === "file" ? "file" : "image"; const kindDir = mediaKindDir(currentProject, k); const urlBase = k === "file" ? "/files/" : "/images/";
+  const from = path.join(kindDir, rel);
   if (!fs.existsSync(from)) return { ok: false, error: "That file is gone." };
   const ext = path.extname(rel).toLowerCase();
   const wanted = String(name || "").trim().replace(new RegExp(ext.replace(".", "\\.") + "$", "i"), "");
   const base = slugifyId(wanted);
   if (!base) return { ok: false, error: "Give it a name." };
-  if (base + ext === rel) return { ok: true, rel, url: `/images/${rel}`, renamedTo: rel };
+  if (base + ext === rel) return { ok: true, rel, url: urlBase + rel, renamedTo: rel };
   const sub = path.dirname(rel) === "." ? "" : path.dirname(rel) + "/";
   let next = base + ext; let n = 2;
-  while (fs.existsSync(path.join(mediaDir(currentProject), sub + next))) next = `${base}-${n++}${ext}`;
-  const to = path.join(mediaDir(currentProject), sub + next);
+  while (fs.existsSync(path.join(kindDir, sub + next))) next = `${base}-${n++}${ext}`;
+  const to = path.join(kindDir, sub + next);
   try { fs.renameSync(from, to); } catch (e) { return { ok: false, error: e.message }; }
   // Follow the rename through the content files.
-  const oldUrl = `/images/${rel}`, newUrl = `/images/${sub}${next}`;
+  const oldUrl = urlBase + rel, newUrl = urlBase + sub + next;
   let rewritten = 0;
   const walk = (d) => { let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; } for (const e of es) { const a = path.join(d, e.name); if (e.isDirectory()) walk(a); else if (/\.(json|md|mdx)$/.test(e.name)) { try { const t = fs.readFileSync(a, "utf8"); if (t.includes(oldUrl)) { fs.writeFileSync(a, t.split(oldUrl).join(newUrl)); rewritten++; } } catch {} } } };
   walk(siteContentDir(currentProject));
-  const meta = readMediaMeta(currentProject); if (meta[rel]) { meta[sub + next] = meta[rel]; delete meta[rel]; try { writeMediaMeta(currentProject, meta); } catch {} }
+  const meta = readMediaMeta(currentProject); const mk = mediaMetaKey(k, rel), mk2 = mediaMetaKey(k, sub + next); if (meta[mk]) { meta[mk2] = meta[mk]; delete meta[mk]; try { writeMediaMeta(currentProject, meta); } catch {} }
   return { ok: true, rel: sub + next, url: newUrl, renamedTo: next, rewritten };
 });
-ipcMain.handle("media:delete", (_e, { rel } = {}) => {
+ipcMain.handle("media:delete", (_e, { rel, kind } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
-  if (typeof rel !== "string" || rel.includes("..") || path.isAbsolute(rel)) return { ok: false, error: "Bad path." };
-  try { trash.moveToTrash(currentProject, path.join(mediaDir(currentProject), rel), { kind: "image", title: path.basename(rel), meta: { rel } }); return { ok: true, trashed: true }; } catch (e) { return { ok: false, error: e.message }; }
+  if (!validRel(rel)) return { ok: false, error: "Bad path." };
+  const k = kind === "file" ? "file" : "image";
+  try { trash.moveToTrash(currentProject, path.join(mediaKindDir(currentProject, k), rel), { kind: k, title: path.basename(rel), meta: { rel } }); return { ok: true, trashed: true }; } catch (e) { return { ok: false, error: e.message }; }
 });
 
 // ---- Site IPC ----------------------------------------------------------------

@@ -399,6 +399,8 @@ window.COPY = {
     },
     tabs: { pages: "Pages", posts: "Posts", types: "Types", forms: "Forms", media: "Media", blocks: "Blocks", nav: "Navigation", settings: "Settings" },
     mediaTabDesc: "Every image in the project, the same library the image fields pick from. Hover an image to rename or delete it.",
+    mediaFilesDesc: "Documents and downloads for the site: PDFs, spreadsheets, decks, archives, audio and video. Link to one from any menu or link field.",
+    mediaKinds: { image: "Images", file: "Files" },
     // "Build the site from this design": the one chat-driven step between designing and
     // running the site (/promote-blocks), started from a button here and in Publish.
     build: {
@@ -592,9 +594,10 @@ window.COPY = {
       },
       media: {
         title: "Media",
-        intro: "The project's image library: everything under the images folder, which is what every image field picks from.",
+        intro: "The project's library, in two parts: Images (everything under the images folder, which is what every image field picks from) and Files (documents and downloads served at /files/, which the link pickers can point at). Each part has its own folders and tags.",
         sections: [
           { h: "Add images", items: ["<b>Add images…</b> picks files from your computer; <b>From your phone…</b> shows a code your phone scans to send photos over Wi‑Fi.", "Added images are optimised for the web automatically (AVIF, up to 2400px wide). SVG, GIF and AVIF files are kept as they are."] },
+          { h: "Files", items: ["Switch to <b>Files</b> for PDFs, spreadsheets, decks, CSV, text, ZIP, audio and video. <b>Add files…</b> copies them into the project as they are, served at <i>/files/name.pdf</i>.", "Files have their own folders and tags, rename and delete like images, and a detail view that previews PDFs.", "To use one, pick it from the <b>Files</b> group in any link field or menu item."] },
           { h: "Folders and tags", items: ["Folders are tags: an image sits in every folder it's tagged with, and <b>New folder</b> makes a tag. Drag an image onto a folder to file it, or click an image and add tags in its detail view; tags save as you add them.", "Rename or delete a folder from its hover controls; the change applies to every image carrying the tag, and deleting a folder never deletes images."] },
           { h: "Manage", items: ["Hover an image for <b>Rename</b> and <b>Delete</b>. A renamed image keeps its extension; a name already in use gets a number added, and every page using it is updated to match.", "Deleting moves the image to the Trash in Settings, restorable for 30 days. Pages using it show a broken image until it's restored or replaced.", "<b>Filter by name</b> narrows the grid."] },
         ],
@@ -667,7 +670,12 @@ window.COPY = {
     designBlockPlaceholder: "e.g. three customer testimonials with photos",
     designBlockGo: "Send to the designer",
     designBlockCancel: "Cancel",
-    designBlockRequest: (desc, page) => `/design-block ${desc}\nPage: ${page}`,
+    designBlockRequest: (desc, page, refs) => `/design-block ${desc}\nPage: ${page}` + (refs && refs.length ? `\nReferences (inspiration only, in .thinkany/references; digest at .thinkany/references/digest.md): ${refs.map((r) => `${r.id} (${r.name})`).join(", ")}` : ""),
+    designBlockRefs: "Add reference images…",
+    designBlockRefsHint: "Optional. Images or PDFs the new section can take inspiration from; the design's own colours, type and rhythm still apply. Drop files here or use the button.",
+    designBlockRefsPhone: "Send from your phone",
+    designBlockRefsReading: "Reading the references…",
+    designBlockRefRemove: "Remove",
     // What the chat shows for that request (the command itself stays out of view).
     designBlockEcho: (desc, page) => `Design a new block for the ${page} page: ${desc}`,
     editContent: "Edit content",
@@ -717,7 +725,7 @@ window.COPY = {
     navLabel: "Link Text",
     navHref: "URL",
     navHrefHint: "Type a URL, or open the list to choose from the project’s pages, posts, content and home-page sections.",
-    navGroups: { pages: "Pages", sections: "Home page sections", posts: "Posts", types: "Content", indexes: "Content indexes" },
+    navGroups: { pages: "Pages", sections: "Home page sections", posts: "Posts", types: "Content", indexes: "Content indexes", files: "Files" },
     addLink: "+ Add link",
     addSubLink: "+ Sub-link",
     subLinks: "Sub-links",
@@ -942,6 +950,10 @@ window.COPY = {
       lead: "Images in this project. Pick one, or add files from your computer.",
       upload: "Add images…",
       fromPhone: "From your phone…",
+      uploadFiles: "Add files…",
+      uploadFilesNote: "Files are kept exactly as uploaded and served at /files/. PDF, Word, Excel, PowerPoint, CSV, text, ZIP, audio and video.",
+      emptyFiles: "No files yet. Add some to get started.",
+      fileDetailNoPreview: "No preview for this kind of file.",
       folders: {
         heading: "Folders",
         desc: "Folders are the tags: an image sits in every folder it's tagged with. Drag an image onto a folder to file it.",

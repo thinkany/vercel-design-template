@@ -271,12 +271,28 @@
       .media-folder .acts .site-mini { padding: 2px 5px; }
       .media-folder input.field { margin: 0; padding: 3px 6px; font-size: 12px; }
       .media-tile.dragging { opacity: .5; }
+      /* "Design a new block" references: a drop zone with the add buttons and the attached files as chips. */
+      .design-block-refs { margin: 8px 0; padding: 10px 12px; border: 1px dashed #d6d6de; border-radius: 10px; background: #fafafb; }
+      .design-block-refs.drag { border-color: #111; background: #f0f0f4; }
+      .design-block-refs .tagchips { margin-top: 8px; }
       /* Redirects modal: the add row and the list. */
       .redirect-add { display: grid; grid-template-columns: 180px 1fr 1fr auto; gap: 8px; align-items: end; margin: 6px 0 14px; }
       .redirect-add .site-kv { margin: 0; }
       .redirect-row { display: grid; grid-template-columns: 180px 1fr 1fr auto; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid #e2e2e8; border-radius: 8px; margin-bottom: 6px; font-size: 12.5px; }
       .redirect-row .path { font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-all; }
       .redirect-row .type { color: #505056; }
+      /* Images | Files switch at the top of the Media tab. */
+      .media-kinds { display: inline-flex; border: 1px solid #d6d6de; border-radius: 8px; overflow: hidden; margin: 8px 0 4px; }
+      .media-kinds button { border: 0; background: #fff; color: #444; font: inherit; font-size: 12.5px; padding: 6px 14px; cursor: pointer; }
+      .media-kinds button + button { border-left: 1px solid #d6d6de; }
+      .media-kinds button.on { background: #111; color: #fff; }
+      /* A file tile: a type badge where the thumbnail would be. */
+      .media-tile .file-badge { aspect-ratio: 4 / 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: #f4f4f7; color: #505056; }
+      .media-tile .file-badge svg { width: 34px; height: 34px; stroke: currentColor; fill: none; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+      .media-tile .file-badge .ext { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+      .media-detail .file-preview { display: flex; flex-direction: column; align-items: center; gap: 12px; color: #505056; font-size: 13px; }
+      .media-detail .file-preview svg { width: 72px; height: 72px; stroke: currentColor; fill: none; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
+      .media-detail embed.file-embed { width: 100%; height: 100%; border: 0; border-radius: 8px; background: #fff; }
       .site-media-bar { display: flex; gap: 8px; align-items: center; margin: 8px 0 6px; }
       .site-media-bar .field { flex: 1; }
       .media-meta .muted { font-size: 10.5px; }

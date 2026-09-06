@@ -3176,19 +3176,57 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
     const dzForm = siteEl("div"); dzForm.hidden = true; dzForm.style.cssText = "margin-top:8px;";
     dzForm.appendChild(siteEl("div", "sess-desc", COPY.site.designBlockPrompt));
     const dzIn = document.createElement("textarea"); dzIn.className = "field"; dzIn.placeholder = COPY.site.designBlockPlaceholder; dzIn.style.minHeight = "56px";
+    // References: images or PDFs as inspiration for the section (the design's own
+    // language still applies). They go through the references store + ingest, and the
+    // request names them so the skill reads exactly those.
+    const dzRefs = []; // { id, name }
+    const dzDrop = siteEl("div", "design-block-refs");
+    const dzDropText = siteEl("div", "sess-desc", COPY.site.designBlockRefsHint); dzDropText.style.margin = "0 0 6px";
+    const dzRefRow = siteEl("div"); dzRefRow.style.cssText = "display:flex;gap:6px;align-items:center;flex-wrap:wrap;";
+    const dzRefBtn = siteEl("button", "panelbtn", COPY.site.designBlockRefs); dzRefBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+    const dzPhone = siteEl("button", "site-link", COPY.site.designBlockRefsPhone); dzPhone.type = "button";
+    const dzRefList = siteEl("div", "tagchips");
+    const dzPhoneHost = siteEl("div");
+    dzRefRow.append(dzRefBtn, dzPhone); dzDrop.append(dzDropText, dzRefRow, dzRefList, dzPhoneHost);
+    const paintRefs = () => {
+      dzRefList.innerHTML = "";
+      dzRefs.forEach((r) => {
+        const chip = siteEl("span", "tagchip", r.name);
+        const x = document.createElement("button"); x.type = "button"; x.title = COPY.site.designBlockRefRemove; x.setAttribute("aria-label", COPY.site.designBlockRefRemove);
+        x.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+        x.addEventListener("click", async () => { await window.desktop.removeReference(r.id).catch(() => {}); dzRefs.splice(dzRefs.indexOf(r), 1); paintRefs(); });
+        chip.appendChild(x); dzRefList.appendChild(chip);
+      });
+    };
+    const takeRefs = (res) => { if (!res || !res.ok) return; handleRefResult(res); (res.added || []).forEach((a) => { if (!dzRefs.some((r) => r.id === a.id)) dzRefs.push({ id: a.id, name: a.name || a.file || a.id }); }); paintRefs(); };
+    dzRefBtn.addEventListener("click", async () => takeRefs(await window.desktop.addReferences()));
+    ["dragenter", "dragover"].forEach((t) => dzDrop.addEventListener(t, (e) => { e.preventDefault(); e.stopPropagation(); dzDrop.classList.add("drag"); }));
+    ["dragleave", "drop"].forEach((t) => dzDrop.addEventListener(t, (e) => { e.preventDefault(); e.stopPropagation(); dzDrop.classList.remove("drag"); }));
+    dzDrop.addEventListener("drop", async (e) => { const paths = []; for (const f of [...(e.dataTransfer?.files || [])]) { const src = window.desktop.pathForFile(f); if (src) paths.push(src); } if (paths.length) takeRefs(await window.desktop.addReferencePaths(paths)); });
+    let dzPhoneOpen = null;
+    dzPhone.addEventListener("click", async () => {
+      if (dzPhoneOpen) { dzPhoneOpen.close(); return; }
+      dzPhone.disabled = true;
+      dzPhoneOpen = await phonePanel({ target: "references", title: COPY.intake.uploadFromPhone, lead: COPY.intake.uploadFromPhoneLead, receivedText: COPY.intake.uploadFromPhoneReceived, onReceived: (payload) => takeRefs({ ok: true, added: payload.added || [], skipped: payload.skipped || [], assets: payload.assets, digest: payload.digest }), onClose: () => { dzPhoneOpen = null; dzPhone.disabled = false; } });
+      dzPhone.disabled = false; dzPhoneHost.appendChild(dzPhoneOpen.el);
+    });
     const dzRow = siteEl("div"); dzRow.style.cssText = "display:flex;gap:8px;align-items:center;";
     const dzGo = siteEl("button", "panelbtn primary", COPY.site.designBlockGo); dzGo.style.cssText = "margin:0;width:auto;";
     const dzNo = siteMini(COPY.site.designBlockCancel, () => { dzForm.hidden = true; });
-    dzRow.append(dzGo, dzNo); dzForm.append(dzIn, dzRow);
+    const dzNote = siteEl("span", "sess-desc"); dzNote.style.margin = "0";
+    dzRow.append(dzGo, dzNo, dzNote); dzForm.append(dzIn, dzDrop, dzRow);
     dzBtn.addEventListener("click", () => { dzForm.hidden = !dzForm.hidden; if (!dzForm.hidden) dzIn.focus(); });
-    dzGo.addEventListener("click", () => {
+    dzGo.addEventListener("click", async () => {
       // Strip a page suffix someone typed or pasted ("(add it to the … page)", "Page: …")
       // so the request carries the page exactly once.
       const desc = dzIn.value.trim().replace(/\s*\(add it to the [^)]*page\)?\s*/gi, " ").replace(/\n?\s*Page:\s*.+$/i, "").trim();
       if (!desc) return;
+      // References still being read (the vision pass) → wait so the digest is whole.
+      if (dzRefs.length && refsAnalyzing) { dzGo.disabled = true; dzNote.textContent = COPY.site.designBlockRefsReading; await waitForIngest(); dzGo.disabled = false; dzNote.textContent = ""; }
+      if (dzPhoneOpen) dzPhoneOpen.close();
       closeModal();
       // The command goes to Claude; the chat echoes a plain sentence.
-      runAgent(COPY.site.designBlockRequest(desc, page.title), COPY.site.designBlockEcho(desc, page.title));
+      runAgent(COPY.site.designBlockRequest(desc, page.title, dzRefs), COPY.site.designBlockEcho(desc, page.title));
     });
     dz.append(dzBtn, dzForm);
     addRow.appendChild(sel); bf.body.appendChild(addRow); bf.body.appendChild(dz);
@@ -3966,7 +4004,9 @@ async function phonePanel({ target, title, lead, note, receivedText, onReceived,
 function mediaTile(it, { selected = false, onSelect, onOpen, onRenamed, onDeleted } = {}) {
   const M = COPY.site.media;
   const tile = siteEl("div", "media-tile" + (selected ? " active" : "")); tile.tabIndex = 0; tile.setAttribute("role", "button");
-  const img = document.createElement("img"); img.src = it.file; img.alt = it.name; img.loading = "lazy";
+  let img;
+  if (it.kind === "file") { img = siteEl("div", "file-badge"); img.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6"/></svg>'; img.appendChild(siteEl("span", "ext", it.ext || "")); }
+  else { img = document.createElement("img"); img.src = it.file; img.alt = it.name; img.loading = "lazy"; }
   const meta = siteEl("div", "media-meta");
   const nameEl = siteEl("div", "", it.name);
   meta.appendChild(nameEl);
@@ -3987,7 +4027,7 @@ function mediaTile(it, { selected = false, onSelect, onOpen, onRenamed, onDelete
       if (!renaming) return; renaming = false;
       const want = inp.value.trim();
       if (!commit || !want || want + ext === it.name) { nameEl.textContent = it.name; return; }
-      const r = await window.desktop.renameMedia(it.rel, want + ext);
+      const r = await window.desktop.renameMedia(it.rel, want + ext, it.kind);
       if (r && r.ok) { it.rel = r.rel; it.url = r.url; it.name = r.renamedTo; it.file = it.file.replace(/[^/]+$/, encodeURIComponent(r.renamedTo)); nameEl.textContent = it.name; if (onRenamed) onRenamed(r); }
       else { nameEl.textContent = it.name; alert((r && r.error) || "Couldn't rename it."); }
     };
@@ -4000,7 +4040,7 @@ function mediaTile(it, { selected = false, onSelect, onOpen, onRenamed, onDelete
   delBtn.addEventListener("click", async (e) => {
     e.stopPropagation();
     if (!(await askConfirm({ title: COPY.site.deleteTitle, message: M.deleteConfirm(it.name), okLabel: M.delete, danger: true }))) return;
-    const r = await window.desktop.deleteMedia(it.rel); // moves to Trash (Settings)
+    const r = await window.desktop.deleteMedia(it.rel, it.kind); // moves to Trash (Settings)
     if (r && r.ok && onDeleted) onDeleted();
   });
   if (onSelect) {
@@ -4086,10 +4126,14 @@ function openMediaDetail(it, { allTags, onTags, onClose } = {}) {
   fields.appendChild(ro(D.name, it.name));
   fields.appendChild(ro(D.size, (it.width ? M.dims(it.width, it.height) + " · " : "") + Math.max(1, Math.round(it.size / 1024)) + " KB"));
   fields.appendChild(ro(D.path, it.url));
-  const combo = tagCombo({ tags: it.tags || [], allTags, onChange: async (tags) => { const r = await window.desktop.setMediaTags(it.rel, tags); if (r && r.ok) { it.tags = r.tags; if (onTags) onTags(it); } } });
+  const combo = tagCombo({ tags: it.tags || [], allTags, onChange: async (tags) => { const r = await window.desktop.setMediaTags(it.rel, tags, it.kind); if (r && r.ok) { it.tags = r.tags; if (onTags) onTags(it); } } });
   fields.appendChild(combo.wrap);
   const pv = siteEl("div", "blockedit-preview");
-  const img = document.createElement("img"); img.src = it.file; img.alt = it.name; pv.appendChild(img);
+  if (it.kind === "file") {
+    // PDFs render inline (Chromium's viewer); anything else gets a type badge.
+    if (it.ext === "pdf") { const em = document.createElement("embed"); em.className = "file-embed"; em.type = "application/pdf"; em.src = it.file + "#toolbar=0"; pv.appendChild(em); }
+    else { const fp = siteEl("div", "file-preview"); fp.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6"/></svg>'; fp.appendChild(siteEl("span", "", (it.ext || "").toUpperCase() + " · " + M.fileDetailNoPreview)); pv.appendChild(fp); }
+  } else { const img = document.createElement("img"); img.src = it.file; img.alt = it.name; pv.appendChild(img); }
   body.append(fields, pv); card.append(head, body); ov.appendChild(card);
   const close = () => { ov.remove(); document.removeEventListener("keydown", onKey, true); if (onClose) onClose(); };
   const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
@@ -4105,6 +4149,12 @@ function openMediaDetail(it, { allTags, onTags, onClose } = {}) {
 // with; dragging a tile onto a folder adds that tag.
 async function renderSiteMedia(body) {
   const M = COPY.site.media; const F = M.folders;
+  // Images | Files: two libraries, each with its own folders (tags never cross).
+  if (!siteRailState.mediaKind) siteRailState.mediaKind = "image";
+  const kind = siteRailState.mediaKind; const isFiles = kind === "file";
+  const kinds = siteEl("div", "media-kinds");
+  ["image", "file"].forEach((k) => { const b = document.createElement("button"); b.type = "button"; b.className = k === kind ? "on" : ""; b.textContent = COPY.site.mediaKinds[k]; b.addEventListener("click", () => { if (k === kind) return; siteRailState.mediaKind = k; siteRailState.mediaFolder = null; body.innerHTML = ""; renderSiteMedia(body); }); kinds.appendChild(b); });
+  body.appendChild(kinds);
   const cols = siteEl("div", "site-cols"); const left = siteEl("div"); const right = siteEl("div", "site-detail"); cols.append(left, right); body.appendChild(cols);
   if (!("mediaFolder" in siteRailState)) siteRailState.mediaFolder = null; // null = all, "__untagged", or a tag
   let items = []; let tags = []; let filter = ""; let phone = null; let dragging = null;
@@ -4118,7 +4168,7 @@ async function renderSiteMedia(body) {
   const addRow = siteEl("div"); addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:4px 0 14px;";
   const addIn = document.createElement("input"); addIn.className = "field"; addIn.placeholder = F.addPlaceholder; addIn.style.marginBottom = "0";
   const addBtn = siteEl("button", "panelbtn", F.add); addBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
-  const addFolder = async () => { const v = addIn.value.trim(); if (!v) return; const r = await window.desktop.addMediaTag(v); if (r && r.ok) { addIn.value = ""; siteRailState.mediaFolder = r.tag; await loadTags(); paintFolders(); paintGrid(); } };
+  const addFolder = async () => { const v = addIn.value.trim(); if (!v) return; const r = await window.desktop.addMediaTag(v, kind); if (r && r.ok) { addIn.value = ""; siteRailState.mediaFolder = r.tag; await loadTags(); paintFolders(); paintGrid(); } };
   addBtn.addEventListener("click", addFolder); addIn.addEventListener("keydown", (e) => { if (e.key === "Enter") addFolder(); });
   addRow.append(addIn, addBtn); left.appendChild(addRow);
 
@@ -4132,7 +4182,7 @@ async function renderSiteMedia(body) {
       acts.appendChild(siteMini("✎", (e) => {
         e.stopPropagation();
         const inp = document.createElement("input"); inp.className = "field"; inp.value = tag;
-        const finish = async (commit) => { if (!inp.isConnected) return; const v = inp.value.trim(); inp.replaceWith(name); if (!commit || !v || v === tag) return; const r = await window.desktop.renameMediaTag(tag, v); if (r && r.ok) { if (siteRailState.mediaFolder === tag) siteRailState.mediaFolder = r.tag; await load(); } };
+        const finish = async (commit) => { if (!inp.isConnected) return; const v = inp.value.trim(); inp.replaceWith(name); if (!commit || !v || v === tag) return; const r = await window.desktop.renameMediaTag(tag, v, kind); if (r && r.ok) { if (siteRailState.mediaFolder === tag) siteRailState.mediaFolder = r.tag; await load(); } };
         inp.addEventListener("keydown", (ev) => { ev.stopPropagation(); if (ev.key === "Enter") finish(true); else if (ev.key === "Escape") finish(false); });
         inp.addEventListener("blur", () => finish(true)); inp.addEventListener("click", (ev) => ev.stopPropagation());
         name.replaceWith(inp); inp.focus(); inp.select();
@@ -4140,7 +4190,7 @@ async function renderSiteMedia(body) {
       acts.appendChild(siteTrashBtn(async (e) => {
         e.stopPropagation();
         if (!(await askConfirm({ title: F.remove, message: F.removeConfirm(tag, count), okLabel: F.remove, danger: true }))) return;
-        const r = await window.desktop.deleteMediaTag(tag); if (r && r.ok) { if (siteRailState.mediaFolder === tag) siteRailState.mediaFolder = null; await load(); }
+        const r = await window.desktop.deleteMediaTag(tag, kind); if (r && r.ok) { if (siteRailState.mediaFolder === tag) siteRailState.mediaFolder = null; await load(); }
       }, F.remove));
       row.appendChild(acts);
       // Drop an image here to tag it.
@@ -4149,7 +4199,7 @@ async function renderSiteMedia(body) {
       row.addEventListener("drop", async (e) => {
         e.preventDefault(); row.classList.remove("drop"); const it = dragging; dragging = null; if (!it) return;
         if ((it.tags || []).some((t) => same(t, tag))) return;
-        const r = await window.desktop.setMediaTags(it.rel, [...(it.tags || []), tag]);
+        const r = await window.desktop.setMediaTags(it.rel, [...(it.tags || []), tag], kind);
         if (r && r.ok) { it.tags = r.tags; paintFolders(); paintGrid(); }
       });
     }
@@ -4163,20 +4213,20 @@ async function renderSiteMedia(body) {
   };
 
   // ── Library ──
-  right.appendChild(siteEl("div", "sess-desc", COPY.site.mediaTabDesc));
+  right.appendChild(siteEl("div", "sess-desc", isFiles ? COPY.site.mediaFilesDesc : COPY.site.mediaTabDesc));
   const bar = siteEl("div", "site-media-bar");
   const filterIn = document.createElement("input"); filterIn.className = "field"; filterIn.placeholder = M.filter; filterIn.style.marginBottom = "0";
-  const upBtn = siteEl("button", "panelbtn", M.upload); upBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
-  const phoneBtn = siteEl("button", "panelbtn", M.fromPhone); phoneBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+  const upBtn = siteEl("button", "panelbtn", isFiles ? M.uploadFiles : M.upload); upBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+  const phoneBtn = siteEl("button", "panelbtn", M.fromPhone); phoneBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;"; phoneBtn.hidden = isFiles; // photos only
   bar.append(filterIn, upBtn, phoneBtn); right.appendChild(bar);
-  const note = siteEl("div", "sess-desc", M.uploadNote); right.appendChild(note);
+  const note = siteEl("div", "sess-desc", isFiles ? M.uploadFilesNote : M.uploadNote); right.appendChild(note);
   const phoneHost = siteEl("div"); right.appendChild(phoneHost);
   const gridHost = siteEl("div"); right.appendChild(gridHost);
   const paintGrid = () => {
     gridHost.innerHTML = "";
-    if (!items.length) { gridHost.appendChild(siteEl("div", "muted", M.empty)); return; }
+    if (!items.length) { gridHost.appendChild(siteEl("div", "muted", isFiles ? M.emptyFiles : M.empty)); return; }
     const shown = items.filter(inFolder).filter((it) => !filter || it.name.toLowerCase().includes(filter) || (it.tags || []).some((t) => t.toLowerCase().includes(filter)));
-    if (!shown.length) { gridHost.appendChild(siteEl("div", "sess-desc", siteRailState.mediaFolder ? F.emptyFolder : M.empty)); return; }
+    if (!shown.length) { gridHost.appendChild(siteEl("div", "sess-desc", siteRailState.mediaFolder ? F.emptyFolder : (isFiles ? M.emptyFiles : M.empty))); return; }
     const grid = siteEl("div", "media-grid");
     shown.forEach((it) => {
       const tile = mediaTile(it, {
@@ -4191,13 +4241,13 @@ async function renderSiteMedia(body) {
     });
     gridHost.appendChild(grid);
   };
-  const loadTags = async () => { tags = ((await window.desktop.getMediaTags().catch(() => ({ tags: [] }))).tags) || []; if (siteRailState.mediaFolder && siteRailState.mediaFolder !== "__untagged" && !tags.some((t) => same(t, siteRailState.mediaFolder))) siteRailState.mediaFolder = null; };
-  const load = async () => { items = await window.desktop.listMedia().catch(() => []); mediaIndex = items; await loadTags(); paintFolders(); paintGrid(); };
+  const loadTags = async () => { tags = ((await window.desktop.getMediaTags(kind).catch(() => ({ tags: [] }))).tags) || []; if (siteRailState.mediaFolder && siteRailState.mediaFolder !== "__untagged" && !tags.some((t) => same(t, siteRailState.mediaFolder))) siteRailState.mediaFolder = null; };
+  const load = async () => { items = await window.desktop.listMedia(kind).catch(() => []); if (!isFiles) mediaIndex = items; await loadTags(); paintFolders(); paintGrid(); };
   filterIn.addEventListener("input", () => { filter = filterIn.value.trim().toLowerCase(); paintGrid(); });
   upBtn.addEventListener("click", async () => {
-    upBtn.disabled = true; upBtn.textContent = M.uploading;
-    const r = await window.desktop.uploadMedia();
-    upBtn.disabled = false; upBtn.textContent = M.upload;
+    const label = upBtn.textContent; upBtn.disabled = true; upBtn.textContent = M.uploading;
+    const r = await (isFiles ? window.desktop.uploadFiles() : window.desktop.uploadMedia());
+    upBtn.disabled = false; upBtn.textContent = label;
     if (r && r.ok && r.added && r.added.length) await load();
   });
   phoneBtn.addEventListener("click", async () => {
@@ -4553,6 +4603,7 @@ function siteLinkOptions(data, posts, ctx) {
   const blog = "/" + ((data.site && data.site.blogPath) || "blog");
   if (posts.length) out.push({ group: "posts", label: COPY.site.tabs.posts, href: blog });
   posts.filter((p) => !p.draft).forEach((p) => out.push({ group: "posts", label: p.title, href: blog + "/" + (p.slug || p.id) }));
+  (ctx.files || []).forEach((f) => out.push({ group: "files", label: f.name, href: f.url }));
   ctx.types.forEach((t) => {
     if (t.index) out.push({ group: "indexes", label: t.label, href: t.path });
     (ctx.entries[t.key] || []).forEach((e) => out.push({ group: "types", label: `${e.title} (${t.singular || t.label})`, href: `${t.path}/${e.slug || e.id}` }));
@@ -5272,7 +5323,8 @@ async function renderSite(body) {
   const delivery = await window.desktop.getFormsDelivery().catch(() => ({ provider: "", from: "", hasKey: false, ready: false }));
   const configured = data.site && data.site.url && !/example\.com/.test(data.site.url) ? data.site.url : null;
   const siteUrl = (data.liveUrl || configured || COPY.site.siteUrlPlaceholder).replace(/\/$/, "");
-  const ctx = { types: typesData.types || [], entries: typesData.entries || {}, blocks: data.blocks, forms: siteForms, pages: data.pages, delivery, siteUrl };
+  const siteFiles = await window.desktop.listMedia("file").catch(() => []); // the link picker's Files group
+  const ctx = { types: typesData.types || [], entries: typesData.entries || {}, blocks: data.blocks, forms: siteForms, pages: data.pages, delivery, siteUrl, files: siteFiles };
   mediaIndex = await window.desktop.listMedia().catch(() => []); // thumbnails for image fields
   siteMarks = data.marks || {};
   siteBlogPath = (data.site && data.site.blogPath) || "blog";
