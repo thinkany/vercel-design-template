@@ -599,6 +599,16 @@ window.COPY = {
           { h: "Manage", items: ["Hover an image for <b>Rename</b> and <b>Delete</b>. A renamed image keeps its extension; a name already in use gets a number added, and every page using it is updated to match.", "Deleting moves the image to the Trash in Settings, restorable for 30 days. Pages using it show a broken image until it's restored or replaced.", "<b>Filter by name</b> narrows the grid."] },
         ],
       },
+      redirects: {
+        title: "Redirects",
+        intro: "A redirect sends a visitor, and a search engine, from an old address on this site to a new one. Use one whenever a page moves, is renamed or is retired, so old links and search results still land somewhere useful.",
+        sections: [
+          { h: "Types", items: ["<b>301 Permanent</b>: the page has moved for good. Search engines pass the old page's ranking to the new address. The default, and right for almost every case.", "<b>302 Temporary</b>: the page is elsewhere for now and will come back. Search engines keep the old address in their index.", "<b>307</b> and <b>308</b> are the temporary and permanent variants that also keep the request method (a form submission stays a submission). Rare on a marketing site; use them only when a developer asks for them."] },
+          { h: "Addresses", items: ["<b>Old address</b> is a path on this site, like <i>/old-page</i>. Full URLs are reduced to their path.", "<b>Redirect to</b> is a path on this site, like <i>/new-page</i>, or a full address elsewhere starting with <i>https://</i>.", "Each old address can appear once, and it can't point at itself."] },
+          { h: "Import", items: ["<b>Redirection</b> (WordPress plugin): Tools → Redirection → Import/Export, export as JSON or CSV, then import the file here.", "<b>Yoast SEO Premium</b>: SEO → Redirects → Export, download the CSV, then import it here.", "<b>Spreadsheet</b>: save as CSV with the old address in one column and the new in the next, and an optional type column (301, 302, 307 or 308). Headings such as <i>Old URL</i> / <i>New URL</i> or <i>source</i> / <i>target</i> are recognised; without headings the first three columns are used.", "Regex rules and 410 / 451 “gone” entries can't be expressed here and are skipped; the result line says how many. Old addresses already in the list are left as they are."] },
+          { h: "When they take effect", items: ["The local preview honours redirects as soon as they're saved. The published site picks them up on the next publish."] },
+        ],
+      },
       forms: {
         title: "Forms",
         intro: "Forms visitors fill in: a contact form, a quote request, a sign-up. Define the form here, then put it on a page with the Form block.",
@@ -900,7 +910,8 @@ window.COPY = {
         saved: "Saved",
         close: "Done",
         import: "Import…",
-        importHint: "A Redirection plugin export (JSON or CSV), a Yoast Premium CSV export, or a spreadsheet saved as CSV with old and new addresses in two columns and, optionally, a type.",
+        importHint: "Import from Redirection, Yoast or a CSV",
+        help: "About redirects and importing",
         imported: (n, dup, skipped) => `${n === 1 ? "1 redirect" : `${n} redirects`} imported${dup ? `, ${dup} already listed` : ""}${skipped ? `, ${skipped} skipped (regex rules or gone codes)` : ""}.`,
         importedNone: "Nothing to import from that file.",
       },

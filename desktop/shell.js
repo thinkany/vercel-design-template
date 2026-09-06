@@ -5102,12 +5102,16 @@ function openRedirectsModal(initial, onChange) {
   const R = COPY.site.settings.redirects;
   let list = JSON.parse(JSON.stringify(initial || []));
   const ov = siteEl("div", "blockedit");
-  const card = siteEl("div", "blockedit-card"); card.style.maxWidth = "980px";
+  const card = siteEl("div", "blockedit-card");
   const head = siteEl("div", "blockedit-head");
   head.appendChild(siteEl("div", "blockedit-title", R.title));
   const acts = siteEl("div", "blockedit-acts");
+  // "?" → the help overlay's Redirects entry (types, addresses, import formats).
+  const helpBtn = siteEl("button", "site-tabs-help"); helpBtn.type = "button"; helpBtn.title = R.help; helpBtn.setAttribute("aria-label", R.help);
+  helpBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/><circle cx="12" cy="12" r="4"/></svg>';
+  helpBtn.addEventListener("click", () => openCmsHelp("redirects"));
   const done = siteEl("button", "panelbtn", R.close); done.style.cssText = "margin:0;width:auto;";
-  acts.appendChild(done); head.appendChild(acts);
+  acts.append(helpBtn, done); head.appendChild(acts);
   const body = siteEl("div", "blockedit-fields"); body.style.cssText = "flex:1;overflow:auto;padding:16px 20px;";
   body.appendChild(siteEl("div", "sess-desc", R.intro));
   // Add row
