@@ -594,6 +594,7 @@ window.COPY = {
         intro: "The project's image library: everything under the images folder, which is what every image field picks from.",
         sections: [
           { h: "Add images", items: ["<b>Add images…</b> picks files from your computer; <b>From your phone…</b> shows a code your phone scans to send photos over Wi‑Fi.", "Added images are optimised for the web automatically (AVIF, up to 2400px wide). SVG, GIF and AVIF files are kept as they are."] },
+          { h: "Folders and tags", items: ["Folders are tags: an image sits in every folder it's tagged with, and <b>New folder</b> makes a tag. Drag an image onto a folder to file it, or click an image and add tags in its detail view; tags save as you add them.", "Rename or delete a folder from its hover controls; the change applies to every image carrying the tag, and deleting a folder never deletes images."] },
           { h: "Manage", items: ["Hover an image for <b>Rename</b> and <b>Delete</b>. A renamed image keeps its extension; a name already in use gets a number added, and every page using it is updated to match.", "Deleting moves the image to the Trash in Settings, restorable for 30 days. Pages using it show a broken image until it's restored or replaced.", "<b>Filter by name</b> narrows the grid."] },
         ],
       },
