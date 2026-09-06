@@ -1499,7 +1499,7 @@ function readSiteContent(dir) {
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
     licensed: siteLicensed(), // the CMS drawer shows a licensing note instead of the editor when false
-    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), siteNameDefault: readProjectEnv(dir).VITE_CLIENT_NAME || path.basename(dir), logos: logosSetting(dir, site), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, scripts: { gtm: (site.scripts && site.scripts.gtm) || "", extra: Array.isArray(site.scripts && site.scripts.extra) ? site.scripts.extra : [] }, seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
+    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), siteNameDefault: readProjectEnv(dir).VITE_CLIENT_NAME || path.basename(dir), logos: logosSetting(dir, site), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, scripts: { gtm: (site.scripts && site.scripts.gtm) || "", extra: Array.isArray(site.scripts && site.scripts.extra) ? site.scripts.extra : [] }, redirects: Array.isArray(site.redirects) ? site.redirects : [], seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
     pages, posts, ...(() => {
       const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {}, builtins: {} };
       const names = site.blockNames && typeof site.blockNames === "object" ? site.blockNames : {};
@@ -1808,6 +1808,99 @@ ipcMain.handle("site:saveScripts", (_e, { scripts } = {}) => {
   const next = { ...cur, scripts: { gtm: String(sc.gtm || "").trim(), extra } };
   try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, scripts: next.scripts }; }
   catch (e) { return { ok: false, error: e.message }; }
+});
+// Redirects (Settings): old path → new path or address, with the status code. Served by
+// Astro locally and by Vercel (the site's vercel.json) when published.
+const REDIRECT_TYPES = [301, 302, 307, 308];
+ipcMain.handle("site:saveRedirects", (_e, { redirects } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const seen = new Set(); const clean = [];
+  for (const r of Array.isArray(redirects) ? redirects : []) {
+    if (!r || typeof r !== "object") continue;
+    let from = String(r.from || "").trim(); const to = String(r.to || "").trim();
+    if (!from || !to) continue;
+    if (!from.startsWith("/")) from = "/" + from;
+    from = from.replace(/\/+$/, "") || "/";
+    if (!(to.startsWith("/") || /^https?:\/\//i.test(to))) return { ok: false, error: `"${to}" should be a path like /new-page or a full address starting with https://.` };
+    if (from === to) return { ok: false, error: `"${from}" would redirect to itself.` };
+    if (seen.has(from)) return { ok: false, error: `"${from}" is listed twice.` }; seen.add(from);
+    clean.push({ from, to, type: REDIRECT_TYPES.includes(Number(r.type)) ? Number(r.type) : 301 });
+  }
+  const p = path.join(siteContentDir(currentProject), "site.json");
+  const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
+  const next = { ...cur, redirects: clean };
+  if (!clean.length) delete next.redirects;
+  try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, redirects: clean }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+// Import redirects from a file: the Redirection plugin's JSON or CSV export, Yoast
+// Premium's CSV export, or a spreadsheet saved as CSV. Columns are found by heading
+// (source / from / origin / old …, target / to / destination / new …, code / type /
+// status); without headings the first three columns are taken as from, to, type.
+// Regex rules and "gone" codes (410, 451) are skipped and reported.
+function parseCsv(text) {
+  const rows = []; let row = []; let cell = ""; let q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; continue; }
+    if (c === '"') { q = true; continue; }
+    if (c === ",") { row.push(cell); cell = ""; continue; }
+    if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(cell); cell = ""; if (row.some((x) => x.trim())) rows.push(row); row = []; continue; }
+    cell += c;
+  }
+  row.push(cell); if (row.some((x) => x.trim())) rows.push(row);
+  return rows;
+}
+function importRedirectsText(text, name) {
+  const out = []; const skipped = [];
+  const push = (from, to, code, regex) => {
+    from = String(from || "").trim(); to = String(to || "").trim(); const type = Number(code) || 301;
+    if (!from) return;
+    if (regex) { skipped.push({ from, why: "regex" }); return; }
+    if (!REDIRECT_TYPES.includes(type)) { skipped.push({ from, why: `status ${type}` }); return; } // 410 / 451 "gone" rules have no target
+    if (!to) return;
+    try { if (/^https?:\/\//i.test(from)) from = new URL(from).pathname; } catch {}
+    if (!from.startsWith("/")) from = "/" + from;
+    out.push({ from, to, type });
+  };
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    const j = JSON.parse(trimmed);
+    const list = Array.isArray(j) ? j : Array.isArray(j.redirects) ? j.redirects : Array.isArray(j.items) ? j.items : [];
+    for (const r of list) {
+      if (!r || typeof r !== "object") continue;
+      const to = (r.action_data && (r.action_data.url || r.action_data.url_from)) || r.target || r.to || r.destination || "";
+      push(r.url || r.source || r.from || r.origin, to, r.action_code || r.code || r.type || r.status, !!r.regex || r.match_type === "regex" || r.format === "regex");
+    }
+    return { redirects: out, skipped, format: "json" };
+  }
+  const rows = parseCsv(text);
+  if (!rows.length) return { redirects: out, skipped, format: "csv" };
+  const head = rows[0].map((h) => h.trim().toLowerCase());
+  const find = (names) => head.findIndex((h) => names.some((n) => h === n || h.replace(/[^a-z]/g, "") === n.replace(/[^a-z]/g, "")));
+  const iFrom = find(["source", "from", "origin", "old", "old url", "old path", "url", "path", "request"]);
+  const iTo = find(["target", "to", "destination", "new", "new url", "new path", "redirect to", "redirect"]);
+  const iCode = find(["code", "type", "status", "status code", "http code", "action_code"]);
+  const iRegex = find(["regex", "format", "match_type", "match type"]);
+  const hasHeader = iFrom >= 0 && iTo >= 0;
+  const body = hasHeader ? rows.slice(1) : rows;
+  for (const r of body) {
+    const from = hasHeader ? r[iFrom] : r[0]; const to = hasHeader ? r[iTo] : r[1]; const code = hasHeader ? (iCode >= 0 ? r[iCode] : 301) : (r[2] || 301);
+    const rx = hasHeader && iRegex >= 0 ? /^(1|true|yes|regex)$/i.test(String(r[iRegex] || "").trim()) : false;
+    push(from, to, code, rx);
+  }
+  return { redirects: out, skipped, format: hasHeader ? "csv" : "csv-positional" };
+}
+ipcMain.handle("redirects:import", async () => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const res = await dialog.showOpenDialog(mainWindow, { title: "Import redirects", properties: ["openFile"], filters: [{ name: "Redirects (JSON or CSV)", extensions: ["json", "csv", "txt"] }] });
+  if (res.canceled || !res.filePaths[0]) return { ok: false, canceled: true };
+  try {
+    const r = importRedirectsText(fs.readFileSync(res.filePaths[0], "utf8"), path.basename(res.filePaths[0]));
+    return { ok: true, ...r, file: path.basename(res.filePaths[0]) };
+  } catch (e) { return { ok: false, error: `Couldn't read that file as redirects (${e.message}).` }; }
 });
 // Block display names (the Blocks tab): recognition in the CMS only.
 ipcMain.handle("site:saveBlockNames", (_e, { names } = {}) => {

@@ -220,6 +220,18 @@ async function deleteEnv(token, teamId, projectId, key) {
 // ---- Project + deployment ----------------------------------------------------
 // Reuse an existing project by name, else create one. Build settings mirror the
 // template's vercel.json (vercel.json in the uploaded files still wins at build).
+// Redirects (Settings → Redirects) from content/site.json, in Vercel's shape. A path
+// source with a path or absolute destination and the exact status the designer chose.
+function siteVercelRedirects(projectDir) {
+  try {
+    const site = JSON.parse(fs.readFileSync(path.join(projectDir, "content", "site.json"), "utf8"));
+    const list = (Array.isArray(site.redirects) ? site.redirects : [])
+      .filter((r) => r && typeof r.from === "string" && r.from.startsWith("/") && typeof r.to === "string" && r.to)
+      .map((r) => ({ source: r.from, destination: r.to, statusCode: [301, 302, 307, 308].includes(Number(r.type)) ? Number(r.type) : 301 }));
+    return list.length ? { redirects: list } : {};
+  } catch { return {}; }
+}
+
 // ---- The two deploy targets --------------------------------------------------
 // preview: the gated design preview (middleware.js gate, noindex), the default.
 // site:    the public website built from site/ (no gate, indexable). Its own Vercel
@@ -237,7 +249,8 @@ const TARGETS = {
     // above, nothing else. middleware.js (the gate) is left out of the upload entirely.
     // cleanUrls: Astro writes /blog.html (build.format "file", for extension-free
     // links); Vercel serves static files literally unless told to map /blog → it.
-    vercelJson: JSON.stringify({
+    vercelJson: (projectDir) => JSON.stringify({
+      ...siteVercelRedirects(projectDir),
       buildCommand: "npx astro build --root site",
       outputDirectory: "dist-site",
       installCommand: "pnpm install --no-frozen-lockfile",
@@ -466,7 +479,7 @@ async function publishProject({ token, teamId, projectDir, projectName, env, sit
     return { file: rel.split(path.sep).join("/"), sha: meta.sha, size: meta.size };
   });
   if (t.vercelJson) {
-    const meta = await uploadBuffer(token, teamId, Buffer.from(t.vercelJson, "utf8"));
+    const meta = await uploadBuffer(token, teamId, Buffer.from(t.vercelJson(projectDir), "utf8"));
     files.push({ file: "vercel.json", sha: meta.sha, size: meta.size });
   }
   emit("upload", "done", `${files.length} files`);

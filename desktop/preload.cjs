@@ -164,6 +164,8 @@ contextBridge.exposeInMainWorld("desktop", {
   setManageNav: (manageNav) => ipcRenderer.invoke("site:setManageNav", { manageNav }),
   setBlogPath: (path) => ipcRenderer.invoke("site:setBlogPath", { path }),
   saveSiteScripts: (scripts) => ipcRenderer.invoke("site:saveScripts", { scripts }),
+  saveSiteRedirects: (redirects) => ipcRenderer.invoke("site:saveRedirects", { redirects }),
+  importRedirects: () => ipcRenderer.invoke("redirects:import"),
   saveBlockNames: (names) => ipcRenderer.invoke("site:saveBlockNames", { names }),
   saveSiteLogos: (logos) => ipcRenderer.invoke("site:saveLogos", { logos }),
   getLlmsDefault: () => ipcRenderer.invoke("site:llmsDefault"),

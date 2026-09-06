@@ -90,7 +90,16 @@ function lastModified() {
 }
 const LASTMOD = lastModified();
 
+// Redirects (Settings → Redirects): Astro serves them in dev and writes redirect pages at
+// build; the published site's vercel.json (desktop/publish.cjs) carries the same list so
+// Vercel answers with the real status code.
+const REDIRECTS = {};
+for (const r of Array.isArray(siteJson.redirects) ? siteJson.redirects : []) {
+  if (r && typeof r.from === "string" && r.from.startsWith("/") && typeof r.to === "string" && r.to) REDIRECTS[r.from] = { status: [301, 302, 307, 308].includes(Number(r.type)) ? Number(r.type) : 301, destination: r.to };
+}
+
 export default defineConfig({
+  redirects: REDIRECTS,
   // The canonical public URL. Feeds the sitemap, canonical links and og:url.
   // SITE_URL in the environment wins (a Vercel env), then content/site.json's
   // `url`; the fallback keeps local builds working and is obviously wrong in output.

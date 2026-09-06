@@ -64,6 +64,8 @@ export const siteSchema = z.object({
     /** The verified sender, "Website <forms@client.com>". */
     from: z.string().default(""),
   }).default({ provider: "", from: "" }),
+  /** Redirects (Settings): an old path to a new path or address, with the status code. */
+  redirects: z.array(z.object({ from: z.string(), to: z.string(), type: z.number().default(301) })).default([]),
   /** CMS display names per block key (recognition only; the site doesn't use them). */
   blockNames: z.record(z.string()).default({}),
   /** The posts directory: posts are listed at /<path> and served at /<path>/<post>. */

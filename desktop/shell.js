@@ -5065,6 +5065,15 @@ async function renderSiteSettings(host, data, st) {
   touchCtl.appendChild(siteEl("div", "sess-desc", S.touchHint)); wrap.appendChild(touchCtl);
   wrap.appendChild(iconStatus);
 
+  // Redirects: a button into the modal where they're managed.
+  wrap.appendChild(siteEl("div", "drawer-sep"));
+  wrap.appendChild(siteEl("div", "sess-label", S.redirectsHeading));
+  wrap.appendChild(siteEl("div", "sess-desc", S.redirectsDesc));
+  const redirectsNote = siteEl("div", "sess-desc", S.redirectsCount((data.site.redirects || []).length));
+  const redirectsBtn = siteEl("button", "panelbtn", S.redirectsManage); redirectsBtn.style.cssText = "margin:0 0 6px;width:auto;";
+  redirectsBtn.addEventListener("click", () => openRedirectsModal(data.site.redirects || [], (list) => { data.site.redirects = list; redirectsNote.textContent = S.redirectsCount(list.length); }));
+  wrap.append(redirectsBtn, redirectsNote);
+
   wrap.appendChild(siteEl("div", "drawer-sep"));
   wrap.appendChild(siteEl("div", "sess-label", S.siteHeading));
   if (data.design) wrap.appendChild(siteEl("div", "sess-desc", S.designPinned(data.design)));
@@ -5085,6 +5094,79 @@ async function renderSiteSettings(host, data, st) {
   wrap.appendChild(siteEl("div", "drawer-sep"));
   wrap.appendChild(enableRow());
   siteAccordionize(wrap);
+}
+
+// The redirects modal (the expanded-content overlay's size): an add row, then the list.
+// Adding or removing saves straight away; onChange gets the saved list.
+function openRedirectsModal(initial, onChange) {
+  const R = COPY.site.settings.redirects;
+  let list = JSON.parse(JSON.stringify(initial || []));
+  const ov = siteEl("div", "blockedit");
+  const card = siteEl("div", "blockedit-card"); card.style.maxWidth = "980px";
+  const head = siteEl("div", "blockedit-head");
+  head.appendChild(siteEl("div", "blockedit-title", R.title));
+  const acts = siteEl("div", "blockedit-acts");
+  const done = siteEl("button", "panelbtn", R.close); done.style.cssText = "margin:0;width:auto;";
+  acts.appendChild(done); head.appendChild(acts);
+  const body = siteEl("div", "blockedit-fields"); body.style.cssText = "flex:1;overflow:auto;padding:16px 20px;";
+  body.appendChild(siteEl("div", "sess-desc", R.intro));
+  // Add row
+  const add = siteEl("div", "redirect-add");
+  const typeWrap = siteEl("div", "site-kv"); typeWrap.appendChild(siteEl("div", "k", R.type));
+  const type = document.createElement("select"); type.className = "field";
+  Object.entries(R.types).forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; type.appendChild(o); }); type.value = "301";
+  typeWrap.appendChild(type);
+  const from = siteField(R.from, "", { placeholder: R.fromPlaceholder }); const to = siteField(R.to, "", { placeholder: R.toPlaceholder });
+  const addBtn = siteEl("button", "panelbtn primary", R.add); addBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+  add.append(typeWrap, from.wrap, to.wrap, addBtn); body.appendChild(add);
+  const note = siteEl("div", "muted"); note.style.cssText = "font-size:12px;margin:-6px 0 10px;"; body.appendChild(note);
+  // Import: Redirection (JSON/CSV), Yoast (CSV) or a spreadsheet CSV; new addresses only.
+  const importBtn = siteEl("button", "panelbtn", R.import); importBtn.style.cssText = "margin:0;width:auto;";
+  importBtn.title = R.importHint;
+  importBtn.addEventListener("click", async () => {
+    importBtn.disabled = true;
+    const r = await window.desktop.importRedirects();
+    importBtn.disabled = false;
+    if (!r || r.canceled) return;
+    if (!r.ok) { note.textContent = r.error; note.style.color = "#e5484d"; return; }
+    const have = new Set(list.map((x) => x.from.toLowerCase()));
+    const fresh = []; let dup = 0;
+    for (const x of r.redirects) { if (have.has(x.from.toLowerCase())) { dup++; continue; } have.add(x.from.toLowerCase()); fresh.push(x); }
+    if (!fresh.length && !dup) { note.textContent = R.importedNone; note.style.color = ""; return; }
+    if (await save([...list, ...fresh])) { note.textContent = R.imported(fresh.length, dup, (r.skipped || []).length); note.style.color = ""; }
+  });
+  acts.prepend(importBtn);
+  const host = siteEl("div"); body.appendChild(host);
+  const save = async (next) => {
+    const r = await window.desktop.saveSiteRedirects(next);
+    if (r && r.ok) { list = r.redirects; note.textContent = ""; if (onChange) onChange(list); paint(); return true; }
+    note.textContent = (r && r.error) || "Couldn't save."; note.style.color = "#e5484d"; return false;
+  };
+  const paint = () => {
+    host.innerHTML = "";
+    if (!list.length) { host.appendChild(siteEl("div", "sess-desc", R.empty)); return; }
+    list.forEach((r, i) => {
+      const row = siteEl("div", "redirect-row");
+      row.append(siteEl("span", "type", R.types[r.type] || String(r.type)), siteEl("span", "path", r.from), siteEl("span", "path", r.to), siteTrashBtn(() => save(list.filter((_, j) => j !== i)), R.remove));
+      host.appendChild(row);
+    });
+  };
+  const doAdd = async () => {
+    const f = from.input.value.trim(), t = to.input.value.trim();
+    if (!f || !t) return;
+    if (await save([...list, { from: f, to: t, type: Number(type.value) }])) { from.input.value = ""; to.input.value = ""; from.input.focus(); }
+  };
+  addBtn.addEventListener("click", doAdd);
+  [from.input, to.input].forEach((inp) => inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doAdd(); } }));
+  card.append(head, body); ov.appendChild(card);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey, true); };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  done.addEventListener("click", close);
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  document.addEventListener("keydown", onKey, true);
+  document.body.appendChild(ov);
+  paint(); from.input.focus();
+  return { close };
 }
 
 async function renderTrash(S) {
