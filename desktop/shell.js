@@ -4011,6 +4011,95 @@ function mediaTile(it, { selected = false, onSelect, onOpen, onRenamed, onDelete
   return tile;
 }
 
+// The tag combo: a text field that lists the library's existing tags (minus the ones
+// already on this image) as you type, offers to add what you typed as a new tag, and
+// shows the chosen tags as chips on their own line. Every add or remove calls onChange.
+function tagCombo({ tags, allTags, onChange }) {
+  const D = COPY.site.media.detail;
+  const wrap = siteEl("div", "site-kv"); wrap.appendChild(siteEl("div", "k", D.tags));
+  const combo = siteEl("div", "tagcombo");
+  const input = document.createElement("input"); input.className = "field"; input.placeholder = D.tagsPlaceholder; input.autocomplete = "off";
+  const list = siteEl("div", "tagcombo-list"); list.hidden = true;
+  combo.append(input, list); wrap.appendChild(combo);
+  wrap.appendChild(siteEl("div", "sess-desc", D.tagsHint));
+  const chips = siteEl("div", "tagchips"); wrap.appendChild(chips);
+  let current = [...tags]; let hot = -1;
+  const has = (t) => current.some((x) => x.toLowerCase() === t.toLowerCase());
+  const paintChips = () => {
+    chips.innerHTML = "";
+    if (!current.length) { chips.appendChild(siteEl("span", "sess-desc", D.noTags)).style.margin = "0"; return; }
+    current.forEach((t) => {
+      const chip = siteEl("span", "tagchip", t);
+      const x = document.createElement("button"); x.type = "button"; x.title = D.removeTag; x.setAttribute("aria-label", D.removeTag);
+      x.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+      x.addEventListener("click", () => { current = current.filter((y) => y !== t); paintChips(); paintList(); onChange(current); });
+      chip.appendChild(x); chips.appendChild(chip);
+    });
+  };
+  const options = () => {
+    const q = input.value.trim().toLowerCase();
+    const existing = allTags.filter((t) => !has(t) && (!q || t.toLowerCase().includes(q)));
+    const typed = input.value.trim();
+    const isNew = typed && !has(typed) && !allTags.some((t) => t.toLowerCase() === typed.toLowerCase());
+    return { existing, typed, isNew };
+  };
+  const add = (t) => { const v = String(t || "").trim(); if (!v || has(v)) return; current.push(v); if (!allTags.some((x) => x.toLowerCase() === v.toLowerCase())) allTags.push(v); input.value = ""; hot = -1; paintChips(); paintList(); onChange(current); };
+  const paintList = () => {
+    const { existing, typed, isNew } = options();
+    list.innerHTML = "";
+    const rows = [];
+    if (isNew) rows.push({ label: D.addTag(typed), value: typed, cls: "new" });
+    existing.forEach((t) => rows.push({ label: t, value: t, cls: "" }));
+    if (!rows.length || document.activeElement !== input) { list.hidden = true; return; }
+    rows.forEach((r, i) => { const b = document.createElement("button"); b.type = "button"; b.className = r.cls + (i === hot ? " hot" : ""); b.textContent = r.label; b.addEventListener("mousedown", (e) => e.preventDefault()); b.addEventListener("click", () => add(r.value)); list.appendChild(b); });
+    list.hidden = false;
+  };
+  input.addEventListener("input", () => { hot = -1; paintList(); });
+  input.addEventListener("focus", paintList);
+  input.addEventListener("blur", () => setTimeout(() => { list.hidden = true; }, 120));
+  input.addEventListener("keydown", (e) => {
+    const rows = Array.from(list.querySelectorAll("button"));
+    if (e.key === "ArrowDown") { e.preventDefault(); hot = Math.min(rows.length - 1, hot + 1); paintList(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); hot = Math.max(-1, hot - 1); paintList(); }
+    else if (e.key === "Enter") { e.preventDefault(); if (hot >= 0 && rows[hot]) rows[hot].click(); else add(input.value); }
+    else if (e.key === "Escape") { list.hidden = true; }
+    else if (e.key === "Backspace" && !input.value && current.length) { current = current.slice(0, -1); paintChips(); paintList(); onChange(current); }
+  });
+  paintChips();
+  return { wrap, get: () => current };
+}
+
+// The image detail view (the Media tab): the picture large on the right, its details
+// and tags in a rail on the left. Tags autosave; rename is the tile's job.
+function openMediaDetail(it, { allTags, onTags, onClose } = {}) {
+  const M = COPY.site.media; const D = M.detail;
+  const ov = siteEl("div", "blockedit media-detail");
+  const card = siteEl("div", "blockedit-card");
+  const head = siteEl("div", "blockedit-head");
+  head.appendChild(siteEl("div", "blockedit-title", it.name));
+  const acts = siteEl("div", "blockedit-acts");
+  const done = siteEl("button", "panelbtn", D.close); done.style.cssText = "margin:0;width:auto;";
+  acts.appendChild(done); head.appendChild(acts);
+  const body = siteEl("div", "blockedit-body");
+  const fields = siteEl("div", "blockedit-fields");
+  const ro = (label, value) => { const w = siteEl("div", "site-kv"); w.appendChild(siteEl("div", "k", label)); w.appendChild(siteEl("div", "ro", value)); return w; };
+  fields.appendChild(ro(D.name, it.name));
+  fields.appendChild(ro(D.size, (it.width ? M.dims(it.width, it.height) + " · " : "") + Math.max(1, Math.round(it.size / 1024)) + " KB"));
+  fields.appendChild(ro(D.path, it.url));
+  const combo = tagCombo({ tags: it.tags || [], allTags, onChange: async (tags) => { const r = await window.desktop.setMediaTags(it.rel, tags); if (r && r.ok) { it.tags = r.tags; if (onTags) onTags(it); } } });
+  fields.appendChild(combo.wrap);
+  const pv = siteEl("div", "blockedit-preview");
+  const img = document.createElement("img"); img.src = it.file; img.alt = it.name; pv.appendChild(img);
+  body.append(fields, pv); card.append(head, body); ov.appendChild(card);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey, true); if (onClose) onClose(); };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  done.addEventListener("click", close);
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  document.addEventListener("keydown", onKey, true);
+  document.body.appendChild(ov);
+  return { close };
+}
+
 // The Media tab: the whole library, with add, from-phone, filter, rename and delete.
 async function renderSiteMedia(body) {
   const M = COPY.site.media;
@@ -4027,10 +4116,12 @@ async function renderSiteMedia(body) {
   let items = []; let filter = ""; let phone = null;
   const paint = () => {
     gridHost.innerHTML = "";
-    const shown = items.filter((it) => !filter || it.name.toLowerCase().includes(filter));
+    const shown = items.filter((it) => !filter || it.name.toLowerCase().includes(filter) || (it.tags || []).some((t) => t.toLowerCase().includes(filter)));
     if (!items.length) { gridHost.appendChild(siteEl("div", "muted", M.empty)); return; }
     const grid = siteEl("div", "media-grid");
+    const allTags = () => { const set = new Map(); items.forEach((x) => (x.tags || []).forEach((t) => set.set(t.toLowerCase(), t))); return Array.from(set.values()).sort((a, b) => a.localeCompare(b)); };
     shown.forEach((it) => grid.appendChild(mediaTile(it, {
+      onSelect: () => openMediaDetail(it, { allTags: allTags(), onTags: () => paint() }),
       onRenamed: (r) => { note.textContent = M.renamed(r.renamedTo, r.rewritten || 0); },
       onDeleted: () => { items = items.filter((x) => x !== it); paint(); },
     })));

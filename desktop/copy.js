@@ -906,6 +906,18 @@ window.COPY = {
       lead: "Images in this project. Pick one, or add files from your computer.",
       upload: "Add images…",
       fromPhone: "From your phone…",
+      detail: {
+        name: "File name",
+        size: "Size",
+        path: "Path",
+        tags: "Tags",
+        tagsPlaceholder: "Type a tag, or pick one",
+        tagsHint: "Tags save as you add or remove them.",
+        addTag: (t) => `Add “${t}”`,
+        removeTag: "Remove tag",
+        noTags: "No tags yet.",
+        close: "Done",
+      },
       phone: {
         title: "Send photos from your phone",
         lead: "Scan this with the phone's camera. It opens a page on your Wi‑Fi where you can take a photo or pick from the library; each one lands here as you send it.",

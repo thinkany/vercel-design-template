@@ -153,6 +153,8 @@ contextBridge.exposeInMainWorld("desktop", {
   saveSiteFavicon: (favicon) => ipcRenderer.invoke("site:saveFavicon", { favicon }),
   deleteMedia: (rel) => ipcRenderer.invoke("media:delete", { rel }),
   renameMedia: (rel, name) => ipcRenderer.invoke("media:rename", { rel, name }),
+  getMediaMeta: () => ipcRenderer.invoke("media:meta"),
+  setMediaTags: (rel, tags) => ipcRenderer.invoke("media:setTags", { rel, tags }),
   getCmsSettings: () => ipcRenderer.invoke("cms:getSettings"),
   saveSiteSeo: (seo) => ipcRenderer.invoke("site:saveSeo", { seo }),
   setManageNav: (manageNav) => ipcRenderer.invoke("site:setManageNav", { manageNav }),

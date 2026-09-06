@@ -2319,6 +2319,7 @@ app.on("will-quit", () => { try { phoneUpload.stopServer(); } catch {} });
 const MEDIA_EXT = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".svg"]);
 function mediaDir(dir) { return path.join(dir, "public", "images"); }
 function listMedia(dir) {
+  const mediaTags = readMediaMeta(dir);
   const root = mediaDir(dir);
   const out = [];
   const walk = (d, rel) => {
@@ -2332,7 +2333,7 @@ function listMedia(dir) {
       let size = 0, width = 0, height = 0, mtime = 0;
       try { const st = fs.statSync(abs); size = st.size; mtime = st.mtimeMs; } catch {}
       if (!/\.svg$/i.test(e.name)) { try { const sz = nativeImage.createFromPath(abs).getSize(); width = sz.width; height = sz.height; } catch {} }
-      out.push({ rel: r, name: e.name, url: `/images/${r}`, file: pathToFileURL(abs).href, size, width, height, mtime });
+      out.push({ rel: r, name: e.name, url: `/images/${r}`, file: pathToFileURL(abs).href, size, width, height, mtime, tags: (mediaTags[r] && mediaTags[r].tags) || [] });
     }
   };
   walk(root, "");
@@ -2464,6 +2465,23 @@ ipcMain.handle("media:import", (_e, { paths, raw } = {}) => {
   if (!list.length) return { ok: true, added: [] };
   return importMediaFiles(list, { raw: !!raw });
 });
+// Image metadata (tags for now) lives in content/media.json keyed by the image's path
+// under public/images. Uploaded with the site (harmless) so it can drive galleries later.
+function mediaMetaPath(dir) { return path.join(siteContentDir(dir), "media.json"); }
+function readMediaMeta(dir) { const j = readJsonFile(mediaMetaPath(dir)); return j && typeof j === "object" && !Array.isArray(j) ? j : {}; }
+function writeMediaMeta(dir, meta) { fs.mkdirSync(siteContentDir(dir), { recursive: true }); fs.writeFileSync(mediaMetaPath(dir), JSON.stringify(meta, null, 2) + "\n"); }
+function cleanTags(tags) { const out = []; for (const t of Array.isArray(tags) ? tags : []) { const v = String(t || "").trim().replace(/\s+/g, " ").slice(0, 40); if (v && !out.some((x) => x.toLowerCase() === v.toLowerCase())) out.push(v); } return out; }
+ipcMain.handle("media:meta", () => (currentProject ? { meta: readMediaMeta(currentProject) } : { meta: {} }));
+ipcMain.handle("media:setTags", (_e, { rel, tags } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (typeof rel !== "string" || rel.includes("..") || path.isAbsolute(rel)) return { ok: false, error: "Bad path." };
+  const meta = readMediaMeta(currentProject);
+  const clean = cleanTags(tags);
+  if (clean.length) meta[rel] = { ...(meta[rel] || {}), tags: clean }; else if (meta[rel]) { delete meta[rel].tags; if (!Object.keys(meta[rel]).length) delete meta[rel]; }
+  try { writeMediaMeta(currentProject, meta); return { ok: true, tags: clean }; } catch (e) { return { ok: false, error: e.message }; }
+});
+
 // Rename an image. The extension stays; the base is slugified; a name already taken
 // gets "-N" with the next free number. Every reference in content/ (pages, posts,
 // entries, site.json) follows the file, so nothing on the site breaks.
@@ -2488,6 +2506,7 @@ ipcMain.handle("media:rename", (_e, { rel, name } = {}) => {
   let rewritten = 0;
   const walk = (d) => { let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; } for (const e of es) { const a = path.join(d, e.name); if (e.isDirectory()) walk(a); else if (/\.(json|md|mdx)$/.test(e.name)) { try { const t = fs.readFileSync(a, "utf8"); if (t.includes(oldUrl)) { fs.writeFileSync(a, t.split(oldUrl).join(newUrl)); rewritten++; } } catch {} } } };
   walk(siteContentDir(currentProject));
+  const meta = readMediaMeta(currentProject); if (meta[rel]) { meta[sub + next] = meta[rel]; delete meta[rel]; try { writeMediaMeta(currentProject, meta); } catch {} }
   return { ok: true, rel: sub + next, url: newUrl, renamedTo: next, rewritten };
 });
 ipcMain.handle("media:delete", (_e, { rel } = {}) => {
