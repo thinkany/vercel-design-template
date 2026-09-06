@@ -368,10 +368,14 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
           PreToolUse: [{
             matcher: "Bash|Write|Edit|MultiEdit|NotebookEdit",
             hooks: [async (hookInput) => {
-              const verdict = guardToolUse({ toolName: hookInput.tool_name, input: hookInput.tool_input, projectDir: cwd });
-              if (verdict.allow) return { continue: true };
-              console.warn(`[guard] denied ${hookInput.tool_name}: ${verdict.reason}`);
-              return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: verdict.reason } };
+              // A hook must never throw or return an odd shape: either can end the whole
+              // turn (the CLI's error_during_execution). Anything unexpected → allow.
+              try {
+                const verdict = guardToolUse({ toolName: hookInput && hookInput.tool_name, input: hookInput && hookInput.tool_input, projectDir: cwd });
+                if (verdict.allow) return {};
+                console.warn(`[guard] denied ${hookInput.tool_name}: ${verdict.reason}`);
+                return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: verdict.reason } };
+              } catch (e) { console.warn(`[guard] check failed, allowing: ${e && e.message}`); return {}; }
             }],
           }],
         },
@@ -461,7 +465,10 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
               modelUsage: message.modelUsage ?? null,
             });
           } else {
-            onEvent({ type: "error", message: `Agent turn ended: ${message.subtype}` });
+            // Carry the CLI's own diagnostic (result text, errors) so a failed turn can be read later.
+            const detail = [message.result, ...(Array.isArray(message.errors) ? message.errors : [])].filter((x) => typeof x === "string" && x.trim()).join(" | ");
+            console.error(`[agent] turn ended: ${message.subtype}${detail ? ` :: ${detail}` : ""}`);
+            onEvent({ type: "error", message: `Agent turn ended: ${message.subtype}${detail ? ` (${detail.slice(0, 300)})` : ""}` });
           }
           break;
       }

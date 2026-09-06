@@ -112,8 +112,12 @@ function checkBash(command, projectDir) {
     if (verb === "sed" && !args.some((a) => /^-[a-zA-Z]*i/.test(a))) continue; // sed without -i only reads
     // rm on the project root itself, home, or / is never fine
     if (verb === "rm" && args.some((a) => { const p = asPath(a, cwd); return p && (p === os.homedir() || p === "/" || p === path.resolve(projectDir)); })) return "deleting the project folder, the home folder or the disk root";
-    for (const a of args) {
-      if (a.startsWith("-")) continue;
+    // cp / mv / rsync / install / ln read their sources from anywhere (a photo in
+    // Downloads, a font in /tmp); only where they WRITE, the last path, is judged.
+    const destOnly = ["cp", "mv", "rsync", "install", "ln"].includes(verb);
+    const pathArgs = args.filter((a) => !a.startsWith("-"));
+    const judged = destOnly ? pathArgs.slice(-1) : pathArgs;
+    for (const a of judged) {
       if (verb === "tar" && !args.some((x) => /^-?[a-zA-Z]*x/.test(x) || x === "--extract")) break; // tar without extract only reads/creates locally
       const p = asPath(a, cwd);
       if (!p) continue;
