@@ -48,6 +48,26 @@ In ONE turn:
 Do NOT read `site/src/**`; the contract is inlined below. Do not read the
 variation's `Home.tsx`: the promoted blocks ARE the design now.
 
+## 1b. References, when the request carries them (inspiration, never a template)
+
+The app's "Design a new block" form lets the designer attach images or PDFs. The
+request then carries a `References:` line naming the assets (ids and file names
+under `.thinkany/references/`, with the distilled read in
+`.thinkany/references/digest.md`). When it does:
+
+- Read the digest's entries for those assets and look at the named image files.
+  They tell you what the designer is after: a composition, a density, a mood, a
+  kind of imagery, a way of pairing text and picture.
+- Take that as **inspiration for the block's composition and imagery only**. The
+  block still speaks this design's language: its `--ta-*` palette and fonts, its
+  spacing rhythm, type scale, eyebrow treatment, container width, motifs and
+  `@lg:` breaks, exactly as §2 requires. Never lift the reference's colours,
+  typefaces, or brand elements, and never reproduce it as a template.
+- The description wins where the two disagree: the reference informs, the words
+  decide.
+- Say in one line, in the close, what you took from the reference, so the
+  designer knows what to tweak next.
+
 ## 2. The block contract (the same one `/promote-blocks` uses)
 
 One file `site/blocks/<Name>.tsx`:
