@@ -1,7 +1,9 @@
 # WordPress export (ACF Pro and Gutenberg, full theme and headless)
 
 **Status:** future feature, spec'd 2026-09-05 from Rob's brief. Not scheduled. Nothing
-built. Written so the thinking here is not lost.
+built. Written so the thinking here is not lost. The reverse direction, an existing
+ACF site migrated into a new design, is [wordpress-migration-spec.md](wordpress-migration-spec.md);
+the two share the payload format and the field-type table.
 
 ## Goal
 
