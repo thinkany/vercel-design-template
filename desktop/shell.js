@@ -5843,6 +5843,12 @@ async function renderSiteSettings(host, data, st) {
   redirectsBtn.addEventListener("click", () => openRedirectsModal(data.site.redirects || [], (list) => { data.site.redirects = list; redirectsNote.textContent = S.redirectsCount(list.length); }));
   wrap.append(redirectsBtn, redirectsNote);
 
+  // Import from WordPress: the plugin, the content, the mapping, the import.
+  wrap.appendChild(siteEl("div", "drawer-sep"));
+  wrap.appendChild(siteEl("div", "sess-label", S.wp.heading));
+  wrap.appendChild(siteEl("div", "sess-desc", S.wp.desc));
+  await renderWpImport(wrap);
+
   wrap.appendChild(siteEl("div", "drawer-sep"));
   wrap.appendChild(siteEl("div", "sess-label", S.siteHeading));
   if (data.design) wrap.appendChild(siteEl("div", "sess-desc", S.designPinned(data.design)));
@@ -5863,6 +5869,133 @@ async function renderSiteSettings(host, data, st) {
   wrap.appendChild(siteEl("div", "drawer-sep"));
   wrap.appendChild(enableRow());
   siteAccordionize(wrap);
+}
+
+// Import from WordPress (docs/wordpress-migration-spec.md). One section, four steps that
+// unlock in order: the plugin, the content (fetch or file), the brief (before the site is
+// built) or the mapping (after), the import. Lives in Settings once the site is ready
+// and on the CMS drawer's not-ready card before that, so the inventory can seed the brief.
+let wpBusy = null; // "fetch" | "import" while one runs, so a re-render keeps the running note
+async function renderWpImport(host, { compact = false } = {}) {
+  const S = COPY.site.settings.wp;
+  const wrap = siteEl("div");
+  host.appendChild(wrap);
+  const paint = async () => {
+    wrap.innerHTML = "";
+    const st = await window.desktop.wpStatus().catch(() => null);
+    if (!st || !st.project) return;
+    const status = siteEl("div"); status.style.cssText = "min-height:18px;";
+    const err = (m) => { status.innerHTML = ""; const e = siteEl("div", "sess-desc", m); e.style.color = "#c0261e"; status.appendChild(e); };
+    const step = (label, hint) => { wrap.appendChild(siteEl("div", "k", label)).style.cssText = "margin-top:10px;font-weight:600;"; if (hint) wrap.appendChild(siteEl("div", "sess-desc", hint)); };
+    const row = () => { const r = siteEl("div"); r.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 6px;"; wrap.appendChild(r); return r; };
+    const btn = (label, onClick, { primary, disabled, title } = {}) => { const b = siteEl("button", primary ? "panelbtn primary" : "panelbtn", label); b.style.cssText = "margin:0;width:auto;"; if (disabled) b.disabled = true; if (title) b.title = title; b.addEventListener("click", onClick); return b; };
+    const licensed = st.licensed !== false && appHasKey;
+
+    // 1. the plugin
+    step(S.pluginStep, S.pluginHint);
+    const r1 = row();
+    r1.appendChild(btn(S.savePlugin, async () => { const r = await window.desktop.wpSavePlugin(); if (r && r.ok) siteFlash(status, S.pluginSaved(r.path)); else if (r && r.error) err(r.error); }));
+
+    // 2. the content
+    step(S.fetchStep);
+    const url = siteField(S.url, (st.payload && st.payload.url) || "", { placeholder: S.urlPlaceholder, type: "url" });
+    const token = siteField(S.token, "", { placeholder: S.tokenPlaceholder, type: "password" });
+    url.wrap.style.marginBottom = "4px"; token.wrap.style.marginBottom = "4px";
+    wrap.append(url.wrap, token.wrap);
+    const r2 = row();
+    const fetchBtn = btn(wpBusy === "fetch" ? S.fetching : S.fetch, async () => {
+      const u = url.input.value.trim(), t = token.input.value.trim();
+      if (!u || !t) return;
+      wpBusy = "fetch"; fetchBtn.disabled = true; fetchBtn.textContent = S.fetching;
+      const r = await window.desktop.wpFetch(u, t);
+      wpBusy = null;
+      if (!r || !r.ok) { fetchBtn.disabled = false; fetchBtn.textContent = S.fetch; err((r && r.error) || "Couldn't fetch the site."); return; }
+      paint();
+    }, { primary: true, disabled: !licensed || wpBusy === "fetch", title: licensed ? "" : COPY.site.notLicensed });
+    const fileBtn = btn(S.loadFile, async () => { const r = await window.desktop.wpLoadFile(); if (!r || r.canceled) return; if (!r.ok) { err(r.error); return; } paint(); }, { disabled: !licensed, title: S.loadFileHint });
+    r2.append(fetchBtn, fileBtn);
+    if (st.payload) {
+      const c = st.payload.counts;
+      const when = st.payload.fetched ? new Date(st.payload.fetched).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "";
+      wrap.appendChild(siteEl("div", "sess-desc", `${st.payload.site.name || st.payload.url || st.payload.file || ""}: ${S.summary(c)}${when ? ` Fetched ${when}.` : ""}`));
+      const r2b = row();
+      r2b.appendChild(btn(S.viewInventory, async () => { const r = await window.desktop.wpInventory(); if (r && r.ok) openWpTextModal(S.inventoryTitle, r.markdown); else if (r) err(r.error); }));
+    }
+
+    if (st.payload && !st.siteReady) {
+      // 3. the brief (the site isn't built yet: the inventory feeds the design)
+      step(S.briefStep, S.briefHint);
+      const r3 = row();
+      r3.appendChild(btn(S.brief, () => { closeModal(); runAgent(S.briefRequest, S.briefEcho); }, { primary: true, disabled: !licensed }));
+    } else if (st.payload) {
+      // 3. the mapping
+      step(S.mapStep, S.mapHint);
+      wrap.appendChild(siteEl("div", "sess-desc", st.mapping ? S.mappingReady : S.mappingMissing));
+      const r3 = row();
+      r3.appendChild(btn(S.propose, async () => {
+        const r = await window.desktop.wpSkeleton(); if (!r || !r.ok) { err((r && r.error) || "Couldn't start the mapping."); return; }
+        closeModal(); runAgent(S.proposeRequest, S.proposeEcho);
+      }, { primary: !st.mapping, disabled: !licensed }));
+      r3.appendChild(btn(S.reveal, async () => { const r = await window.desktop.wpSkeleton(); if (r && r.ok) window.desktop.wpRevealMapping(); else if (r) err(r.error); }, { disabled: !licensed }));
+
+      // 4. the import
+      step(S.importStep, S.importHint);
+      const r4 = row();
+      const runBtn = btn(wpBusy === "import" ? S.running : S.run, async () => {
+        wpBusy = "import"; runBtn.disabled = true; runBtn.textContent = S.running;
+        const r = await window.desktop.wpTransform();
+        wpBusy = null;
+        if (!r || !r.ok) { runBtn.disabled = false; runBtn.textContent = S.run; err((r && r.error) || "The import failed."); return; }
+        await paint();
+        openWpTextModal(S.reportTitle, r.markdown);
+      }, { primary: st.mapping, disabled: !licensed || !st.mapping || wpBusy === "import", title: !st.mapping ? S.needMapping : "" });
+      r4.appendChild(runBtn);
+      if (st.report) {
+        const rep = st.report;
+        wrap.appendChild(siteEl("div", "sess-desc", `${S.done(rep)}${rep.when ? ` ${new Date(rep.when).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}.` : ""}`));
+        const r4b = row();
+        r4b.appendChild(btn(S.viewReport, async () => { const r = await window.desktop.wpReport(); if (r && r.ok) openWpTextModal(S.reportTitle, r.markdown); else if (r) err(r.error); }));
+      }
+    }
+    if (st.payload) {
+      // Forget: a two-click confirm (the first click asks).
+      const rf = row(); rf.style.marginTop = "10px";
+      let armed = false;
+      const forget = btn(S.forget, async () => {
+        if (!armed) { armed = true; forget.textContent = S.forgetConfirm; forget.style.whiteSpace = "normal"; forget.style.textAlign = "left"; return; }
+        const r = await window.desktop.wpForget(); if (r && r.ok) paint(); else if (r) err(r.error);
+      });
+      forget.style.opacity = "0.75";
+      rf.appendChild(forget);
+    }
+    wrap.appendChild(status);
+    if (!compact) { const help = siteEl("button", "panelbtn", S.help); help.type = "button"; help.style.cssText = "margin:6px 0 0;width:auto;font-size:12px;opacity:0.75;"; help.addEventListener("click", () => openCmsHelp("settings")); wrap.appendChild(help); }
+  };
+  await paint();
+  return wrap;
+}
+// A read-only text modal (the inventory, the import report): the redirects modal's frame
+// around preformatted text, so long reports scroll and copy cleanly.
+function openWpTextModal(title, text) {
+  const S = COPY.site.settings.wp;
+  const ov = siteEl("div", "blockedit");
+  const card = siteEl("div", "blockedit-card");
+  const head = siteEl("div", "blockedit-head");
+  head.appendChild(siteEl("div", "blockedit-title", title));
+  const acts = siteEl("div", "blockedit-acts");
+  const done = siteEl("button", "panelbtn", S.close); done.style.cssText = "margin:0;width:auto;";
+  acts.appendChild(done); head.appendChild(acts);
+  const body = siteEl("div", "blockedit-fields"); body.style.cssText = "flex:1;overflow:auto;padding:16px 20px;";
+  const pre = document.createElement("pre"); pre.style.cssText = "white-space:pre-wrap;word-break:break-word;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0;color:#1a1a1a;";
+  pre.textContent = text || ""; body.appendChild(pre);
+  card.append(head, body); ov.appendChild(card);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey, true); };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  done.addEventListener("click", close);
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  document.addEventListener("keydown", onKey, true);
+  document.body.appendChild(ov);
+  return { close };
 }
 
 // The redirects modal (the expanded-content overlay's size): an add row, then the list.
@@ -6013,7 +6146,7 @@ function siteAccordionize(wrap) {
   tail.forEach((n) => wrap.appendChild(n));
   // Walkthrough anchors: each section by its heading, and the Site builder switch.
   const S = COPY.site.settings;
-  const ids = { [S.mediaHeading]: "images", [S.searchHeading]: "search", [S.logosHeading]: "logos", [S.navHeading]: "nav", [S.blogHeading]: "blog", [S.scriptsHeading]: "scripts", [S.iconsHeading]: "icons", [S.redirectsHeading]: "redirects", [S.siteHeading]: "site", [S.trashHeading]: "trash" };
+  const ids = { [S.mediaHeading]: "images", [S.searchHeading]: "search", [S.logosHeading]: "logos", [S.navHeading]: "nav", [S.blogHeading]: "blog", [S.scriptsHeading]: "scripts", [S.iconsHeading]: "icons", [S.redirectsHeading]: "redirects", [S.wp.heading]: "wordpress", [S.siteHeading]: "site", [S.trashHeading]: "trash" };
   wrap.querySelectorAll(".site-acc").forEach((sec) => { const id = ids[sec.querySelector(".site-acc-title").textContent]; if (id) sec.dataset.tour = "cms-settings-" + id; });
   const sw = wrap.querySelector(".site-enable-row"); if (sw) sw.dataset.tour = "cms-settings-enable";
 }
@@ -6037,6 +6170,15 @@ async function renderSite(body) {
   if (!data.ready) {
     const card = emptyCard(COPY.site.notReady[data.reason] || COPY.site.notReady["not-promoted"]);
     if (data.reason !== "no-site") siteBuildCta(card, { licensed: data.licensed !== false });
+    // Import from WordPress before the site exists: fetch the old site, take its
+    // inventory into the brief. The mapping and the import wait for the site's blocks.
+    if (data.reason !== "no-site") {
+      const wp = siteEl("div"); wp.style.cssText = "margin-top:18px;padding-top:14px;border-top:1px solid #e6e6e6;text-align:left;";
+      wp.appendChild(siteEl("div", "sess-label", COPY.site.settings.wp.heading));
+      wp.appendChild(siteEl("div", "sess-desc", COPY.site.settings.wp.notReadyDesc));
+      card.appendChild(wp);
+      await renderWpImport(wp, { compact: true });
+    }
     return;
   }
   const posts = await window.desktop.getSitePosts().catch(() => []);

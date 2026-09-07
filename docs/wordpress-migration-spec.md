@@ -1,10 +1,24 @@
 # WordPress migration (an existing ACF Pro site into a new design)
 
 **Status:** spec'd 2026-09-07 from Rob's idea (a plugin that reads the fields and
-content as a proof of concept) and the follow-up discussion. **Ideation-level spec,
-no code.** Not scheduled. Sibling of [wordpress-export-spec.md](wordpress-export-spec.md):
-the two share one payload format and one field-type table, read in opposite
-directions. Nothing built.
+content as a proof of concept) and the follow-up discussion. **Proof of concept
+BUILT 2026-09-07 on `feature/wordpress-migration`** (not merged, not app-tested,
+not run against a real WordPress site): the read-only plugin
+(`desktop/wp-plugin/thinkany-export.php`), the importer module
+(`desktop/wp-import.cjs`: fetch, inventory, mapping skeleton, HTML to markdown,
+transform, redirects, report; fixture test `desktop/dev/wp-import.test.cjs`), the
+built-in Table block, the Import from WordPress section in Site → Settings (and on
+the CMS drawer before the site is built), and the `/migrate-wordpress` skill
+(`inventory`, `map`) in `desktop/skills`, served locally with `SKILLS_LOCAL=1`.
+Sibling of [wordpress-export-spec.md](wordpress-export-spec.md): the two share one
+payload format and one field-type table, read in opposite directions.
+
+**Dev loop:** `SKILLS_LOCAL=1 npm run desktop` (the skill reads from disk, no derive
+push). Test the importer with `node desktop/dev/wp-import.test.cjs`. The scaffold
+stub `.claude/commands/migrate-wordpress.md` reaches new projects after
+`node desktop/build/make-template.cjs` on a committed tree. The export token is kept
+in `.thinkany/wp-import/source.json` (local, skipped by publish) so media can be
+fetched from a site that is not public.
 
 ## Goal
 

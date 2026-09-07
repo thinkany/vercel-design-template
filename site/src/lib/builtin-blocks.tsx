@@ -142,7 +142,49 @@ function Form({ form, heading, intro }: z.infer<typeof formProps>) {
   );
 }
 
+// Table: rows of cells, an optional header row and caption. Prose (richtext) has no
+// table syntax by design; tabular content is a block, styled once in the design's
+// tokens. The WordPress importer promotes tables found in old content to this block.
+const tableProps = z.object({
+  caption: z.string().optional(),
+  /** The first row is a header row. */
+  header: z.boolean().default(true),
+  rows: z.array(z.object({ cells: z.array(z.string()).default([]) })).default([]),
+});
+
+function Table({ caption, header, rows }: z.infer<typeof tableProps>) {
+  const width = rows.reduce((n, r) => Math.max(n, r.cells.length), 0);
+  const body = header ? rows.slice(1) : rows;
+  const head = header ? rows[0] : null;
+  const cell = "px-4 py-3 align-top border-b border-ta-border";
+  return (
+    <section data-block="table" className="w-full px-8 py-12 bg-ta-surface">
+      <div className="mx-auto max-w-[960px] overflow-x-auto">
+        <table className="w-full border-collapse font-ta-sans text-[15px] text-ta-body leading-[1.5]">
+          {caption && <caption className="text-left font-ta-sans text-[13px] tracking-[0.06em] uppercase text-ta-muted pb-3">{caption}</caption>}
+          {head && (
+            <thead>
+              <tr>{Array.from({ length: width }, (_, i) => <th key={i} scope="col" className={`${cell} text-left font-semibold text-ta-ink border-b-2`}>{head.cells[i] ?? ""}</th>)}</tr>
+            </thead>
+          )}
+          <tbody>
+            {body.map((r, ri) => (
+              <tr key={ri}>{Array.from({ length: width }, (_, i) => <td key={i} className={cell}>{r.cells[i] ?? ""}</td>)}</tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export const builtinBlocks: Record<string, BlockDef> = {
+  table: defineBlock({
+    name: "Table",
+    description: "Rows and columns (hours, prices, specs), with an optional header row and caption.",
+    props: tableProps,
+    component: Table,
+  }),
   code: defineBlock({
     name: "Code snippet",
     description: "Paste HTML or a script (a form embed, a widget). Placed on the page as written.",

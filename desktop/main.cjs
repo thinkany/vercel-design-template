@@ -1918,6 +1918,158 @@ ipcMain.handle("redirects:import", async () => {
     return { ok: true, ...r, file: path.basename(res.filePaths[0]) };
   } catch (e) { return { ok: false, error: `Couldn't read that file as redirects (${e.message}).` }; }
 });
+// ---- WordPress migration (docs/wordpress-migration-spec.md) --------------------
+// The read-only plugin (desktop/wp-plugin) is saved out for the designer to upload to
+// the client's site; its payload lands in <project>/.thinkany/wp-import/ (never in
+// content/ until the transform runs). The deterministic half lives in wp-import.cjs;
+// the inventory-to-brief and mapping proposals are the /migrate-wordpress skill.
+const wpImport = require("./wp-import.cjs");
+const WP_PLUGIN_FILE = path.join(__dirname, "wp-plugin", "thinkany-export.php");
+function wpDir(dir) { return path.join(dir, ".thinkany", "wp-import"); }
+function wpFile(dir, name) { return path.join(wpDir(dir), name); }
+function wpReadPayload(dir) { return readJsonFile(wpFile(dir, "payload.json")); }
+// What the mapping targets: the site's blocks with their field kinds by dotted path.
+function wpBlocks(dir) {
+  const ib = introspectBlocks(dir);
+  const all = [...readBlockRegistry(dir), ...Object.values(ib.builtins || {})];
+  return all.map((b) => ({ key: b.key, name: b.name, fields: (ib.fields && ib.fields[b.key]) || {} }));
+}
+// Write the payload and the files derived from it (the inventory the card shows, the
+// slim definitions the skill reads). One place, so a fetch and a file load agree.
+function wpStore(dir, payload, source) {
+  fs.mkdirSync(wpDir(dir), { recursive: true });
+  const inv = wpImport.inventory(payload);
+  fs.writeFileSync(wpFile(dir, "payload.json"), JSON.stringify(payload));
+  fs.writeFileSync(wpFile(dir, "inventory.json"), JSON.stringify(inv, null, 2) + "\n");
+  fs.writeFileSync(wpFile(dir, "inventory.md"), wpImport.inventoryMarkdown(inv));
+  fs.writeFileSync(wpFile(dir, "definitions.json"), JSON.stringify(wpImport.definitionsForSkill(payload), null, 2) + "\n");
+  fs.writeFileSync(wpFile(dir, "source.json"), JSON.stringify({ ...source, fetched: new Date().toISOString() }, null, 2) + "\n");
+  appLog.write(`[wp] stored payload from ${source.url || source.file}: ${inv.counts.pages} pages, ${inv.counts.posts} posts, ${inv.counts.media} media`);
+  return inv;
+}
+function wpStatus() {
+  if (!currentProject) return { licensed: siteLicensed(), project: false };
+  const dir = currentProject;
+  const inv = readJsonFile(wpFile(dir, "inventory.json"));
+  const source = readJsonFile(wpFile(dir, "source.json")) || {};
+  const report = readJsonFile(wpFile(dir, "report.json"));
+  const site = siteReady(dir);
+  return {
+    licensed: siteLicensed(), project: true, dir: wpDir(dir), siteReady: site.ready,
+    payload: inv ? { site: inv.site, counts: inv.counts, fetched: source.fetched || null, url: source.url || null, file: source.file || null } : null,
+    mapping: fs.existsSync(wpFile(dir, "mapping.json")), mappingPath: wpFile(dir, "mapping.json"),
+    report: report ? { pages: report.pages.length, posts: report.posts.imported, redirects: report.redirects, media: report.media, unmappedBlocks: Object.keys(report.unmappedBlocks || {}).length, when: report.when || null } : null,
+  };
+}
+ipcMain.handle("wp:status", () => wpStatus());
+ipcMain.handle("wp:savePlugin", async () => {
+  const res = await dialog.showSaveDialog(mainWindow, { title: "Save the thinkany Export plugin", defaultPath: path.join(app.getPath("downloads"), "thinkany-export.php"), filters: [{ name: "PHP", extensions: ["php"] }] });
+  if (res.canceled || !res.filePath) return { ok: false, canceled: true };
+  // read + write, not copyFile: the source sits inside app.asar when packaged.
+  try { fs.writeFileSync(res.filePath, fs.readFileSync(WP_PLUGIN_FILE)); return { ok: true, path: res.filePath }; } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle("wp:fetch", async (_e, { url, token } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  try {
+    const payload = await wpImport.fetchPayload(url, token);
+    // The token stays beside the payload (local, never uploaded: publish skips .thinkany) so
+    // the transform can fetch media from a site that is not public.
+    const inv = wpStore(currentProject, payload, { url: String(url || "").trim().replace(/\/+$/, ""), token: String(token || "").trim() });
+    return { ok: true, inventory: inv, status: wpStatus() };
+  } catch (e) { appLog.write(`[wp] fetch failed: ${e.message}`); return { ok: false, error: e.message }; }
+});
+// The WP-CLI route: `wp thinkany export --out=site.json`, then load the file here.
+ipcMain.handle("wp:loadFile", async () => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const res = await dialog.showOpenDialog(mainWindow, { title: "Load a thinkany WordPress export", properties: ["openFile"], filters: [{ name: "Export (JSON)", extensions: ["json"] }] });
+  if (res.canceled || !res.filePaths[0]) return { ok: false, canceled: true };
+  try {
+    const payload = JSON.parse(fs.readFileSync(res.filePaths[0], "utf8"));
+    const v = wpImport.validatePayload(payload); if (!v.ok) return { ok: false, error: v.error };
+    const inv = wpStore(currentProject, payload, { file: path.basename(res.filePaths[0]) });
+    return { ok: true, inventory: inv, status: wpStatus() };
+  } catch (e) { return { ok: false, error: `Couldn't read that file (${e.message}).` }; }
+});
+ipcMain.handle("wp:inventory", () => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const md = readTextSafe(wpFile(currentProject, "inventory.md"));
+  return md ? { ok: true, markdown: md } : { ok: false, error: "Nothing has been imported yet." };
+});
+// The mapping file the designer (or the /migrate-wordpress skill) fills in: every slot
+// present, targets empty. Never overwritten once it exists.
+ipcMain.handle("wp:skeleton", () => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const payload = wpReadPayload(currentProject); if (!payload) return { ok: false, error: "Nothing has been imported yet." };
+  const p = wpFile(currentProject, "mapping.json");
+  if (fs.existsSync(p)) return { ok: true, path: p, existed: true };
+  try {
+    const blocks = siteReady(currentProject).ready ? wpBlocks(currentProject) : [];
+    fs.writeFileSync(p, JSON.stringify(wpImport.mappingSkeleton(payload, blocks), null, 2) + "\n");
+    return { ok: true, path: p, existed: false };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle("wp:revealMapping", () => {
+  if (!currentProject) return { ok: false };
+  const p = wpFile(currentProject, "mapping.json");
+  if (!fs.existsSync(p)) return { ok: false, error: "There's no mapping file yet." };
+  shell.showItemInFolder(p); return { ok: true };
+});
+// Run the transform: payload + mapping → content/, media through the same conversion as
+// uploads, redirects into site.json, and a report beside the payload. Re-runnable.
+ipcMain.handle("wp:transform", async () => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const dir = currentProject;
+  if (!siteReady(dir).ready) return { ok: false, error: "Build the site first (promote the approved design), then run the import." };
+  const payload = wpReadPayload(dir); if (!payload) return { ok: false, error: "Nothing has been imported yet." };
+  const mapping = readJsonFile(wpFile(dir, "mapping.json")); if (!mapping) return { ok: false, error: "The mapping file is missing or isn't valid JSON." };
+  const blocks = wpBlocks(dir);
+  const settings = loadCmsSettings(dir).media;
+  const tmp = path.join(app.getPath("temp"), "thinkany-wp-media"); fs.mkdirSync(tmp, { recursive: true });
+  const token = (readJsonFile(wpFile(dir, "source.json")) || {}).token || "";
+  // One attachment → one file under public/images/<folder>/, converted like an upload.
+  const fetchMedia = async (att, folder) => {
+    const res = await fetch(att.url, { headers: token ? { "x-thinkany-token": token } : {} });
+    if (!res.ok) throw new Error(`${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    const ext = path.extname(att.filename || new URL(att.url).pathname).toLowerCase() || ".bin";
+    const base = slugifyId(path.basename(att.filename || "image", ext)) || `image-${att.id || Date.now()}`;
+    const outDir = path.join(mediaDir(dir), folder); fs.mkdirSync(outDir, { recursive: true });
+    if (MEDIA_CONVERT.has(ext)) {
+      const src = path.join(tmp, `${base}${ext}`); fs.writeFileSync(src, buf);
+      const out = path.join(outDir, `${base}.avif`);
+      const r = await convertImage(src, out, { maxWidth: settings.maxWidth, quality: settings.quality });
+      try { fs.unlinkSync(src); } catch {}
+      if (!r || !r.ok) throw new Error((r && r.error) || "conversion failed");
+      return `/images/${folder}/${base}.avif`;
+    }
+    fs.writeFileSync(path.join(outDir, `${base}${ext}`), buf);
+    return `/images/${folder}/${base}${ext}`;
+  };
+  try {
+    const r = await wpImport.transform(dir, payload, mapping, { blocks, fetchMedia, blogPath: blogPathOf(siteJsonOf(dir)) });
+    if (!r.ok) return { ok: false, errors: r.errors, error: r.errors.join("\n") };
+    const report = { ...r.report, when: new Date().toISOString() };
+    fs.writeFileSync(wpFile(dir, "report.json"), JSON.stringify(report, null, 2) + "\n");
+    fs.writeFileSync(wpFile(dir, "report.md"), wpImport.reportMarkdown(report));
+    appLog.write(`[wp] transform: ${report.pages.length} pages, ${report.posts.imported} posts, ${report.redirects} redirects, ${report.media.downloaded} media (${report.media.failed.length} failed)`);
+    return { ok: true, status: wpStatus(), markdown: wpImport.reportMarkdown(report) };
+  } catch (e) { appLog.write(`[wp] transform failed: ${e.stack || e.message}`); return { ok: false, error: e.message }; }
+});
+ipcMain.handle("wp:report", () => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const md = readTextSafe(wpFile(currentProject, "report.md"));
+  return md ? { ok: true, markdown: md } : { ok: false, error: "The import hasn't run yet." };
+});
+// Forget the import (payload, inventory, mapping, report). Content already written stays.
+ipcMain.handle("wp:forget", () => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  try { fs.rmSync(wpDir(currentProject), { recursive: true, force: true }); return { ok: true, status: wpStatus() }; } catch (e) { return { ok: false, error: e.message }; }
+});
+
 // Block display names (the Blocks tab): recognition in the CMS only.
 ipcMain.handle("site:saveBlockNames", (_e, { names } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
