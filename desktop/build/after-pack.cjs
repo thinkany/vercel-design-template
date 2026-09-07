@@ -37,4 +37,10 @@ exports.default = async function afterPack(context) {
   fs.copyFileSync(src, dest);
   fs.chmodSync(dest, 0o755);
   console.log(`[afterPack] claude (darwin-${archStr}) -> ${path.relative(context.appOutDir, dest)}`);
+
+  // Complete the bundle's node_modules (see fill-node-modules.cjs): packages that
+  // electron-builder nested under one parent must also sit at the top level, or a
+  // sibling importer (Astro's markdown package, for one) can't resolve them.
+  const unpackedModules = path.join(context.appOutDir, `${productFilename}.app`, "Contents", "Resources", "app.asar.unpacked", "node_modules");
+  require("./fill-node-modules.cjs").fill({ appRoot, unpackedModules, log: (m) => console.log(`[afterPack] ${m}`) });
 };
