@@ -5930,12 +5930,12 @@ async function renderWpImport(host, { compact = false } = {}) {
     } else if (st.payload) {
       // 3. the mapping
       step(S.mapStep, S.mapHint);
-      wrap.appendChild(siteEl("div", "sess-desc", st.mapping ? S.mappingReady : S.mappingMissing));
+      wrap.appendChild(siteEl("div", "sess-desc", st.mappingFilled ? S.mappingReady : st.mapping ? S.mappingEmpty : S.mappingMissing));
       const r3 = row();
       r3.appendChild(btn(S.propose, async () => {
         const r = await window.desktop.wpSkeleton(); if (!r || !r.ok) { err((r && r.error) || "Couldn't start the mapping."); return; }
         closeModal(); runAgent(S.proposeRequest, S.proposeEcho);
-      }, { primary: !st.mapping, disabled: !licensed }));
+      }, { primary: !st.mappingFilled, disabled: !licensed }));
       r3.appendChild(btn(S.reveal, async () => { const r = await window.desktop.wpSkeleton(); if (r && r.ok) window.desktop.wpRevealMapping(); else if (r) err(r.error); }, { disabled: !licensed }));
 
       // 4. the import
@@ -5948,7 +5948,7 @@ async function renderWpImport(host, { compact = false } = {}) {
         if (!r || !r.ok) { runBtn.disabled = false; runBtn.textContent = S.run; err((r && r.error) || "The import failed."); return; }
         await paint();
         openWpTextModal(S.reportTitle, r.markdown);
-      }, { primary: st.mapping, disabled: !licensed || !st.mapping || wpBusy === "import", title: !st.mapping ? S.needMapping : "" });
+      }, { primary: st.mappingFilled, disabled: !licensed || !st.mappingFilled || wpBusy === "import", title: !st.mapping ? S.needMapping : !st.mappingFilled ? S.needFilled : "" });
       r4.appendChild(runBtn);
       if (st.report) {
         const rep = st.report;

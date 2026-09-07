@@ -1966,10 +1966,13 @@ function wpStatus() {
   const source = readJsonFile(wpFile(dir, "source.json")) || {};
   const report = readJsonFile(wpFile(dir, "report.json"));
   const site = siteReady(dir);
+  // A skeleton is a mapping file with no destinations; the import waits for at least one.
+  const mapping = readJsonFile(wpFile(dir, "mapping.json"));
+  const filled = !!mapping && (Object.values(mapping.blocks || {}).some((b) => b && b.block) || !!(mapping.prose && mapping.prose.block) || Object.values(mapping.types || {}).some((t) => t && t.include !== false && t.key));
   return {
     licensed: siteLicensed(), project: true, dir: wpDir(dir), siteReady: site.ready,
     payload: inv ? { site: inv.site, counts: inv.counts, fetched: source.fetched || null, url: source.url || null, file: source.file || null } : null,
-    mapping: fs.existsSync(wpFile(dir, "mapping.json")), mappingPath: wpFile(dir, "mapping.json"),
+    mapping: !!mapping, mappingFilled: filled, mappingPath: wpFile(dir, "mapping.json"),
     report: report ? { pages: report.pages.length, posts: report.posts.imported, redirects: report.redirects, media: report.media, unmappedBlocks: Object.keys(report.unmappedBlocks || {}).length, when: report.when || null } : null,
   };
 }
