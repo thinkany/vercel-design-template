@@ -1096,7 +1096,9 @@ async function saveKey() {
     const res = await window.desktop.saveKey(key);
     if (res.ok) {
       keyinput.value = "";
+      queueTour(); // first connection → the walkthrough, once the next stage has painted
       await boot();
+      flushPendingTour();
     } else {
       keyerror.textContent = res.error || COPY.keygate.couldNotSave;
     }
@@ -1170,6 +1172,8 @@ const PANELS = {
 function closeModal() {
   Object.values(RAILS).forEach((b) => b.classList.remove("active"));
   if (modal.hidden) return;
+  // A drawer-anchored tour step can't outlive its drawer.
+  if (typeof tourRunning === "function" && tourRunning() && tourTarget && modalBody.contains(tourTarget)) endTour();
   modal.classList.remove("open"); // slide out
   // Hide after the slide-out finishes — unless it was reopened in the meantime.
   setTimeout(() => { if (!modal.classList.contains("open")) modal.hidden = true; }, 240);
@@ -1190,6 +1194,7 @@ async function openModal(kind) {
   card.style.width = wide ? "" : Math.max(360, parseInt(el("chat").style.width, 10) || 400) + "px";
   el("modal-card").dataset.panel = kind; // lets CSS style a panel's controls (the CMS switches)
   el("modal-preview").hidden = kind !== "site"; // "Preview in Browser" belongs to the CMS drawer
+  el("modal-info").hidden = true; // the CMS walkthrough "i": renderSite shows it once the site is ready
   Object.values(RAILS).forEach((b) => b.classList.remove("active"));
   RAILS[kind].classList.add("active");
   // Slide in on a fresh open (or if interrupted mid-close). When a drawer is
@@ -1199,7 +1204,17 @@ async function openModal(kind) {
     void modal.offsetWidth; // commit the closed transform, then transition to open
     modal.classList.add("open");
   }
-  await render(modalBody);
+  modalRender = render(modalBody);
+  await modalRender;
+}
+// The in-flight (or last) drawer render, so a caller that finds the drawer already
+// open can wait for its body instead of re-rendering into it (a second concurrent
+// openModal would append a duplicate set of rows).
+let modalRender = Promise.resolve();
+async function ensureModal(kind) {
+  const isOpen = !modal.hidden && modal.classList.contains("open") && RAILS[kind].classList.contains("active");
+  if (isOpen) await modalRender;
+  else await openModal(kind);
 }
 // Rail click: if this panel's drawer is already open, close it; else open/switch.
 function toggleModal(kind) {
@@ -1219,6 +1234,402 @@ railClaude.addEventListener("click", () => toggleModal("claude"));
 railDirector.addEventListener("click", () => toggleModal("director"));
 if (railA11y) railA11y.addEventListener("click", () => toggleModal("a11y"));
 railLicenses.addEventListener("click", () => toggleModal("licenses"));
+
+// ---- Walkthrough tour ---------------------------------------------------------
+// Ordered tooltips that introduce the studio, one at a time, each anchored to a
+// target on screen. Runs on its own the first time a Claude key is connected
+// (saveKey → queueTour) and can be replayed from the About drawer. Wording lives in
+// COPY.tour; the ORDER and targets live here. A step: { copy: key into
+// COPY.tour.steps, target: () => element, placement: right|left|top|bottom,
+// advanceOnClick: clicking the target itself moves the tour along }.
+const TOUR_DONE_KEY = "ta-tour-done";
+const CMS_TOUR_DONE_KEY = "ta-tour-cms-done"; // set the first time the CMS walkthrough runs, app-wide
+// A step may also carry onEnter: an async hook run before the target is looked up
+// (e.g. open the drawer the target lives in), onExit: run when the step is left, and
+// when: () => bool, checked once at start; false drops the step from this run (the
+// new-project tips only make sense on the Choose-a-project screen).
+const inDrawer = (id) => () => modalBody.querySelector(`[data-tour="${id}"]`);
+const TOUR_STEPS = [
+  { copy: "claude", target: () => railClaude, placement: "right", advanceOnClick: true },
+  // Rail-icon steps close any open drawer first so the tip isn't drawn over it.
+  { copy: "licenses", onEnter: () => closeModal(), target: () => railLicenses, placement: "right", advanceOnClick: true },
+  { copy: "claudeKey", onEnter: () => ensureModal("licenses"), target: inDrawer("claude-key"), placement: "right" },
+  { copy: "figmaLicense", onEnter: () => ensureModal("licenses"), target: inDrawer("figma-license"), placement: "right" },
+  { copy: "designLicense", onEnter: () => ensureModal("licenses"), target: inDrawer("design-license"), placement: "right" },
+  { copy: "closeDrawer", onEnter: () => ensureModal("licenses"), target: () => modalClose, placement: "right" },
+  { copy: "figma", onEnter: () => ensureModal("figma"), target: inDrawer("figma-export"), placement: "right" },
+  { copy: "figmaHelp", onEnter: () => ensureModal("figma"), target: inDrawer("figma-help"), placement: "right", advanceOnClick: true },
+  // onExit closes the help panel the tour opened (whether it ends here or is skipped).
+  { copy: "helpPanels", onEnter: () => ensureHelpOverlay(COPY.figma.exportHelpHtml), target: () => document.querySelector(".iref-help-card"), placement: "right", onExit: () => closeHelpOverlay() },
+  { copy: "company", onEnter: () => closeModal(), target: () => railCompany, placement: "right", advanceOnClick: true },
+  { copy: "companyDrawer", onEnter: () => ensureModal("company"), target: inDrawer("company"), placement: "right" },
+  { copy: "voice", onEnter: () => closeModal(), target: () => railVoice, placement: "right", advanceOnClick: true },
+  { copy: "voiceProject", onEnter: () => ensureModal("voice"), target: inDrawer("voice-project"), placement: "right" },
+  { copy: "voiceGlobal", onEnter: () => ensureModal("voice"), target: inDrawer("voice-global"), placement: "right" },
+  { copy: "voiceSave", onEnter: () => ensureModal("voice"), target: inDrawer("voice-save"), placement: "right" },
+  { copy: "a11y", onEnter: () => closeModal(), target: () => railA11y, placement: "right" },
+  // The Art Director icon only shows once a built design is previewed; reveal it for
+  // its tip on a fresh install and hide it again afterwards.
+  { copy: "artdirector", onEnter: () => { closeModal(); tourRevealRail(railDirector); }, target: () => railDirector, placement: "right", onExit: () => tourRestoreRail(railDirector) },
+  { copy: "publish", onEnter: () => closeModal(), target: () => railPublish, placement: "right", advanceOnClick: true },
+  { copy: "publishDrawer", onEnter: () => ensureModal("publish"), target: inDrawer("publish"), placement: "right" },
+  { copy: "cms", onEnter: () => closeModal(), target: () => railSite, placement: "right" },
+  // Creating a project. On a fresh install the tour runs on the Choose-a-project screen
+  // and points at its buttons; on a replay with a project open the same steps point at
+  // Switch Projects and its Create new / Switch buttons instead.
+  { copy: () => onGate() ? "newProjectIntro" : "projectsIntro", onEnter: () => closeModal(), target: () => onGate() ? gateCard() : railProjects, placement: "right" },
+  // In the drawer the tips sit below the buttons so neither button is covered.
+  { copy: "newProject", onEnter: () => onGate() || ensureModal("projects"), target: () => onGate() ? createproject : inDrawer("project-create")(), placement: () => onGate() ? "right" : "bottom" },
+  { copy: "openProject", onEnter: () => onGate() || ensureModal("projects"), target: () => onGate() ? openproject : inDrawer("project-switch")(), placement: () => onGate() ? "right" : "bottom" },
+  { copy: () => onGate() ? "afterCreate" : "afterCreateOpen", onEnter: () => onGate() || ensureModal("projects"), target: () => onGate() ? gateCard() : inDrawer("project-create")(), placement: () => onGate() ? "right" : "bottom" },
+];
+const onGate = () => currentStage === "project";
+const gateCard = () => projectgate.querySelector(".gate-inner");
+
+// ── The CMS walkthrough: the Pages tab left to right, then the home page's sections. ──
+// Runs on its own the first time a built site's CMS opens (renderSite → maybeStartCmsTour),
+// and from the "i" in the drawer header after that. Every step lands on Pages with the
+// home page selected, re-rendering the drawer only when that isn't already the case.
+async function ensureCmsTab(tab, selected = null) {
+  const cur = siteRailState.selected;
+  const sameSel = !selected || (cur && cur.kind === selected.kind && cur.id === selected.id);
+  const already = siteRailState.tab === tab && sameSel;
+  const open = !modal.hidden && modal.classList.contains("open") && RAILS.site.classList.contains("active");
+  siteRailState.tab = tab;
+  if (selected) siteRailState.selected = selected;
+  if (open && already) await ensureModal("site");
+  else await openModal("site");
+}
+const ensureCmsHome = () => ensureCmsTab("pages", { kind: "page", id: "home" });
+const ensureCmsPosts = () => ensureCmsTab("posts"); // the first post is selected on its own
+// Types: nothing is selected by default, so open the first type (its row's click selects
+// it and re-renders) when a step needs the type editor.
+async function ensureCmsType() {
+  await ensureCmsTab("types");
+  if (modalBody.querySelector('[data-tour="cms-type-settings"]')) return;
+  const row = modalBody.querySelector('[data-tour="cms-type-row"]');
+  if (row) { row.click(); await modalRender; }
+}
+const cmsStep = (copy, id, placement, onEnter = ensureCmsHome) => ({ copy, onEnter, target: inDrawer(id), placement });
+// The About drawer lists the CMS walkthrough by tab; withTab stamps each step's tab.
+const withTab = (tab, steps) => steps.map((st) => ({ ...st, tab }));
+const CMS_TOUR_STEPS = [
+  ...withTab("pages", [
+  cmsStep("tabs", "cms-tabs", "bottom"),
+  cmsStep("help", "cms-help", "bottom"),
+  { copy: "preview", onEnter: ensureCmsHome, target: () => el("modal-preview"), placement: "bottom" },
+  cmsStep("pageList", "cms-page-list", "right"),
+  cmsStep("pageSearch", "cms-page-search", "right"),
+  cmsStep("addPage", "cms-add-page", "bottom"),
+  cmsStep("pageHead", "cms-page-head", "bottom"),
+  cmsStep("pageSettings", "cms-page-settings", "left"),
+  cmsStep("blocks", "cms-blocks", "left"),
+  cmsStep("blockRow", "cms-block-row", "bottom"),
+  cmsStep("addBlock", "cms-add-block", "left"),
+  cmsStep("designBlock", "cms-design-block", "left"),
+  cmsStep("seo", "cms-seo", "left"),
+  cmsStep("actions", "cms-actions", "top"),
+  ]),
+  // Posts: the tab, the list, then a post's editor (skipped while there are no posts).
+  ...withTab("posts", [
+  cmsStep("postsTab", "cms-tab-posts", "bottom", ensureCmsPosts),
+  cmsStep("postList", "cms-post-list", "right", ensureCmsPosts),
+  cmsStep("postSearch", "cms-post-search", "right", ensureCmsPosts),
+  cmsStep("addPost", "cms-add-post", "bottom", ensureCmsPosts),
+  cmsStep("postTags", "cms-post-tags", "right", ensureCmsPosts),
+  cmsStep("postSettings", "cms-post-settings", "left", ensureCmsPosts),
+  cmsStep("postContent", "cms-post-content", "left", ensureCmsPosts),
+  cmsStep("postSeo", "cms-post-seo", "left", ensureCmsPosts),
+  cmsStep("postActions", "cms-post-actions", "top", ensureCmsPosts),
+  ]),
+  // Types: the tab, the list, adding, then a type's definition (skipped without a type).
+  ...withTab("types", [
+  cmsStep("typesTab", "cms-tab-types", "bottom", () => ensureCmsTab("types")),
+  cmsStep("typeList", "cms-type-list", "right", () => ensureCmsTab("types")),
+  cmsStep("addEntry", "cms-add-entry", "bottom", () => ensureCmsTab("types")),
+  cmsStep("addType", "cms-add-type", "bottom", () => ensureCmsTab("types")),
+  cmsStep("typeSettings", "cms-type-settings", "left", ensureCmsType),
+  cmsStep("typeFields", "cms-type-fields", "left", ensureCmsType),
+  cmsStep("typeTemplate", "cms-type-template", "left", ensureCmsType),
+  cmsStep("typeActions", "cms-type-actions", "top", ensureCmsType),
+  ]),
+  // Forms: the tab, the list, adding, a form's sections (skipped without a form), then delivery.
+  ...withTab("forms", [
+  cmsStep("formsTab", "cms-tab-forms", "bottom", () => ensureCmsTab("forms")),
+  cmsStep("formList", "cms-form-list", "right", () => ensureCmsTab("forms")),
+  cmsStep("addForm", "cms-add-form", "bottom", () => ensureCmsTab("forms")),
+  cmsStep("formFields", "cms-form-fields", "left", () => ensureCmsTab("forms")),
+  cmsStep("formAfter", "cms-form-after", "left", () => ensureCmsTab("forms")),
+  cmsStep("formDelivery", "cms-form-delivery", "left", () => ensureCmsTab("forms")),
+  cmsStep("formActions", "cms-form-actions", "top", () => ensureCmsTab("forms")),
+  cmsStep("siteDelivery", "cms-forms-delivery", "right", () => ensureCmsTab("forms")),
+  ]),
+  // Media: the tab, Images/Files, folders, adding one, the library bar, then the grid.
+  ...withTab("media", [
+  cmsStep("mediaTab", "cms-tab-media", "bottom", () => ensureCmsTab("media")),
+  cmsStep("mediaKinds", "cms-media-kinds", "bottom", () => ensureCmsTab("media")),
+  cmsStep("mediaFolders", "cms-media-folders", "right", () => ensureCmsTab("media")),
+  cmsStep("mediaSettings", "cms-media-settings", "right", () => ensureCmsTab("media")),
+  cmsStep("addFolder", "cms-add-folder", "bottom", () => ensureCmsTab("media")),
+  cmsStep("mediaBar", "cms-media-bar", "bottom", () => ensureCmsTab("media")),
+  cmsStep("mediaGrid", "cms-media-grid", "left", () => ensureCmsTab("media")),
+  ]),
+  // Blocks: the tab, the library, one block's card.
+  ...withTab("blocks", [
+  cmsStep("blocksTab", "cms-tab-blocks", "bottom", () => ensureCmsTab("blocks")),
+  cmsStep("blockLibrary", "cms-block-library", "right", () => ensureCmsTab("blocks")),
+  cmsStep("blockCard", "cms-block-card", "bottom", () => ensureCmsTab("blocks")),
+  ]),
+  // Navigation: the tab, then the header menu, footer and legal sections.
+  ...withTab("nav", [
+  cmsStep("navTab", "cms-tab-nav", "bottom", () => ensureCmsTab("nav")),
+  cmsStep("navHeader", "cms-nav-header", "right", () => ensureCmsTab("nav")),
+  cmsStep("navFooter", "cms-nav-footer", "right", () => ensureCmsTab("nav")),
+  cmsStep("navLegal", "cms-nav-legal", "right", () => ensureCmsTab("nav")),
+  ]),
+  // Settings: the tab, then each section top to bottom, ending on the Site builder switch.
+  ...withTab("settings", [
+  cmsStep("settingsTab", "cms-tab-settings", "bottom", () => ensureCmsTab("settings")),
+  cmsStep("settingsImages", "cms-settings-images", "right", () => ensureCmsTab("settings")),
+  cmsStep("settingsSearch", "cms-settings-search", "right", () => ensureCmsTab("settings")),
+  cmsStep("settingsLogos", "cms-settings-logos", "right", () => ensureCmsTab("settings")),
+  cmsStep("settingsNav", "cms-settings-nav", "right", () => ensureCmsTab("settings")),
+  cmsStep("settingsBlog", "cms-settings-blog", "right", () => ensureCmsTab("settings")),
+  cmsStep("settingsScripts", "cms-settings-scripts", "right", () => ensureCmsTab("settings")),
+  cmsStep("settingsIcons", "cms-settings-icons", "right", () => ensureCmsTab("settings")),
+  cmsStep("settingsRedirects", "cms-settings-redirects", "right", () => ensureCmsTab("settings")),
+  cmsStep("settingsSite", "cms-settings-site", "right", () => ensureCmsTab("settings")),
+  cmsStep("settingsTrash", "cms-settings-trash", "right", () => ensureCmsTab("settings")),
+  cmsStep("settingsEnable", "cms-settings-enable", "right", () => ensureCmsTab("settings")),
+  ]),
+];
+const CMS_TOUR = { steps: CMS_TOUR_STEPS, copy: () => COPY.tour.cms.steps, doneKey: CMS_TOUR_DONE_KEY };
+// Is the open project's CMS active: a built, licensed site with the CMS switched on?
+async function cmsIsActive() {
+  try {
+    const site = await window.desktop.getSiteContent();
+    if (!site || !site.ready || site.licensed === false) return false;
+    const cms = await window.desktop.getCmsSettings();
+    return !!(cms && cms.enabled);
+  } catch { return false; }
+}
+// First visit to a built site's CMS, app-wide: run the walkthrough once. Marked seen as it
+// starts, so no later project's CMS auto-opens it either.
+function maybeStartCmsTour() {
+  if (tourRunning()) return;
+  let seen = false; try { seen = localStorage.getItem(CMS_TOUR_DONE_KEY) === "1"; } catch {}
+  if (seen) return;
+  try { localStorage.setItem(CMS_TOUR_DONE_KEY, "1"); } catch {}
+  setTimeout(() => { if (!tourRunning()) startTour(0, CMS_TOUR); }, 600);
+}
+el("modal-info").addEventListener("click", () => startTour(0, CMS_TOUR));
+let tourRevealed = null; // the rail button the tour un-hid, if any
+function tourRevealRail(btn) { if (btn && btn.hidden) { btn.hidden = false; tourRevealed = btn; } }
+function tourRestoreRail(btn) { if (tourRevealed === btn) { btn.hidden = true; tourRevealed = null; } }
+const tourEl = (() => {
+  const t = document.createElement("div");
+  t.id = "tour";
+  t.hidden = true;
+  t.setAttribute("role", "dialog");
+  t.setAttribute("aria-live", "polite");
+  t.innerHTML = `
+    <div class="tour-head">
+      <span class="tour-step"></span>
+      <button type="button" class="tour-x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="tour-title"></div>
+    <div class="tour-body"></div>
+    <div class="tour-foot">
+      <button type="button" class="tour-skip"></button>
+      <span class="tour-acts">
+        <button type="button" class="tour-back"></button>
+        <button type="button" class="tour-next"></button>
+      </span>
+    </div>`;
+  document.body.appendChild(t);
+  return t;
+})();
+// A tour: its steps, the copy map its keys index, and the localStorage flag that marks it seen.
+// MAIN_TOUR is the studio walkthrough; CMS_TOUR walks the site builder's Pages tab.
+const MAIN_TOUR = { steps: TOUR_STEPS, copy: () => COPY.tour.steps, doneKey: TOUR_DONE_KEY };
+let tourCurrent = MAIN_TOUR;
+let tourActive = [];         // the steps this run shows (the tour's steps minus any whose `when` is false)
+let tourIndex = -1;          // -1 = not running
+let tourDir = 1;             // +1 forward, -1 back: a step whose target is absent is skipped this way
+let tourTarget = null;       // the element the current step is anchored to
+let tourClickHandler = null; // the advance-on-click listener on the target
+let tourPending = false;     // set by saveKey; fires once boot has settled
+const tourRO = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => positionTour()) : null;
+
+function tourRunning() { return tourIndex >= 0; }
+
+function queueTour() {
+  // First connection only: a replay is always explicit (the About drawer).
+  if (localStorage.getItem(TOUR_DONE_KEY) === "1") return;
+  tourPending = true;
+}
+// Called once the stage after a key save has painted; the rail un-mutes over .25s and
+// the project gate fades in over .45s, so the tip lands after both have settled.
+function flushPendingTour() {
+  if (!tourPending || currentStage === "key") return;
+  tourPending = false;
+  setTimeout(() => startTour(), 650);
+}
+
+// The steps this context shows, in order (the About drawer lists the same set).
+function tourStepsFor(tour = MAIN_TOUR) { return tour.steps.filter((st) => !st.when || st.when()); }
+// The copy entry a step shows right now (copy may pick by context).
+function tourStepCopy(step, tour = tourCurrent) { return tour.copy()[typeof step.copy === "function" ? step.copy() : step.copy] || {}; }
+// Start a tour at the beginning, or jump straight to a step (the About drawer's list).
+function startTour(from = 0, tour = MAIN_TOUR) {
+  if (tourRunning()) endTour();
+  tourCurrent = tour;
+  tourDir = 1;
+  tourActive = tourStepsFor(tour);
+  if (!tourActive.length) return;
+  // Every step so far points at the rail: make sure it's showing.
+  if (document.body.classList.contains("rail-collapsed")) {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "0");
+    applySidebarCollapsed();
+  }
+  tourEl.querySelector(".tour-x").setAttribute("aria-label", COPY.tour.closeAria);
+  tourEl.querySelector(".tour-skip").textContent = COPY.tour.skip;
+  tourEl.querySelector(".tour-back").textContent = COPY.tour.back;
+  if (tourRO) tourRO.observe(el("sidebar")); // the rail's width animates; keep the tip on its target
+  tourShow(Math.max(0, Math.min(from, tourActive.length - 1)));
+}
+
+async function tourShow(i) {
+  tourDetach();
+  const step = tourActive[i];
+  if (!step) { endTour(); return; }
+  tourIndex = i; // running (so a close during onEnter is a clean end, not a no-op)
+  if (step.onEnter) { try { await step.onEnter(); } catch {} }
+  if (tourIndex !== i) return; // ended or moved on while the hook ran
+  const target = step.target();
+  if (!target) {
+    // Nothing to point at here (e.g. no post exists yet): move past it in the current direction.
+    const j = i + tourDir;
+    if (j >= 0 && j < tourActive.length) { tourIndex = -1; tourShow(j); } else endTour();
+    return;
+  }
+  tourTarget = target;
+  // A folded drawer section (the CMS accordions) opens so the tip has something to show.
+  if (target.classList && target.classList.contains("site-acc") && !target.classList.contains("open")) {
+    const head = target.querySelector(".site-acc-head"); if (head) head.click();
+  }
+  // Bring a drawer target into view: centred when it fits comfortably, top-aligned when
+  // it's taller than most of the window (so its heading stays visible).
+  if (target.scrollIntoView) {
+    const tall = target.getBoundingClientRect().height > window.innerHeight * 0.7;
+    target.scrollIntoView({ block: tall ? "start" : "center" });
+  }
+  const c = tourStepCopy(step);
+  const last = i === tourActive.length - 1;
+  tourEl.querySelector(".tour-step").textContent = COPY.tour.stepOf(i + 1, tourActive.length);
+  tourEl.querySelector(".tour-title").textContent = c.title || "";
+  tourEl.querySelector(".tour-body").textContent = c.body || "";
+  // A step's copy may name its own button (e.g. "Open" when Next opens a drawer).
+  tourEl.querySelector(".tour-next").textContent = last ? COPY.tour.done : (c.next || COPY.tour.next);
+  tourEl.querySelector(".tour-skip").hidden = last;
+  tourEl.querySelector(".tour-back").hidden = i === 0;
+  target.classList.add("tour-target");
+  if (step.advanceOnClick) {
+    // Let the target's own handler run (e.g. the drawer opens), then move on.
+    tourClickHandler = () => setTimeout(() => tourNext(), 0);
+    target.addEventListener("click", tourClickHandler);
+  }
+  if (tourRO) tourRO.observe(target);
+  const fresh = tourEl.hidden;
+  tourEl.hidden = false;
+  tourEl.className = "place-" + stepPlacement(step);
+  positionTour();
+  setTimeout(positionTour, 320); // after the drawer slide (.24s), in case no transitionend reaches us
+  setTimeout(positionTour, 520); // the wide CMS drawer takes .42s
+  if (fresh) { void tourEl.offsetWidth; requestAnimationFrame(() => tourEl.classList.add("show")); }
+  else tourEl.classList.add("show");
+}
+
+// A step's placement may depend on context (a function), default right.
+function stepPlacement(step) { const p = typeof step.placement === "function" ? step.placement() : step.placement; return p || "right"; }
+function positionTour() {
+  if (!tourRunning() || !tourTarget || tourEl.hidden) return;
+  if (!tourTarget.isConnected) { endTour(); return; }
+  const step = tourActive[tourIndex];
+  const gap = 14, pad = 8;
+  const r = tourTarget.getBoundingClientRect();
+  const tw = tourEl.offsetWidth, th = tourEl.offsetHeight;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let place = stepPlacement(step);
+  // Flip when the preferred side has no room.
+  if (place === "right" && r.right + gap + tw > vw - pad && r.left - gap - tw >= pad) place = "left";
+  else if (place === "left" && r.left - gap - tw < pad && r.right + gap + tw <= vw - pad) place = "right";
+  else if (place === "bottom" && r.bottom + gap + th > vh - pad && r.top - gap - th >= pad) place = "top";
+  else if (place === "top" && r.top - gap - th < pad && r.bottom + gap + th <= vh - pad) place = "bottom";
+  tourEl.className = "place-" + place + (tourEl.classList.contains("show") ? " show" : "");
+  let left, top;
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  if (place === "right" || place === "left") {
+    left = place === "right" ? r.right + gap : r.left - gap - tw;
+    top = Math.max(pad, Math.min(cy - th / 2, vh - th - pad));
+    tourEl.style.setProperty("--arrow-y", (cy - top) + "px");
+  } else {
+    top = place === "bottom" ? r.bottom + gap : r.top - gap - th;
+    left = Math.max(pad, Math.min(cx - tw / 2, vw - tw - pad));
+    tourEl.style.setProperty("--arrow-x", (cx - left) + "px");
+  }
+  tourEl.style.left = Math.round(left) + "px";
+  tourEl.style.top = Math.round(top) + "px";
+}
+
+// Drop the current step's hooks on its target (ring, click listener, observer).
+function tourDetach() {
+  if (tourTarget) {
+    tourTarget.classList.remove("tour-target");
+    if (tourClickHandler) tourTarget.removeEventListener("click", tourClickHandler);
+    if (tourRO) tourRO.unobserve(tourTarget);
+    const step = tourActive[tourIndex];
+    if (step && step.onExit) { try { step.onExit(); } catch {} }
+  }
+  tourTarget = null;
+  tourClickHandler = null;
+}
+
+function tourNext() {
+  if (!tourRunning()) return;
+  tourDir = 1;
+  if (tourIndex + 1 >= tourActive.length) endTour(true);
+  else tourShow(tourIndex + 1);
+}
+// Back re-enters the previous step (its onEnter reopens whatever it needs).
+function tourBack() {
+  if (!tourRunning() || tourIndex === 0) return;
+  tourDir = -1;
+  tourShow(tourIndex - 1);
+}
+
+// Finishing or skipping both count as seen: the tour never auto-starts again, only
+// a replay from the About drawer brings it back.
+function endTour() {
+  if (!tourRunning()) return;
+  tourDetach();
+  tourIndex = -1;
+  if (tourRO) tourRO.unobserve(el("sidebar"));
+  try { localStorage.setItem(tourCurrent.doneKey, "1"); } catch {}
+  tourEl.classList.remove("show");
+  setTimeout(() => { if (!tourRunning()) tourEl.hidden = true; }, 240);
+}
+
+tourEl.querySelector(".tour-next").addEventListener("click", () => tourNext());
+tourEl.querySelector(".tour-back").addEventListener("click", () => tourBack());
+tourEl.querySelector(".tour-skip").addEventListener("click", () => endTour());
+tourEl.querySelector(".tour-x").addEventListener("click", () => endTour());
+window.addEventListener("resize", positionTour);
+document.addEventListener("scroll", positionTour, true);
+// A target inside a drawer is measured while the drawer is still sliding in; settle
+// the tip once transitions finish.
+document.addEventListener("transitionend", positionTour, true);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && tourRunning()) { endTour(); e.stopPropagation(); } }, true);
 
 // Sidebar collapse pull-tab (the gear). Preference persists in localStorage — the
 // shell is one app-wide renderer, so it's global across projects and sessions.
@@ -1317,6 +1728,106 @@ buildCommandMenu();
 // The About drawer: version + byline. (The command list used to live here; the
 // chat pane is where commands are found now.)
 async function renderHelp(body) {
+  // ── Replay the walkthrough tour ──
+  const replay = document.createElement("div");
+  replay.className = "setrow tour-replay";
+  const rk = document.createElement("div");
+  rk.className = "k";
+  rk.textContent = COPY.tour.replayTitle;
+  const rd = document.createElement("div");
+  rd.className = "d";
+  rd.textContent = COPY.tour.replayDesc;
+  const rb = document.createElement("button");
+  rb.type = "button";
+  rb.className = "cbtn ghost";
+  rb.textContent = COPY.tour.replayBtn;
+  // The drawer slides away first so the tip points at an uncovered rail.
+  const launch = (from) => { closeModal(); setTimeout(() => startTour(from), 260); };
+  rb.addEventListener("click", () => launch(0));
+  // "Show tour steps": the step titles, each a jump straight into the tour there.
+  const sb = document.createElement("button");
+  sb.type = "button";
+  sb.className = "cbtn ghost";
+  sb.textContent = COPY.tour.showSteps;
+  const list = document.createElement("ol");
+  list.className = "tour-steps";
+  list.hidden = true;
+  tourStepsFor().forEach((step, i) => {
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "tour-step-btn";
+    b.innerHTML = `<span class="n">${i + 1}</span><span class="t"></span>`;
+    b.querySelector(".t").textContent = tourStepCopy(step, MAIN_TOUR).title || ""; // the studio tour's wording, whatever ran last
+    b.addEventListener("click", () => launch(i));
+    li.appendChild(b);
+    list.appendChild(li);
+  });
+  sb.addEventListener("click", () => { const open = list.hidden; siteReveal(list, open); sb.textContent = open ? COPY.tour.hideSteps : COPY.tour.showSteps; });
+  const btns = document.createElement("div");
+  btns.className = "tour-replay-btns";
+  btns.append(rb, sb);
+  replay.append(rk, rd, btns, list);
+  // "CMS": the site builder's walkthrough, grouped by tab. Only once the project's CMS is
+  // active (a built site with the CMS switched on). A tab's name starts its steps from the
+  // first; a step under an expanded tab starts there.
+  const cmsActive = await cmsIsActive();
+  if (cmsActive) {
+    const cb = document.createElement("button");
+    cb.type = "button";
+    cb.className = "cbtn ghost";
+    cb.textContent = COPY.tour.cms.listBtn;
+    btns.appendChild(cb);
+    const groups = document.createElement("div");
+    groups.className = "tour-groups";
+    groups.hidden = true;
+    const steps = tourStepsFor(CMS_TOUR);
+    const tabs = [...new Set(steps.map((st) => st.tab))];
+    tabs.forEach((tab) => {
+      const g = document.createElement("div");
+      g.className = "tour-group";
+      const head = document.createElement("div");
+      head.className = "tour-group-head";
+      const tri = document.createElement("button");
+      tri.type = "button";
+      tri.className = "tour-group-tri";
+      tri.setAttribute("aria-label", COPY.tour.cms.expandTab(COPY.site.tabs[tab] || tab));
+      tri.setAttribute("aria-expanded", "false");
+      tri.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5l9 7-9 7z"/></svg>';
+      const name = document.createElement("button");
+      name.type = "button";
+      name.className = "tour-group-name";
+      name.textContent = COPY.site.tabs[tab] || tab;
+      const first = steps.findIndex((st) => st.tab === tab);
+      name.addEventListener("click", () => startTour(first, CMS_TOUR));
+      head.append(tri, name);
+      const kids = document.createElement("ol");
+      kids.className = "tour-steps tour-group-steps";
+      kids.hidden = true;
+      steps.forEach((st, i) => {
+        if (st.tab !== tab) return;
+        const li = document.createElement("li");
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "tour-step-btn";
+        b.innerHTML = `<span class="n">${i - first + 1}</span><span class="t"></span>`;
+        b.querySelector(".t").textContent = tourStepCopy(st, CMS_TOUR).title || "";
+        b.addEventListener("click", () => startTour(i, CMS_TOUR));
+        li.appendChild(b);
+        kids.appendChild(li);
+      });
+      tri.addEventListener("click", () => { const open = kids.hidden; siteReveal(kids, open); tri.classList.toggle("open", open); tri.setAttribute("aria-expanded", String(open)); });
+      g.append(head, kids);
+      groups.appendChild(g);
+    });
+    cb.addEventListener("click", () => { const open = groups.hidden; siteReveal(groups, open); cb.textContent = open ? COPY.tour.cms.hideListBtn : COPY.tour.cms.listBtn; });
+    replay.appendChild(groups);
+  }
+  body.appendChild(replay);
+  const sep = document.createElement("div");
+  sep.className = "help-divider";
+  body.appendChild(sep);
+
   // ── Version + credit ──
   const footer = document.createElement("div");
   footer.className = "help-footer";
@@ -1361,6 +1872,10 @@ function loadingDots() {
   return d;
 }
 
+// The life-preserver mark: every control that opens a help overlay uses it (the Figma
+// drawer's export help, the references and direction panels' help, the publish help),
+// so one icon means "more to read" everywhere.
+const HELP_BUOY_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/><circle cx="12" cy="12" r="4"/></svg>';
 // The unplug mark (disconnect), shared across integration drawers.
 const UNPLUG_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 5 3-3"/><path d="m2 22 3-3"/><path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z"/><path d="M7.5 13.5 10 11"/><path d="M10.5 16.5 13 14"/><path d="m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z"/></svg>';
 
@@ -1469,12 +1984,14 @@ async function renderProjects(body) {
   btnRow.className = "projbtns";
   const createBtn = document.createElement("button");
   createBtn.className = "panelbtn primary";
+  createBtn.dataset.tour = "project-create"; // walkthrough tour anchor
   createBtn.textContent = COPY.project.createNew;
   // Creating a project runs the agent → needs a Claude key. Disabled in read-only mode.
   if (!appHasKey) { createBtn.disabled = true; createBtn.title = COPY.project.needKeyToCreate; }
   else createBtn.addEventListener("click", createNewProject);
   const switchBtn = document.createElement("button");
   switchBtn.className = "panelbtn";
+  switchBtn.dataset.tour = "project-switch"; // walkthrough tour anchor
   switchBtn.textContent = COPY.project.switchExisting;
   switchBtn.addEventListener("click", switchToExisting);
   btnRow.append(createBtn, switchBtn);
@@ -1525,6 +2042,7 @@ let companyAutoCreate = false;
 async function renderCompany(body) {
   const def = await window.desktop.getDefaultCompany(); // { has, companyName, headingFont, bodyFont, logoName }
   const proj = await window.desktop.getProjectStatus();
+  body = tourSection(body, "company"); // the walkthrough tour anchors to the whole drawer
 
   // Header (Licenses-style): title + Active/Not-set badge + an unplug delete when active.
   body.appendChild(connStatusRow(
@@ -1669,6 +2187,7 @@ async function renderCompany(body) {
 async function renderFigma(body) {
   const lic = await window.desktop.getLicenseStatus();
   railFigma.classList.toggle("activated", !!lic.hasLicense); // color the icon on save/clear
+  body = tourSection(body, "figma-export"); // the walkthrough tour anchors to the whole drawer
 
   body.appendChild(connStatusRow(COPY.figma.licenseLabel, lic.hasLicense, lic.hasLicense ? COPY.common.active : COPY.common.notSet, null, null));
 
@@ -1677,23 +2196,26 @@ async function renderFigma(body) {
   // (Destination / update-vs-new file (P16/P17) are still confirmed in chat on first export.)
   let cbStyleguide = null;
   let cbPages = null;
+  // "What to export" header, with a help (life-preserver) button pushed to the right that opens the options help.
+  // Shown unlicensed too (as "What gets exported") so the help is readable before buying,
+  // and so the walkthrough tour can point at the help button on a fresh install.
+  const scopeHead = document.createElement("div");
+  scopeHead.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;";
+  const scopeLabel = document.createElement("div");
+  scopeLabel.className = "sess-label";
+  scopeLabel.style.marginBottom = "0"; // the flex header owns the spacing now
+  scopeLabel.textContent = lic.hasLicense ? COPY.figma.exportScopeLabel : COPY.figma.exportScopeLabelUnlicensed;
+  const help = document.createElement("button");
+  help.type = "button";
+  help.className = "row-help";
+  help.dataset.tour = "figma-help";
+  help.title = COPY.figma.exportHelpTitle;
+  help.setAttribute("aria-label", COPY.figma.exportHelpTitle);
+  help.innerHTML = HELP_BUOY_SVG;
+  help.addEventListener("click", () => openHelpOverlay(COPY.figma.exportHelpHtml));
+  scopeHead.append(scopeLabel, help);
+  body.appendChild(scopeHead);
   if (lic.hasLicense) {
-    // "What to export" header, with a "?" pushed to the right that opens the options help.
-    const scopeHead = document.createElement("div");
-    scopeHead.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;";
-    const scopeLabel = document.createElement("div");
-    scopeLabel.className = "sess-label";
-    scopeLabel.style.marginBottom = "0"; // the flex header owns the spacing now
-    scopeLabel.textContent = COPY.figma.exportScopeLabel;
-    const help = document.createElement("button");
-    help.type = "button";
-    help.className = "row-help";
-    help.title = COPY.figma.exportHelpTitle;
-    help.setAttribute("aria-label", COPY.figma.exportHelpTitle);
-    help.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>';
-    help.addEventListener("click", () => openHelpOverlay(COPY.figma.exportHelpHtml));
-    scopeHead.append(scopeLabel, help);
-    body.appendChild(scopeHead);
     const scopeRow = (text, checked) => {
       const row = document.createElement("label");
       row.className = "toggle-row";
@@ -1808,14 +2330,116 @@ function licensesDivider(body) {
   sep.style.cssText = "height:1px;background:#2a2a2a;margin:20px 0;";
   body.appendChild(sep);
 }
+// The tools at the top of the Pages and Posts lists: a search field and the Create row,
+// and for posts a Tags expander (each tag with its post count). A search shows what
+// matches (by name first, then by tag) in the right column as pills; a tag shows its
+// posts the same way. Picking a pill opens that item there as the editor. Typing and
+// tag clicks never re-render the drawer: the editor's nodes are set aside and put back
+// when the search is cleared. Call later() once the editor is in the right column.
+// A search field: the input with a magnifier at its right edge (decorative; the input
+// keeps its own placeholder and behaviour).
+function siteSearchField(input) {
+  const wrap = siteEl("div", "site-search");
+  wrap.appendChild(input);
+  const icon = document.createElement("span"); icon.className = "site-search-icon"; icon.setAttribute("aria-hidden", "true");
+  icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
+  wrap.appendChild(icon);
+  return wrap;
+}
+function siteListTools({ left, right, placeholder, items, onOpen, addRow, tags, tourId }) {
+  const S = COPY.site;
+  const tools = siteEl("div", "site-list-tools");
+  const search = document.createElement("input"); search.className = "field"; search.placeholder = placeholder; search.autocomplete = "off"; search.style.marginBottom = "0";
+  if (tourId) search.dataset.tour = tourId + "-search"; // walkthrough anchors
+  search.value = siteRailState.query || "";
+  tools.appendChild(siteSearchField(search));
+  addRow.style.margin = "0";
+  tools.appendChild(addRow);
+  let saved = null; // the editor's nodes while results are showing
+  const pillsFor = (list) => {
+    const pills = siteEl("div", "site-pills");
+    list.forEach((it) => {
+      const b = siteEl("button", "site-pill"); b.type = "button";
+      b.append(siteEl("span", "t", it.title), siteEl("span", "s", it.sub || ""));
+      b.addEventListener("click", () => { siteRailState.query = ""; siteRailState.listMode = null; onOpen(it.id); });
+      pills.appendChild(b);
+    });
+    return pills;
+  };
+  const showResults = (heading, list) => {
+    if (!saved) saved = Array.from(right.childNodes);
+    right.innerHTML = "";
+    const box = siteEl("div", "site-results");
+    box.appendChild(siteEl("div", "sess-label", heading));
+    if (!list.length) box.appendChild(siteEl("div", "sess-desc", S.searchNone));
+    else box.appendChild(pillsFor(list));
+    right.appendChild(box);
+  };
+  const restore = () => { if (!saved) return; right.innerHTML = ""; saved.forEach((n) => right.appendChild(n)); saved = null; };
+  const tagRows = () => Array.from(tools.querySelectorAll(".site-tag-row"));
+  const runSearch = () => {
+    const raw = search.value.trim(); const q = raw.toLowerCase();
+    siteRailState.query = search.value;
+    tagRows().forEach((r) => r.classList.remove("active"));
+    if (!q) { siteRailState.listMode = null; restore(); return; }
+    siteRailState.listMode = { kind: "search" };
+    const byName = items.filter((it) => it.title.toLowerCase().includes(q));
+    const byTag = items.filter((it) => !byName.includes(it) && (it.tags || []).some((t) => t.toLowerCase().includes(q)));
+    showResults(S.searchResults(raw), [...byName, ...byTag]);
+  };
+  search.addEventListener("input", runSearch);
+  search.addEventListener("keydown", (e) => { if (e.key === "Escape") { search.value = ""; runSearch(); } });
+  if (tags) {
+    const counts = {}; items.forEach((it) => (it.tags || []).forEach((t) => { counts[t] = (counts[t] || 0) + 1; }));
+    const names = Object.keys(counts).sort((a, b) => a.localeCompare(b));
+    const tog = siteEl("button", "site-tags-toggle"); tog.type = "button";
+    tog.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5l9 7-9 7z"/></svg><span></span>';
+    tog.querySelector("span").textContent = S.tagsExpander;
+    if (tourId) tog.dataset.tour = tourId + "-tags";
+    tog.setAttribute("aria-expanded", String(!!siteRailState.tagsOpen));
+    const list = siteEl("div", "site-tag-list"); list.hidden = !siteRailState.tagsOpen;
+    tog.classList.toggle("open", !!siteRailState.tagsOpen);
+    tog.addEventListener("click", () => { const open = list.hidden; siteReveal(list, open); siteRailState.tagsOpen = open; tog.classList.toggle("open", open); tog.setAttribute("aria-expanded", String(open)); });
+    if (!names.length) list.appendChild(siteEl("div", "sess-desc", S.tagsNone));
+    names.forEach((t) => {
+      const row = siteEl("button", "site-tag-row"); row.type = "button";
+      row.append(siteEl("span", "name", t), siteEl("span", "count", String(counts[t])));
+      row.addEventListener("click", () => {
+        search.value = ""; siteRailState.query = "";
+        siteRailState.listMode = { kind: "tag", tag: t };
+        tagRows().forEach((r) => r.classList.toggle("active", r === row));
+        showResults(S.tagPosts(t), items.filter((it) => (it.tags || []).includes(t)));
+      });
+      list.appendChild(row);
+    });
+    tools.append(tog, list);
+  }
+  left.append(tools, siteEl("div", "site-list-sep"));
+  // Re-apply a search or tag view that was showing before a re-render (a save, say).
+  const mode = siteRailState.listMode;
+  const later = () => {
+    if (mode && mode.kind === "search" && search.value.trim()) runSearch();
+    else if (mode && mode.kind === "tag") { const row = tagRows().find((r) => r.firstChild.textContent === mode.tag); if (row) row.click(); else siteRailState.listMode = null; }
+  };
+  return { later, search };
+}
+
+// Each section sits in its own container tagged data-tour so the walkthrough tour
+// can anchor a tip to it (TOUR_STEPS in the tour section).
+function tourSection(body, id) {
+  const w = document.createElement("div");
+  w.dataset.tour = id;
+  body.appendChild(w);
+  return w;
+}
 async function renderLicenses(body) {
   // Your keys — the Anthropic API key the studio runs on.
   licensesGroupHead(body, COPY.licenses.keysGroup);
-  await claudeKeySection(body);
+  await claudeKeySection(tourSection(body, "claude-key"));
 
   // Licenses — the feature unlocks, in order: Figma, then Design.
   licensesGroupHead(body, COPY.licenses.licensesGroup);
-  await licenseSection(body, {
+  await licenseSection(tourSection(body, "figma-license"), {
     label: COPY.licenses.figmaLabel,
     desc: COPY.licenses.figmaDesc,
     getStatus: () => window.desktop.getLicenseStatus(),
@@ -1825,7 +2449,7 @@ async function renderLicenses(body) {
 
   licensesDivider(body);
 
-  await licenseSection(body, {
+  await licenseSection(tourSection(body, "design-license"), {
     label: COPY.licenses.designLabel,
     desc: COPY.licenses.designDesc,
     getStatus: () => window.desktop.getDesignLicenseStatus(),
@@ -2246,7 +2870,9 @@ async function renderPublish(body) {
   const col = document.createElement("div");
   col.style.cssText = "min-height:100%;display:flex;flex-direction:column;";
   body.appendChild(col);
-  body = col;
+  // The content sits in a data-tour container (the walkthrough tour anchors to it); the
+  // help footer below stays a direct child of the column so it still pins to the bottom.
+  body = tourSection(col, "publish");
 
   // Appended last (before any early return) so it sits at the very bottom, as a
   // footer separated from the content above (e.g. the Disconnect button) by a rule.
@@ -2689,6 +3315,9 @@ function siteField(labelText, value, { textarea, placeholder, hint, type } = {})
 }
 // A field with a fixed lead-in the designer can't edit: the site address before a
 // type's path, or the type's path before an entry's slug.
+// A URL slug from a title: lowercase, accents stripped, anything else a hyphen. Pages and
+// posts both derive their permalink from the title this way until it's edited by hand.
+function siteSlugOf(t) { return String(t || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
 function sitePrefixField(labelText, prefix, value, { hint, placeholder } = {}) {
   const wrap = siteEl("div", "site-kv");
   wrap.appendChild(siteEl("div", "k", labelText));
@@ -2727,13 +3356,47 @@ function siteFoldSet(key, open) {
     catch (e) { console.warn("[cms] fold state not saved:", e); }
   }, 150);
 }
+// Soft open / close for anything that expands by toggling `hidden` (the CMS folds, the
+// Media tab's settings panel, the Tags expander, the About drawer's step lists): height
+// and opacity ease over ~.22s, then `hidden` is set (closing) or the inline height
+// cleared (opening). Reduced-motion users get the plain toggle.
+function siteReveal(el, open, ms) {
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (el._revealAnim) { el._revealAnim.cancel(); el._revealAnim = null; }
+  if (reduce || !el.animate) { el.hidden = !open; el.style.overflow = ""; return; }
+  // Height, padding and margins travel together so the box reads as one shape the whole
+  // way; the close doesn't fade (a fade crossing the collapse reads as a stutter), the
+  // open fades in gently and takes a touch longer.
+  const ease = "cubic-bezier(.4, 0, .2, 1)";
+  const cs = getComputedStyle(el);
+  // offsetHeight is the box as it will rest (content + padding); scrollHeight can differ
+  // by a few pixels, which showed as a pop at the end of an open.
+  const full = () => ({ height: el.offsetHeight + "px", paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom, marginTop: cs.marginTop, marginBottom: cs.marginBottom });
+  const zero = { height: "0px", paddingTop: "0px", paddingBottom: "0px", marginTop: "0px", marginBottom: "0px" };
+  // Measure BEFORE clipping: overflow hidden stops child margins collapsing through the
+  // box, so it measures a few pixels taller than it rests at, which showed as a pop.
+  const done = () => { el._revealAnim = null; el.style.overflow = ""; };
+  if (open) {
+    el.hidden = false;
+    const to = full();
+    el.style.overflow = "hidden";
+    el._revealAnim = el.animate([{ ...zero, opacity: 0 }, { ...to, opacity: 1 }], { duration: ms || 250, easing: ease });
+    el._revealAnim.onfinish = done;
+  } else {
+    const from = full();
+    el.style.overflow = "hidden";
+    el._revealAnim = el.animate([from, zero], { duration: ms || 220, easing: ease });
+    el._revealAnim.onfinish = () => { el.hidden = true; done(); };
+  }
+}
+
 function siteFold(title, key, { defaultOpen = true } = {}) {
   const isOpen = key in siteFolds ? siteFolds[key] !== false : defaultOpen;
   const sec = siteEl("div", "site-acc" + (isOpen ? " open" : ""));
   const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(isOpen));
   head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
   const body = siteEl("div", "site-acc-body"); body.hidden = !isOpen;
-  head.addEventListener("click", () => { const now = body.hidden; body.hidden = !now; sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(key, now); });
+  head.addEventListener("click", () => { const now = body.hidden; siteReveal(body, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(key, now); });
   sec.append(head, body);
   return { sec, body, head };
 }
@@ -3071,39 +3734,49 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
     const slug = siteEl("div", "site-page-slug", page.id === "home" ? COPY.site.homeSlug : "/" + (page.slug || page.id));
     head.append(chevron, title, slug);
     head.addEventListener("click", () => { siteRailState.open[page.id] = !siteRailState.open[page.id]; refresh(); });
+    head.dataset.tour = "cms-page-head";
     card.appendChild(head);
     if (!siteRailState.open[page.id]) return card;
   } else {
     const h = siteEl("div"); h.style.cssText = "display:flex;align-items:baseline;gap:10px;margin-bottom:10px;";
     h.append(siteEl("div", "site-page-title", page.title), siteEl("div", "site-page-slug", page.id === "home" ? COPY.site.homeSlug : "/" + (page.slug || page.id)));
     h.querySelector(".site-page-title").style.fontSize = "15px";
+    h.dataset.tour = "cms-page-head";
     card.appendChild(h);
   }
 
   // Working copy; Save writes it. Deep-cloned so a cancelled edit changes nothing.
-  const draft = JSON.parse(JSON.stringify({ title: page.title, slug: page.slug, parent: page.parent || null, seo: page.seo || {}, blocks: page.blocks || [] }));
+  const draft = JSON.parse(JSON.stringify({ title: page.title, slug: page.id === "home" ? page.slug : (page.slug || siteSlugOf(page.title) || page.id), parent: page.parent || null, seo: page.seo || {}, blocks: page.blocks || [] }));
   let dirty = false;
   let cancelBtn = null;
   const markDirty = () => { dirty = true; saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
   const body = siteEl("div"); body.style.marginTop = "10px";
 
-  const ps = siteFold(COPY.site.pageSettings, "page:settings"); body.appendChild(ps.sec);
-  const t = siteField(COPY.site.pageTitle, draft.title); t.input.addEventListener("input", () => { draft.title = t.input.value; markDirty(); }); ps.body.appendChild(t.wrap);
-  if (page.id !== "home") {
-    const sl = siteField(COPY.site.pageSlug, draft.slug || page.id, { hint: COPY.site.pageSlugHint }); sl.input.addEventListener("input", () => { draft.slug = sl.input.value; markDirty(); }); ps.body.appendChild(sl.wrap);
-    // Parent page: any page but home, itself, or one of its own descendants.
+  const ps = siteFold(COPY.site.pageSettings, "page:settings"); ps.sec.dataset.tour = "cms-page-settings"; body.appendChild(ps.sec);
+  const t = siteField(COPY.site.pageTitle, draft.title); ps.body.appendChild(t.wrap);
+  if (page.id === "home") t.input.addEventListener("input", () => { draft.title = t.input.value; markDirty(); });
+  else {
     const all = (renderSitePage.pages || []);
+    // Permalink, as posts have it: the title's slug, following the title until it's edited
+    // by hand. The prefix shows the parent's address so the full path reads as one.
+    const prefixFor = (pid) => { const par = pid && all.find((x) => x.id === pid); return par ? "/" + (par.route || par.slug || par.id) + "/" : "/"; };
+    const sl = sitePrefixField(COPY.site.pageSlug, prefixFor(draft.parent), draft.slug, { hint: COPY.site.pageSlugHint }); ps.body.appendChild(sl.wrap);
+    const slugFollows = page.slug ? page.slug === siteSlugOf(page.title) : true;
+    if (!slugFollows) sl.input.dataset.touched = "1";
+    t.input.addEventListener("input", () => { draft.title = t.input.value; if (!sl.input.dataset.touched) { draft.slug = siteSlugOf(t.input.value); sl.input.value = draft.slug; } markDirty(); });
+    sl.input.addEventListener("input", () => { sl.input.dataset.touched = "1"; draft.slug = sl.input.value; markDirty(); });
+    // Parent page: any page but home, itself, or one of its own descendants.
     const under = (id) => { let cur = all.find((x) => x.id === id); let g = 0; while (cur && cur.parent && g++ < 16) { if (cur.parent === page.id) return true; cur = all.find((x) => x.id === cur.parent); } return false; };
     const pw = siteEl("div", "site-kv"); pw.appendChild(siteEl("div", "k", COPY.site.pageParent));
     const psel = document.createElement("select"); psel.className = "field";
     const o0 = document.createElement("option"); o0.value = ""; o0.textContent = COPY.site.pageParentNone; psel.appendChild(o0);
     all.filter((x) => x.id !== "home" && x.id !== page.id && !under(x.id)).forEach((x) => { const o = document.createElement("option"); o.value = x.id; o.textContent = `${x.title}  ·  /${x.route || x.slug || x.id}`; psel.appendChild(o); });
-    psel.value = draft.parent || ""; psel.addEventListener("change", () => { draft.parent = psel.value || null; markDirty(); });
+    psel.value = draft.parent || ""; psel.addEventListener("change", () => { draft.parent = psel.value || null; sl.lead.textContent = prefixFor(draft.parent); markDirty(); });
     pw.appendChild(psel); pw.appendChild(siteEl("div", "sess-desc", COPY.site.pageParentHint)); ps.body.appendChild(pw);
   }
 
   // SEO: its own section, the LAST one (appended after Blocks, below).
-  const sf = siteFold(COPY.site.seoHeading, "page:seo");
+  const sf = siteFold(COPY.site.seoHeading, "page:seo"); sf.sec.dataset.tour = "cms-seo";
   const st = siteField(COPY.site.seoTitle, draft.seo.title, { hint: COPY.site.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; markDirty(); }); sf.body.appendChild(st.wrap);
   const sd = siteField(COPY.site.seoDescription, draft.seo.description, { textarea: true, hint: COPY.site.seoDescriptionHint }); sd.input.addEventListener("input", () => { draft.seo.description = sd.input.value; markDirty(); }); sf.body.appendChild(sd.wrap);
   sf.body.appendChild(siteImageControl(draft.seo.image, (next) => { draft.seo.image = next ? next.src : ""; markDirty(); }, { label: COPY.site.seoImage }));
@@ -3114,7 +3787,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
   const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!draft.seo.noindex;
   nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; markDirty(); }); nx.append(nxCb, siteEl("span", "", COPY.site.seoNoindex)); sf.body.appendChild(nx);
 
-  const bf = siteFold(COPY.site.blocksHeading, "page:blocks"); body.appendChild(bf.sec);
+  const bf = siteFold(COPY.site.blocksHeading, "page:blocks"); bf.sec.dataset.tour = "cms-blocks"; body.appendChild(bf.sec);
   const blockList = siteEl("div");
   const byKey = Object.fromEntries(blocks.map((b) => [b.key, b]));
   const paintBlocks = () => {
@@ -3122,6 +3795,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
     if (!draft.blocks.length) blockList.appendChild(siteEl("div", "sess-desc", COPY.site.noBlocks));
     draft.blocks.forEach((b, i) => {
       const row = siteEl("div", "site-block");
+      if (i === 0) row.dataset.tour = "cms-block-row"; // the walkthrough points at the first section
       const def = byKey[b.type];
       row.appendChild(siteEl("div", "site-block-name", def ? def.name : b.type));
       siteMakeDraggable(row, i, (from, to) => { const [m] = draft.blocks.splice(from, 1); draft.blocks.splice(to, 0, m); markDirty(); paintBlocks(); });
@@ -3229,13 +3903,14 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
       runAgent(COPY.site.designBlockRequest(desc, page.title, dzRefs), COPY.site.designBlockEcho(desc, page.title));
     });
     dz.append(dzBtn, dzForm);
+    addRow.dataset.tour = "cms-add-block"; dz.dataset.tour = "cms-design-block";
     addRow.appendChild(sel); bf.body.appendChild(addRow); bf.body.appendChild(dz);
   }
 
   const actions = siteEl("div", "site-actions");
   // Status + actions: a draft is previewed here and left out of the published site;
   // Publish flips it on save. The row sticks to the bottom of the drawer.
-  actions.className = "site-actions";
+  actions.className = "site-actions"; actions.dataset.tour = "cms-actions";
   const isDraft = page.id !== "home" && !!page.draft;
   if (page.id !== "home") actions.appendChild(siteEl("span", "site-status" + (isDraft ? " draft" : ""), isDraft ? COPY.site.statusDraft : COPY.site.statusPublished));
   const doSave = async (btn, asDraft) => {
@@ -3276,13 +3951,14 @@ function renderSitePost(post, refresh) {
   const h = siteEl("div"); h.style.cssText = "display:flex;align-items:baseline;gap:10px;margin-bottom:10px;";
   h.append(siteEl("div", "site-page-title", post.title), siteEl("div", "site-page-slug", "/" + siteBlogPath + "/" + post.id));
   h.querySelector(".site-page-title").style.fontSize = "15px";
+  h.dataset.tour = "cms-post-head";
   card.appendChild(h);
-  const slugOf = (t) => String(t || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const slugOf = siteSlugOf;
   const draft = JSON.parse(JSON.stringify({ title: post.title, slug: post.slug || slugOf(post.title) || post.id, date: post.date, description: post.description, image: post.image, tags: post.tags || [], draft: !!post.draft, seo: post.seo || {}, body: post.body || "" }));
   let saveBtn, cancelBtn;
   const dirty = () => { saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
   // Sections, as pages have: Post settings, Content, SEO (last).
-  const pf = siteFold(S.postSettings, "post:settings"); card.appendChild(pf.sec);
+  const pf = siteFold(S.postSettings, "post:settings"); pf.sec.dataset.tour = "cms-post-settings"; card.appendChild(pf.sec);
   const t = siteField(S.pageTitle, draft.title); pf.body.appendChild(t.wrap);
   // The permalink starts as the title's slug and follows the title until it's edited by hand.
   const sl = sitePrefixField(S.postSlug, `/${siteBlogPath}/`, draft.slug, { hint: S.postSlugHint }); pf.body.appendChild(sl.wrap);
@@ -3297,11 +3973,14 @@ function renderSitePost(post, refresh) {
   upd.appendChild(siteEl("div", "sess-desc", updText)); pf.body.appendChild(upd);
   const ds = siteField(S.postDescription, draft.description, { textarea: true, hint: S.postDescriptionHint }); ds.input.addEventListener("input", () => { draft.description = ds.input.value; dirty(); }); pf.body.appendChild(ds.wrap);
   pf.body.appendChild(siteImageControl(draft.image, (next) => { draft.image = next ? next.src : ""; dirty(); }, { label: S.postImage }));
-  const tg = siteField(S.postTags, draft.tags.join(", "), { hint: S.postTagsHint }); tg.input.addEventListener("input", () => { draft.tags = tg.input.value.split(",").map((x) => x.trim()).filter(Boolean); dirty(); }); pf.body.appendChild(tg.wrap);
-  const cf = siteFold(S.postContent, "post:content"); card.appendChild(cf.sec);
+  // Tags: the same picker as an image's tags. The list holds every tag used by any post
+  // (renderSitePost.allTags, set by the Posts tab), so a tag is picked, not retyped.
+  const tg = tagCombo({ tags: draft.tags, allTags: renderSitePost.allTags || [], onChange: (t) => { draft.tags = [...t]; dirty(); }, label: S.postTags, hint: S.postTagsHint, noTags: S.postNoTags });
+  pf.body.appendChild(tg.wrap);
+  const cf = siteFold(S.postContent, "post:content"); cf.sec.dataset.tour = "cms-post-content"; card.appendChild(cf.sec);
   const rich = siteRichEditor(draft.body, () => { draft.body = rich.getMarkdown(); dirty(); });
   cf.body.appendChild(rich.wrap); cf.body.appendChild(siteEl("div", "sess-desc", S.postBodyHint));
-  const sf = siteFold(S.seoHeading, "post:seo"); card.appendChild(sf.sec);
+  const sf = siteFold(S.seoHeading, "post:seo"); sf.sec.dataset.tour = "cms-post-seo"; card.appendChild(sf.sec);
   const st = siteField(S.seoTitle, draft.seo.title, { hint: S.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; dirty(); }); sf.body.appendChild(st.wrap);
   const sd = siteField(S.seoDescription, draft.seo.description, { textarea: true, hint: S.postSeoDescriptionHint }); sd.input.addEventListener("input", () => { draft.seo.description = sd.input.value; dirty(); }); sf.body.appendChild(sd.wrap);
   sf.body.appendChild(siteImageControl(draft.seo.image, (next) => { draft.seo.image = next ? next.src : ""; dirty(); }, { label: S.seoImage }));
@@ -3313,7 +3992,7 @@ function renderSitePost(post, refresh) {
   nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; dirty(); }); nx.append(nxCb, siteEl("span", "", S.seoNoindex)); sf.body.appendChild(nx);
 
   // Status + actions. A draft is never built; Publish flips it live on save.
-  const actions = siteEl("div", "site-actions");
+  const actions = siteEl("div", "site-actions"); actions.dataset.tour = "cms-post-actions";
   const status = siteEl("span", "site-status" + (draft.draft ? " draft" : ""), draft.draft ? S.statusDraft : S.statusPublished);
   const doSave = async (btn, asDraft) => {
     const label = btn.textContent; btn.disabled = true; btn.textContent = S.saving;
@@ -3407,8 +4086,12 @@ function renderSiteEntry(type, entry, ctx, refresh) {
 
   // The same shape as a page: settings, content, blocks, then SEO last.
   const ps = siteFold(S.entrySettings, foldKey + ":settings"); card.appendChild(ps.sec);
-  const t = siteField(S.pageTitle, entry.title); t.input.addEventListener("input", dirty); ps.body.appendChild(t.wrap);
-  const sl = sitePrefixField(S.pageSlug, `${type.path}/`, entry.slug || entry.id, { hint: S.pageSlugHint }); sl.input.addEventListener("input", dirty); ps.body.appendChild(sl.wrap);
+  const t = siteField(S.pageTitle, entry.title); ps.body.appendChild(t.wrap);
+  // Permalink as pages and posts have it: the title's slug until it's edited by hand.
+  const sl = sitePrefixField(S.pageSlug, `${type.path}/`, entry.slug || siteSlugOf(entry.title) || entry.id, { hint: S.pageSlugHint }); ps.body.appendChild(sl.wrap);
+  if (entry.slug && entry.slug !== siteSlugOf(entry.title)) sl.input.dataset.touched = "1";
+  t.input.addEventListener("input", () => { if (!sl.input.dataset.touched) sl.input.value = siteSlugOf(t.input.value); dirty(); });
+  sl.input.addEventListener("input", () => { sl.input.dataset.touched = "1"; dirty(); });
 
   const cf = siteFold(S.entryFieldsHeading, foldKey + ":fields"); card.appendChild(cf.sec);
   if (!type.fields.length) cf.body.appendChild(siteEl("div", "sess-desc", S.fieldsDesc));
@@ -3528,7 +4211,7 @@ function renderSiteTypeEditor(type, ctx, refresh) {
   const foldKey = "type"; // shared by every content type
 
   // Settings: names, address, the index page.
-  const settings = siteFold(S.typeSettingsHeading, foldKey + ":settings"); card.appendChild(settings.sec);
+  const settings = siteFold(S.typeSettingsHeading, foldKey + ":settings"); settings.sec.dataset.tour = "cms-type-settings"; card.appendChild(settings.sec);
   const lab = siteField(S.typeLabel, draft.label); settings.body.appendChild(lab.wrap);
   const sing = siteField(S.typeSingular, draft.singular); settings.body.appendChild(sing.wrap);
   const pth = sitePrefixField(S.typePath, (ctx.siteUrl || COPY.site.siteUrlPlaceholder) + "/", String(draft.path || "").replace(/^\/+/, ""), { hint: S.typePathHint }); settings.body.appendChild(pth.wrap);
@@ -3546,7 +4229,7 @@ function renderSiteTypeEditor(type, ctx, refresh) {
 
   // Fields: each one collapsible (open by default, remembered while this editor lives)
   // and draggable to reorder; the trash can removes it.
-  const fieldsFold = siteFold(S.fieldsHeading, foldKey + ":fields"); card.appendChild(fieldsFold.sec);
+  const fieldsFold = siteFold(S.fieldsHeading, foldKey + ":fields"); fieldsFold.sec.dataset.tour = "cms-type-fields"; card.appendChild(fieldsFold.sec);
   fieldsFold.body.appendChild(siteEl("div", "sess-desc", S.fieldsDesc));
   const fieldsHost = siteEl("div"); fieldsFold.body.appendChild(fieldsHost);
   const openState = new WeakMap(); // field object → false when collapsed
@@ -3593,11 +4276,11 @@ function renderSiteTypeEditor(type, ctx, refresh) {
   paintFields();
 
   // Page template: the blocks that render each entry.
-  const tpl = siteFold(S.templateHeading, foldKey + ":template"); card.appendChild(tpl.sec);
+  const tpl = siteFold(S.templateHeading, foldKey + ":template"); tpl.sec.dataset.tour = "cms-type-template"; card.appendChild(tpl.sec);
   tpl.body.appendChild(siteEl("div", "sess-desc", S.templateDesc));
   tpl.body.appendChild(siteBlocksEditor(draft.template, ctx.blocks, dirty, "type:" + (draft.key || "new")));
 
-  const actions = siteEl("div", "site-actions");
+  const actions = siteEl("div", "site-actions"); actions.dataset.tour = "cms-type-actions";
   saveBtn = siteEl("button", "panelbtn primary", S.saveType); saveBtn.disabled = !isNew; saveBtn.style.margin = "0";
   saveBtn.addEventListener("click", async () => {
     saveBtn.disabled = true;
@@ -3627,7 +4310,7 @@ function renderSiteTypesList(left, right, ctx, refresh) {
   left.appendChild(siteEl("div", "sess-label", S.typesHeading)).style.marginTop = "12px";
   left.appendChild(siteEl("div", "sess-desc", S.typesDesc));
   ctx.types.forEach((t) => {
-    const row = siteEl("div", "site-list-row" + (sel && sel.kind === "type" && sel.id === t.key ? " active" : ""));
+    const row = siteEl("div", "site-list-row" + (sel && sel.kind === "type" && sel.id === t.key ? " active" : "")); row.dataset.tour = "cms-type-row";
     row.append(siteEl("div", "site-page-title", t.label), siteEl("div", "site-page-slug", S.entries((ctx.entries[t.key] || []).length)));
     row.addEventListener("click", () => { siteRailState.selected = { kind: "type", id: t.key }; refresh(); });
     left.appendChild(row);
@@ -3639,7 +4322,7 @@ function renderSiteTypesList(left, right, ctx, refresh) {
       er.addEventListener("click", () => { siteRailState.selected = { kind: "entry", id: t.key + "/" + e.id }; refresh(); });
       list.appendChild(er);
     });
-    const addRow = siteEl("div"); addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:2px 0 6px;";
+    const addRow = siteEl("div"); addRow.dataset.tour = "cms-add-entry"; addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:2px 0 6px;";
     const inp = document.createElement("input"); inp.className = "field"; inp.placeholder = S.newEntryPlaceholder; inp.style.marginBottom = "0";
     const btn = siteEl("button", "panelbtn", S.addEntry(t.singular || t.label)); btn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
     const create = async () => { const v = inp.value.trim(); if (!v) return; const res = await window.desktop.createSiteEntry(t.key, v); if (res && res.ok) { siteRailState.selected = { kind: "entry", id: t.key + "/" + res.entry.id }; refresh(); } };
@@ -3647,7 +4330,7 @@ function renderSiteTypesList(left, right, ctx, refresh) {
     addRow.append(inp, btn); list.appendChild(addRow);
     left.appendChild(list);
   });
-  const addType = siteEl("button", "panelbtn", S.addType); addType.style.margin = "4px 0 0";
+  const addType = siteEl("button", "panelbtn", S.addType); addType.dataset.tour = "cms-add-type"; addType.style.margin = "4px 0 0";
   addType.addEventListener("click", () => { siteRailState.selected = { kind: "newtype", id: "" }; refresh(); });
   left.appendChild(addType);
 
@@ -3681,6 +4364,7 @@ const FROM_RE = /^(?:[^<>]*<[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>|[^\s@<>]+@[^\s@<>]+\
 function renderFormsDelivery(delivery, hasForms) {
   const D = COPY.site.delivery;
   const { sec, body } = siteFold(D.title, "forms:delivery");
+  sec.dataset.tour = "cms-forms-delivery"; // walkthrough anchor
   sec.style.maxWidth = "720px";
   body.appendChild(siteEl("div", "sess-desc", D.intro));
   let saved = { ...delivery }; // what the app has on disk (the source of "ready")
@@ -3784,6 +4468,7 @@ function renderSiteForms(host, ctx, refresh) {
   const cur = sel && sel.kind === "form" && ctx.forms.some((f) => f.id === sel.id) ? sel : (ctx.forms[0] ? { kind: "form", id: ctx.forms[0].id } : null);
   const fold = siteFold(S.formsHeading, "forms:list");
   const cols = siteEl("div", "site-cols"); const left = siteEl("div"); const right = siteEl("div", "site-detail"); cols.append(left, right);
+  left.dataset.tour = "cms-form-list"; // walkthrough anchors
   fold.body.appendChild(cols); host.appendChild(fold.sec);
   left.appendChild(siteEl("div", "sess-desc", S.formsDesc));
   if (!ctx.forms.length) left.appendChild(siteEl("div", "sess-desc", S.noForms));
@@ -3793,7 +4478,7 @@ function renderSiteForms(host, ctx, refresh) {
     row.addEventListener("click", () => { siteRailState.selected = { kind: "form", id: f.id }; refresh(); });
     left.appendChild(row);
   });
-  const addRow = siteEl("div"); addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:4px 0 14px;";
+  const addRow = siteEl("div"); addRow.dataset.tour = "cms-add-form"; addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:4px 0 14px;";
   const inp = document.createElement("input"); inp.className = "field"; inp.placeholder = S.newFormPlaceholder; inp.style.marginBottom = "0";
   const btn = siteEl("button", "panelbtn", S.create); btn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
   const create = async () => { const v = inp.value.trim(); if (!v) return; const res = await window.desktop.createSiteForm(v); if (res && res.ok) { siteRailState.selected = { kind: "form", id: res.form.id }; refresh(); } };
@@ -3815,9 +4500,9 @@ function renderSiteFormEditor(form, ctx, refresh) {
   const name = siteField(S.formName, draft.name); name.input.addEventListener("input", dirty); card.appendChild(name.wrap);
 
   // Sections: Fields open by default, the rest folded until opened once (remembered per project).
-  const fieldsFold = siteFold(S.formFieldsHeading, "form:fields"); card.appendChild(fieldsFold.sec);
-  const afterFold = siteFold(S.formAfterHeading, "form:after", { defaultOpen: false }); card.appendChild(afterFold.sec);
-  const deliveryFold = siteFold(S.formDeliveryHeading, "form:delivery", { defaultOpen: false }); card.appendChild(deliveryFold.sec);
+  const fieldsFold = siteFold(S.formFieldsHeading, "form:fields"); fieldsFold.sec.dataset.tour = "cms-form-fields"; card.appendChild(fieldsFold.sec);
+  const afterFold = siteFold(S.formAfterHeading, "form:after", { defaultOpen: false }); afterFold.sec.dataset.tour = "cms-form-after"; card.appendChild(afterFold.sec);
+  const deliveryFold = siteFold(S.formDeliveryHeading, "form:delivery", { defaultOpen: false }); deliveryFold.sec.dataset.tour = "cms-form-delivery"; card.appendChild(deliveryFold.sec);
 
   // Fields: label, type, required; the id (made from the label) behind "Show ID".
   fieldsFold.body.appendChild(siteEl("div", "sess-desc", S.formFieldsDesc));
@@ -3929,7 +4614,7 @@ function renderSiteFormEditor(form, ctx, refresh) {
   card.appendChild(siteEl("div", "sess-label", S.formUsedOn)).style.marginTop = "12px";
   card.appendChild(siteEl("div", "sess-desc", used.length ? used.map((p) => p.title).join(", ") : S.formUsedNowhere));
 
-  const actions = siteEl("div", "site-actions");
+  const actions = siteEl("div", "site-actions"); actions.dataset.tour = "cms-form-actions";
   saveBtn = siteEl("button", "panelbtn primary", S.saveForm); saveBtn.disabled = true; saveBtn.style.margin = "0";
   saveBtn.addEventListener("click", async () => {
     saveBtn.disabled = true;
@@ -4054,20 +4739,21 @@ function mediaTile(it, { selected = false, onSelect, onOpen, onRenamed, onDelete
 // The tag combo: a text field that lists the library's existing tags (minus the ones
 // already on this image) as you type, offers to add what you typed as a new tag, and
 // shows the chosen tags as chips on their own line. Every add or remove calls onChange.
-function tagCombo({ tags, allTags, onChange }) {
+// Also used for a post's tags (label / hint / noTags override the media wording there).
+function tagCombo({ tags, allTags, onChange, label, hint, noTags }) {
   const D = COPY.site.media.detail;
-  const wrap = siteEl("div", "site-kv"); wrap.appendChild(siteEl("div", "k", D.tags));
+  const wrap = siteEl("div", "site-kv"); wrap.appendChild(siteEl("div", "k", label || D.tags));
   const combo = siteEl("div", "tagcombo");
   const input = document.createElement("input"); input.className = "field"; input.placeholder = D.tagsPlaceholder; input.autocomplete = "off";
   const list = siteEl("div", "tagcombo-list"); list.hidden = true;
   combo.append(input, list); wrap.appendChild(combo);
-  wrap.appendChild(siteEl("div", "sess-desc", D.tagsHint));
+  wrap.appendChild(siteEl("div", "sess-desc", hint || D.tagsHint));
   const chips = siteEl("div", "tagchips"); wrap.appendChild(chips);
   let current = [...tags]; let hot = -1;
   const has = (t) => current.some((x) => x.toLowerCase() === t.toLowerCase());
   const paintChips = () => {
     chips.innerHTML = "";
-    if (!current.length) { chips.appendChild(siteEl("span", "sess-desc", D.noTags)).style.margin = "0"; return; }
+    if (!current.length) { chips.appendChild(siteEl("span", "sess-desc", noTags || D.noTags)).style.margin = "0"; return; }
     current.forEach((t) => {
       const chip = siteEl("span", "tagchip", t);
       const x = document.createElement("button"); x.type = "button"; x.title = D.removeTag; x.setAttribute("aria-label", D.removeTag);
@@ -4087,9 +4773,10 @@ function tagCombo({ tags, allTags, onChange }) {
   const paintList = () => {
     const { existing, typed, isNew } = options();
     list.innerHTML = "";
+    // Existing tags first so a near-match is the obvious pick; "Add" comes last.
     const rows = [];
-    if (isNew) rows.push({ label: D.addTag(typed), value: typed, cls: "new" });
     existing.forEach((t) => rows.push({ label: t, value: t, cls: "" }));
+    if (isNew) rows.push({ label: D.addTag(typed), value: typed, cls: "new" });
     if (!rows.length || document.activeElement !== input) { list.hidden = true; return; }
     rows.forEach((r, i) => { const b = document.createElement("button"); b.type = "button"; b.className = r.cls + (i === hot ? " hot" : ""); b.textContent = r.label; b.addEventListener("mousedown", (e) => e.preventDefault()); b.addEventListener("click", () => add(r.value)); list.appendChild(b); });
     list.hidden = false;
@@ -4152,20 +4839,38 @@ async function renderSiteMedia(body) {
   // Images | Files: two libraries, each with its own folders (tags never cross).
   if (!siteRailState.mediaKind) siteRailState.mediaKind = "image";
   const kind = siteRailState.mediaKind; const isFiles = kind === "file";
-  const kinds = siteEl("div", "media-kinds");
+  const kinds = siteEl("div", "media-kinds in-column"); kinds.dataset.tour = "cms-media-kinds"; // walkthrough anchors
   ["image", "file"].forEach((k) => { const b = document.createElement("button"); b.type = "button"; b.className = k === kind ? "on" : ""; b.textContent = COPY.site.mediaKinds[k]; b.addEventListener("click", () => { if (k === kind) return; siteRailState.mediaKind = k; siteRailState.mediaFolder = null; body.innerHTML = ""; renderSiteMedia(body); }); kinds.appendChild(b); });
-  body.appendChild(kinds);
   const cols = siteEl("div", "site-cols"); const left = siteEl("div"); const right = siteEl("div", "site-detail"); cols.append(left, right); body.appendChild(cols);
+  left.dataset.tour = "cms-media-folders";
+  // Top line of the left column: Images | Files on the left, the Image Settings gear at the
+  // right edge. Both columns start on this line, so the divider runs from the top.
+  const topRow = siteEl("div", "media-top-row");
+  topRow.appendChild(kinds);
+  const gear = siteEl("button", "media-settings-btn"); gear.type = "button"; gear.dataset.tour = "cms-media-settings";
+  gear.title = M.settingsBtn; gear.setAttribute("aria-label", M.settingsBtn); gear.setAttribute("aria-expanded", String(!!siteRailState.mediaSettingsOpen));
+  gear.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
+  topRow.appendChild(gear);
+  left.appendChild(topRow);
   if (!("mediaFolder" in siteRailState)) siteRailState.mediaFolder = null; // null = all, "__untagged", or a tag
   let items = []; let tags = []; let filter = ""; let phone = null; let dragging = null;
   const same = (a, b) => a.toLowerCase() === b.toLowerCase();
   const inFolder = (it) => siteRailState.mediaFolder === null ? true : siteRailState.mediaFolder === "__untagged" ? !(it.tags || []).length : (it.tags || []).some((t) => same(t, siteRailState.mediaFolder));
 
   // ── Folders ──
-  left.appendChild(siteEl("div", "sess-label", F.heading)).style.marginTop = "12px";
+  // Image Settings panel (opened by the gear above): the same sliders as Settings →
+  // Images, so uploads can be tuned without leaving the library. Then the Folders heading.
+  const panel = siteEl("div", "media-settings"); panel.hidden = !siteRailState.mediaSettingsOpen;
+  const cmsSt = await window.desktop.getCmsSettings().catch(() => ({ media: { quality: 55, maxWidth: 2400 }, defaults: { media: { quality: 55, maxWidth: 2400 } } }));
+  panel.appendChild(siteEl("div", "sess-desc", COPY.site.settings.mediaDesc));
+  panel.appendChild(siteImageSettings(cmsSt));
+  gear.addEventListener("click", () => { const open = panel.hidden; siteReveal(panel, open); siteRailState.mediaSettingsOpen = open; gear.classList.toggle("on", open); gear.setAttribute("aria-expanded", String(open)); });
+  gear.classList.toggle("on", !!siteRailState.mediaSettingsOpen);
+  left.appendChild(panel);
+  left.appendChild(siteEl("div", "sess-label", F.heading));
   left.appendChild(siteEl("div", "sess-desc", F.desc));
   const folderHost = siteEl("div"); left.appendChild(folderHost);
-  const addRow = siteEl("div"); addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:4px 0 14px;";
+  const addRow = siteEl("div"); addRow.dataset.tour = "cms-add-folder"; addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:4px 0 14px;";
   const addIn = document.createElement("input"); addIn.className = "field"; addIn.placeholder = F.addPlaceholder; addIn.style.marginBottom = "0";
   const addBtn = siteEl("button", "panelbtn", F.add); addBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
   const addFolder = async () => { const v = addIn.value.trim(); if (!v) return; const r = await window.desktop.addMediaTag(v, kind); if (r && r.ok) { addIn.value = ""; siteRailState.mediaFolder = r.tag; await loadTags(); paintFolders(); paintGrid(); } };
@@ -4214,14 +4919,15 @@ async function renderSiteMedia(body) {
 
   // ── Library ──
   right.appendChild(siteEl("div", "sess-desc", isFiles ? COPY.site.mediaFilesDesc : COPY.site.mediaTabDesc));
-  const bar = siteEl("div", "site-media-bar");
+  const bar = siteEl("div", "site-media-bar"); bar.dataset.tour = "cms-media-bar";
   const filterIn = document.createElement("input"); filterIn.className = "field"; filterIn.placeholder = M.filter; filterIn.style.marginBottom = "0";
   const upBtn = siteEl("button", "panelbtn", isFiles ? M.uploadFiles : M.upload); upBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
   const phoneBtn = siteEl("button", "panelbtn", M.fromPhone); phoneBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;"; phoneBtn.hidden = isFiles; // photos only
-  bar.append(filterIn, upBtn, phoneBtn); right.appendChild(bar);
+  const filterWrap = siteSearchField(filterIn); filterWrap.style.flex = "1";
+  bar.append(filterWrap, upBtn, phoneBtn); right.appendChild(bar);
   const note = siteEl("div", "sess-desc", isFiles ? M.uploadFilesNote : M.uploadNote); right.appendChild(note);
   const phoneHost = siteEl("div"); right.appendChild(phoneHost);
-  const gridHost = siteEl("div"); right.appendChild(gridHost);
+  const gridHost = siteEl("div"); gridHost.dataset.tour = "cms-media-grid"; right.appendChild(gridHost);
   const paintGrid = () => {
     gridHost.innerHTML = "";
     if (!items.length) { gridHost.appendChild(siteEl("div", "muted", isFiles ? M.emptyFiles : M.empty)); return; }
@@ -4664,7 +5370,7 @@ let siteNavRemove = () => {};
 
 function renderSiteNav(site, refresh, options = [], megaMenu = false) {
   const wrap = siteEl("div");
-  const hf = siteFold(COPY.site.navHeading, "nav:header"); wrap.appendChild(hf.sec);
+  const hf = siteFold(COPY.site.navHeading, "nav:header"); hf.sec.dataset.tour = "cms-nav-header"; wrap.appendChild(hf.sec);
   hf.body.appendChild(siteEl("div", "sess-desc", site.manageNav === false ? COPY.site.navAuto : COPY.site.navDesc));
   // One datalist shared by every URL field: the project's pages, sections, posts,
   // content entries and indexes. Chromium renders it as a combo: type, or pick.
@@ -4783,14 +5489,14 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
   const paintNav = () => { navList.innerHTML = ""; draft.nav.forEach((l, i) => navList.appendChild(linkRow(l, draft.nav, i, paintNav, true, { kind: "item", owners: [], reorder: { kinds: ["item", "link"], target: () => draft.nav, topLevel: true }, nest: { into: () => (l.links = Array.isArray(l.links) ? l.links : []) }, repaint: paintNav }))); navList.appendChild(siteMini(COPY.site.addLink, () => { draft.nav.push({ label: "", href: "/", links: [] }); dirty(); paintNav(); })); };
   paintNav();
   if (site.manageNav !== false) hf.body.appendChild(navList); // derived menus aren't edited here
-  const ff = siteFold(COPY.site.footerHeading, "nav:footer"); wrap.appendChild(ff.sec);
+  const ff = siteFold(COPY.site.footerHeading, "nav:footer"); ff.sec.dataset.tour = "cms-nav-footer"; wrap.appendChild(ff.sec);
   ff.body.appendChild(siteEl("div", "sess-desc", COPY.site.footerDesc));
   const footList = siteEl("div");
   const paintFoot = () => { footList.innerHTML = ""; draft.footerLinks.forEach((l, i) => footList.appendChild(linkRow(l, draft.footerLinks, i, paintFoot, true, { kind: "footer", owners: [], reorder: { kinds: ["footer", "link"], target: () => draft.footerLinks, topLevel: true }, nest: { into: () => (l.links = Array.isArray(l.links) ? l.links : []) }, repaint: paintFoot }))); footList.appendChild(siteMini(COPY.site.addLink, () => { draft.footerLinks.push({ label: "", href: "/" }); dirty(); paintFoot(); })); };
   paintFoot();
   ff.body.appendChild(footList);
   // Legal: the copyright line + privacy / terms links, their own section.
-  const lf = siteFold(COPY.site.legalHeading, "nav:legal"); wrap.appendChild(lf.sec);
+  const lf = siteFold(COPY.site.legalHeading, "nav:legal"); lf.sec.dataset.tour = "cms-nav-legal"; wrap.appendChild(lf.sec);
   lf.body.appendChild(siteEl("div", "sess-desc", COPY.site.legalDesc));
   const cr = siteField(COPY.site.copyright, draft.legal.copyright, { hint: COPY.site.copyrightHint, placeholder: "© {year} {siteName}" });
   cr.input.addEventListener("input", () => { draft.legal.copyright = cr.input.value; dirty(); });
@@ -4833,15 +5539,16 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !cmshelp
 // (the block itself is unchanged), its description, and where it's used.
 function renderSiteBlocks(data) {
   const S = COPY.site;
-  const wrap = siteEl("div");
+  const wrap = siteEl("div"); wrap.dataset.tour = "cms-block-library"; // walkthrough anchors
   wrap.appendChild(siteEl("div", "sess-desc", S.blocksDesc));
   const names = {}; data.blocks.forEach((b) => { if (b.name !== b.originalName) names[b.key] = b.name; });
   const status = siteEl("div"); status.style.cssText = "min-height:18px;";
   let timer = null;
   const save = () => { clearTimeout(timer); timer = setTimeout(async () => { const r = await window.desktop.saveBlockNames(names); status.innerHTML = ""; if (r && r.ok) siteFlash(status, S.saved); else if (r && r.error) { const e = siteEl("div", "sess-desc", r.error); e.style.color = "#c0261e"; status.appendChild(e); } }, 1000); };
   const usage = (key) => data.pages.filter((p) => (p.blocks || []).some((b) => b.type === key)).map((p) => p.title);
-  data.blocks.forEach((b) => {
+  data.blocks.forEach((b, i) => {
     const card = siteEl("div", "site-item");
+    if (i === 0) card.dataset.tour = "cms-block-card";
     const head = siteEl("div"); head.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:6px;";
     const name = document.createElement("input"); name.className = "field"; name.style.cssText = "margin:0;flex:1;font-weight:600;"; name.value = b.name; name.placeholder = b.originalName;
     name.addEventListener("input", () => { const v = name.value.trim(); if (v && v !== b.originalName) names[b.key] = v; else delete names[b.key]; save(); });
@@ -4857,6 +5564,50 @@ function renderSiteBlocks(data) {
     wrap.appendChild(card);
   });
   wrap.appendChild(status);
+  return wrap;
+}
+
+// The image optimization sliders (quality + largest width). The Settings tab's Images
+// section and the Media tab's Image Settings panel both render this, and both write the
+// same project setting (setCmsSettings), so a change in either place is the change.
+function siteImageSettings(st) {
+  const S = COPY.site.settings;
+  const wrap = siteEl("div", "site-image-settings");
+  const rangeRow = (label, hint, min, max, value, fmt, onCommit) => {
+    const kv = siteEl("div", "site-kv");
+    kv.appendChild(siteEl("div", "k", label));
+    const row = siteEl("div", "site-range");
+    const r = document.createElement("input"); r.type = "range"; r.min = String(min); r.max = String(max); r.value = String(value);
+    const v = siteEl("span", "val", fmt(value));
+    // The rail's fill follows the grabber (a CSS variable the track's gradient reads).
+    const fill = () => r.style.setProperty("--pct", ((Number(r.value) - min) / (max - min) * 100) + "%");
+    fill();
+    r.addEventListener("input", () => { v.textContent = fmt(Number(r.value)); fill(); });
+    r.addEventListener("change", () => onCommit(Number(r.value)));
+    row.append(r, v); kv.appendChild(row);
+    kv.appendChild(siteEl("div", "sess-desc", hint));
+    return { kv, r, v };
+  };
+  const status = siteEl("div"); status.style.cssText = "min-height:18px;";
+  const save = async (patch) => {
+    const res = await window.desktop.setCmsSettings({ media: patch });
+    st.media = { ...st.media, ...patch }; // whichever place renders next reads the new values
+    status.innerHTML = "";
+    if (res && res.ok) siteFlash(status, S.saved);
+  };
+  const q = rangeRow(S.quality, S.qualityHint, 20, 95, st.media.quality, (x) => String(x), (x) => save({ quality: x, maxWidth: Number(w.r.value) }));
+  const w = rangeRow(S.maxWidth, S.maxWidthHint, 800, 6000, st.media.maxWidth, (x) => x + "px", (x) => save({ quality: Number(q.r.value), maxWidth: x }));
+  w.r.step = "100";
+  wrap.append(q.kv, w.kv);
+  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:4px;";
+  actions.appendChild(siteMini(S.reset, async () => {
+    const d = st.defaults.media;
+    q.r.value = String(d.quality); q.r.dispatchEvent(new Event("input")); // label + rail fill follow
+    w.r.value = String(d.maxWidth); w.r.dispatchEvent(new Event("input"));
+    await save({ quality: d.quality, maxWidth: d.maxWidth });
+  }));
+  actions.appendChild(status);
+  wrap.appendChild(actions);
   return wrap;
 }
 
@@ -4891,40 +5642,7 @@ async function renderSiteSettings(host, data, st) {
 
   wrap.appendChild(siteEl("div", "sess-label", S.mediaHeading));
   wrap.appendChild(siteEl("div", "sess-desc", S.mediaDesc));
-  const rangeRow = (label, hint, min, max, value, fmt, onCommit) => {
-    const kv = siteEl("div", "site-kv");
-    kv.appendChild(siteEl("div", "k", label));
-    const row = siteEl("div", "site-range");
-    const r = document.createElement("input"); r.type = "range"; r.min = String(min); r.max = String(max); r.value = String(value);
-    const v = siteEl("span", "val", fmt(value));
-    // The rail's fill follows the grabber (a CSS variable the track's gradient reads).
-    const fill = () => r.style.setProperty("--pct", ((Number(r.value) - min) / (max - min) * 100) + "%");
-    fill();
-    r.addEventListener("input", () => { v.textContent = fmt(Number(r.value)); fill(); });
-    r.addEventListener("change", () => onCommit(Number(r.value)));
-    row.append(r, v); kv.appendChild(row);
-    kv.appendChild(siteEl("div", "sess-desc", hint));
-    return { kv, r, v };
-  };
-  const status = siteEl("div"); status.style.cssText = "min-height:18px;";
-  const save = async (patch) => {
-    const res = await window.desktop.setCmsSettings({ media: patch });
-    status.innerHTML = "";
-    if (res && res.ok) siteFlash(status, S.saved);
-  };
-  const q = rangeRow(S.quality, S.qualityHint, 20, 95, st.media.quality, (x) => String(x), (x) => save({ quality: x, maxWidth: Number(w.r.value) }));
-  const w = rangeRow(S.maxWidth, S.maxWidthHint, 800, 6000, st.media.maxWidth, (x) => x + "px", (x) => save({ quality: Number(q.r.value), maxWidth: x }));
-  w.r.step = "100";
-  wrap.append(q.kv, w.kv);
-  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:4px;";
-  actions.appendChild(siteMini(S.reset, async () => {
-    const d = st.defaults.media;
-    q.r.value = String(d.quality); q.r.dispatchEvent(new Event("input")); // label + rail fill follow
-    w.r.value = String(d.maxWidth); w.r.dispatchEvent(new Event("input"));
-    await save({ quality: d.quality, maxWidth: d.maxWidth });
-  }));
-  actions.appendChild(status);
-  wrap.appendChild(actions);
+  wrap.appendChild(siteImageSettings(st));
 
   // ── Search engines: robots.txt, the sitemap, llms.txt (content/site.json seo) ──
   wrap.appendChild(siteEl("div", "drawer-sep"));
@@ -5284,7 +6002,7 @@ function siteAccordionize(wrap) {
       const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(isOpen));
       head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
       const body = siteEl("div", "site-acc-body"); body.hidden = !isOpen;
-      head.addEventListener("click", () => { const now = body.hidden; body.hidden = !now; sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(key, now); });
+      head.addEventListener("click", () => { const now = body.hidden; siteReveal(body, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(key, now); });
       sec.append(head, body); wrap.appendChild(sec);
       return;
     }
@@ -5293,6 +6011,11 @@ function siteAccordionize(wrap) {
     if (section) section.querySelector(".site-acc-body").appendChild(n); else tail.push(n);
   });
   tail.forEach((n) => wrap.appendChild(n));
+  // Walkthrough anchors: each section by its heading, and the Site builder switch.
+  const S = COPY.site.settings;
+  const ids = { [S.mediaHeading]: "images", [S.searchHeading]: "search", [S.logosHeading]: "logos", [S.navHeading]: "nav", [S.blogHeading]: "blog", [S.scriptsHeading]: "scripts", [S.iconsHeading]: "icons", [S.redirectsHeading]: "redirects", [S.siteHeading]: "site", [S.trashHeading]: "trash" };
+  wrap.querySelectorAll(".site-acc").forEach((sec) => { const id = ids[sec.querySelector(".site-acc-title").textContent]; if (id) sec.dataset.tour = "cms-settings-" + id; });
+  const sw = wrap.querySelector(".site-enable-row"); if (sw) sw.dataset.tour = "cms-settings-enable";
 }
 
 async function renderSite(body) {
@@ -5338,16 +6061,17 @@ async function renderSite(body) {
   if (!TABS.includes(siteRailState.tab)) siteRailState.tab = "pages";
   if (!cms.enabled) siteRailState.tab = "settings";
   const counts = { pages: data.pages.length, posts: posts.length, types: ctx.types.length, forms: siteForms.length, media: mediaIndex.length, blocks: data.blocks.length };
-  const tabs = siteEl("div", "site-tabs");
+  el("modal-info").hidden = !cms.enabled; // the CMS walkthrough "i" in the header (site is ready here)
+  const tabs = siteEl("div", "site-tabs"); tabs.dataset.tour = "cms-tabs";
   TABS.forEach((t) => {
-    const b = siteEl("button", "site-tab" + (siteRailState.tab === t ? " active" : ""), COPY.site.tabs[t]); b.type = "button";
+    const b = siteEl("button", "site-tab" + (siteRailState.tab === t ? " active" : ""), COPY.site.tabs[t]); b.type = "button"; b.dataset.tour = "cms-tab-" + t;
     if (counts[t] != null) b.appendChild(siteEl("span", "count", String(counts[t])));
     if (!cms.enabled && t !== "settings") b.disabled = true;
-    b.addEventListener("click", () => { siteRailState.tab = t; refresh(); });
+    b.addEventListener("click", () => { siteRailState.tab = t; siteRailState.query = ""; siteRailState.listMode = null; refresh(); });
     tabs.appendChild(b);
   });
   // The "?" at the far right: help for the current tab.
-  const helpBtn = siteEl("button", "site-tabs-help"); helpBtn.type = "button"; helpBtn.title = COPY.site.helpTip; helpBtn.setAttribute("aria-label", COPY.site.helpTip);
+  const helpBtn = siteEl("button", "site-tabs-help"); helpBtn.type = "button"; helpBtn.dataset.tour = "cms-help"; helpBtn.title = COPY.site.helpTip; helpBtn.setAttribute("aria-label", COPY.site.helpTip);
   helpBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/><circle cx="12" cy="12" r="4"/></svg>';
   helpBtn.addEventListener("click", () => openCmsHelp(siteRailState.tab));
   tabs.appendChild(helpBtn);
@@ -5355,6 +6079,9 @@ async function renderSite(body) {
 
   // Selection is per tab: a kind that belongs to another tab is ignored here.
   const sel = siteRailState.selected && typeof siteRailState.selected === "object" ? siteRailState.selected : null;
+  // Open an item in the editor. Any search or tag view is dropped first; otherwise the
+  // re-render would put that view back over the editor just asked for.
+  const openItem = (kind, id) => { siteRailState.selected = { kind, id }; siteRailState.listMode = null; siteRailState.query = ""; refresh(); };
   const isSel = (kind, id) => !!sel && sel.kind === kind && sel.id === id;
   const two = () => { const cols = siteEl("div", "site-cols"); const left = siteEl("div"); const right = siteEl("div", "site-detail"); cols.append(left, right); body.appendChild(cols); return { left, right }; };
   const listRow = (title, sub, active, onClick) => { const row = siteEl("div", "site-list-row" + (active ? " active" : "")); row.append(siteEl("div", "site-page-title", title), siteEl("div", "site-page-slug", sub)); row.addEventListener("click", onClick); return row; };
@@ -5369,13 +6096,19 @@ async function renderSite(body) {
 
   if (siteRailState.tab === "pages") {
     const { left, right } = two();
+    left.dataset.tour = "cms-page-list"; // walkthrough anchors
     const cur = sel && sel.kind === "page" && data.pages.some((p) => p.id === sel.id) ? sel : (data.pages[0] ? { kind: "page", id: data.pages[0].id } : null);
+    // Search + Create at the top, above the tree.
+    const addPage = addRow(COPY.site.newPagePlaceholder, COPY.site.create, async (t) => { const res = await window.desktop.createSitePage(t); if (res && res.ok) openItem("page", res.page.id); });
+    addPage.dataset.tour = "cms-add-page";
+    const pageItems = data.pages.map((p) => ({ id: p.id, title: p.title, sub: p.id === "home" ? COPY.site.homeSlug : "/" + (p.route || p.slug || p.id), tags: [] }));
+    const pageTools = siteListTools({ left, right, placeholder: COPY.site.searchPages, items: pageItems, onOpen: (id) => openItem("page", id), addRow: addPage, tourId: "cms-page" });
     // A tree: children indented under their parent (home first, then by title). Drag a
     // page onto another to nest it; drop between pages to sit at that level.
     const kids = (pid) => data.pages.filter((p) => (p.parent || null) === pid && p.id !== "home").sort((a, b) => ((a.order ?? 1e9) - (b.order ?? 1e9)) || a.title.localeCompare(b.title));
     const walk = (pid, depth) => kids(pid).forEach((p) => { pageRow(p, depth); walk(p.id, depth + 1); });
     const pageRow = (p, depth) => {
-      const row = listRow(p.title, (p.id === "home" ? COPY.site.homeSlug : "/" + (p.route || p.slug || p.id)) + (p.draft ? "  ·  " + COPY.site.draftTag : ""), cur && cur.id === p.id, () => { siteRailState.selected = { kind: "page", id: p.id }; refresh(); });
+      const row = listRow(p.title, (p.id === "home" ? COPY.site.homeSlug : "/" + (p.route || p.slug || p.id)) + (p.draft ? "  ·  " + COPY.site.draftTag : ""), cur && cur.id === p.id, () => openItem("page", p.id));
       row.style.marginLeft = depth * PAGE_INDENT + "px";
       sitePageDraggable(row, p, data.pages, refresh, depth);
       left.appendChild(row);
@@ -5384,20 +6117,30 @@ async function renderSite(body) {
     walk(null, 0);
     const curPage = cur && data.pages.find((p) => p.id === cur.id);
     sitePreviewPath = curPage && curPage.id !== "home" ? "/" + (curPage.route || curPage.slug || curPage.id) : "/";
-    left.appendChild(addRow(COPY.site.newPagePlaceholder, COPY.site.create, async (t) => { const res = await window.desktop.createSitePage(t); if (res && res.ok) { siteRailState.selected = { kind: "page", id: res.page.id }; refresh(); } }));
     renderSitePage.pages = data.pages; // for the parent picker
     if (cur) right.appendChild(renderSitePage(data.pages.find((p) => p.id === cur.id), data.blocks, refresh, true));
+    pageTools.later();
+    maybeStartCmsTour(); // first ever visit to a built site's CMS → the walkthrough
   } else if (siteRailState.tab === "posts") {
     const { left, right } = two();
+    left.dataset.tour = "cms-post-list"; // walkthrough anchors
     const cur = sel && sel.kind === "post" && posts.some((p) => p.id === sel.id) ? sel : (posts[0] ? { kind: "post", id: posts[0].id } : null);
     const curPost = cur && posts.find((p) => p.id === cur.id);
     sitePreviewPath = curPost ? `/${siteBlogPath}/${curPost.slug || curPost.id}` : `/${siteBlogPath}`;
+    // Search + Create + the Tags expander at the top, above the list.
+    const addPost = addRow(COPY.site.newPostPlaceholder, COPY.site.create, async (t) => { const res = await window.desktop.createSitePost(t); if (res && res.ok) openItem("post", res.post.id); });
+    addPost.dataset.tour = "cms-add-post";
+    const postSub = (p) => p.draft ? COPY.site.draftTag : (p.date || "");
+    const postItems = posts.map((p) => ({ id: p.id, title: p.title, sub: postSub(p), tags: p.tags || [] }));
+    const postTools = siteListTools({ left, right, placeholder: COPY.site.searchPosts, items: postItems, onOpen: (id) => openItem("post", id), addRow: addPost, tags: true, tourId: "cms-post" });
     if (!posts.length) left.appendChild(siteEl("div", "sess-desc", COPY.site.noPosts));
-    posts.forEach((p) => left.appendChild(listRow(p.title, p.draft ? COPY.site.draftTag : (p.date || ""), cur && cur.id === p.id, () => { siteRailState.selected = { kind: "post", id: p.id }; refresh(); })));
-    left.appendChild(addRow(COPY.site.newPostPlaceholder, COPY.site.create, async (t) => { const res = await window.desktop.createSitePost(t); if (res && res.ok) { siteRailState.selected = { kind: "post", id: res.post.id }; refresh(); } }));
+    posts.forEach((p) => left.appendChild(listRow(p.title, postSub(p), cur && cur.id === p.id, () => openItem("post", p.id))));
+    renderSitePost.allTags = [...new Set(posts.flatMap((p) => p.tags || []))].sort((a, b) => a.localeCompare(b)); // the tag picker's options
     if (cur) right.appendChild(renderSitePost(posts.find((p) => p.id === cur.id), refresh));
+    postTools.later();
   } else if (siteRailState.tab === "types") {
     const { left, right } = two();
+    left.dataset.tour = "cms-type-list"; // walkthrough anchors
     if (sel && sel.kind === "entry") { const [k, id] = sel.id.split("/"); const t = ctx.types.find((x) => x.key === k); const e = t && (ctx.entries[k] || []).find((x) => x.id === id); sitePreviewPath = t && e ? `${t.path}/${e.slug || e.id}` : "/"; }
     else if (sel && sel.kind === "type") { const t = ctx.types.find((x) => x.key === sel.id); sitePreviewPath = t && t.index ? t.path : "/"; }
     else sitePreviewPath = "/";
@@ -5508,7 +6251,10 @@ async function renderVoice(body) {
   intro.textContent = COPY.voice.intro;
   body.appendChild(intro);
 
+  // Each section sits in a data-tour container so the walkthrough tour can point at it.
+  const outer = body;
   // ── This project ──
+  body = tourSection(outer, "voice-project");
   body.appendChild(voiceHeader(COPY.voice.thisProject));
   const toneLabel = document.createElement("div"); toneLabel.className = "voice-label"; toneLabel.textContent = COPY.voice.tone;
   body.appendChild(toneLabel);
@@ -5549,7 +6295,8 @@ async function renderVoice(body) {
 
   // ── Global rules ── (divider to set it apart from the project grouping)
   const divider = document.createElement("div"); divider.className = "voice-divider";
-  body.appendChild(divider);
+  outer.appendChild(divider);
+  body = tourSection(outer, "voice-global");
   body.appendChild(voiceHeader(COPY.voice.globalRules, COPY.voice.globalRulesSub));
   const toggle = document.createElement("label"); toggle.className = "voice-toggle";
   const chk = document.createElement("input"); chk.type = "checkbox"; chk.checked = state.decline;
@@ -5571,8 +6318,9 @@ async function renderVoice(body) {
   body.appendChild(globalWrap);
 
   // ── Save (both project + global) ──
+  body = tourSection(outer, "voice-save");
+  body.style.marginTop = "16px";
   const save = document.createElement("button"); save.className = "panelbtn primary"; save.textContent = COPY.voice.save;
-  save.style.marginTop = "16px";
   const msg = document.createElement("div"); msg.className = "muted"; msg.style.marginTop = "8px";
   save.addEventListener("click", async () => {
     save.disabled = true; save.textContent = COPY.common.saving;
@@ -6935,13 +7683,13 @@ function buildReferencesPanel() {
   title.textContent = COPY.intake.referencesTitle;
   panel.appendChild(title);
 
-  // Thin-line "?" in the corner → opens the "how references work" overlay.
+  // Help (life-preserver) button in the corner → opens the "how references work" overlay.
   const info = document.createElement("button");
   info.type = "button";
   info.className = "iref-info";
   info.title = COPY.intake.referencesHelpTitle;
   info.setAttribute("aria-label", COPY.intake.referencesHelpTitle);
-  info.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>';
+  info.innerHTML = HELP_BUOY_SVG;
   info.addEventListener("click", (e) => { e.stopPropagation(); openReferencesHelp(); });
   panel.appendChild(info);
 
@@ -7098,11 +7846,20 @@ function openReferenceLightbox(a) {
 // best. Same dismiss pattern as the lightbox (backdrop / Escape / the × button).
 // Generic help overlay (backdrop + card + Esc/close), reused by the references "?" and the
 // design-direction "?". `html` supplies the card body (must include a `.iref-help-x` close).
+// The open help overlay's close(), so the walkthrough tour can dismiss it; null when none.
+let helpOverlayClose = null;
+function closeHelpOverlay() { if (helpOverlayClose) helpOverlayClose(); }
+// Open it unless one is already showing (the tour's "?" step may have been clicked through).
+function ensureHelpOverlay(html) { if (!helpOverlayClose) openHelpOverlay(html); }
 function openHelpOverlay(html) {
   const overlay = document.createElement("div");
   overlay.className = "iref-help";
   const onKey = (e) => { if (e.key === "Escape") close(); };
-  function close() { overlay.classList.remove("show"); document.removeEventListener("keydown", onKey); setTimeout(() => overlay.remove(), 180); }
+  function close() {
+    if (helpOverlayClose === close) helpOverlayClose = null;
+    overlay.classList.remove("show"); document.removeEventListener("keydown", onKey); setTimeout(() => overlay.remove(), 180);
+  }
+  helpOverlayClose = close;
   overlay.addEventListener("click", close);
 
   const card = document.createElement("div");
@@ -7790,13 +8547,13 @@ async function renderDirectionPanel(host, opts = {}) {
   head.className = "idir-head";
   head.textContent = COPY.intake.direction.title;
 
-  // Thin-line "?" in the corner → opens the "how the direction picker works" overlay.
+  // Help (life-preserver) button in the corner → opens the "how the direction picker works" overlay.
   const info = document.createElement("button");
   info.type = "button";
   info.className = "idir-info";
   info.title = COPY.intake.direction.helpTitle;
   info.setAttribute("aria-label", COPY.intake.direction.helpTitle);
-  info.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>';
+  info.innerHTML = HELP_BUOY_SVG;
   info.addEventListener("click", (e) => { e.stopPropagation(); openDirectionHelp(); });
   panel.appendChild(info);
 

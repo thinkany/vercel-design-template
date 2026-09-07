@@ -529,9 +529,10 @@ window.COPY = {
         title: "Pages",
         intro: "Every page of your site, built from the blocks that came out of your approved design. Pick a page on the left to edit it on the right.",
         sections: [
-          { h: "Add or remove pages", items: ["Type a title in <b>Add a page</b>. Its address is made from the title; adjust it in the editor.", "<b>Delete page</b> removes its file. The home page can’t be deleted.", "A new page needs a link in <b>Navigation</b> to be reachable from the menu."] },
+          { h: "Find a page", items: ["<b>Search pages</b>, at the top of the list, matches page names as you type. The matches appear on the right as pills; click one to open it. Clear the search and what you were editing comes back."] },
+          { h: "Add or remove pages", items: ["Type a title in the <b>Create</b> row under the search. The page’s permalink is made from the title and follows it until you edit it in the editor.", "<b>Delete page</b> removes its file. The home page can’t be deleted.", "A new page needs a link in <b>Navigation</b> to be reachable from the menu."] },
           { h: "Nested pages", items: ["Drag a page onto another to nest it (<i>/about/island-guide</i>); drop it between pages to put it at that level. <b>Parent page</b> in the editor does the same.", "Menu links to a moved page are updated to its new address."] },
-          { h: "Edit a page", items: ["<b>Page settings</b>: title, address, parent page.", "<b>Save page</b> writes the changes; the Site tab updates right away."] },
+          { h: "Edit a page", items: ["<b>Page settings</b>: title, permalink, parent page.", "<b>Save page</b> writes the changes; the Site tab updates right away."] },
           { h: "Blocks", items: ["Reorder with the arrows, remove with ×, add one from the list at the bottom.", "<b>Edit content</b> opens a block’s text, images and lists. Images use the upload zone: drop a file, or choose one already in the project.", "Blocks come from the approved design. To change how a block looks, edit the design in the chat; to change what it says, edit here."] },
           { h: "SEO", items: ["The last section: SEO title, meta description, share image, keyphrase, whether search engines may list the page, and an optional custom schema block. These go into the page's head on every version of the site: published, gated preview and local."] },
         ],
@@ -540,7 +541,8 @@ window.COPY = {
         title: "Posts",
         intro: "Your blog. Posts are written here and listed at the posts directory (Settings, Blog: /blog by default), newest first.",
         sections: [
-          { h: "Write a post", items: ["<b>Add a post</b> creates a draft. Drafts are never published, so you can work on them across sessions.", "<b>Publish date</b> is the date shown on the post; <b>Last edited</b> is stamped automatically on every save.", "<b>Summary</b> appears in the blog list and as the search description. <b>Tags</b> are comma-separated."] },
+          { h: "Find a post", items: ["<b>Search posts</b>, at the top of the list, matches as you type: posts matching by name first, then posts carrying a matching tag. The matches appear on the right as pills; click one to open it. Clear the search and what you were editing comes back.", "<b>Tags</b>, under the Create row, expands to every tag with the number of posts carrying it. Click a tag to list its posts on the right, then click a post to edit it."] },
+          { h: "Write a post", items: ["Type a title in the <b>Create</b> row to start a draft. Drafts are never published, so you can work on them across sessions.", "<b>Publish date</b> is the date shown on the post; <b>Last edited</b> is stamped automatically on every save.", "<b>Summary</b> appears in the blog list and as the search description.", "<b>Tags</b>: pick one another post already uses, or type a new one and press Enter. Each shows as a pill you can remove; reusing existing tags keeps spellings consistent."] },
           { h: "SEO", items: ["The last section: SEO title, meta description (leave empty to use the summary), share image, keyphrase, whether search engines may list the post, and an optional custom schema block. Posts also carry article structured data with their dates."] },
           { h: "Draft and publish", items: ["A draft shows <b>Save draft</b> and <b>Publish</b>. Publish makes it live on the next site publish.", "A published post shows <b>Save</b> and <b>Unpublish</b>. Unpublish takes it back to a draft without deleting it.", "<b>Delete post</b> removes the file for good."] },
         ],
@@ -596,6 +598,7 @@ window.COPY = {
         title: "Media",
         intro: "The project's library, in two parts: Images (everything under the images folder, which is what every image field picks from) and Files (documents and downloads served at /files/, which the link pickers can point at). Each part has its own folders and tags.",
         sections: [
+          { h: "Image settings", items: ["The gear across from <b>Images | Files</b> opens the image optimization sliders: quality and the largest width for new uploads. They are the same settings as <b>Settings → Images</b>; change them in either place."] },
           { h: "Add images", items: ["<b>Add images…</b> picks files from your computer; <b>From your phone…</b> shows a code your phone scans to send photos over Wi‑Fi.", "Added images are optimised for the web automatically (AVIF, up to 2400px wide). SVG, GIF and AVIF files are kept as they are."] },
           { h: "Files", items: ["Switch to <b>Files</b> for PDFs, spreadsheets, decks, CSV, text, ZIP, audio and video. <b>Add files…</b> copies them into the project as they are, served at <i>/files/name.pdf</i>.", "Files have their own folders and tags, rename and delete like images, and a detail view that previews PDFs.", "To use one, pick it from the <b>Files</b> group in any link field or menu item."] },
           { h: "Folders and tags", items: ["Folders are tags: an image sits in every folder it's tagged with, and <b>New folder</b> makes a tag. Drag an image onto a folder to file it, or click an image and add tags in its detail view; tags save as you add them.", "Rename or delete a folder from its hover controls; the change applies to every image carrying the tag, and deleting a folder never deletes images."] },
@@ -628,6 +631,14 @@ window.COPY = {
     previewNote: "Previewing in the Site tab. Publish from the Publish panel when it’s ready.",
     pagesHeading: "Pages",
     addPage: "Add a page",
+    // Search + Tags at the top of the Pages / Posts lists
+    searchPages: "Search pages",
+    searchPosts: "Search posts by name or tag",
+    searchResults: (q) => `Results for “${q}”`,
+    searchNone: "No matches.",
+    tagsExpander: "Tags",
+    tagsNone: "No tags yet.",
+    tagPosts: (t) => `Posts tagged “${t}”`,
     newPagePlaceholder: "Page title (e.g. About)",
     create: "Create",
     pageSettings: "Page settings",
@@ -637,12 +648,12 @@ window.COPY = {
     previewDesktop: "Desktop",
     previewMobile: "Mobile",
     previewUnavailable: "The design preview isn't running, so the block can't be shown here yet.",
-    pageSlugHint: "One word or hyphenated, no slashes. A nested page's full address adds its parent's, like /about/island-guide.",
+    pageSlugHint: "Made from the title until you edit it. One word or hyphenated, no slashes; a nested page’s address follows its parent’s, like /about/island-guide.",
     pageParent: "Parent page",
     pageParentNone: "None (top level)",
     pageParentHint: "Nest this page under another. Its address becomes the parent's plus its own, and menu links to it are updated.",
     pageTitle: "Title",
-    pageSlug: "Address",
+    pageSlug: "Permalink",
     homeSlug: "/ (home)",
     seoHeading: "SEO",
     seoTitle: "SEO Title",
@@ -747,7 +758,8 @@ window.COPY = {
     postDescriptionHint: "Shown in the blog list and used as the search description.",
     postImage: "Cover image",
     postTags: "Tags",
-    postTagsHint: "Comma-separated.",
+    postTagsHint: "Pick a tag other posts use, or type a new one and press Enter. Tags save with the post.",
+    postNoTags: "No tags yet.",
     postDraft: "Draft (not published)",
     postBody: "Body",
     postBodyHint: "Format with the toolbar. Images come from the project's images; the file is saved as markdown.",
@@ -950,6 +962,7 @@ window.COPY = {
       lead: "Images in this project. Pick one, or add files from your computer.",
       upload: "Add images…",
       fromPhone: "From your phone…",
+      settingsBtn: "Image Settings",
       uploadFiles: "Add files…",
       uploadFilesNote: "Files are kept exactly as uploaded and served at /files/. PDF, Word, Excel, PowerPoint, CSV, text, ZIP, audio and video.",
       emptyFiles: "No files yet. Add some to get started.",
@@ -1082,6 +1095,407 @@ window.COPY = {
     siteLink: "thinkany.co",
   },
 
+  // ── Walkthrough tour: ordered tooltips that introduce the studio ────────────
+  // The ORDER and targets live in shell.js (TOUR_STEPS); each step points at an
+  // entry in `steps` by key, so only the wording lives here. The tour starts on
+  // its own the first time a Claude key is connected, and can be replayed from
+  // the About drawer at any time.
+  tour: {
+    stepOf: (n, total) => `${n} of ${total}`,
+    next: "Next",
+    back: "Back",
+    done: "Got it",
+    skip: "Skip the tour",
+    closeAria: "Close the tour",
+    // About drawer: the replay row
+    // ── The CMS walkthrough (the site builder's Pages tab, then the home page's sections) ──
+    cms: {
+      info: "Walk through the CMS",
+      listBtn: "CMS",
+      hideListBtn: "Hide CMS steps",
+      expandTab: (tab) => `Show the ${tab} steps`,
+      steps: {
+        tabs: {
+          title: "The site builder",
+          body: "Everything the site is made of, one tab each: Pages, Posts, Types, Forms, Media, Blocks, Navigation and Settings. Edits save to the project and show in the Site tab right away. We’ll walk through Pages.",
+        },
+        help: {
+          title: "Help for this tab",
+          body: "The life preserver opens help for whichever tab is open: what it holds, how to add and change things, and tips.",
+        },
+        preview: {
+          title: "Preview in browser",
+          body: "Opens the page you’re editing in your browser, so you can check it at full size while you work.",
+        },
+        pageList: {
+          title: "Your pages",
+          body: "Search and Create at the top, then every page of the site: home first, with child pages indented under their parent. Click one to edit it on the right. Drag a page onto another to nest it, or between pages to move it.",
+        },
+        pageSearch: {
+          title: "Search pages",
+          body: "Type part of a page’s name and the matches appear on the right as pills. Click one to open it. Clear the search and whatever you were editing comes back.",
+        },
+        addPage: {
+          title: "Add a page",
+          body: "Type a title and press Create. The page’s permalink is made from the title, and you can adjust it in Page settings.",
+        },
+        pageHead: {
+          title: "The page you’re editing",
+          body: "The home page is open now. Everything below is its content: settings, the sections it’s built from, and its search settings.",
+        },
+        pageSettings: {
+          title: "Page settings",
+          body: "The title, the permalink (made from the title until you edit it by hand), and for any page but home, its parent. Home always lives at the site’s root.",
+        },
+        blocks: {
+          title: "Blocks: the page’s sections",
+          body: "Each section of your approved design became a block, and this list is the home page top to bottom, in order. Reorder, edit or remove any of them here.",
+        },
+        blockRow: {
+          title: "One section",
+          body: "Each row is a section. The arrows move it up or down, Edit content opens its fields with a live preview of the block beside them, and the bin removes it. You can drag rows to reorder too.",
+        },
+        addBlock: {
+          title: "Add a block",
+          body: "Pick any block the site has, from the design or built in, and it’s added to the bottom of the page with its fields open.",
+        },
+        designBlock: {
+          title: "Design a new block",
+          body: "Need a section the design doesn’t have? Describe it, add references if you like, and the assistant designs it in the site’s own language, adds it to the library and places it on this page.",
+        },
+        seo: {
+          title: "SEO",
+          body: "The search settings for this page: title, description, share image, keyphrase, whether search engines may list it, and structured data.",
+        },
+        actions: {
+          title: "Save your changes",
+          body: "Save writes the page and the Site tab updates. Cancel discards what you changed. Pages other than home can be drafts, previewed here but left out of the published site until you publish them.",
+        },
+        postsTab: {
+          title: "Posts",
+          body: "The blog. Posts live under the posts directory with a list page of their own, and each one is written here rather than composed from blocks.",
+        },
+        postList: {
+          title: "Your posts",
+          body: "Search, Create and Tags at the top, then every post with its date or a Draft tag. Click one to edit it. A new post starts as a draft, so you can work on it across sessions before it goes live.",
+        },
+        postSearch: {
+          title: "Search posts",
+          body: "Type part of a name or a tag. Posts matching by name come first, then posts carrying a matching tag, as pills on the right. Click one to open it; clear the search to get back to what you were editing.",
+        },
+        addPost: {
+          title: "Add a post",
+          body: "Type a title and press Create. The permalink is made from the title and follows it until you edit it by hand.",
+        },
+        postTags: {
+          title: "Tags",
+          body: "Expand to see every tag with the number of posts carrying it. Click a tag to list its posts on the right, then click a post to edit it. Tags are set on each post under Post settings.",
+        },
+        postSettings: {
+          title: "Post settings",
+          body: "Title, permalink, publish date, a summary for the blog list and search results, the cover image, and tags.",
+        },
+        postContent: {
+          title: "Content",
+          body: "Write the post here with the formatting toolbar. Images come from the project’s media library, and the file is saved as markdown.",
+        },
+        postSeo: {
+          title: "SEO",
+          body: "Search settings for the post: title, description (the summary is used when this is empty), share image, keyphrase, listing, and structured data.",
+        },
+        postActions: {
+          title: "Draft and publish",
+          body: "Save draft keeps working on it in private. Publish makes it part of the next site publish, and you can unpublish it again later. Delete moves it to the Trash under Settings.",
+        },
+        typesTab: {
+          title: "Types",
+          body: "Your own kinds of content, like products, team members or landing pages. A type has fields, an address, and a content template built from your blocks, and each entry gets a page of its own.",
+        },
+        typeList: {
+          title: "Types and entries",
+          body: "Each type lists its entries beneath it. Click a type to edit what it is made of, or an entry to edit its content.",
+        },
+        addEntry: {
+          title: "Add an entry",
+          body: "Type a title under a type to add an entry. Its form has one control per field, and it renders through the type’s template unless you give it blocks of its own.",
+        },
+        addType: {
+          title: "Add a content type",
+          body: "Name it in the plural, like Products. Its address is made from the name, and you add its fields next.",
+        },
+        typeSettings: {
+          title: "Type settings",
+          body: "The plural and singular names, the path entries live under, and whether an index page lists every entry at that address.",
+        },
+        typeFields: {
+          title: "Fields",
+          body: "Every entry gets a title and an address; add the rest here: text, long text, images, options, references to other entries, and more. Mark the required ones and drag the grip to reorder.",
+        },
+        typeTemplate: {
+          title: "Content template",
+          body: "The blocks that render each entry. In any text, {{field}} fills in that field and {{title}} the entry’s title, so one template serves every entry.",
+        },
+        typeActions: {
+          title: "Save the type",
+          body: "Save type writes the definition. Changing fields keeps existing entries and their content. Delete type stops its entries being published but leaves them on disk.",
+        },
+        formsTab: {
+          title: "Forms",
+          body: "Forms visitors fill in: their fields, the button, what happens after, and who receives each submission. A form reaches a page through the Form block.",
+        },
+        formList: {
+          title: "Your forms",
+          body: "Every form, with its field count and the pages it’s on. Click one to edit it. A form that isn’t on a page yet is waiting for a Form block to pick it.",
+        },
+        addForm: {
+          title: "Add a form",
+          body: "Name it, like Contact, and press Create. It starts empty; you add the fields next.",
+        },
+        formFields: {
+          title: "Fields",
+          body: "The fields in the order they appear on the page: text, email, phone, long text, choices and more. Each has a label, whether it’s required, a placeholder and help text. Add one from the list at the bottom.",
+        },
+        formAfter: {
+          title: "After submitting",
+          body: "What the visitor sees once they’ve sent it: a thank-you message in place, or a page of this site, like a thank-you page you made in Pages.",
+        },
+        formDelivery: {
+          title: "Who receives it",
+          body: "The addresses each submission goes to, the reply-to, and whether the visitor’s own email is used as the reply-to. Turn on reCAPTCHA here to keep bots out on top of the built-in honeypot.",
+        },
+        formActions: {
+          title: "Save the form",
+          body: "Save form writes it, and every page that uses it picks up the change. Delete form removes it; any Form block that used it shows no form until you pick another.",
+        },
+        siteDelivery: {
+          title: "Delivery, once per site",
+          body: "How submissions actually get sent: a transactional mail service you connect once for this site. Pick the service, paste its key and set the from address, then send a test. The key stays in the app and reaches the site’s hosting at publish; it’s never written into the project.",
+        },
+        mediaTab: {
+          title: "Media",
+          body: "Every image in the project, the same library the image fields pick from, plus the files the site offers for download.",
+        },
+        mediaKinds: {
+          title: "Images and Files",
+          body: "Two libraries. Images are optimized for the web as they’re added. Files, like PDFs, spreadsheets, decks, audio and video, are kept exactly as uploaded and served at /files/, ready to link from any menu or link field.",
+        },
+        mediaFolders: {
+          title: "Folders",
+          body: "Folders are tags, so an image sits in every folder it’s tagged with. Drag an image onto a folder to file it, and hover a folder to rename or delete it; the images themselves stay.",
+        },
+        mediaSettings: {
+          title: "Image settings",
+          body: "The gear opens the image optimization sliders right here: quality and the largest width for new uploads. They’re the same settings as Settings, Images, so a change in either place applies to both.",
+        },
+        addFolder: {
+          title: "New folder",
+          body: "Type a name and press New folder. Each library has its own folders; they never cross.",
+        },
+        mediaBar: {
+          title: "Filter and add",
+          body: "Filter the library by name, add images or files from your computer, or scan a code to send photos straight from your phone over Wi‑Fi.",
+        },
+        mediaGrid: {
+          title: "The library",
+          body: "Click an image to open it: its name, size, path, alt text and tags. Hover one to rename or delete it. Renaming updates every page that uses it; deleting sends it to the Trash under Settings, restorable for 30 days.",
+        },
+        blocksTab: {
+          title: "Blocks",
+          body: "The block library: everything a page can be composed from. The blocks promoted from your design, plus the built-in ones every site has, like the Form block.",
+        },
+        blockLibrary: {
+          title: "Every block the site can use",
+          body: "One card per block, with its design name, a description, and the pages it’s on. A block that’s on no page yet is still here, ready to add from any page’s Add a block list.",
+        },
+        blockCard: {
+          title: "Name a block",
+          body: "Give a block a name that’s easier to recognise when composing pages. Only the label changes; the block itself and every page using it stay as they are. Names save as you type.",
+        },
+        navTab: {
+          title: "Navigation",
+          body: "The links in the site’s header and footer, and the legal line at the bottom of every page. Everything here saves a moment after you change it.",
+        },
+        navHeader: {
+          title: "Primary navigation",
+          body: "The header menu. Each link has text and a URL; open the URL field to pick any page, home-page section, post or entry in the project. Add a sub-link for a dropdown, drag rows to reorder, and where the design has a mega menu, add panels under a link.",
+        },
+        navFooter: {
+          title: "Footer",
+          body: "The footer’s own links, independent of the header. It starts as a copy of the design’s footer links. Give a link sub-links and it becomes a column, with its text as the heading.",
+        },
+        navLegal: {
+          title: "Legal",
+          body: "The copyright line, where {year} and {siteName} fill in automatically, and links like Privacy and Terms shown beside it.",
+        },
+        settingsTab: {
+          title: "Settings",
+          body: "Everything about the site as a whole, one section each: images, search engines, logos, navigation, the blog, scripts, icons, redirects, the site itself, the Trash, and the switch that turns the site builder on. Each section folds; the studio remembers which you keep open.",
+        },
+        settingsImages: {
+          title: "Images",
+          body: "How added images are optimized: the quality and the largest width. Applies to new uploads; images already in the library are left as they are.",
+        },
+        settingsSearch: {
+          title: "Search engines",
+          body: "The site name, title separator and default share image every page falls back to, the publisher’s structured data, and the switches for robots.txt, the sitemap and llms.txt. Discourage crawling while a site isn’t ready to be found.",
+        },
+        settingsLogos: {
+          title: "Logos",
+          body: "The logo in the header and footer, on desktop and on mobile. Add one and it’s used everywhere; add more to give a spot its own. With none, the wordmark shows instead.",
+        },
+        settingsNav: {
+          title: "Navigation",
+          body: "On, the menu is edited by hand in the Navigation tab. Off, it follows the page outline: top-level pages in order, with their child pages as sub-links. A site with a mega menu stays on.",
+        },
+        settingsBlog: {
+          title: "Blog",
+          body: "The directory posts live under, which sets their addresses and the blog’s list page. It saves a moment after you stop typing.",
+        },
+        settingsScripts: {
+          title: "Scripts",
+          body: "Google Tag Manager and any other scripts, each with a placement in the page. They go to the published site only, never into the design previews or the local preview.",
+        },
+        settingsIcons: {
+          title: "Icons",
+          body: "The favicon browsers show and the icon phones use when the site is added to a home screen. Uploads are kept exactly as they are.",
+        },
+        settingsRedirects: {
+          title: "Redirects",
+          body: "Send an old address to a new one, so links that are out there keep working after a page moves or is renamed. Adding or removing one saves straight away.",
+        },
+        settingsSite: {
+          title: "Site",
+          body: "Which design this site is built from, and where the site’s preview runs. The design is pinned so the site keeps its look while you explore new directions.",
+        },
+        settingsTrash: {
+          title: "Trash",
+          body: "Pages, posts, entries, forms and images you delete land here for 30 days. Restore puts one back where it was; Delete forever removes it now.",
+        },
+        settingsEnable: {
+          title: "The site builder switch",
+          body: "Turns the CMS on for this project. Off, only this Settings tab is reachable and the Site tab stops previewing; on, every tab opens up. Your content is kept either way.",
+        },
+      },
+    },
+    replayTitle: "Take the tour",
+    replayDesc: "A short walkthrough of the studio, one tip at a time. Replay it whenever you like.",
+    replayBtn: "Start the tour",
+    showSteps: "Show tour steps",
+    hideSteps: "Hide tour steps",
+    steps: {
+      claude: {
+        title: "You’re connected",
+        body: "This is Claude Settings. Open it to choose the model, set build fidelity, and decide how the assistant works with you. Everything in the studio runs on the key you just added.",
+      },
+      licenses: {
+        title: "Keys & Licenses",
+        body: "Your Claude key and the studio’s licenses live here, in one place. Let’s open it and look at what each one covers.",
+        next: "Open", // the button opens the drawer, so it says so
+      },
+      claudeKey: {
+        title: "Your Claude API key",
+        body: "The studio runs on it. Every design, edit and review is a conversation with Claude, billed to your own Anthropic account. It’s stored encrypted in your keychain and never written into a project.",
+      },
+      figmaLicense: {
+        title: "Figma Export license",
+        body: "This license unlocks exporting a finished design to Figma: real color variables, the type and spacing scales, and every section rebuilt as a reusable component.",
+      },
+      designLicense: {
+        title: "Design, Research, Art Director & Site builder",
+        body: "This license unlocks the studio’s own intelligence: design directions, competitor research, the Art Director review, and the site builder with pages, posts, media and publishing. Licenses are validated with thinkany and kept in your keychain too.",
+      },
+      closeDrawer: {
+        title: "Closing a drawer",
+        body: "This X closes any drawer. A click anywhere outside the drawer, or the Escape key, closes it too. The rail stays live while a drawer is open, so you can switch straight to another.",
+      },
+      figma: {
+        title: "Figma Export",
+        body: "When a design is finished, send it to Figma from here: the styleguide as real variables, every section as a reusable component, and the pages composed from them. It needs the Figma Export license and a completed build.",
+      },
+      figmaHelp: {
+        title: "More to read",
+        body: "Wherever you see this life preserver, there is more to read. Click it to see exactly what a Figma export includes.",
+        next: "Show help",
+      },
+      helpPanels: {
+        title: "Help panels",
+        body: "Panels like this one explain a feature in more depth: what it does, what to expect, and tips. Close one with the X, a click outside, or Escape. Look for the life preserver across the studio.",
+      },
+      company: {
+        title: "Company Profile",
+        body: "Your agency’s identity: the name, fonts and logo used on the login gate and the admin chrome. Set it once and every new project starts out branded as yours.",
+        next: "Open",
+      },
+      companyDrawer: {
+        title: "Your default profile",
+        body: "Create or update the profile here. It’s applied automatically to every new project, so client setup skips those questions. With a project open, you can also save that project’s identity as the default.",
+      },
+      voice: {
+        title: "Copy Voice",
+        body: "How the assistant writes. Set the tone and the rules it follows whenever it drafts copy for a design. Nothing is set by default.",
+        next: "Open",
+      },
+      voiceProject: {
+        title: "This project",
+        body: "A tone for this design, picked from an example or typed in your own words, plus rules that apply here only, like no exclamation points or sentence-case headings. Any global rules in effect are listed underneath.",
+      },
+      voiceGlobal: {
+        title: "Global rules",
+        body: "Rules that apply to every project. Add the ones you always want followed, and tick the box to ignore them on a project that needs a voice of its own.",
+      },
+      voiceSave: {
+        title: "Save",
+        body: "Saves both the project and the global settings together. Changes take effect from your next message to the assistant.",
+      },
+      a11y: {
+        title: "Accessibility Review",
+        body: "Checks a built design against WCAG AA: contrast, structure, labels and keyboard use. Findings arrive grouped by rule, and each one can be fixed by the assistant, held for later, or dismissed. Turn on AA mode in Claude Settings to make it part of every build.",
+      },
+      artdirector: {
+        title: "Art Director",
+        body: "You won’t see this icon yet: it joins the rail only after a design has been built and is being previewed. When it does, it’s a second pair of eyes on the finished pages, reviewing hierarchy, rhythm, type and color, then suggesting specific changes you can apply in one click or hold for later.",
+      },
+      publish: {
+        title: "Publish",
+        body: "Send a finished design to a private, password-protected link you can share with a client. Let’s open it and look at how publishing works.",
+        next: "Open",
+      },
+      publishDrawer: {
+        title: "How publishing works",
+        body: "A design has to be built before it can be published. Once one is, connect your Vercel account here and publish: the first publish creates the private link and a preview password to share with your client, and its sign-in screen carries your company name and logo. Later publishes update the same link, and you can move it to a subdomain of a domain you own.",
+      },
+      cms: {
+        title: "CMS",
+        body: "Once a design is approved, the site is built from it: each section becomes an editable block, and the copy and images move into pages, posts, media and forms you manage here, along with navigation and site settings. Part of the Design license.",
+      },
+      projectsIntro: {
+        title: "Switch Projects",
+        body: "Every design lives in its own project folder, separate from the app. This is where you start a new one or jump between recent ones. Let’s open it.",
+        next: "Open",
+      },
+      afterCreateOpen: {
+        title: "What happens next",
+        body: "When a new project opens, you pick how to begin. Get Designing asks a few questions about the site and starts designing from your answers. With a Figma Export license you also get Start from Figma, which imports a Figma frame to seed the brand and, if it’s a page, designs from it. Without the license, Get Designing starts right away.",
+      },
+      newProjectIntro: {
+        title: "Your first project",
+        body: "Everything you design lives in a project folder, separate from the app, so the studio itself stays a clean, unbranded template. Here’s how a new one begins.",
+      },
+      newProject: {
+        title: "New project",
+        body: "Copies the blank template into an empty folder you pick, then runs it live, so you watch the design take shape in the preview as you work.",
+      },
+      openProject: {
+        title: "Open an existing project",
+        body: "Have a project folder from before, or from another machine? Open it here. Recent projects are also one click away under Switch Projects, at the top of the rail.",
+      },
+      afterCreate: {
+        title: "What happens next",
+        body: "Once the project opens, you pick how to begin. Get Designing asks a few questions about the site and starts designing from your answers. With a Figma Export license you also get Start from Figma, which imports a Figma frame to seed the brand and, if it’s a page, designs from it. Without the license, Get Designing starts right away. Ready? Pick New project.",
+      },
+    },
+  },
+
   // ── Shared labels reused across drawers ─────────────────────────────────────
   common: {
     copy: "Copy",
@@ -1116,6 +1530,7 @@ window.COPY = {
     licenseLabel: "Figma export license",
     exportDesign: "Export Design",
     exportScopeLabel: "What to export",
+    exportScopeLabelUnlicensed: "What gets exported", // the header when there's no license yet (help still opens)
     scopeStyleguide: "Styleguide + Blocks",
     scopePages: "Pages",
     exportPickScope: "Tick at least one thing to export.",

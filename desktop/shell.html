@@ -265,9 +265,13 @@
       .media-folder.active { border-color: #111; background: #f4f4f7; }
       .media-folder.drop { border-color: #111; background: #e8e8ee; }
       .media-folder .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
-      .media-folder .count { font-size: 11px; color: #737373; }
-      .media-folder .acts { display: none; gap: 2px; }
-      .media-folder:hover .acts { display: inline-flex; }
+      /* The count sits at the row's right edge; the rename / delete buttons come before it. */
+      .media-folder .count { font-size: 11px; color: #737373; order: 2; }
+      .media-folder .acts { order: 1; }
+      /* The rename / delete buttons stay in the layout (invisible until hover) so a row's
+         height never changes and the list doesn't shift under the pointer. */
+      .media-folder .acts { display: inline-flex; gap: 2px; visibility: hidden; }
+      .media-folder:hover .acts, .media-folder:focus-within .acts { visibility: visible; }
       .media-folder .acts .site-mini { padding: 2px 5px; }
       .media-folder input.field { margin: 0; padding: 3px 6px; font-size: 12px; }
       .media-tile.dragging { opacity: .5; }
@@ -283,6 +287,16 @@
       .redirect-row .type { color: #505056; }
       /* Images | Files switch at the top of the Media tab. */
       .media-kinds { display: inline-flex; border: 1px solid #d6d6de; border-radius: 8px; overflow: hidden; margin: 8px 0 4px; }
+      .media-kinds.in-column { margin: 0; }
+      /* The left column's top line: Images | Files, and the Image Settings gear at the right
+         edge; the panel beneath holds the same sliders as Settings → Images. */
+      .media-top-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
+      .media-settings-btn { width: 24px; height: 24px; padding: 0; border: none; border-radius: 6px; background: none; color: #74747a; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: color .12s, background .12s; }
+      .media-settings-btn:hover, .media-settings-btn.on { color: #111; background: #f0f0f4; }
+      .media-settings-btn svg { width: 17px; height: 17px; display: block; }
+      .media-settings { margin: 0 0 14px; padding: 10px 12px 6px; border: 1px solid #e2e2e8; border-radius: 8px; background: #fafafb; }
+      .media-settings[hidden] { display: none; }
+      .media-settings > .sess-desc:first-child { margin-bottom: 8px; }
       .media-kinds button { border: 0; background: #fff; color: #444; font: inherit; font-size: 12.5px; padding: 6px 14px; cursor: pointer; }
       .media-kinds button + button { border-left: 1px solid #d6d6de; }
       .media-kinds button.on { background: #111; color: #fff; }
@@ -470,6 +484,11 @@
       #modal-preview:hover { opacity: 1; }
       #modal-preview[hidden] { display: none; }
       #modal-preview svg { width: 20px; height: 20px; display: block; }
+      /* The CMS walkthrough "i" (the CMS drawer only): same treatment as the preview button. */
+      #modal-info { display: flex; align-items: center; justify-content: center; border: none; background: none; color: #fff; cursor: pointer; padding: 0; opacity: .7; transition: opacity .25s linear; }
+      #modal-info:hover { opacity: 1; }
+      #modal-info[hidden] { display: none; }
+      #modal-info svg { width: 20px; height: 20px; display: block; }
       #modal-close { border: none; background: none; cursor: pointer; color: #fff; line-height: 1; padding: 0; display: flex; opacity: .7; transition: opacity .25s linear; }
       #modal-close:hover { opacity: 1; }
       #modal-close svg { width: 20px; height: 20px; display: block; }   /* matches the rail icons (life-buoy) height */
@@ -897,6 +916,121 @@
       /* The app tooltip (every title outside the rail): the rail icons' tip, placed by script. */
       #apptip { position: fixed; z-index: 9000; background: #111; color: #fff; font-size: 12px; line-height: 1.35; white-space: normal; width: max-content; max-width: 300px; padding: 4px 8px; border-radius: 6px; pointer-events: none; }
       #apptip[hidden] { display: none; }
+
+      /* ---- Walkthrough tour: one ordered tooltip at a time, anchored to a target ---- */
+      /* Sits above the drawers (100), the rail (110), the gates (40) and the help
+         overlay (7000), below the hover tip (9000) and the splash. Fixed so it can point at anything on screen; the
+         engine (shell.js, startTour) positions it and flips placement near the edges. */
+      #tour {
+        position: fixed; z-index: 7500; width: 272px;
+        background: #111; color: #fff; border-radius: 10px; padding: 14px 16px 14px;
+        /* The faint outer line keeps the tip legible over the help overlay's dark backdrop. */
+        box-shadow: 0 0 0 1px rgba(255,255,255,.16), 0 12px 36px rgba(0,0,0,.28);
+        font-size: 13px; line-height: 1.5;
+        opacity: 0; transform: translateX(-6px);
+        transition: opacity .22s ease, transform .22s cubic-bezier(.16, 1, .3, 1);
+      }
+      #tour.show { opacity: 1; transform: none; }
+      #tour[hidden] { display: none; }
+      /* The arrow: a rotated square on the edge facing the target. Placement classes
+         set which edge; the engine sets --arrow-y / --arrow-x to line it up. */
+      #tour::before {
+        content: ""; position: absolute; width: 12px; height: 12px; background: #111;
+        transform: rotate(45deg); border-radius: 2px;
+      }
+      #tour.place-right::before  { left: -5px; top: calc(var(--arrow-y, 50%) - 6px); }
+      #tour.place-left::before   { right: -5px; top: calc(var(--arrow-y, 50%) - 6px); }
+      #tour.place-bottom::before { top: -5px; left: calc(var(--arrow-x, 50%) - 6px); }
+      #tour.place-top::before    { bottom: -5px; left: calc(var(--arrow-x, 50%) - 6px); }
+      .tour-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+      .tour-step { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #9a9aa3; }
+      .tour-x {
+        width: 22px; height: 22px; margin: -4px -6px 0 0; padding: 0; border: none; border-radius: 6px;
+        background: none; color: #9a9aa3; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        transition: color .12s, background .12s;
+      }
+      .tour-x:hover { color: #fff; background: #2a2a31; }
+      .tour-x svg { width: 14px; height: 14px; display: block; }
+      .tour-title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 4px; }
+      .tour-body { color: #d6d6dc; }
+      .tour-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; }
+      .tour-skip {
+        border: none; background: none; padding: 0; font: inherit; font-size: 12px; color: #9a9aa3; cursor: pointer;
+        transition: color .12s;
+      }
+      .tour-skip:hover { color: #fff; }
+      .tour-acts { display: flex; align-items: center; gap: 8px; }
+      .tour-next, .tour-back {
+        border: none; border-radius: 7px; padding: 7px 14px; font: inherit; font-size: 12.5px; font-weight: 600;
+        background: #fff; color: #111; cursor: pointer; transition: background .2s linear, border-color .2s linear;
+      }
+      .tour-next:hover { background: #e6e6ea; }
+      /* Back: outlined, so Next stays the obvious move. */
+      .tour-back { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.28); padding: 6px 13px; }
+      .tour-back:hover { border-color: rgba(255,255,255,.7); }
+      .tour-back[hidden], .tour-skip[hidden] { display: none; }
+      /* The step's target: lit, ringed, with a soft pulse so the eye lands on it. On a
+         rail icon the ring is white on the dark rail; the icon's own hover tip stays
+         quiet while the tour is speaking for it. */
+      .tour-target { position: relative; z-index: 5001; }
+      .railbtn.tour-target { opacity: 1; background: #2a2a31; animation: tour-ring 1.6s ease-out infinite; }
+      .railbtn.tour-target::after { display: none; }
+      @keyframes tour-ring {
+        0%   { box-shadow: 0 0 0 0 rgba(255,255,255,.55); }
+        70%  { box-shadow: 0 0 0 7px rgba(255,255,255,0); }
+        100% { box-shadow: 0 0 0 7px rgba(255,255,255,0); }
+      }
+      /* The drawer's close X (dark header): the same white ring as a rail icon. */
+      #modal-close.tour-target, #modal-preview.tour-target, #modal-info.tour-target { border-radius: 50%; animation: tour-ring 1.6s ease-out infinite; }
+      /* In-drawer buttons the CMS walkthrough points at (the tabs' help buoy): dark ring. */
+      .site-tabs-help.tour-target { color: #111; border-radius: 50%; animation: tour-ring-dark 1.6s ease-out infinite; }
+      /* A small in-drawer control (the "?" help button): dark ring on white. */
+      .row-help.tour-target { color: #111; border-radius: 50%; animation: tour-ring-dark 1.6s ease-out infinite; }
+      @keyframes tour-ring-dark {
+        0%   { box-shadow: 0 0 0 0 rgba(17,17,17,.4); }
+        70%  { box-shadow: 0 0 0 7px rgba(17,17,17,0); }
+        100% { box-shadow: 0 0 0 7px rgba(17,17,17,0); }
+      }
+      /* A drawer section under the tour: a soft panel around it, drawn with a spread
+         shadow so nothing in the drawer moves. */
+      [data-tour]:not(button).tour-target { background: #f4f4f8; box-shadow: 0 0 0 12px #f4f4f8; border-radius: 6px; transition: background .2s, box-shadow .2s; }
+      /* A tagged button keeps its own look and gets the dark pulse ring instead. */
+      button[data-tour].tour-target { animation: tour-ring-dark 1.6s ease-out infinite; }
+      /* About drawer: the replay row */
+      .tour-replay .d { font-size: 12.5px; color: #666; line-height: 1.5; margin: -4px 0 10px; }
+      .tour-replay-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+      /* The step list: numbered titles, each a button that starts the tour at that step. */
+      .tour-steps { list-style: none; margin: 12px 0 0; padding: 0; border: 1px solid #e6e6ea; border-radius: 8px; overflow: hidden; }
+      .tour-steps[hidden] { display: none; }
+      .tour-steps li + li { border-top: 1px solid #ececf1; }
+      .tour-step-btn {
+        display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border: none; background: #fff;
+        font: inherit; font-size: 12.5px; color: #222; text-align: left; cursor: pointer; transition: background .15s;
+      }
+      .tour-step-btn:hover { background: #f4f4f8; }
+      .tour-step-btn .n { flex: 0 0 22px; font-size: 11px; font-weight: 600; color: #8a8a93; text-align: right; }
+      /* The CMS walkthrough by tab: a triangle expander beside each tab's name. The name
+         starts that tab's steps; the expanded list starts at a particular step. */
+      .tour-groups { margin-top: 12px; border: 1px solid #e6e6ea; border-radius: 8px; overflow: hidden; }
+      .tour-groups[hidden] { display: none; }
+      .tour-group + .tour-group { border-top: 1px solid #ececf1; }
+      .tour-group-head { display: flex; align-items: center; background: #fff; }
+      .tour-group-tri {
+        flex: 0 0 28px; height: 32px; padding: 0; border: none; background: none; color: #8a8a93; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; transition: color .15s;
+      }
+      .tour-group-tri:hover { color: #111; }
+      .tour-group-tri svg { width: 12px; height: 12px; transition: transform .15s; }
+      .tour-group-tri.open svg { transform: rotate(90deg); }
+      .tour-group-name {
+        flex: 1; padding: 7px 10px 7px 2px; border: none; background: none; font: inherit; font-size: 12.5px; font-weight: 600; color: #222;
+        text-align: left; cursor: pointer; transition: background .15s;
+      }
+      .tour-group-name:hover { background: #f4f4f8; }
+      .tour-group-steps { margin: 0; border: none; border-top: 1px solid #ececf1; border-radius: 0; background: #fafafb; }
+      .tour-group-steps[hidden] { display: none; }
+      .tour-group-steps .tour-step-btn { background: #fafafb; padding-left: 30px; }
+      .tour-group-steps .tour-step-btn:hover { background: #f0f0f4; }
       /* An icon never takes the pointer: Chromium looks for a tooltip on the SVG itself
          (its own <title>), not on the button around it, so hovering the icon showed
          nothing and hovering the button's padding did. This makes the button the target. */
@@ -944,6 +1078,30 @@
       .site-nav-row.drop-after { box-shadow: 0 2px 0 0 #111; }
       .site-nav-row.drop-into { outline: 2px solid #111; outline-offset: 1px; }
       .site-list-row.dragging { opacity: .4; }
+      /* The Pages / Posts list tools: search, Create, and (posts) a Tags expander, parted
+         from the list below by a muted rule. Results show as pills in the right column. */
+      .site-list-tools { display: flex; flex-direction: column; gap: 8px; }
+      /* A search input with a magnifier at its right edge. */
+      .site-search { position: relative; }
+      .site-search input.field { padding-right: 34px; width: 100%; }
+      .site-search-icon { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); color: #8a8a93; pointer-events: none; display: flex; }
+      .site-search-icon svg { width: 16px; height: 16px; display: block; }
+      .site-list-sep { height: 1px; background: #e3e3e8; margin: 14px 0; }
+      .site-tags-toggle { display: flex; align-items: center; gap: 6px; padding: 4px 0; border: none; background: none; font: inherit; font-size: 12.5px; font-weight: 600; color: #222; cursor: pointer; }
+      .site-tags-toggle svg { width: 12px; height: 12px; color: #8a8a93; transition: transform .15s; }
+      .site-tags-toggle.open svg { transform: rotate(90deg); }
+      .site-tag-list { display: flex; flex-direction: column; gap: 2px; padding-left: 18px; }
+      .site-tag-list[hidden] { display: none; }
+      .site-tag-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 8px; border: 1px solid transparent; border-radius: 6px; background: none; font: inherit; font-size: 12.5px; color: #222; cursor: pointer; text-align: left; }
+      .site-tag-row:hover { background: #f4f4f8; }
+      .site-tag-row.active { border-color: #111; background: #f4f4f7; }
+      .site-tag-row .count { font-size: 11px; color: #8a8a93; }
+      .site-results .sess-label { margin-bottom: 10px; }
+      .site-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+      .site-pill { display: inline-flex; align-items: baseline; gap: 8px; padding: 7px 14px; border: 1px solid #e2e2e8; border-radius: 999px; background: #fff; font: inherit; font-size: 13px; color: #222; cursor: pointer; transition: border-color .15s, background .15s; }
+      .site-pill:hover { border-color: #111; background: #f4f4f7; }
+      .site-pill .t { font-weight: 500; }
+      .site-pill .s { font-size: 11.5px; color: #8a8a93; }
       /* The drop ghost: an outlined row where the dragged page will land; indented with an arrow when it becomes a child. */
       .site-drop-ghost { display: flex; align-items: center; gap: 6px; padding: 8px 10px; margin-bottom: 6px; border: 1.5px dashed #111; border-radius: 8px; background: #f4f4f7; color: #111; font-size: 13px; font-weight: 500; }
       .site-drop-ghost-arrow { display: none; width: 12px; height: 12px; border-left: 1.5px solid #111; border-bottom: 1.5px solid #111; border-bottom-left-radius: 3px; margin: -6px 2px 0 0; }
@@ -2036,6 +2194,9 @@
           <div id="modal-acts">
             <button id="modal-preview" data-copy-title="chrome.previewInBrowser" data-copy-aria="chrome.previewInBrowser" hidden>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+            </button>
+            <button id="modal-info" data-copy-title="tour.cms.info" data-copy-aria="tour.cms.info" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4.5"/><circle cx="12" cy="8.2" r=".6" fill="currentColor"/></svg>
             </button>
             <button id="modal-close" data-copy-title="chrome.close" data-copy-aria="chrome.close">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><path d="M5 5 L19 19 M19 5 L5 19"/></svg>
