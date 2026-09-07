@@ -1947,6 +1947,18 @@ function wpStore(dir, payload, source) {
   appLog.write(`[wp] stored payload from ${source.url || source.file}: ${inv.counts.pages} pages, ${inv.counts.posts} posts, ${inv.counts.media} media`);
   return inv;
 }
+// The derived files follow the importer, not the fetch: rebuilt from payload.json whenever
+// they are read, so an app update improves an inventory already on disk without a refetch.
+function wpRefreshDerived(dir) {
+  const payload = wpReadPayload(dir); if (!payload) return null;
+  try {
+    const inv = wpImport.inventory(payload);
+    fs.writeFileSync(wpFile(dir, "inventory.json"), JSON.stringify(inv, null, 2) + "\n");
+    fs.writeFileSync(wpFile(dir, "inventory.md"), wpImport.inventoryMarkdown(inv));
+    fs.writeFileSync(wpFile(dir, "definitions.json"), JSON.stringify(wpImport.definitionsForSkill(payload), null, 2) + "\n");
+    return inv;
+  } catch (e) { appLog.write(`[wp] derived files: ${e.message}`); return null; }
+}
 function wpStatus() {
   if (!currentProject) return { licensed: siteLicensed(), project: false };
   const dir = currentProject;
@@ -1994,6 +2006,7 @@ ipcMain.handle("wp:loadFile", async () => {
 });
 ipcMain.handle("wp:inventory", () => {
   if (!currentProject) return { ok: false, error: "No project is open." };
+  wpRefreshDerived(currentProject);
   const md = readTextSafe(wpFile(currentProject, "inventory.md"));
   return md ? { ok: true, markdown: md } : { ok: false, error: "Nothing has been imported yet." };
 });
@@ -2003,6 +2016,7 @@ ipcMain.handle("wp:skeleton", () => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   const payload = wpReadPayload(currentProject); if (!payload) return { ok: false, error: "Nothing has been imported yet." };
+  wpRefreshDerived(currentProject); // the skill reads definitions.json next
   const p = wpFile(currentProject, "mapping.json");
   if (fs.existsSync(p)) return { ok: true, path: p, existed: true };
   try {

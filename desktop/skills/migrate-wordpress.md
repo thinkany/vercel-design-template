@@ -121,6 +121,13 @@ Rules for a good proposal:
   their prop paths; use those paths exactly. Prop kinds come from
   `.thinkany/blocks.json` (`fields[block][path].kind`): string, richtext, image,
   link, list, enum with its options, boolean, number.
+- **Layout settings are not content.** The old theme's presentation knobs (padding,
+  background colors, section ids, hide on mobile, column widths, a deactivate
+  toggle) are listed per block as `_layoutFields` in the skeleton and `layoutFields`
+  in the definitions. Never map them: the new design decides layout. When a block
+  has a deactivate toggle the skeleton already sets `skipWhen` to it, so instances
+  switched off on the old site are skipped; a page block marked `deactivated` in
+  the definitions is one of those.
 - **Fields.** Map only fields whose kinds agree or convert cleanly: text → string,
   wysiwyg → richtext (or string, if the prop is plain text: the tags are stripped),
   image → image, link/url → link, repeater → list with `each`, group → object with

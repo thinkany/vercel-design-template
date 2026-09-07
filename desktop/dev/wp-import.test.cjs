@@ -27,6 +27,7 @@ t("inventory counts", () => {
   assert.equal(inv.counts.forms, 1);
   assert.ok(inv.pages.find((p) => p.id === 10).home);
   assert.deepEqual(inv.acfBlocks.find((b) => b.name === "acf/hero").fields.sort(), ["button", "extra_note", "heading", "image", "subheading", "tone"]);
+  assert.deepEqual(inv.acfBlocks.find((b) => b.name === "acf/hero").layoutFields.sort(), ["deactivate_block", "hide_on_mobile", "padding", "section_id"]);
   assert.equal(inv.acfBlocks.find((b) => b.name === "acf/hero").uses, 3);
 });
 t("inventory markdown reads", () => {
@@ -61,6 +62,8 @@ t("skeleton has every slot", () => {
   assert.equal(sk.pages.find((p) => p.wp === 13).page, "team");
   assert.deepEqual(Object.keys(sk.blocks).sort(), ["acf/features", "acf/hero", "acf/testimonial"]);
   assert.deepEqual(sk.blocks["acf/hero"]._wpFields.sort(), ["button", "extra_note", "heading", "image", "subheading", "tone"]);
+  assert.deepEqual(sk.blocks["acf/hero"]._layoutFields.sort(), ["deactivate_block", "hide_on_mobile", "padding", "section_id"]);
+  assert.equal(sk.blocks["acf/hero"].skipWhen, "deactivate_block");
   assert.equal(sk.nav, "primary");
   assert.equal(sk.types.team.include, false);
   assert.equal(sk.availableBlocks.length, 4);
@@ -92,7 +95,7 @@ const mapping = {
     { wp: 15, page: "old-promotions", include: false },
   ],
   blocks: {
-    "acf/hero": { block: "hero", fields: { heading: "heading", body: "subheading", image: "image", "ctas[0]": { from: "button", each: { label: "title", href: "url", style: "=primary" } }, tone: "tone" } },
+    "acf/hero": { block: "hero", skipWhen: "deactivate_block", fields: { heading: "heading", body: "subheading", image: "image", "ctas[0]": { from: "button", each: { label: "title", href: "url", style: "=primary" } }, tone: "tone" } },
     "acf/features": { block: "features", fields: { heading: "title", items: { from: "items", each: { title: "name", text: "text", icon: "icon" } } } },
   },
   prose: { block: "prose", prop: "body" },
@@ -159,7 +162,10 @@ t("mapping validates, and catches a bad id", () => {
     const about = JSON.parse(fs.readFileSync(path.join(dir, "content", "pages", "about.json"), "utf8"));
     assert.equal(about.slug, "about");
     assert.equal(about.seo.description, "Who we are.");
-    assert.equal(about.blocks[1].props.body, "Founded in 2009. **Independent** and *local*.\n\n- Digital x-rays\n- Sedation options");
+    assert.equal(about.blocks[0].type, "prose", "the About hero was switched off on the old site, so it is skipped");
+    assert.equal(about.blocks[0].props.body, "Founded in 2009. **Independent** and *local*.\n\n- Digital x-rays\n- Sedation options");
+    assert.deepEqual(rep.skipped, [{ where: "about", block: "acf/hero", why: "deactivate_block" }]);
+    assert.ok(!rep.unmappedFields["acf/hero"].includes("padding") && !rep.unmappedFields["acf/hero"].includes("section_id"), "layout fields are never reported as unmapped");
     assert.ok(rep.pages.find((p) => p.id === "about").lost.some((l) => l.node === "page-fields" && l.text === "sidebar_note"));
     const team = JSON.parse(fs.readFileSync(path.join(dir, "content", "pages", "team.json"), "utf8"));
     assert.equal(team.parent, "about");

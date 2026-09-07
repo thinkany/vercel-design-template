@@ -18,166 +18,919 @@
     "seoPlugin": "yoast",
     "menus": [
       {
-        "id": 3, "name": "Primary", "slug": "primary", "locations": ["primary"],
+        "id": 3,
+        "name": "Primary",
+        "slug": "primary",
+        "locations": [
+          "primary"
+        ],
         "items": [
-          { "id": 101, "parent": 0, "order": 1, "title": "Home", "url": "https://harbordental.example/", "type": "post_type", "object": "page", "objectId": 10, "target": "" },
-          { "id": 102, "parent": 0, "order": 2, "title": "About Us", "url": "https://harbordental.example/about-us/", "type": "post_type", "object": "page", "objectId": 12, "target": "" },
-          { "id": 103, "parent": 102, "order": 3, "title": "Our Team", "url": "https://harbordental.example/about-us/team/", "type": "post_type", "object": "page", "objectId": 13, "target": "" },
-          { "id": 104, "parent": 0, "order": 4, "title": "Services", "url": "https://harbordental.example/services/", "type": "post_type", "object": "page", "objectId": 14, "target": "" },
-          { "id": 105, "parent": 0, "order": 5, "title": "Blog", "url": "https://harbordental.example/blog/", "type": "post_type", "object": "page", "objectId": 11, "target": "" },
-          { "id": 106, "parent": 0, "order": 6, "title": "Book", "url": "https://booking.example/harbor", "type": "custom", "object": "custom", "objectId": 0, "target": "_blank" }
+          {
+            "id": 101,
+            "parent": 0,
+            "order": 1,
+            "title": "Home",
+            "url": "https://harbordental.example/",
+            "type": "post_type",
+            "object": "page",
+            "objectId": 10,
+            "target": ""
+          },
+          {
+            "id": 102,
+            "parent": 0,
+            "order": 2,
+            "title": "About Us",
+            "url": "https://harbordental.example/about-us/",
+            "type": "post_type",
+            "object": "page",
+            "objectId": 12,
+            "target": ""
+          },
+          {
+            "id": 103,
+            "parent": 102,
+            "order": 3,
+            "title": "Our Team",
+            "url": "https://harbordental.example/about-us/team/",
+            "type": "post_type",
+            "object": "page",
+            "objectId": 13,
+            "target": ""
+          },
+          {
+            "id": 104,
+            "parent": 0,
+            "order": 4,
+            "title": "Services",
+            "url": "https://harbordental.example/services/",
+            "type": "post_type",
+            "object": "page",
+            "objectId": 14,
+            "target": ""
+          },
+          {
+            "id": 105,
+            "parent": 0,
+            "order": 5,
+            "title": "Blog",
+            "url": "https://harbordental.example/blog/",
+            "type": "post_type",
+            "object": "page",
+            "objectId": 11,
+            "target": ""
+          },
+          {
+            "id": 106,
+            "parent": 0,
+            "order": 6,
+            "title": "Book",
+            "url": "https://booking.example/harbor",
+            "type": "custom",
+            "object": "custom",
+            "objectId": 0,
+            "target": "_blank"
+          }
         ]
       }
     ],
-    "options": { "phone": "(555) 010-2020", "footer_note": "Open Monday to Saturday." }
+    "options": {
+      "phone": "(555) 010-2020",
+      "footer_note": "Open Monday to Saturday."
+    }
   },
   "definitions": {
     "postTypes": [
-      { "key": "post", "label": "Posts", "singular": "Post", "builtin": true, "hierarchical": false, "hasArchive": false, "rewrite": "post", "supports": ["title", "editor", "thumbnail"], "taxonomies": ["category", "post_tag"], "count": 2 },
-      { "key": "page", "label": "Pages", "singular": "Page", "builtin": true, "hierarchical": true, "hasArchive": false, "rewrite": "page", "supports": ["title", "editor"], "taxonomies": [], "count": 6 },
-      { "key": "team", "label": "Team members", "singular": "Team member", "builtin": false, "hierarchical": false, "hasArchive": true, "rewrite": "team", "supports": ["title", "thumbnail"], "taxonomies": [], "count": 2 }
+      {
+        "key": "post",
+        "label": "Posts",
+        "singular": "Post",
+        "builtin": true,
+        "hierarchical": false,
+        "hasArchive": false,
+        "rewrite": "post",
+        "supports": [
+          "title",
+          "editor",
+          "thumbnail"
+        ],
+        "taxonomies": [
+          "category",
+          "post_tag"
+        ],
+        "count": 2
+      },
+      {
+        "key": "page",
+        "label": "Pages",
+        "singular": "Page",
+        "builtin": true,
+        "hierarchical": true,
+        "hasArchive": false,
+        "rewrite": "page",
+        "supports": [
+          "title",
+          "editor"
+        ],
+        "taxonomies": [],
+        "count": 6
+      },
+      {
+        "key": "team",
+        "label": "Team members",
+        "singular": "Team member",
+        "builtin": false,
+        "hierarchical": false,
+        "hasArchive": true,
+        "rewrite": "team",
+        "supports": [
+          "title",
+          "thumbnail"
+        ],
+        "taxonomies": [],
+        "count": 2
+      }
     ],
     "taxonomies": [
-      { "key": "category", "label": "Categories", "hierarchical": true, "objectTypes": ["post"], "terms": [{ "id": 1, "name": "Uncategorized", "slug": "uncategorized", "parent": 0, "count": 1 }, { "id": 5, "name": "Oral health", "slug": "oral-health", "parent": 0, "count": 1 }] },
-      { "key": "post_tag", "label": "Tags", "hierarchical": false, "objectTypes": ["post"], "terms": [{ "id": 7, "name": "Kids", "slug": "kids", "parent": 0, "count": 1 }] }
+      {
+        "key": "category",
+        "label": "Categories",
+        "hierarchical": true,
+        "objectTypes": [
+          "post"
+        ],
+        "terms": [
+          {
+            "id": 1,
+            "name": "Uncategorized",
+            "slug": "uncategorized",
+            "parent": 0,
+            "count": 1
+          },
+          {
+            "id": 5,
+            "name": "Oral health",
+            "slug": "oral-health",
+            "parent": 0,
+            "count": 1
+          }
+        ]
+      },
+      {
+        "key": "post_tag",
+        "label": "Tags",
+        "hierarchical": false,
+        "objectTypes": [
+          "post"
+        ],
+        "terms": [
+          {
+            "id": 7,
+            "name": "Kids",
+            "slug": "kids",
+            "parent": 0,
+            "count": 1
+          }
+        ]
+      }
     ],
     "fieldGroups": [
-      { "key": "group_hero", "title": "Hero block", "location": [[{ "param": "block", "operator": "==", "value": "acf/hero" }]], "active": true,
+      {
+        "key": "group_hero",
+        "title": "Hero block",
+        "location": [
+          [
+            {
+              "param": "block",
+              "operator": "==",
+              "value": "acf/hero"
+            }
+          ]
+        ],
+        "active": true,
         "fields": [
-          { "key": "field_h1", "name": "heading", "label": "Heading", "type": "text", "required": true },
-          { "key": "field_h2", "name": "subheading", "label": "Subheading", "type": "wysiwyg", "required": false },
-          { "key": "field_h3", "name": "image", "label": "Image", "type": "image", "required": false, "return_format": "array" },
-          { "key": "field_h4", "name": "button", "label": "Button", "type": "link", "required": false },
-          { "key": "field_h5", "name": "tone", "label": "Tone", "type": "select", "required": false, "choices": { "light": "Light", "dark": "Dark" } }
-        ] },
-      { "key": "group_features", "title": "Features block", "location": [[{ "param": "block", "operator": "==", "value": "acf/features" }]], "active": true,
+          {
+            "key": "field_h1",
+            "name": "heading",
+            "label": "Heading",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "field_h2",
+            "name": "subheading",
+            "label": "Subheading",
+            "type": "wysiwyg",
+            "required": false
+          },
+          {
+            "key": "field_h3",
+            "name": "image",
+            "label": "Image",
+            "type": "image",
+            "required": false,
+            "return_format": "array"
+          },
+          {
+            "key": "field_h4",
+            "name": "button",
+            "label": "Button",
+            "type": "link",
+            "required": false
+          },
+          {
+            "key": "field_h5",
+            "name": "tone",
+            "label": "Tone",
+            "type": "select",
+            "required": false,
+            "choices": {
+              "light": "Light",
+              "dark": "Dark"
+            }
+          }
+        ]
+      },
+      {
+        "key": "group_features",
+        "title": "Features block",
+        "location": [
+          [
+            {
+              "param": "block",
+              "operator": "==",
+              "value": "acf/features"
+            }
+          ]
+        ],
+        "active": true,
         "fields": [
-          { "key": "field_f1", "name": "title", "label": "Title", "type": "text", "required": false },
-          { "key": "field_f2", "name": "items", "label": "Items", "type": "repeater", "required": false, "subFields": [
-            { "key": "field_f21", "name": "name", "label": "Name", "type": "text", "required": false },
-            { "key": "field_f22", "name": "text", "label": "Text", "type": "textarea", "required": false },
-            { "key": "field_f23", "name": "icon", "label": "Icon", "type": "image", "required": false }
-          ] }
-        ] },
-      { "key": "group_team", "title": "Team member", "location": [[{ "param": "post_type", "operator": "==", "value": "team" }]], "active": true,
+          {
+            "key": "field_f1",
+            "name": "title",
+            "label": "Title",
+            "type": "text",
+            "required": false
+          },
+          {
+            "key": "field_f2",
+            "name": "items",
+            "label": "Items",
+            "type": "repeater",
+            "required": false,
+            "subFields": [
+              {
+                "key": "field_f21",
+                "name": "name",
+                "label": "Name",
+                "type": "text",
+                "required": false
+              },
+              {
+                "key": "field_f22",
+                "name": "text",
+                "label": "Text",
+                "type": "textarea",
+                "required": false
+              },
+              {
+                "key": "field_f23",
+                "name": "icon",
+                "label": "Icon",
+                "type": "image",
+                "required": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "group_team",
+        "title": "Team member",
+        "location": [
+          [
+            {
+              "param": "post_type",
+              "operator": "==",
+              "value": "team"
+            }
+          ]
+        ],
+        "active": true,
         "fields": [
-          { "key": "field_t1", "name": "role", "label": "Role", "type": "text", "required": true },
-          { "key": "field_t2", "name": "bio", "label": "Bio", "type": "wysiwyg", "required": false },
-          { "key": "field_t3", "name": "photo", "label": "Photo", "type": "image", "required": false, "return_format": "array" },
-          { "key": "field_t4", "name": "accepting", "label": "Accepting patients", "type": "true_false", "required": false }
-        ] }
+          {
+            "key": "field_t1",
+            "name": "role",
+            "label": "Role",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "field_t2",
+            "name": "bio",
+            "label": "Bio",
+            "type": "wysiwyg",
+            "required": false
+          },
+          {
+            "key": "field_t3",
+            "name": "photo",
+            "label": "Photo",
+            "type": "image",
+            "required": false,
+            "return_format": "array"
+          },
+          {
+            "key": "field_t4",
+            "name": "accepting",
+            "label": "Accepting patients",
+            "type": "true_false",
+            "required": false
+          }
+        ]
+      }
     ],
     "blocks": [
-      { "name": "acf/hero", "title": "Hero", "description": "Big opener", "category": "harbor", "mode": "preview", "supports": {} },
-      { "name": "acf/features", "title": "Features", "description": "Three-up features", "category": "harbor", "mode": "preview", "supports": {} },
-      { "name": "acf/testimonial", "title": "Testimonial", "description": "A quote", "category": "harbor", "mode": "preview", "supports": {} }
+      {
+        "name": "acf/hero",
+        "title": "Hero",
+        "description": "Big opener",
+        "category": "harbor",
+        "mode": "preview",
+        "supports": {}
+      },
+      {
+        "name": "acf/features",
+        "title": "Features",
+        "description": "Three-up features",
+        "category": "harbor",
+        "mode": "preview",
+        "supports": {}
+      },
+      {
+        "name": "acf/testimonial",
+        "title": "Testimonial",
+        "description": "A quote",
+        "category": "harbor",
+        "mode": "preview",
+        "supports": {}
+      }
     ],
-    "optionsPages": [{ "slug": "site-options", "title": "Site options", "postId": "options" }],
-    "blocksInUse": { "acf/hero": 3, "core/paragraph": 5, "acf/features": 1, "core/heading": 2, "core/table": 1, "acf/testimonial": 1, "core/embed": 1 }
+    "optionsPages": [
+      {
+        "slug": "site-options",
+        "title": "Site options",
+        "postId": "options"
+      }
+    ],
+    "blocksInUse": {
+      "acf/hero": 3,
+      "core/paragraph": 5,
+      "acf/features": 1,
+      "core/heading": 2,
+      "core/table": 1,
+      "acf/testimonial": 1,
+      "core/embed": 1
+    }
   },
   "entries": [
     {
-      "id": 10, "type": "page", "status": "publish", "title": "Home", "slug": "home", "url": "https://harbordental.example/", "path": "/",
-      "parent": 0, "order": 0, "date": "2024-01-10T08:00:00+00:00", "modified": "2026-08-01T08:00:00+00:00", "author": "Dana", "excerpt": "",
-      "featuredImage": null, "terms": [], "template": null,
-      "seo": { "plugin": "yoast", "title": "Harbor Dental | Gentle dentistry", "description": "Family dentistry on the waterfront.", "noindex": false, "canonical": "", "keyphrase": "waterfront dentist", "image": null },
+      "id": 10,
+      "type": "page",
+      "status": "publish",
+      "title": "Home",
+      "slug": "home",
+      "url": "https://harbordental.example/",
+      "path": "/",
+      "parent": 0,
+      "order": 0,
+      "date": "2024-01-10T08:00:00+00:00",
+      "modified": "2026-08-01T08:00:00+00:00",
+      "author": "Dana",
+      "excerpt": "",
+      "featuredImage": null,
+      "terms": [],
+      "template": null,
+      "seo": {
+        "plugin": "yoast",
+        "title": "Harbor Dental | Gentle dentistry",
+        "description": "Family dentistry on the waterfront.",
+        "noindex": false,
+        "canonical": "",
+        "keyphrase": "waterfront dentist",
+        "image": null
+      },
       "blocks": [
-        { "name": "acf/hero", "blockId": "block_home_hero", "raw": {}, "fields": {
-          "heading": "Gentle care, <em>every</em> visit",
-          "subheading": "<p>We look after families across the harbor.</p><p>Same-day appointments &amp; weekend hours.</p>",
-          "image": { "image": 501, "url": "https://harbordental.example/wp-content/uploads/2024/01/reception.jpg", "alt": "Our reception", "title": "reception", "caption": "", "width": 2000, "height": 1200, "mime": "image/jpeg", "filename": "reception.jpg" },
-          "button": { "title": "Book a visit", "url": "https://harbordental.example/about-us/team/", "target": "" },
-          "tone": "dark",
-          "extra_note": "unused field value"
-        } },
-        { "name": "acf/features", "blockId": "block_home_features", "raw": {}, "fields": {
-          "title": "Why families choose us",
-          "items": [
-            { "name": "Kids welcome", "text": "Play corner and patient staff.", "icon": { "image": 502, "url": "https://harbordental.example/wp-content/uploads/2024/01/kids.png", "alt": "", "title": "kids", "caption": "", "width": 128, "height": 128, "mime": "image/png", "filename": "kids.png" } },
-            { "name": "Open Saturdays", "text": "Because weekdays are busy.", "icon": null }
-          ]
-        } },
-        { "name": "core/heading", "attrs": { "level": 2 }, "html": "<h2 class=\"wp-block-heading\">Opening hours</h2>" },
-        { "name": "core/paragraph", "attrs": {}, "html": "<p>Call us on <a href=\"tel:5550102020\">(555) 010-2020</a> or <a href=\"https://harbordental.example/about-us/\">read about us</a>.</p>" },
-        { "name": "core/table", "attrs": {}, "html": "<figure class=\"wp-block-table\"><table><thead><tr><th>Day</th><th>Hours</th></tr></thead><tbody><tr><td>Mon to Fri</td><td>8 to 6</td></tr><tr><td>Sat</td><td>9 to 1</td></tr></tbody></table></figure>" },
-        { "name": "core/paragraph", "attrs": {}, "html": "<p>Closed on public holidays.</p>" },
-        { "name": "core/embed", "attrs": { "url": "https://www.youtube.com/watch?v=abc" }, "html": "<figure class=\"wp-block-embed\"><div class=\"wp-block-embed__wrapper\">https://www.youtube.com/watch?v=abc</div></figure>" },
-        { "name": "acf/testimonial", "blockId": "block_home_quote", "raw": {}, "fields": { "quote": "Best dentist in town.", "who": "A patient" } }
+        {
+          "name": "acf/hero",
+          "blockId": "block_home_hero",
+          "raw": {},
+          "fields": {
+            "heading": "Gentle care, <em>every</em> visit",
+            "subheading": "<p>We look after families across the harbor.</p><p>Same-day appointments &amp; weekend hours.</p>",
+            "image": {
+              "image": 501,
+              "url": "https://harbordental.example/wp-content/uploads/2024/01/reception.jpg",
+              "alt": "Our reception",
+              "title": "reception",
+              "caption": "",
+              "width": 2000,
+              "height": 1200,
+              "mime": "image/jpeg",
+              "filename": "reception.jpg"
+            },
+            "button": {
+              "title": "Book a visit",
+              "url": "https://harbordental.example/about-us/team/",
+              "target": ""
+            },
+            "tone": "dark",
+            "extra_note": "unused field value"
+          }
+        },
+        {
+          "name": "acf/features",
+          "blockId": "block_home_features",
+          "raw": {},
+          "fields": {
+            "title": "Why families choose us",
+            "items": [
+              {
+                "name": "Kids welcome",
+                "text": "Play corner and patient staff.",
+                "icon": {
+                  "image": 502,
+                  "url": "https://harbordental.example/wp-content/uploads/2024/01/kids.png",
+                  "alt": "",
+                  "title": "kids",
+                  "caption": "",
+                  "width": 128,
+                  "height": 128,
+                  "mime": "image/png",
+                  "filename": "kids.png"
+                }
+              },
+              {
+                "name": "Open Saturdays",
+                "text": "Because weekdays are busy.",
+                "icon": null
+              }
+            ]
+          }
+        },
+        {
+          "name": "core/heading",
+          "attrs": {
+            "level": 2
+          },
+          "html": "<h2 class=\"wp-block-heading\">Opening hours</h2>"
+        },
+        {
+          "name": "core/paragraph",
+          "attrs": {},
+          "html": "<p>Call us on <a href=\"tel:5550102020\">(555) 010-2020</a> or <a href=\"https://harbordental.example/about-us/\">read about us</a>.</p>"
+        },
+        {
+          "name": "core/table",
+          "attrs": {},
+          "html": "<figure class=\"wp-block-table\"><table><thead><tr><th>Day</th><th>Hours</th></tr></thead><tbody><tr><td>Mon to Fri</td><td>8 to 6</td></tr><tr><td>Sat</td><td>9 to 1</td></tr></tbody></table></figure>"
+        },
+        {
+          "name": "core/paragraph",
+          "attrs": {},
+          "html": "<p>Closed on public holidays.</p>"
+        },
+        {
+          "name": "core/embed",
+          "attrs": {
+            "url": "https://www.youtube.com/watch?v=abc"
+          },
+          "html": "<figure class=\"wp-block-embed\"><div class=\"wp-block-embed__wrapper\">https://www.youtube.com/watch?v=abc</div></figure>"
+        },
+        {
+          "name": "acf/testimonial",
+          "blockId": "block_home_quote",
+          "raw": {},
+          "fields": {
+            "quote": "Best dentist in town.",
+            "who": "A patient"
+          }
+        }
       ]
     },
     {
-      "id": 11, "type": "page", "status": "publish", "title": "Blog", "slug": "blog", "url": "https://harbordental.example/blog/", "path": "/blog",
-      "parent": 0, "order": 5, "date": "2024-01-10T08:00:00+00:00", "modified": "2024-01-10T08:00:00+00:00", "author": "Dana", "excerpt": "", "featuredImage": null, "terms": [], "template": null, "seo": null,
-      "classic": true, "html": ""
+      "id": 11,
+      "type": "page",
+      "status": "publish",
+      "title": "Blog",
+      "slug": "blog",
+      "url": "https://harbordental.example/blog/",
+      "path": "/blog",
+      "parent": 0,
+      "order": 5,
+      "date": "2024-01-10T08:00:00+00:00",
+      "modified": "2024-01-10T08:00:00+00:00",
+      "author": "Dana",
+      "excerpt": "",
+      "featuredImage": null,
+      "terms": [],
+      "template": null,
+      "seo": null,
+      "classic": true,
+      "html": ""
     },
     {
-      "id": 12, "type": "page", "status": "publish", "title": "About Us", "slug": "about-us", "url": "https://harbordental.example/about-us/", "path": "/about-us",
-      "parent": 0, "order": 1, "date": "2024-01-10T08:00:00+00:00", "modified": "2025-05-05T08:00:00+00:00", "author": "Dana", "excerpt": "", "featuredImage": null, "terms": [], "template": null,
-      "seo": { "plugin": "yoast", "title": "", "description": "Who we are.", "noindex": false, "canonical": "", "keyphrase": "", "image": null },
+      "id": 12,
+      "type": "page",
+      "status": "publish",
+      "title": "About Us",
+      "slug": "about-us",
+      "url": "https://harbordental.example/about-us/",
+      "path": "/about-us",
+      "parent": 0,
+      "order": 1,
+      "date": "2024-01-10T08:00:00+00:00",
+      "modified": "2025-05-05T08:00:00+00:00",
+      "author": "Dana",
+      "excerpt": "",
+      "featuredImage": null,
+      "terms": [],
+      "template": null,
+      "seo": {
+        "plugin": "yoast",
+        "title": "",
+        "description": "Who we are.",
+        "noindex": false,
+        "canonical": "",
+        "keyphrase": "",
+        "image": null
+      },
       "blocks": [
-        { "name": "acf/hero", "blockId": "block_about_hero", "raw": {}, "fields": { "heading": "About Harbor Dental", "subheading": "", "image": null, "button": null, "tone": "light" } },
-        { "name": "core/paragraph", "attrs": {}, "html": "<p>Founded in 2009. <strong>Independent</strong> and <em>local</em>.</p>" },
-        { "name": "core/list", "attrs": {}, "html": "<ul class=\"wp-block-list\"><li>Digital x-rays</li><li>Sedation options</li></ul>", "inner": [], "rendered": "<ul class=\"wp-block-list\"><li>Digital x-rays</li><li>Sedation options</li></ul>" }
+        {
+          "name": "acf/hero",
+          "blockId": "block_about_hero",
+          "raw": {},
+          "fields": {
+            "heading": "About Harbor Dental",
+            "subheading": "",
+            "image": null,
+            "button": null,
+            "tone": "light",
+            "deactivate_block": true,
+            "hide_on_mobile": false
+          }
+        },
+        {
+          "name": "core/paragraph",
+          "attrs": {},
+          "html": "<p>Founded in 2009. <strong>Independent</strong> and <em>local</em>.</p>"
+        },
+        {
+          "name": "core/list",
+          "attrs": {},
+          "html": "<ul class=\"wp-block-list\"><li>Digital x-rays</li><li>Sedation options</li></ul>",
+          "inner": [],
+          "rendered": "<ul class=\"wp-block-list\"><li>Digital x-rays</li><li>Sedation options</li></ul>"
+        }
       ],
-      "fields": { "sidebar_note": "Parking behind the building." }
+      "fields": {
+        "sidebar_note": "Parking behind the building."
+      }
     },
     {
-      "id": 13, "type": "page", "status": "publish", "title": "Our Team", "slug": "team", "url": "https://harbordental.example/about-us/team/", "path": "/about-us/team",
-      "parent": 12, "order": 0, "date": "2024-01-10T08:00:00+00:00", "modified": "2024-01-10T08:00:00+00:00", "author": "Dana", "excerpt": "", "featuredImage": null, "terms": [], "template": null, "seo": null,
-      "classic": true, "html": "<h2>Meet the team</h2>\n<p>Two dentists, three hygienists.</p>\n[gravityform id=\"1\" title=\"false\"]\n<script>alert(1)</script>"
+      "id": 13,
+      "type": "page",
+      "status": "publish",
+      "title": "Our Team",
+      "slug": "team",
+      "url": "https://harbordental.example/about-us/team/",
+      "path": "/about-us/team",
+      "parent": 12,
+      "order": 0,
+      "date": "2024-01-10T08:00:00+00:00",
+      "modified": "2024-01-10T08:00:00+00:00",
+      "author": "Dana",
+      "excerpt": "",
+      "featuredImage": null,
+      "terms": [],
+      "template": null,
+      "seo": null,
+      "classic": true,
+      "html": "<h2>Meet the team</h2>\n<p>Two dentists, three hygienists.</p>\n[gravityform id=\"1\" title=\"false\"]\n<script>alert(1)</script>"
     },
     {
-      "id": 14, "type": "page", "status": "publish", "title": "Services", "slug": "services", "url": "https://harbordental.example/services/", "path": "/services",
-      "parent": 0, "order": 2, "date": "2024-01-10T08:00:00+00:00", "modified": "2024-01-10T08:00:00+00:00", "author": "Dana", "excerpt": "", "featuredImage": null, "terms": [], "template": null, "seo": null,
-      "blocks": [ { "name": "acf/hero", "blockId": "block_services_hero", "raw": {}, "fields": { "heading": "Services", "subheading": "<p>Everything from checkups to implants.</p>", "image": null, "button": null, "tone": "light" } } ]
-    },
-    {
-      "id": 15, "type": "page", "status": "draft", "title": "Old Promotions", "slug": "old-promotions", "url": "https://harbordental.example/?page_id=15", "path": "/",
-      "parent": 12, "order": 9, "date": "2022-01-10T08:00:00+00:00", "modified": "2022-01-10T08:00:00+00:00", "author": "Dana", "excerpt": "", "featuredImage": null, "terms": [], "template": null, "seo": null,
-      "classic": true, "html": "<p>Expired.</p>"
-    },
-    {
-      "id": 20, "type": "post", "status": "publish", "title": "Brushing tips for kids", "slug": "brushing-tips-for-kids", "url": "https://harbordental.example/brushing-tips-for-kids/", "path": "/brushing-tips-for-kids",
-      "parent": 0, "order": 0, "date": "2025-03-02T09:30:00+00:00", "modified": "2025-03-03T09:30:00+00:00", "author": "Dana", "excerpt": "Three habits that stick.",
-      "featuredImage": 503, "terms": [{ "taxonomy": "category", "id": 5, "name": "Oral health", "slug": "oral-health" }, { "taxonomy": "post_tag", "id": 7, "name": "Kids", "slug": "kids" }], "template": null,
-      "seo": { "plugin": "yoast", "title": "", "description": "", "noindex": false, "canonical": "", "keyphrase": "kids brushing", "image": null },
+      "id": 14,
+      "type": "page",
+      "status": "publish",
+      "title": "Services",
+      "slug": "services",
+      "url": "https://harbordental.example/services/",
+      "path": "/services",
+      "parent": 0,
+      "order": 2,
+      "date": "2024-01-10T08:00:00+00:00",
+      "modified": "2024-01-10T08:00:00+00:00",
+      "author": "Dana",
+      "excerpt": "",
+      "featuredImage": null,
+      "terms": [],
+      "template": null,
+      "seo": null,
       "blocks": [
-        { "name": "core/paragraph", "attrs": {}, "html": "<p>Start early. Make it fun.</p>" },
-        { "name": "core/heading", "attrs": { "level": 3 }, "html": "<h3>Three habits</h3>" },
-        { "name": "core/list", "attrs": { "ordered": true }, "html": "<ol><li>Twice a day</li><li>Two minutes</li><li>Spit, don't rinse</li></ol>" },
-        { "name": "core/image", "attrs": { "id": 503 }, "html": "<figure class=\"wp-block-image\"><img src=\"https://harbordental.example/wp-content/uploads/2025/03/kid.jpg\" alt=\"A child brushing\"/><figcaption>Two minutes, twice a day</figcaption></figure>" }
+        {
+          "name": "acf/hero",
+          "blockId": "block_services_hero",
+          "raw": {},
+          "fields": {
+            "heading": "Services",
+            "subheading": "<p>Everything from checkups to implants.</p>",
+            "image": null,
+            "button": null,
+            "tone": "light",
+            "padding": "large",
+            "section_id": "top",
+            "deactivate_block": false
+          }
+        }
       ]
     },
     {
-      "id": 21, "type": "post", "status": "draft", "title": "Untitled draft", "slug": "untitled-draft", "url": "https://harbordental.example/?p=21", "path": "/",
-      "parent": 0, "order": 0, "date": "2025-04-02T09:30:00+00:00", "modified": "2025-04-02T09:30:00+00:00", "author": "Dana", "excerpt": "", "featuredImage": null, "terms": [{ "taxonomy": "category", "id": 1, "name": "Uncategorized", "slug": "uncategorized" }], "template": null, "seo": null,
-      "classic": true, "html": "<p>Not ready.</p>"
+      "id": 15,
+      "type": "page",
+      "status": "draft",
+      "title": "Old Promotions",
+      "slug": "old-promotions",
+      "url": "https://harbordental.example/?page_id=15",
+      "path": "/",
+      "parent": 12,
+      "order": 9,
+      "date": "2022-01-10T08:00:00+00:00",
+      "modified": "2022-01-10T08:00:00+00:00",
+      "author": "Dana",
+      "excerpt": "",
+      "featuredImage": null,
+      "terms": [],
+      "template": null,
+      "seo": null,
+      "classic": true,
+      "html": "<p>Expired.</p>"
     },
     {
-      "id": 30, "type": "team", "status": "publish", "title": "Dr. Ana Reyes", "slug": "ana-reyes", "url": "https://harbordental.example/team/ana-reyes/", "path": "/team/ana-reyes",
-      "parent": 0, "order": 0, "date": "2024-02-01T08:00:00+00:00", "modified": "2024-02-01T08:00:00+00:00", "author": "Dana", "excerpt": "", "featuredImage": 504, "terms": [], "template": null, "seo": null,
-      "classic": true, "html": "",
-      "fields": { "role": "Principal dentist", "bio": "<p>Twenty years of <strong>gentle</strong> care.</p>", "photo": { "image": 504, "url": "https://harbordental.example/wp-content/uploads/2024/02/ana.jpg", "alt": "Dr. Ana Reyes", "title": "ana", "caption": "", "width": 800, "height": 1000, "mime": "image/jpeg", "filename": "ana.jpg" }, "accepting": true }
+      "id": 20,
+      "type": "post",
+      "status": "publish",
+      "title": "Brushing tips for kids",
+      "slug": "brushing-tips-for-kids",
+      "url": "https://harbordental.example/brushing-tips-for-kids/",
+      "path": "/brushing-tips-for-kids",
+      "parent": 0,
+      "order": 0,
+      "date": "2025-03-02T09:30:00+00:00",
+      "modified": "2025-03-03T09:30:00+00:00",
+      "author": "Dana",
+      "excerpt": "Three habits that stick.",
+      "featuredImage": 503,
+      "terms": [
+        {
+          "taxonomy": "category",
+          "id": 5,
+          "name": "Oral health",
+          "slug": "oral-health"
+        },
+        {
+          "taxonomy": "post_tag",
+          "id": 7,
+          "name": "Kids",
+          "slug": "kids"
+        }
+      ],
+      "template": null,
+      "seo": {
+        "plugin": "yoast",
+        "title": "",
+        "description": "",
+        "noindex": false,
+        "canonical": "",
+        "keyphrase": "kids brushing",
+        "image": null
+      },
+      "blocks": [
+        {
+          "name": "core/paragraph",
+          "attrs": {},
+          "html": "<p>Start early. Make it fun.</p>"
+        },
+        {
+          "name": "core/heading",
+          "attrs": {
+            "level": 3
+          },
+          "html": "<h3>Three habits</h3>"
+        },
+        {
+          "name": "core/list",
+          "attrs": {
+            "ordered": true
+          },
+          "html": "<ol><li>Twice a day</li><li>Two minutes</li><li>Spit, don't rinse</li></ol>"
+        },
+        {
+          "name": "core/image",
+          "attrs": {
+            "id": 503
+          },
+          "html": "<figure class=\"wp-block-image\"><img src=\"https://harbordental.example/wp-content/uploads/2025/03/kid.jpg\" alt=\"A child brushing\"/><figcaption>Two minutes, twice a day</figcaption></figure>"
+        }
+      ]
     },
     {
-      "id": 31, "type": "team", "status": "publish", "title": "Sam Okafor", "slug": "sam-okafor", "url": "https://harbordental.example/team/sam-okafor/", "path": "/team/sam-okafor",
-      "parent": 0, "order": 1, "date": "2024-02-01T08:00:00+00:00", "modified": "2024-02-01T08:00:00+00:00", "author": "Dana", "excerpt": "", "featuredImage": null, "terms": [], "template": null, "seo": null,
-      "classic": true, "html": "",
-      "fields": { "role": "Hygienist", "bio": "", "photo": null, "accepting": false }
+      "id": 21,
+      "type": "post",
+      "status": "draft",
+      "title": "Untitled draft",
+      "slug": "untitled-draft",
+      "url": "https://harbordental.example/?p=21",
+      "path": "/",
+      "parent": 0,
+      "order": 0,
+      "date": "2025-04-02T09:30:00+00:00",
+      "modified": "2025-04-02T09:30:00+00:00",
+      "author": "Dana",
+      "excerpt": "",
+      "featuredImage": null,
+      "terms": [
+        {
+          "taxonomy": "category",
+          "id": 1,
+          "name": "Uncategorized",
+          "slug": "uncategorized"
+        }
+      ],
+      "template": null,
+      "seo": null,
+      "classic": true,
+      "html": "<p>Not ready.</p>"
+    },
+    {
+      "id": 30,
+      "type": "team",
+      "status": "publish",
+      "title": "Dr. Ana Reyes",
+      "slug": "ana-reyes",
+      "url": "https://harbordental.example/team/ana-reyes/",
+      "path": "/team/ana-reyes",
+      "parent": 0,
+      "order": 0,
+      "date": "2024-02-01T08:00:00+00:00",
+      "modified": "2024-02-01T08:00:00+00:00",
+      "author": "Dana",
+      "excerpt": "",
+      "featuredImage": 504,
+      "terms": [],
+      "template": null,
+      "seo": null,
+      "classic": true,
+      "html": "",
+      "fields": {
+        "role": "Principal dentist",
+        "bio": "<p>Twenty years of <strong>gentle</strong> care.</p>",
+        "photo": {
+          "image": 504,
+          "url": "https://harbordental.example/wp-content/uploads/2024/02/ana.jpg",
+          "alt": "Dr. Ana Reyes",
+          "title": "ana",
+          "caption": "",
+          "width": 800,
+          "height": 1000,
+          "mime": "image/jpeg",
+          "filename": "ana.jpg"
+        },
+        "accepting": true
+      }
+    },
+    {
+      "id": 31,
+      "type": "team",
+      "status": "publish",
+      "title": "Sam Okafor",
+      "slug": "sam-okafor",
+      "url": "https://harbordental.example/team/sam-okafor/",
+      "path": "/team/sam-okafor",
+      "parent": 0,
+      "order": 1,
+      "date": "2024-02-01T08:00:00+00:00",
+      "modified": "2024-02-01T08:00:00+00:00",
+      "author": "Dana",
+      "excerpt": "",
+      "featuredImage": null,
+      "terms": [],
+      "template": null,
+      "seo": null,
+      "classic": true,
+      "html": "",
+      "fields": {
+        "role": "Hygienist",
+        "bio": "",
+        "photo": null,
+        "accepting": false
+      }
     }
   ],
   "media": [
-    { "id": 501, "url": "https://harbordental.example/wp-content/uploads/2024/01/reception.jpg", "mime": "image/jpeg", "filename": "reception.jpg", "width": 2000, "height": 1200, "size": 340000, "alt": "Our reception", "caption": "", "title": "reception", "parent": 10 },
-    { "id": 502, "url": "https://harbordental.example/wp-content/uploads/2024/01/kids.png", "mime": "image/png", "filename": "kids.png", "width": 128, "height": 128, "size": 4000, "alt": "", "caption": "", "title": "kids", "parent": 10 },
-    { "id": 503, "url": "https://harbordental.example/wp-content/uploads/2025/03/kid.jpg", "mime": "image/jpeg", "filename": "kid.jpg", "width": 1600, "height": 1000, "size": 210000, "alt": "A child brushing", "caption": "", "title": "kid", "parent": 20 },
-    { "id": 504, "url": "https://harbordental.example/wp-content/uploads/2024/02/ana.jpg", "mime": "image/jpeg", "filename": "ana.jpg", "width": 800, "height": 1000, "size": 120000, "alt": "Dr. Ana Reyes", "caption": "", "title": "ana", "parent": 30 },
-    { "id": 505, "url": "https://harbordental.example/wp-content/uploads/2024/02/brochure.pdf", "mime": "application/pdf", "filename": "brochure.pdf", "width": null, "height": null, "size": 900000, "alt": "", "caption": "", "title": "brochure", "parent": 0 }
+    {
+      "id": 501,
+      "url": "https://harbordental.example/wp-content/uploads/2024/01/reception.jpg",
+      "mime": "image/jpeg",
+      "filename": "reception.jpg",
+      "width": 2000,
+      "height": 1200,
+      "size": 340000,
+      "alt": "Our reception",
+      "caption": "",
+      "title": "reception",
+      "parent": 10
+    },
+    {
+      "id": 502,
+      "url": "https://harbordental.example/wp-content/uploads/2024/01/kids.png",
+      "mime": "image/png",
+      "filename": "kids.png",
+      "width": 128,
+      "height": 128,
+      "size": 4000,
+      "alt": "",
+      "caption": "",
+      "title": "kids",
+      "parent": 10
+    },
+    {
+      "id": 503,
+      "url": "https://harbordental.example/wp-content/uploads/2025/03/kid.jpg",
+      "mime": "image/jpeg",
+      "filename": "kid.jpg",
+      "width": 1600,
+      "height": 1000,
+      "size": 210000,
+      "alt": "A child brushing",
+      "caption": "",
+      "title": "kid",
+      "parent": 20
+    },
+    {
+      "id": 504,
+      "url": "https://harbordental.example/wp-content/uploads/2024/02/ana.jpg",
+      "mime": "image/jpeg",
+      "filename": "ana.jpg",
+      "width": 800,
+      "height": 1000,
+      "size": 120000,
+      "alt": "Dr. Ana Reyes",
+      "caption": "",
+      "title": "ana",
+      "parent": 30
+    },
+    {
+      "id": 505,
+      "url": "https://harbordental.example/wp-content/uploads/2024/02/brochure.pdf",
+      "mime": "application/pdf",
+      "filename": "brochure.pdf",
+      "width": null,
+      "height": null,
+      "size": 900000,
+      "alt": "",
+      "caption": "",
+      "title": "brochure",
+      "parent": 0
+    }
   ],
   "forms": [
-    { "plugin": "gravityforms", "id": "1", "title": "Contact", "fields": [
-      { "id": "1", "type": "text", "label": "Name", "required": true, "choices": [] },
-      { "id": "2", "type": "email", "label": "Email", "required": true, "choices": [] },
-      { "id": "3", "type": "textarea", "label": "Message", "required": false, "choices": [] }
-    ] }
+    {
+      "plugin": "gravityforms",
+      "id": "1",
+      "title": "Contact",
+      "fields": [
+        {
+          "id": "1",
+          "type": "text",
+          "label": "Name",
+          "required": true,
+          "choices": []
+        },
+        {
+          "id": "2",
+          "type": "email",
+          "label": "Email",
+          "required": true,
+          "choices": []
+        },
+        {
+          "id": "3",
+          "type": "textarea",
+          "label": "Message",
+          "required": false,
+          "choices": []
+        }
+      ]
+    }
   ]
 }

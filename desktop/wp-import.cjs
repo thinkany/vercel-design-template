@@ -58,6 +58,12 @@ function validatePayload(p) {
 
 // ---- inventory ------------------------------------------------------------------
 
+// Fields that are the old theme's presentation settings (padding, colors, section ids,
+// hide-on-mobile switches, a deactivate toggle), not content. They have no destination
+// in a new design, so the skeleton, the skill and the report set them aside.
+const LAYOUT_FIELD = /^(section_id|anchor|background(_color|_colour|_image)?(_full)?|bg_color|padding(_top|_bottom)?|margin(_top|_bottom)?|hide_on_(mobile|desktop|tablet)|deactivate(_block)?|disable(d)?|(block_)?settings|settings|copy_side|image_side|image_corners|column_(width|alignment)|alignment|align|auto_format|title_size|text_size|position_[a-z_]+|wider_[a-z_]+|[a-z_]*_height|add_copy_gradient|gradient|overlay|layout(_type)?|color_scheme|colour_scheme|theme|show_schema|add_intro|show_form_title|animation|reveal)$/i;
+const isLayoutField = (name) => LAYOUT_FIELD.test(String(name || ""));
+
 function blockNames(entry) {
   return Array.isArray(entry.blocks) ? entry.blocks.map((b) => b.name).filter(Boolean) : [];
 }
@@ -91,6 +97,7 @@ function inventory(p) {
   const images = media.filter((m) => /^image\//.test(m.mime || ""));
   const customTypes = (defs.postTypes || []).filter((t) => !t.builtin).map((t) => ({ key: t.key, label: t.label, count: byType[t.key] || 0 }));
   const menus = ((p.site && p.site.menus) || []).map((m) => ({ slug: m.slug, name: m.name, locations: m.locations || [], items: (m.items || []).length }));
+  const fieldsOf = (name) => Array.from(acfBlockFields[name] || []);
   return {
     site: { name: p.site && p.site.name, home: p.site && p.site.home, wpVersion: p.site && p.site.wpVersion, seoPlugin: p.site && p.site.seoPlugin, exported: p.exported, plugin: p.plugin },
     counts: {
@@ -102,7 +109,7 @@ function inventory(p) {
     },
     pages,
     blockTypes,
-    acfBlocks: (defs.blocks || []).map((b) => ({ name: b.name, title: b.title, description: b.description || "", uses: blockTypes[b.name] || 0, fields: Array.from(acfBlockFields[b.name] || []) })),
+    acfBlocks: (defs.blocks || []).map((b) => ({ name: b.name, title: b.title, description: b.description || "", uses: blockTypes[b.name] || 0, fields: fieldsOf(b.name).filter((f) => !isLayoutField(f)), layoutFields: fieldsOf(b.name).filter(isLayoutField) })),
     customTypes,
     taxonomies: (defs.taxonomies || []).map((t) => ({ key: t.key, label: t.label, terms: (t.terms || []).length })),
     forms: (p.forms || []).map((f) => ({ plugin: f.plugin, title: f.title, fields: (f.fields || []).length })),
@@ -119,7 +126,7 @@ function inventoryMarkdown(inv) {
   L.push("## Content", "");
   L.push(`- ${c.pages} pages${c.classicPages ? ` (${c.classicPages} classic, no blocks)` : ""}`);
   L.push(`- ${c.posts} posts`);
-  for (const t of inv.customTypes) L.push(`- ${t.count} ${t.label} (custom type "${t.key}")`);
+  for (const t of inv.customTypes) if (t.count) L.push(`- ${t.count} ${t.label} (custom type "${t.key}")`);
   L.push(`- ${c.images} images${c.imagesMissingAlt ? `, ${c.imagesMissingAlt} without alt text` : ""}, ${c.media - c.images} other files`);
   if (c.forms) L.push(`- ${c.forms} forms (${inv.forms.map((f) => `${f.title}: ${f.fields} fields`).join("; ")})`);
   L.push(`- ${c.menus} menus${inv.menus.length ? ` (${inv.menus.map((m) => `${m.name}: ${m.items} items`).join("; ")})` : ""}`);
@@ -127,11 +134,14 @@ function inventoryMarkdown(inv) {
   const byId = Object.fromEntries(inv.pages.map((x) => [x.id, x]));
   const depth = (x) => { let d = 0, cur = x; while (cur && cur.parent && byId[cur.parent] && d < 8) { d++; cur = byId[cur.parent]; } return d; };
   const sorted = [...inv.pages].sort((a, b) => (a.home ? -1 : b.home ? 1 : a.path.localeCompare(b.path)));
-  for (const x of sorted) L.push(`${"  ".repeat(depth(x))}- ${x.title}${x.home ? " (home)" : ""} \`${x.path}\`${x.status !== "publish" ? ` [${x.status}]` : ""}: ${x.classic ? "classic HTML" : x.blocks.length ? x.blocks.map((b) => b.replace(/^acf\//, "")).join(", ") : "empty"}`);
-  if (inv.acfBlocks.length) {
-    L.push("", "## Blocks (ACF)", "");
-    for (const b of inv.acfBlocks) L.push(`- ${b.title} \`${b.name}\`, used ${b.uses}×${b.fields.length ? `: ${b.fields.join(", ")}` : ""}`);
+  const summarize = (names) => { const out = []; for (const n of names) { const s = n.replace(/^acf\//, ""); const last = out[out.length - 1]; if (last && last.n === s) last.k++; else out.push({ n: s, k: 1 }); } return out.map((x) => (x.k > 1 ? `${x.n} ×${x.k}` : x.n)).join(", "); };
+  for (const x of sorted) { const addr = x.home ? "`/`" : x.status !== "publish" && x.path === "/" ? "(no address yet)" : `\`${x.path}\``; L.push(`${"  ".repeat(depth(x))}- ${x.title}${x.home ? " (home)" : ""} ${addr}${x.status !== "publish" ? ` [${x.status}]` : ""}: ${x.classic ? "classic HTML" : x.blocks.length ? summarize(x.blocks) : "empty"}`); }
+  const used = inv.acfBlocks.filter((b) => b.uses), unused = inv.acfBlocks.filter((b) => !b.uses);
+  if (used.length) {
+    L.push("", "## Blocks (ACF)", "", "Content fields only; the old theme's layout settings (padding, colors, section ids, hide-on-mobile) are set aside.", "");
+    for (const b of used) L.push(`- ${b.title} \`${b.name}\`, used ${b.uses}×${b.fields.length ? `: ${b.fields.join(", ")}` : ""}`);
   }
+  if (unused.length) L.push("", `Registered but unused: ${unused.map((b) => b.title).join(", ")}.`);
   const core = Object.entries(inv.blockTypes).filter(([n]) => !n.startsWith("acf/")).sort((a, b) => b[1] - a[1]);
   if (core.length) L.push("", "## Other blocks in use", "", core.map(([n, k]) => `- ${n} ×${k}`).join("\n"));
   if (inv.classicPages.length) L.push("", "## Classic pages (hand pass)", "", inv.classicPages.map((x) => `- ${x.title} \`${x.path}\``).join("\n"));
@@ -154,7 +164,7 @@ function definitionsForSkill(p) {
   const pages = (p.entries || []).filter((e) => e.type === "page").map((e) => ({
     id: e.id, title: e.title, path: e.path, parent: e.parent || 0, status: e.status, home: inv.pages.find((x) => x.id === e.id)?.home || false,
     classic: !!e.classic,
-    blocks: (e.blocks || []).map((b) => b.name.startsWith("acf/") ? { name: b.name, fields: Object.fromEntries(Object.entries(b.fields || {}).map(([k, v]) => [k, sample(v)])) } : { name: b.name, text: sample(b.rendered || b.html || "") }),
+    blocks: (e.blocks || []).map((b) => b.name.startsWith("acf/") ? { name: b.name, fields: Object.fromEntries(Object.entries(b.fields || {}).filter(([k]) => !isLayoutField(k)).map(([k, v]) => [k, sample(v)])), ...(b.fields && Object.keys(b.fields).some(isLayoutField) ? { layoutFields: Object.keys(b.fields).filter(isLayoutField), ...(b.fields.deactivate_block || b.fields.deactivate ? { deactivated: true } : {}) } : {}) } : { name: b.name, text: sample(b.rendered || b.html || "") }),
     fields: e.fields ? Object.fromEntries(Object.entries(e.fields).map(([k, v]) => [k, sample(v)])) : undefined,
   }));
   return {
@@ -162,7 +172,7 @@ function definitionsForSkill(p) {
     postTypes: (p.definitions && p.definitions.postTypes) || [],
     taxonomies: inv.taxonomies,
     fieldGroups: (p.definitions && p.definitions.fieldGroups) || [],
-    acfBlocks: (p.definitions && p.definitions.blocks) || [],
+    acfBlocks: inv.acfBlocks,
     blocksInUse: inv.blockTypes,
     pages,
     menus: (p.site && p.site.menus) || [],
@@ -186,16 +196,16 @@ function mappingSkeleton(p, blocks = []) {
   const menus = (p.site && p.site.menus) || [];
   const primary = menus.find((m) => (m.locations || []).some((l) => /primary|main|header/i.test(l))) || menus[0];
   const acfNames = Array.from(new Set([...(defs.blocks || []).map((b) => b.name), ...Object.keys(inv.blockTypes).filter((n) => n.startsWith("acf/"))]));
-  const sampleFields = (name) => (inv.acfBlocks.find((b) => b.name === name) || {}).fields || [];
+  const sampleFields = (name) => { const b = inv.acfBlocks.find((x) => x.name === name) || {}; return [...(b.fields || []), ...(b.layoutFields || [])]; };
   return {
     version: MAPPING_VERSION,
-    _about: "Targets are empty until confirmed. A page with include:false is skipped (its old address redirects to the nearest kept ancestor). blocks: old ACF block name → new block key + prop ← field. A field value that starts with = is a constant.",
+    _about: "Targets are empty until confirmed. A page with include:false is skipped (its old address redirects to the nearest kept ancestor). blocks: old ACF block name → new block key + prop ← field. A field value that starts with = is a constant. skipWhen names an old field that, when set, means the block was switched off on the old site (the instance is skipped).",
     availableBlocks: blocks.map((b) => ({ key: b.key, name: b.name, fields: Object.keys(b.fields || {}) })),
     pages: inv.pages.sort((a, b) => (a.home ? -1 : b.home ? 1 : a.path.localeCompare(b.path))).map((x) => ({
       wp: x.id, title: x.title, wpPath: x.path, page: x.home ? "home" : slugify(x.path.split("/").filter(Boolean).pop() || x.title), parent: null, include: x.status === "publish" || x.status === "draft",
       ...(x.classic ? { classic: true } : {}), ...(x.fields.length ? { wpFields: x.fields } : {}),
     })),
-    blocks: Object.fromEntries(acfNames.map((n) => [n, { block: "", fields: Object.fromEntries(sampleFields(n).map((f) => ["", f]).filter(() => false)), _wpFields: sampleFields(n) }])),
+    blocks: Object.fromEntries(acfNames.map((n) => { const all = sampleFields(n); const layout = all.filter(isLayoutField); const off = all.find((f) => /^deactivate(_block)?$/.test(f)); return [n, { block: "", fields: {}, ...(off ? { skipWhen: off } : {}), _wpFields: all.filter((f) => !isLayoutField(f)), ...(layout.length ? { _layoutFields: layout } : {}) }]; })),
     prose: { block: "", prop: "" },
     tables: { block: "table", rows: "rows", header: "header", caption: "caption" },
     posts: { import: (inv.counts.posts || 0) > 0, type: "post", categoriesAsTags: true },
@@ -402,7 +412,7 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
   const byWp = Object.fromEntries(entries.map((e) => [e.id, e]));
   const blockFields = Object.fromEntries(blocks.map((b) => [b.key, b.fields || {}]));
   const homeHost = (() => { try { return new URL(site.home).host; } catch { return ""; } })();
-  const report = { pages: [], posts: { imported: 0, drafts: 0, lost: [] }, types: {}, media: { downloaded: 0, failed: [], skipped: 0 }, redirects: 0, redirectsFlagged: [], unmappedBlocks: {}, unmappedFields: {}, files: [] };
+  const report = { pages: [], posts: { imported: 0, drafts: 0, lost: [] }, types: {}, media: { downloaded: 0, failed: [], skipped: 0 }, redirects: 0, redirectsFlagged: [], unmappedBlocks: {}, unmappedFields: {}, skipped: [], files: [] };
   const written = [];
   const writeFile = (rel, text) => { written.push(rel); if (dry) return; const abs = path.join(projectDir, rel); fs.mkdirSync(path.dirname(abs), { recursive: true }); fs.writeFileSync(abs, text); };
   const readJson = (rel) => { try { return JSON.parse(fs.readFileSync(path.join(projectDir, rel), "utf8")); } catch { return null; } };
@@ -566,10 +576,11 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
       if (b.name.startsWith("acf/")) {
         await flushRun();
         const bm = (mapping.blocks || {})[b.name];
+        if (bm && bm.skipWhen && b.fields && b.fields[bm.skipWhen]) { report.skipped.push({ where: id, block: b.name, why: bm.skipWhen }); continue; }
         if (!bm || !bm.block) { dropped.push(b.name); report.unmappedBlocks[b.name] = (report.unmappedBlocks[b.name] || 0) + 1; continue; }
         const props = await mapFields(bm.fields || {}, b.fields || {}, blockFields[bm.block] || {}, `${id} › ${b.name}`, lost);
         const used = new Set(Object.values(bm.fields || {}).map((s) => typeof s === "string" ? s.split(".")[0] : s && s.from ? String(s.from).split(".")[0] : null));
-        const unmapped = Object.keys(b.fields || {}).filter((k) => !used.has(k) && b.fields[k] !== "" && b.fields[k] !== null && b.fields[k] !== false && !(Array.isArray(b.fields[k]) && !b.fields[k].length));
+        const unmapped = Object.keys(b.fields || {}).filter((k) => !used.has(k) && !isLayoutField(k) && b.fields[k] !== "" && b.fields[k] !== null && b.fields[k] !== false && !(Array.isArray(b.fields[k]) && !b.fields[k].length));
         if (unmapped.length) report.unmappedFields[b.name] = Array.from(new Set([...(report.unmappedFields[b.name] || []), ...unmapped]));
         out.push({ type: bm.block, props });
       } else if (!nonProse(b, id, lost)) run.push(coreHtml(b));
@@ -676,6 +687,7 @@ function reportMarkdown(rep) {
   L.push(`- ${rep.redirects} redirects added${rep.redirectsFlagged.length ? ` (${rep.redirectsFlagged.length} pages not kept, sent to the nearest kept page)` : ""}`);
   const ub = Object.entries(rep.unmappedBlocks);
   if (ub.length) L.push("", "## Blocks with no destination (dropped)", "", ...ub.map(([n, k]) => `- ${n} ×${k}`));
+  if (rep.skipped && rep.skipped.length) L.push("", "## Switched off on the old site (skipped)", "", ...rep.skipped.map((x) => `- ${x.where}: ${x.block}`));
   const uf = Object.entries(rep.unmappedFields);
   if (uf.length) L.push("", "## Fields with no destination", "", ...uf.map(([n, fs]) => `- ${n}: ${fs.join(", ")}`));
   L.push("", "## Pages", "");
