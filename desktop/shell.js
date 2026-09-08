@@ -5861,12 +5861,13 @@ function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }
   return {
     // Call for each row: adds the checkbox (not for home) and registers it with the filter.
     rowBox(row, it) {
-      const box = document.createElement("input"); box.type = "checkbox"; box.style.cssText = "margin:0 8px 0 0;flex:none;";
+      // The box sits at the right edge, so the row keeps its look and the grabber stays on the left.
+      const box = document.createElement("input"); box.type = "checkbox"; box.style.cssText = "margin:0 0 0 10px;flex:none;";
       box.checked = siteSelection.ids.has(it.id);
       if (it.id === "home" && kind === "page") { box.disabled = true; box.style.visibility = "hidden"; }
       box.addEventListener("click", (e) => { e.stopPropagation(); if (box.checked) siteSelection.ids.add(it.id); else siteSelection.ids.delete(it.id); paintCount(); });
-      const text = siteEl("div"); text.style.flex = "1"; Array.from(row.childNodes).forEach((n) => text.appendChild(n));
-      row.append(box, text); row.style.alignItems = "center";
+      const text = siteEl("div"); text.style.cssText = "flex:1;min-width:0;"; Array.from(row.childNodes).forEach((n) => text.appendChild(n));
+      row.append(text, box); row.style.alignItems = "center";
       rows.push({ id: it.id, draft: !!it.draft, row, box });
       row.style.display = visible(it) ? "flex" : "none";
       paintCount();
