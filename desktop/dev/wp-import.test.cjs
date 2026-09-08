@@ -98,6 +98,7 @@ t("skeleton has every slot", () => {
   assert.equal(sk.nav.main, "primary");
   assert.deepEqual(sk.nav.footer, ["footer-one", "footer-two"]);
   assert.equal(sk.types.team.include, false);
+  assert.deepEqual(sk.types.team.fields, { role: "role", bio: "bio", photo: "photo", accepting: "accepting" }, "type fields pre-filled old name → camelCase key");
   assert.equal(sk.availableBlocks.length, 6);
 });
 

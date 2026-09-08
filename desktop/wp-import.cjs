@@ -275,6 +275,7 @@ function definitionsForSkill(p) {
 
 // ---- mapping -------------------------------------------------------------------
 
+function camel(s) { const parts = String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean); return parts.map((p, i) => (i ? p[0].toUpperCase() + p.slice(1) : p)).join("") || "field"; }
 function slugify(s) {
   return String(s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
 }
@@ -310,7 +311,14 @@ function mappingSkeleton(p, blocks = []) {
     prose: { block: "", prop: "" },
     tables: { block: "table", rows: "rows", header: "header", caption: "caption" },
     posts: { import: (inv.counts.posts || 0) > 0, type: "post", categoriesAsTags: true },
-    types: Object.fromEntries(inv.customTypes.map((t) => [t.key, { include: false, key: slugify(t.key), label: t.label, path: `/${slugify(t.key)}`, fields: {} }])),
+    // Custom types: fields pre-filled as old name → camelCase key from the field groups on
+    // that post type, so the direction is never in doubt. include flips the type on.
+    types: Object.fromEntries(inv.customTypes.map((t) => {
+      const groups = (defs.fieldGroups || []).filter((g) => (g.location || []).some((and) => (and || []).some((r) => r && r.param === "post_type" && String(r.value) === t.key)));
+      const fields = {};
+      for (const f of groups.flatMap((g) => g.fields || [])) { if (!f || !f.name || ["tab", "message", "accordion"].includes(f.type) || isLayoutField(f.name)) continue; fields[f.name] = camel(f.name); }
+      return [t.key, { include: false, key: slugify(t.key), label: t.label, path: `/${slugify(t.key)}`, fields, _about: "old field name → new camelCase key" }];
+    })),
     // nav: main replaces the header menu (null keeps the design's); footer lists the menus
     // that become footer columns, one column per menu, headed by the menu's name ([] keeps the design's).
     nav: { main: primary ? primary.slug : null, footer: footers, _menus: menus.map((m) => ({ slug: m.slug, name: m.name, locations: m.locations || [], items: (m.items || []).length })) },

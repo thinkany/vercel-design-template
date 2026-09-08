@@ -108,8 +108,8 @@ the transform doesn't read.** The transform reads exactly these:
   "prose": { "block": "prose", "prop": "body" },   // where runs of ordinary paragraphs/headings/lists land; empty = dropped and reported
   "tables": { "block": "table", "rows": "rows", "header": "header", "caption": "caption" },
   "posts": { "import": true, "type": "post", "categoriesAsTags": true },
-  "types": { "team": { "include": true, "key": "team", "label": "Team", "singular": "Team member", "path": "/team",
-             "fields": { "role": "role", "bio": { "key": "bio" }, "photo": "photo", "accepting": "accepting" } } },
+  "types": { "testimonial": { "include": true, "key": "testimonial", "label": "Testimonials", "singular": "Testimonial", "path": "/testimonials",
+             "fields": { "quote": "quote", "by_line": "byLine", "client_photo": "photo" } } },   // OLD field name → NEW camelCase key, always in that order
   "nav": { "main": "primary", "footer": ["footer-one", "footer-two"] },   // null / [] keeps the design's own menu; several footer menus become columns
   "forms": { "import": true },   // every Gravity Forms / WPForms form becomes a form in the Forms tab
   "media": { "download": true, "folder": "wp" }
@@ -177,14 +177,19 @@ Rules for a good proposal:
 - **Tables.** Keep `tables` pointing at the built-in `table` block unless the site
   has its own.
 - **Types.** Include a custom type when its entries are real content (team, services,
-  locations). Keys are lowercase with dashes; paths start with `/`. Map each ACF
-  field to a camelCase key; the kind comes from the ACF type unless you set one.
-- **Nav.** Two parts, each optional: `main` is the menu in the primary/header
-  location, `footer` the footer menus (`_menus` in the skeleton lists them all with
-  their locations). Several footer menus become footer columns headed by each
-  menu's name, which is how WordPress footers are usually built. Set `main` to
-  null or `footer` to [] to keep the design's own; say so when the old links point
-  nowhere. External links and page links both carry over.
+  locations). Keys are lowercase with dashes; paths start with `/`. The skeleton
+  pre-fills `fields` as **old field name → new camelCase key** from the type's field
+  groups; keep that direction (the left side is the WordPress name, the right side
+  is the new key), rename a key only to read better, and never swap the sides. The
+  kind comes from the ACF type unless you set one.
+- **Nav.** Two parts: `main` is the menu in the primary/header location, `footer`
+  the footer menus (`_menus` in the skeleton lists them all with their locations).
+  Several footer menus become footer columns headed by each menu's name, which is
+  how WordPress footers are usually built. **Leave the skeleton's choices as they
+  are**: importing the menus is the designer's call, not yours. When the old links
+  point nowhere, say so in chat and tell the designer that `main: null` and
+  `footer: []` keep the design's own menus. External links and page links both
+  carry over.
 - **Posts.** Import unless the site has none worth keeping; categories become tags.
 
 After writing the file, tell the designer, in section terms, what lands where, what
