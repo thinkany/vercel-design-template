@@ -2110,6 +2110,12 @@ ipcMain.handle("wp:transform", async () => {
     return { ok: true, status: wpStatus(), markdown: wpImport.reportMarkdown(report) };
   } catch (e) { appLog.write(`[wp] import failed: ${e.stack || e.message}`); return { ok: false, error: e.message }; }
 });
+ipcMain.handle("wp:files", () => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const dir = wpDir(currentProject);
+  let names = []; try { names = fs.readdirSync(dir).filter((f) => !f.startsWith(".")).sort(); } catch { return { ok: true, files: [], dir }; }
+  return { ok: true, dir, files: names.map((f) => { let size = 0, mtime = 0; try { const st = fs.statSync(path.join(dir, f)); size = st.size; mtime = st.mtimeMs; } catch {} return { name: f, size, mtime }; }) };
+});
 ipcMain.handle("wp:report", () => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   const md = readTextSafe(wpFile(currentProject, "report.md"));

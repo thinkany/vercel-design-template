@@ -182,6 +182,7 @@ contextBridge.exposeInMainWorld("desktop", {
   wpRevealMapping: () => ipcRenderer.invoke("wp:revealMapping"),
   wpTransform: () => ipcRenderer.invoke("wp:transform"),
   wpReport: () => ipcRenderer.invoke("wp:report"),
+  wpFiles: () => ipcRenderer.invoke("wp:files"),
   wpForget: () => ipcRenderer.invoke("wp:forget"),
   wpEditBlock: (key, renames, removes) => ipcRenderer.invoke("wp:editBlock", { key, renames, removes }),
   saveBlockNames: (names) => ipcRenderer.invoke("site:saveBlockNames", { names }),

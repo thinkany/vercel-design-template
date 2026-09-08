@@ -5928,11 +5928,18 @@ async function renderSiteSettings(host, data, st) {
   redirectsBtn.addEventListener("click", () => openRedirectsModal(data.site.redirects || [], (list) => { data.site.redirects = list; redirectsNote.textContent = S.redirectsCount(list.length); }));
   wrap.append(redirectsBtn, redirectsNote);
 
-  // Import from WordPress: the plugin, the content, the mapping, the import.
+  // Import from WordPress: one button into the import modal, plus the last result.
   wrap.appendChild(siteEl("div", "drawer-sep"));
   wrap.appendChild(siteEl("div", "sess-label", S.wp.heading));
   wrap.appendChild(siteEl("div", "sess-desc", S.wp.desc));
-  await renderWpImport(wrap);
+  {
+    const st = await window.desktop.wpStatus().catch(() => null);
+    const btn = siteEl("button", "panelbtn primary", S.wp.open); btn.style.cssText = "margin:0 0 6px;width:auto;";
+    btn.addEventListener("click", () => openWpImportModal());
+    wrap.appendChild(btn);
+    if (st && st.report) wrap.appendChild(siteEl("div", "sess-desc", `${S.wp.done(st.report)}${st.report.when ? ` ${new Date(st.report.when).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}.` : ""}`));
+    else if (st && st.payload) wrap.appendChild(siteEl("div", "sess-desc", `${st.payload.site.name || st.payload.url || ""}: ${S.wp.summary(st.payload.counts)}`));
+  }
 
   wrap.appendChild(siteEl("div", "drawer-sep"));
   wrap.appendChild(siteEl("div", "sess-label", S.siteHeading));
@@ -5956,37 +5963,63 @@ async function renderSiteSettings(host, data, st) {
   siteAccordionize(wrap);
 }
 
-// Import from WordPress (docs/wordpress-migration-spec.md). One section, four steps that
-// unlock in order: the plugin, the content (fetch or file), the brief (before the site is
-// built) or the mapping (after), the import. Lives in Settings once the site is ready
-// and on the CMS drawer's not-ready card before that, so the inventory can seed the brief.
-let wpBusy = null; // "fetch" | "import" while one runs, so a re-render keeps the running note
-async function renderWpImport(host, { compact = false } = {}) {
+let wpBusy = null; // "fetch" | "import" while one runs, so a repaint keeps the running note
+// The import modal (docs/wordpress-import-lossless-spec.md): the expanded-content
+// overlay's frame, kept open through the whole flow and repainted in place, so a
+// fetch or an import never resets the tab behind it. Sections expand under links.
+let wpModalOpen = new Set(); // which expandable sections are open, kept across repaints
+function openWpImportModal() {
   const S = COPY.site.settings.wp;
-  const wrap = siteEl("div");
-  host.appendChild(wrap);
+  const ov = siteEl("div", "blockedit");
+  const card = siteEl("div", "blockedit-card");
+  const head = siteEl("div", "blockedit-head");
+  head.appendChild(siteEl("div", "blockedit-title", S.modalTitle));
+  const acts = siteEl("div", "blockedit-acts");
+  const cancel = siteEl("button", "panelbtn", S.modalCancel); cancel.style.cssText = "margin:0;width:auto;";
+  acts.appendChild(cancel); head.appendChild(acts);
+  const body = siteEl("div", "blockedit-fields"); body.style.cssText = "flex:1;overflow:auto;padding:16px 20px;";
+  card.append(head, body); ov.appendChild(card);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey, true); if (RAILS.site.classList.contains("active")) openModal("site"); };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  cancel.addEventListener("click", close);
+  document.addEventListener("keydown", onKey, true);
+  document.body.appendChild(ov);
+  // transient messages survive a repaint
+  const msgs = { plugin: null, fetch: null, run: null };
   const paint = async () => {
-    wrap.innerHTML = "";
+    body.innerHTML = "";
     const st = await window.desktop.wpStatus().catch(() => null);
     if (!st || !st.project) return;
-    const status = siteEl("div"); status.style.cssText = "min-height:18px;";
-    const err = (m) => { status.innerHTML = ""; const e = siteEl("div", "sess-desc", m); e.style.color = "#c0261e"; status.appendChild(e); };
-    const step = (label, hint) => { wrap.appendChild(siteEl("div", "k", label)).style.cssText = "margin-top:10px;font-weight:600;"; if (hint) wrap.appendChild(siteEl("div", "sess-desc", hint)); };
-    const row = () => { const r = siteEl("div"); r.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 6px;"; wrap.appendChild(r); return r; };
-    const btn = (label, onClick, { primary, disabled, title } = {}) => { const b = siteEl("button", primary ? "panelbtn primary" : "panelbtn", label); b.style.cssText = "margin:0;width:auto;"; if (disabled) b.disabled = true; if (title) b.title = title; b.addEventListener("click", onClick); return b; };
     const licensed = st.licensed !== false && appHasKey;
+    const step = (label, hint) => { body.appendChild(siteEl("div", "k", label)).style.cssText = "margin-top:14px;font-weight:600;"; if (hint) body.appendChild(siteEl("div", "sess-desc", hint)); };
+    const row = () => { const r = siteEl("div"); r.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 8px;"; body.appendChild(r); return r; };
+    const btn = (label, onClick, { primary, disabled, title } = {}) => { const b = siteEl("button", primary ? "panelbtn primary" : "panelbtn", label); b.style.cssText = "margin:0;width:auto;"; if (disabled) b.disabled = true; if (title) b.title = title; b.addEventListener("click", onClick); return b; };
+    const message = (m) => { if (!m) return; const e = siteEl("div", "sess-desc", m.text); e.style.cssText = `margin:2px 0 6px;color:${m.ok ? "#1a7f37" : "#c0261e"};`; body.appendChild(e); };
+    // An expandable section under a link: a heading you click, a body that folds.
+    const expander = (key, label, render) => {
+      const sec = siteEl("div", "site-acc" + (wpModalOpen.has(key) ? " open" : "")); sec.style.margin = "4px 0";
+      const h = siteEl("button", "site-acc-head"); h.type = "button"; h.setAttribute("aria-expanded", String(wpModalOpen.has(key)));
+      h.appendChild(siteEl("span", "site-acc-title", label));
+      const b = siteEl("div", "site-acc-body"); b.hidden = !wpModalOpen.has(key);
+      let rendered = false;
+      const fill = async () => { if (rendered) return; rendered = true; await render(b); };
+      if (!b.hidden) fill();
+      h.addEventListener("click", async () => { const now = b.hidden; if (now) await fill(); siteReveal(b, now); sec.classList.toggle("open", now); h.setAttribute("aria-expanded", String(now)); if (now) wpModalOpen.add(key); else wpModalOpen.delete(key); });
+      sec.append(h, b); body.appendChild(sec);
+    };
+    const pre = (text) => { const p = document.createElement("pre"); p.style.cssText = "white-space:pre-wrap;word-break:break-word;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:8px 0;color:#1a1a1a;"; p.textContent = text || ""; return p; };
 
     // 1. the plugin
     step(S.pluginStep, S.pluginHint);
-    const r1 = row();
-    r1.appendChild(btn(S.savePlugin, async () => { const r = await window.desktop.wpSavePlugin(); if (r && r.ok) siteFlash(status, S.pluginSaved(r.path)); else if (r && r.error) err(r.error); }));
+    row().appendChild(btn(S.savePlugin, async () => { const r = await window.desktop.wpSavePlugin(); if (r && r.ok) { msgs.plugin = { ok: true, text: S.pluginSaved(r.path) }; paint(); } else if (r && r.error) { msgs.plugin = { ok: false, text: r.error }; paint(); } }));
+    message(msgs.plugin);
 
     // 2. the content
     step(S.fetchStep);
     const url = siteField(S.url, (st.payload && st.payload.url) || "", { placeholder: S.urlPlaceholder, type: "url" });
     const token = siteField(S.token, "", { placeholder: S.tokenPlaceholder, type: "password" });
     url.wrap.style.marginBottom = "4px"; token.wrap.style.marginBottom = "4px";
-    wrap.append(url.wrap, token.wrap);
+    body.append(url.wrap, token.wrap);
     const r2 = row();
     const fetchBtn = btn(wpBusy === "fetch" ? S.fetching : S.fetch, async () => {
       const u = url.input.value.trim(), t = token.input.value.trim();
@@ -5994,83 +6027,65 @@ async function renderWpImport(host, { compact = false } = {}) {
       wpBusy = "fetch"; fetchBtn.disabled = true; fetchBtn.textContent = S.fetching;
       const r = await window.desktop.wpFetch(u, t);
       wpBusy = null;
-      if (!r || !r.ok) { fetchBtn.disabled = false; fetchBtn.textContent = S.fetch; err((r && r.error) || "Couldn't fetch the site."); return; }
+      msgs.fetch = r && r.ok ? { ok: true, text: S.fetchOk(r.inventory && r.inventory.site && r.inventory.site.name, r.inventory.counts) } : { ok: false, text: (r && r.error) || S.fetchFail };
+      msgs.run = null; if (r && r.ok) wpModalOpen.add("inventory");
       paint();
     }, { primary: true, disabled: !licensed || wpBusy === "fetch", title: licensed ? "" : COPY.site.notLicensed });
-    const fileBtn = btn(S.loadFile, async () => { const r = await window.desktop.wpLoadFile(); if (!r || r.canceled) return; if (!r.ok) { err(r.error); return; } paint(); }, { disabled: !licensed, title: S.loadFileHint });
+    const fileBtn = btn(S.loadFile, async () => { const r = await window.desktop.wpLoadFile(); if (!r || r.canceled) return; msgs.fetch = r.ok ? { ok: true, text: S.fetchOk(r.inventory && r.inventory.site && r.inventory.site.name, r.inventory.counts) } : { ok: false, text: r.error || S.fetchFail }; if (r.ok) wpModalOpen.add("inventory"); paint(); }, { disabled: !licensed, title: S.loadFileHint });
     r2.append(fetchBtn, fileBtn);
+    message(msgs.fetch);
     if (st.payload) {
-      const c = st.payload.counts;
-      const when = st.payload.fetched ? new Date(st.payload.fetched).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "";
-      wrap.appendChild(siteEl("div", "sess-desc", `${st.payload.site.name || st.payload.url || st.payload.file || ""}: ${S.summary(c)}${when ? ` Fetched ${when}.` : ""}`));
-      const r2b = row();
-      r2b.appendChild(btn(S.viewInventory, async () => { const r = await window.desktop.wpInventory(); if (r && r.ok) openWpTextModal(S.inventoryTitle, r.markdown); else if (r) err(r.error); }));
+      if (!msgs.fetch) { const when = st.payload.fetched ? new Date(st.payload.fetched).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : ""; body.appendChild(siteEl("div", "sess-desc", `${st.payload.site.name || st.payload.url || st.payload.file || ""}: ${S.summary(st.payload.counts)}${when ? ` Fetched ${when}.` : ""}`)); }
+      expander("inventory", S.inventoryLink, async (b) => { const r = await window.desktop.wpInventory(); b.appendChild(pre(r && r.ok ? r.markdown : (r && r.error) || "")); });
     }
 
+    // 3. the import (or, before the site is built, the brief)
     if (st.payload && !st.siteReady) {
-      // 3. the brief (the site isn't built yet: the inventory feeds the design)
       step(S.briefStep, S.briefHint);
-      const r3 = row();
-      r3.appendChild(btn(S.brief, () => { closeModal(); runAgent(S.briefRequest, S.briefEcho); }, { primary: true, disabled: !licensed }));
+      row().appendChild(btn(S.brief, () => { close(); closeModal(); runAgent(S.briefRequest, S.briefEcho); }, { primary: true, disabled: !licensed }));
     } else if (st.payload) {
-      // 3. the import: one button; everything lands as drafts and undesigned blocks
       step(S.importStep, S.importHint);
-      const r4 = row();
+      const r3 = row();
       const runBtn = btn(wpBusy === "import" ? S.running : S.run, async () => {
         wpBusy = "import"; runBtn.disabled = true; runBtn.textContent = S.running;
         const r = await window.desktop.wpTransform();
         wpBusy = null;
-        if (!r || !r.ok) { runBtn.disabled = false; runBtn.textContent = S.run; err((r && r.error) || "The import failed."); return; }
-        await paint();
-        openWpTextModal(S.reportTitle, r.markdown);
+        msgs.run = r && r.ok ? { ok: true, text: S.importOk } : { ok: false, text: (r && r.error) || S.importFail };
+        if (r && r.ok) wpModalOpen.add("report");
+        paint();
       }, { primary: true, disabled: !licensed || wpBusy === "import" });
-      r4.appendChild(runBtn);
-      r4.appendChild(btn(S.reveal, async () => { const r = await window.desktop.wpRevealMapping(); if (r && r.error) err(r.error); }));
+      r3.appendChild(runBtn);
+      expander("files", S.filesLink, async (b) => {
+        b.appendChild(siteEl("div", "sess-desc", S.filesHint));
+        const r = await window.desktop.wpFiles();
+        if (r && r.ok) { const list = siteEl("div"); list.style.cssText = "font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;"; r.files.forEach((f) => list.appendChild(siteEl("div", "", `${f.name}  ${f.size >= 1024 ? `${Math.round(f.size / 1024)} KB` : `${f.size} B`}`))); b.appendChild(list); }
+        const reveal = siteEl("button", "panelbtn", S.filesReveal); reveal.style.cssText = "margin:6px 0 0;width:auto;"; reveal.addEventListener("click", () => window.desktop.wpRevealMapping()); b.appendChild(reveal);
+      });
+      message(msgs.run);
       if (st.report) {
-        const rep = st.report;
-        wrap.appendChild(siteEl("div", "sess-desc", `${S.done(rep)}${rep.when ? ` ${new Date(rep.when).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}.` : ""}${rep.blocks ? ` ${S.nextDesign}` : ""}`));
-        const r4b = row();
-        r4b.appendChild(btn(S.viewReport, async () => { const r = await window.desktop.wpReport(); if (r && r.ok) openWpTextModal(S.reportTitle, r.markdown); else if (r) err(r.error); }));
+        if (!msgs.run) body.appendChild(siteEl("div", "sess-desc", `${S.done(st.report)}${st.report.when ? ` ${new Date(st.report.when).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}.` : ""}`));
+        expander("report", S.reportLink, async (b) => { const r = await window.desktop.wpReport(); b.appendChild(pre(r && r.ok ? r.markdown : (r && r.error) || "")); });
+        // 4. next steps, then a button per tab
+        step(S.nextTitle);
+        const ol = document.createElement("ol"); ol.style.cssText = "margin:4px 0 10px 18px;padding:0;font-size:12.5px;line-height:1.55;color:#333;";
+        S.nextSteps.forEach((t) => { const li = document.createElement("li"); li.textContent = t; li.style.margin = "0 0 4px"; ol.appendChild(li); });
+        body.appendChild(ol);
+        body.appendChild(siteEl("div", "k", S.goTo)).style.cssText = "margin-top:6px;font-weight:600;";
+        const r5 = row();
+        for (const [tab, label] of Object.entries(COPY.site.tabs)) { if (tab === "settings") continue; r5.appendChild(btn(label, () => { ov.remove(); document.removeEventListener("keydown", onKey, true); ensureCmsTab(tab); })); }
       }
     }
     if (st.payload) {
-      // Forget: a two-click confirm (the first click asks).
-      const rf = row(); rf.style.marginTop = "10px";
+      const rf = row(); rf.style.marginTop = "14px";
       let armed = false;
       const forget = btn(S.forget, async () => {
         if (!armed) { armed = true; forget.textContent = S.forgetConfirm; forget.style.whiteSpace = "normal"; forget.style.textAlign = "left"; return; }
-        const r = await window.desktop.wpForget(); if (r && r.ok) paint(); else if (r) err(r.error);
+        const r = await window.desktop.wpForget(); if (r && r.ok) { msgs.fetch = null; msgs.run = null; wpModalOpen.clear(); paint(); }
       });
-      forget.style.opacity = "0.75";
-      rf.appendChild(forget);
+      forget.style.opacity = "0.75"; rf.appendChild(forget);
     }
-    wrap.appendChild(status);
-    if (!compact) { const help = siteEl("button", "panelbtn", S.help); help.type = "button"; help.style.cssText = "margin:6px 0 0;width:auto;font-size:12px;opacity:0.75;"; help.addEventListener("click", () => openCmsHelp("settings")); wrap.appendChild(help); }
   };
-  await paint();
-  return wrap;
-}
-// A read-only text modal (the inventory, the import report): the redirects modal's frame
-// around preformatted text, so long reports scroll and copy cleanly.
-function openWpTextModal(title, text) {
-  const S = COPY.site.settings.wp;
-  const ov = siteEl("div", "blockedit");
-  const card = siteEl("div", "blockedit-card");
-  const head = siteEl("div", "blockedit-head");
-  head.appendChild(siteEl("div", "blockedit-title", title));
-  const acts = siteEl("div", "blockedit-acts");
-  const done = siteEl("button", "panelbtn", S.close); done.style.cssText = "margin:0;width:auto;";
-  acts.appendChild(done); head.appendChild(acts);
-  const body = siteEl("div", "blockedit-fields"); body.style.cssText = "flex:1;overflow:auto;padding:16px 20px;";
-  const pre = document.createElement("pre"); pre.style.cssText = "white-space:pre-wrap;word-break:break-word;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0;color:#1a1a1a;";
-  pre.textContent = text || ""; body.appendChild(pre);
-  card.append(head, body); ov.appendChild(card);
-  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey, true); };
-  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
-  done.addEventListener("click", close);
-  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
-  document.addEventListener("keydown", onKey, true);
-  document.body.appendChild(ov);
+  paint();
   return { close };
 }
 
@@ -6252,8 +6267,10 @@ async function renderSite(body) {
       const wp = siteEl("div"); wp.style.cssText = "margin-top:18px;padding-top:14px;border-top:1px solid #e6e6e6;text-align:left;";
       wp.appendChild(siteEl("div", "sess-label", COPY.site.settings.wp.heading));
       wp.appendChild(siteEl("div", "sess-desc", COPY.site.settings.wp.notReadyDesc));
+      const openBtn = siteEl("button", "panelbtn", COPY.site.settings.wp.open); openBtn.style.cssText = "margin:0;width:auto;";
+      openBtn.addEventListener("click", () => openWpImportModal());
+      wp.appendChild(openBtn);
       card.appendChild(wp);
-      await renderWpImport(wp, { compact: true });
     }
     return;
   }
