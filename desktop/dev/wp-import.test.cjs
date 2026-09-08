@@ -407,8 +407,33 @@ t("mapping validates, and catches a bad id", () => {
     assert.ok(res2.ok);
     assert.deepEqual(res2.report.idsChanged.map((x) => x.to), ["home-wp", "brushing-tips-for-kids-wp"], "the same ids the second time");
     assert.ok(!fs.existsSync(path.join(dir4, "content", "pages", "home-wp-2.json")));
+    // a redirect this import added earlier, from an address that is a live page now, is removed on the re-run
+    const sj = JSON.parse(fs.readFileSync(path.join(dir4, "content", "site.json"), "utf8"));
+    sj.redirects = [...(sj.redirects || []), { from: "/about-us", to: "/about-us", type: 301 }];
+    fs.writeFileSync(path.join(dir4, "content", "site.json"), JSON.stringify(sj));
+    const cj = JSON.parse(fs.readFileSync(createdFile, "utf8")); cj.redirects = ["/about-us"]; fs.writeFileSync(createdFile, JSON.stringify(cj));
+    fs.writeFileSync(path.join(dir4, "content", "pages", "about-live.json"), JSON.stringify({ title: "About", slug: "about-us", blocks: [] }));
+    const res3 = await run();
+    assert.ok(res3.ok);
+    const sj3 = JSON.parse(fs.readFileSync(path.join(dir4, "content", "site.json"), "utf8"));
+    assert.ok(!(sj3.redirects || []).some((r) => r.from === "/about-us"), "the redirect from the live page is gone");
+    assert.ok(res3.report.redirectsHeld.some((h) => h.from === "/about-us" && h.to === "(removed)"));
     assert.match(W.reportMarkdown({ ...rep, blocksCreated: r.plan.blocks.map((b) => ({ name: b.name, uses: b.uses, options: b.variants })) }), /blocks created, all needing a design pass/);
     fs.rmSync(dir4, { recursive: true, force: true });
+  });
+
+  await ta("booleans never become text, numeric slugs fall back to the title", async () => {
+    const p2 = JSON.parse(JSON.stringify(payload));
+    const team = p2.entries.find((e) => e.id === 30); team.slug = "394"; team.fields.role = false;
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), "wp-num-"));
+    fs.mkdirSync(path.join(d, "content"), { recursive: true });
+    const m = { version: 1, pages: [], blocks: {}, posts: { import: false }, forms: { import: false }, media: { download: false }, types: { team: { include: true, key: "team", label: "Team", path: "/team", fields: { role: "role" } } } };
+    const r = await W.transform(d, p2, m, { blocks: [] });
+    assert.ok(r.ok, JSON.stringify(r.errors));
+    assert.ok(fs.existsSync(path.join(d, "content", "team", "dr-ana-reyes.json")), "a numeric slug takes the title");
+    const doc = JSON.parse(fs.readFileSync(path.join(d, "content", "team", "dr-ana-reyes.json"), "utf8"));
+    assert.equal(doc.role, undefined, "a false value is not the text \"false\"");
+    fs.rmSync(d, { recursive: true, force: true });
   });
 
   console.log(`${passed} passed${process.exitCode ? ", with failures" : ""}`);

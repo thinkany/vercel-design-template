@@ -306,6 +306,9 @@ function definitionsForSkill(p) {
 // ---- mapping -------------------------------------------------------------------
 
 function camel(s) { const parts = String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean); return parts.map((p, i) => (i ? p[0].toUpperCase() + p.slice(1) : p)).join("") || "field"; }
+// A slug for an entry: the old slug unless it is a bare number (WordPress gives those to
+// untitled posts), then the title, then a key with the old id.
+function entrySlug(slug, title, fallback) { const s = slugify(slug); return (s && !/^\d+$/.test(s) ? s : slugify(title)) || fallback; }
 function slugify(s) {
   return String(s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
 }
@@ -555,7 +558,7 @@ function htmlToMarkdown(html, opts = {}) {
 }
 
 function plainText(v) {
-  if (v == null) return "";
+  if (v == null || typeof v === "boolean") return "";
   if (typeof v !== "string") return Array.isArray(v) ? v.map(plainText).filter(Boolean).join(", ") : typeof v === "object" ? (v.title || v.name || v.url || "") : String(v);
   return decode(v.replace(/<br\s*\/?>/gi, " ").replace(/<\/(?:p|div|li|h[1-6]|tr|td|th|blockquote|section)>/gi, " ").replace(/<[^>]+>/g, "")).replace(/\s+/g, " ").trim();
 }
@@ -880,10 +883,10 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
       for (const l of r.lost) lost.push({ where: e.slug, ...l });
       const body = r.segments.map((s) => s.kind === "md" ? s.md : s.rows.map((row) => `| ${row.join(" | ")} |`).join("\n")).join("\n\n"); // a table in a post stays as a pipe table (text)
       for (const t of r.tables) lost.push({ where: e.slug, node: "table-as-text", text: `${t.rows.length} rows` });
-      const slug = freeId(path.join("content", "posts"), ".md", slugify(e.slug || e.title) || `post-${e.id}`, e.title, `post "${e.title}"`);
+      const slug = freeId(path.join("content", "posts"), ".md", entrySlug(e.slug, e.title, `post-${e.id}`), e.title, `post "${e.title}"`);
       const tags = (e.terms || []).filter((t) => t.taxonomy === "post_tag" || (postsCfg.categoriesAsTags !== false && t.taxonomy === "category")).map((t) => t.name).filter((n) => n && n.toLowerCase() !== "uncategorized");
       const cover = e.featuredImage ? await media(Number(e.featuredImage)) : null;
-      const fm = { title: plainText(e.title), ...(slug !== (slugify(e.slug || e.title) || `post-${e.id}`) ? {} : {}), date: String(e.date || "").slice(0, 10), updated: e.modified || undefined, description: plainText(e.excerpt) || (seoOf(e).description || ""), image: cover ? cover.src : "", tags: Array.from(new Set(tags)), draft: draft || e.status !== "publish", seo: (() => { const s = seoOf(e); delete s.description; return s; })() };
+      const fm = { title: plainText(e.title), date: String(e.date || "").slice(0, 10), updated: e.modified || undefined, description: plainText(e.excerpt) || (seoOf(e).description || ""), image: cover ? cover.src : "", tags: Array.from(new Set(tags)), draft: draft || e.status !== "publish", seo: (() => { const s = seoOf(e); delete s.description; return s; })() };
       writeFile(path.join("content", "posts", `${slug}.md`), serializeFrontmatter(fm) + "\n" + body + "\n", e.id);
       report.posts.imported++; if (fm.draft) report.posts.drafts++; report.posts.lost.push(...lost);
     }
@@ -914,7 +917,7 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
     else { if (i >= 0) typesFile.types[i] = tdef; else typesFile.types.push(tdef); typesChanged = true; (createdNow.types || (createdNow.types = [])).push(t.key); }
     const rep = { key: t.key, entries: 0, lost: [] };
     for (const e of entries.filter((x) => x.type === wpType)) {
-      const slug = freeId(path.join("content", t.key), ".json", slugify(e.slug || e.title) || `${t.key}-${e.id}`, e.title, `${t.key} "${e.title}"`);
+      const slug = freeId(path.join("content", t.key), ".json", entrySlug(e.slug, e.title, `${t.key}-${e.id}`), e.title, `${t.key} "${e.title}"`);
       const doc = { title: plainText(e.title), slug, ...(draft || e.status !== "publish" ? { draft: true } : {}), seo: seoOf(e) };
       const lost = [];
       for (const f of fields) {
@@ -960,16 +963,24 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
     try { for (const f of fs.readdirSync(path.join(projectDir, "content", "posts"))) { if (!/\.mdx?$/.test(f)) continue; const rel = path.join("content", "posts", f); if (createdNow.files[rel]) continue; const fm = (fs.readFileSync(path.join(projectDir, rel), "utf8").match(/^---\n([\s\S]*?)\n---/) || [])[1] || ""; const slug = ((fm.match(/^slug:[ \t]*"?([^"\n]+)"?/m) || [])[1] || f.replace(/\.mdx?$/, "")).trim(); liveRoutes.add(`/${blogPath}/${slug}`); } } catch {}
   }
   report.redirectsHeld = [];
+  const addedBefore = new Set((created.redirects || []).map((f) => String(f).toLowerCase()));
+  if (draft) for (const from of Array.from(have.keys())) if (addedBefore.has(from) && liveRoutes.has(from)) { have.delete(from); report.redirectsHeld.push({ from, to: "(removed)", why: "a live page is at this address; the redirect this import added earlier was removed" }); }
+  createdNow.redirects = [];
   const addRedirect = (from, to) => {
     if (!from || from === "/" || from === to || have.has(from.toLowerCase())) return;
     if (draft && liveRoutes.has(from)) { report.redirectsHeld.push({ from, to, why: "a live page is at this address" }); return; }
-    have.set(from.toLowerCase(), { from, to, type: 301 }); added++;
+    have.set(from.toLowerCase(), { from, to, type: 301 }); added++; createdNow.redirects.push(from);
   };
+  for (const from of addedBefore) if (have.has(from) && !createdNow.redirects.includes(from)) createdNow.redirects.push(from);
   for (const [from, to] of oldToNew) if (from !== to) addRedirect(from, to || "/");
-  if (added) siteJson.redirects = Array.from(have.values());
+  if (added || report.redirectsHeld.some((h) => h.to === "(removed)")) { siteJson.redirects = Array.from(have.values()); if (!siteJson.redirects.length) delete siteJson.redirects; }
   report.redirects = added;
   writeFile(path.join("content", "site.json"), JSON.stringify(siteJson, null, 2) + "\n");
 
+  report.suspect = [];
+  const SUSPECT = new Set(["false", "true", "null", "undefined", "[object Object]"]);
+  const scan = (v, where, prop) => { if (typeof v === "string") { if (SUSPECT.has(v.trim())) report.suspect.push({ where, prop, value: v }); } else if (Array.isArray(v)) v.forEach((x, i) => scan(x, where, `${prop}[${i}]`)); else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) scan(x, where, prop ? `${prop}.${k}` : k); };
+  for (const { id, doc } of pageDocs) doc.blocks.forEach((b, i) => scan(b.props, `${id} › ${b.type} #${i + 1}`, ""));
   report.files = written;
   report.idsChanged = idsChanged;
   report.draft = !!draft;
@@ -983,6 +994,7 @@ function reportMarkdown(rep) {
   if (rep.draft) L.push("- Everything imported is a draft: nothing already in the site was replaced. Publish from the Pages, Posts and Types lists when the blocks are designed.");
   if (rep.idsChanged && rep.idsChanged.length) L.push(`- Ids changed: ${rep.idsChanged.map((x) => `${x.what}: ${x.from} → ${x.to} (${x.why})`).join("; ")}`);
   if (rep.redirectsHeld && rep.redirectsHeld.length) L.push(`- Redirects held (a live page is at the old address; add them when the draft replaces it): ${rep.redirectsHeld.map((x) => `${x.from} → ${x.to}`).join(", ")}`);
+  if (rep.suspect && rep.suspect.length) L.push(`- ${rep.suspect.length} value${rep.suspect.length === 1 ? "" : "s"} that read as a bare "${rep.suspect[0].value}" (check the source field): ${rep.suspect.map((x) => `${x.where} › ${x.prop}`).join("; ")}`);
   if (rep.invalid && rep.invalid.length) L.push(`- ${rep.invalid.length} block${rep.invalid.length === 1 ? "" : "s"} the preview would reject (fix in the page editor): ${rep.invalid.map((x) => `${x.page} › ${x.type} (${x.issues})`).join("; ")}`);
   L.push(`- ${rep.pages.length} pages written, ${rep.posts.imported} posts (${rep.posts.drafts} drafts), ${Object.values(rep.types).reduce((n, t) => n + t.entries, 0)} entries in ${Object.keys(rep.types).length} types`);
   if (rep.forms && rep.forms.length) L.push(`- ${rep.forms.length} form${rep.forms.length === 1 ? "" : "s"} in the Forms tab (${rep.forms.map((f) => `${f.name}: ${f.fields} fields${f.kept ? ", already there, left as is" : ""}${f.skipped.length ? `, ${f.skipped.length} skipped` : ""}`).join("; ")}). Recipients and delivery are set in the Forms tab.`);
