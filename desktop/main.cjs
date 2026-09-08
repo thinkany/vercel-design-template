@@ -1706,7 +1706,8 @@ ipcMain.handle("site:savePage", (_e, { id, data } = {}) => {
     ...(Number.isFinite(prevOrder) && (byId[id].parent || null) === parent ? { order: prevOrder } : {}), // a new parent → last among its children
     ...(data.draft && id !== "home" ? { draft: true } : {}), // a draft previews in dev and stays out of the published site
     seo: data.seo && typeof data.seo === "object" ? data.seo : {},
-    blocks: Array.isArray(data.blocks) ? data.blocks.filter((b) => b && typeof b.type === "string").map((b) => ({ type: b.type, props: pruneEmptyProps(b.props && typeof b.props === "object" ? b.props : {}) })) : [],
+    // _wp: the old site's options on an imported block (wp-import.cjs), kept for the design pass.
+    blocks: Array.isArray(data.blocks) ? data.blocks.filter((b) => b && typeof b.type === "string").map((b) => ({ type: b.type, props: pruneEmptyProps(b.props && typeof b.props === "object" ? b.props : {}), ...(b._wp && typeof b._wp === "object" ? { _wp: b._wp } : {}) })) : [],
   };
   // Drop empty SEO strings so defaults apply.
   for (const k of Object.keys(doc.seo)) if (doc.seo[k] === "" || doc.seo[k] == null) delete doc.seo[k];
@@ -2361,7 +2362,7 @@ ipcMain.handle("site:saveEntry", (_e, { key, id, data } = {}) => {
     else v = String(v);
     doc[f.key] = v;
   }
-  if (Array.isArray(data.blocks) && data.blocks.length) doc.blocks = data.blocks.filter((b) => b && typeof b.type === "string").map((b) => ({ type: b.type, props: b.props && typeof b.props === "object" ? b.props : {} }));
+  if (Array.isArray(data.blocks) && data.blocks.length) doc.blocks = data.blocks.filter((b) => b && typeof b.type === "string").map((b) => ({ type: b.type, props: b.props && typeof b.props === "object" ? b.props : {}, ...(b._wp && typeof b._wp === "object" ? { _wp: b._wp } : {}) }));
   try { fs.mkdirSync(entryDir(currentProject, key), { recursive: true }); fs.writeFileSync(entryFile(currentProject, key, id), JSON.stringify(doc, null, 2) + "\n"); return { ok: true, entry: { id, ...doc } }; }
   catch (e) { return { ok: false, error: e.message }; }
 });

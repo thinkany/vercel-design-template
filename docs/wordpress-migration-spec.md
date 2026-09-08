@@ -13,6 +13,17 @@ the CMS drawer before the site is built), and the `/migrate-wordpress` skill
 Sibling of [wordpress-export-spec.md](wordpress-export-spec.md): the two share one
 payload format and one field-type table, read in opposite directions.
 
+**Block options (step 1 of the variations plan, BUILT 2026-09-08):** the plugin
+exports ACF conditional logic; the importer classifies every block field by
+purpose (content, variant, layout, reference) from conditional logic, field type,
+values used across the site, and name; the inventory shows options in use, the
+skeleton lists them per block (`_variants`), the skill maps one onto an enum prop
+when the new block has it, and the transform keeps every variant value on the
+imported instance under `_wp` (unknown to the schema, stripped at build, kept
+through CMS saves) and lists options seen in the report. Step 2 (block briefs for
+unmapped blocks and a `/design-block` from-WordPress mode that authors the block
+with its options) is to be spec'd after step 1 is tested on the tax site.
+
 **Dev loop:** `SKILLS_LOCAL=1 npm run desktop` (the skill reads from disk, no derive
 push). Test the importer with `node desktop/dev/wp-import.test.cjs`. The scaffold
 stub `.claude/commands/migrate-wordpress.md` reaches new projects after
