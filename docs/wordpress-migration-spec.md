@@ -250,8 +250,9 @@ deterministic before any UI is built.
   shell.js around the placeholder title). Give these turns their own title and
   icon ("Reading the old site", "Proposing where the content lands") the way the
   Art Director review has its own, keyed off the request the panel sends.
-- **Step 2 of block options** (spec after step 1 is tested on the tax site): block
-  briefs for unmapped blocks and a `/design-block` from-WordPress mode.
+- **Step 2 of block options**: spec'd as [design-after-import-spec.md](design-after-import-spec.md)
+  (a punch list of sections the design needs, briefs written from the import, one
+  block designed at a time in the current motif, then a mechanical re-map). Not built.
 
 ## Assumptions and open questions
 
