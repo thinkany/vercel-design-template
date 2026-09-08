@@ -433,6 +433,7 @@ window.COPY = {
       cancel: "Cancel",
       request: (key, direction) => `/design-block --from-brief ${key}${direction ? `\n\nDirection: ${direction}` : ""}`,
       echo: (name) => `Design ${name} from its imported content`,
+      pane: (name) => `Designing ${name}`,
     },
     blockUseExisting: "Use an existing design",
     blockUse: {
@@ -1041,6 +1042,7 @@ window.COPY = {
         brief: "Summarize as a brief",
         briefRequest: "/migrate-wordpress inventory",
         briefEcho: "Summarize the WordPress import as a brief",
+        briefPane: "Reading the old site",
         reveal: "Show the import files",
         open: "Import from WordPress…",
         modalTitle: "Import from WordPress",

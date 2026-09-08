@@ -426,6 +426,17 @@ t("mapping validates, and catches a bad id", () => {
     assert.ok(res4.ok);
     assert.ok(!fs.existsSync(stale), "the stale file is gone");
     assert.deepEqual(res4.report.removed, ["content/team/stale.json"]);
+    // a page edited in the CMS since the import is kept on the next run; overwriteEdited replaces it
+    const servicesPath = path.join(dir4, "content", "pages", "services.json");
+    const edited = JSON.parse(fs.readFileSync(servicesPath, "utf8")); edited.blocks[0].props.heading = "Edited by hand"; fs.writeFileSync(servicesPath, JSON.stringify(edited, null, 2) + "\n");
+    const res5 = await run();
+    assert.ok(res5.ok);
+    assert.deepEqual(res5.report.keptEdited, ["content/pages/services.json"]);
+    assert.equal(JSON.parse(fs.readFileSync(servicesPath, "utf8")).blocks[0].props.heading, "Edited by hand");
+    const res6 = await W.transform(dir4, payload, { ...r.mapping, overwriteEdited: true }, { blocks: [...r.blocks, tableBlock], fetchMedia: async (att, folder) => `/images/${folder}/${att.filename}`, draft: true, neverOverwrite: true, createdFile });
+    assert.ok(res6.ok);
+    assert.notEqual(JSON.parse(fs.readFileSync(servicesPath, "utf8")).blocks[0].props.heading, "Edited by hand");
+    assert.ok(Array.isArray(JSON.parse(fs.readFileSync(createdFile, "utf8")).heldRedirects), "held redirects are recorded for publish time");
     assert.match(W.reportMarkdown({ ...rep, blocksCreated: r.plan.blocks.map((b) => ({ name: b.name, uses: b.uses, options: b.variants })) }), /blocks created, all needing a design pass/);
     fs.rmSync(dir4, { recursive: true, force: true });
   });

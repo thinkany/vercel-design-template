@@ -1724,6 +1724,7 @@ ipcMain.handle("site:savePage", (_e, { id, data } = {}) => {
     fs.mkdirSync(path.dirname(pageFile(currentProject, id)), { recursive: true });
     fs.writeFileSync(pageFile(currentProject, id), JSON.stringify(doc, null, 2) + "\n");
     if (oldRoute != null) { byId[id] = { id, slug: doc.slug, parent }; rewriteNavRoutes(currentProject, oldRoute, pageRouteOf(id, byId)); }
+    try { applyHeldRedirects(currentProject); } catch {}
     return { ok: true, page: { id, ...doc } };
   } catch (e) { return { ok: false, error: e.message }; }
 });
@@ -2268,6 +2269,25 @@ ipcMain.handle("wp:useExisting", (_e, { key, target, pairs } = {}) => {
 // all). Publishing checks the address first: a draft whose route a published page
 // already serves is refused and the page in the way is named. The published site
 // never carries a draft; this only flips which ones are drafts.
+// Redirects the WordPress import held (an old address that was a live page at the time):
+// applied once the imported draft at the new address is published and nothing is
+// published at the old address any more. Runs after any publish or unpublish.
+function applyHeldRedirects(dir) {
+  const cf = wpFile(dir, "created.json"); const created = readJsonFile(cf);
+  if (!created || !Array.isArray(created.heldRedirects) || !created.heldRedirects.length) return 0;
+  const byId = readPagesIndex(dir); const docs = {}; for (const id of Object.keys(byId)) docs[id] = readJsonFile(pageFile(dir, id)) || {};
+  const live = new Set(Object.keys(byId).filter((id) => !docs[id].draft).map((id) => "/" + pageRouteOf(id, byId)).map((r) => r.replace(/\/$/, "") || "/"));
+  const sp = path.join(siteContentDir(dir), "site.json"); const site = readJsonFile(sp) || {};
+  const have = new Set((site.redirects || []).map((r) => r.from.toLowerCase()));
+  const keep = []; let added = 0;
+  for (const h of created.heldRedirects) {
+    const from = String(h.from || "").replace(/\/$/, "") || "/", to = String(h.to || "").replace(/\/$/, "") || "/";
+    if (live.has(to) && !live.has(from) && from !== "/" && !have.has(from.toLowerCase())) { site.redirects = [...(site.redirects || []), { from, to, type: 301 }]; have.add(from.toLowerCase()); added++; }
+    else if (!(live.has(to) && !live.has(from))) keep.push(h);
+  }
+  if (added) { fs.writeFileSync(sp, JSON.stringify(site, null, 2) + "\n"); created.heldRedirects = keep; try { fs.writeFileSync(cf, JSON.stringify(created, null, 2) + "\n"); } catch {} appLog.write(`[wp] applied ${added} held redirect(s) on publish`); }
+  return added;
+}
 ipcMain.handle("site:setPublished", (_e, { kind, key, ids, published } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
@@ -2311,7 +2331,8 @@ ipcMain.handle("site:setPublished", (_e, { kind, key, ids, published } = {}) => 
       }
     } else return { ok: false, error: "Pages, posts or entries." };
     appLog.write(`[cms] ${published ? "publish" : "unpublish"} ${kind}: ${done.length} done, ${refused.length} refused`);
-    return { ok: true, done, refused };
+    const redirects = kind === "page" ? applyHeldRedirects(dir) : 0;
+    return { ok: true, done, refused, redirects };
   } catch (e) { return { ok: false, error: e.message }; }
 });
 

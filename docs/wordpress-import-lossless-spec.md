@@ -287,6 +287,19 @@ Import from WordPress keeps its steps but loses one:
 "Propose a mapping" and "Start the mapping over" go. The migration skill keeps one
 mode, `inventory` (the brief for a new design, unchanged). `map` is retired.
 
+## Done from the to-do list (2026-09-08)
+
+- Link fields are a picker everywhere (block props, type entries): one datalist of
+  pages, sections, posts, entries and files, or a typed address.
+- Held redirects are recorded with the import and applied when the draft at the new
+  address is published and nothing is published at the old one any more.
+- A migration turn names itself in the preview pane ("Reading the old site",
+  "Designing <block>") instead of "Updating your design".
+- A re-run keeps a page, post or entry edited in the CMS since the import (its hash
+  no longer matches) and lists it; `overwriteEdited: true` in the mapping replaces.
+- The plugin (0.1.5) also reads Contact Form 7, Ninja Forms, Formidable and Fluent
+  Forms (best effort, untested against live installs). WS Form is still to do.
+
 ## To do (from the first lossless run on tax.local, 2026-09-08)
 
 - **Link fields in the CMS.** Any prop that holds an `href` (a CTA, a button, a nav

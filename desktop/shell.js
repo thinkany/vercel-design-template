@@ -637,13 +637,16 @@ function showWorking() {
 // No-op during setup (the browser isn't open yet — that path already shows the
 // working placeholder). Idempotent: repeated edit tools in a turn just refresh
 // the narration.
+// A turn that is not a design edit (a WordPress brief, a block's design pass) names
+// itself here so the preview pane doesn't say "Updating your design".
+let previewTurnTitle = null; // { title, emoji } while such a turn runs
 function guardPreviewForEdit(activityText) {
   if (!tabsOpened) return; // preview not open yet — setup already guards this
   if (!guarding) { guarding = true; guardSeq++; }
   browser.hidden = true;
   previewph.hidden = false;
-  setPhEmoji("✨");
-  phTitle.textContent = COPY.preview.updatingDesign;
+  setPhEmoji((previewTurnTitle && previewTurnTitle.emoji) || "✨");
+  phTitle.textContent = (previewTurnTitle && previewTurnTitle.title) || COPY.preview.updatingDesign;
   phProgress.hidden = false;
   stopWorking();
   phText.textContent = activityText || "We're applying your changes…";
@@ -5678,7 +5681,7 @@ function openBlockDesignModal(b) {
     if (!r || !r.ok) { note.textContent = (r && r.error) || "No brief."; note.style.color = "#e5484d"; return; }
     wpDesignTurn = b.key;
     close(); closeModal();
-    runAgent(D.request(b.key, input.value.trim()), D.echo(b.name));
+    runAgent(D.request(b.key, input.value.trim()), D.echo(b.name), { paneTitle: D.pane(b.name), paneEmoji: "🧩" });
   });
   document.addEventListener("keydown", onKey, true);
   document.body.appendChild(ov);
@@ -6316,7 +6319,7 @@ function openWpImportModal() {
     if (visible.includes("brief")) {
       const g = group("brief");
       step(g, S.briefStep, S.briefHint);
-      row(g).appendChild(btn(S.brief, () => { close(); closeModal(); runAgent(S.briefRequest, S.briefEcho); }, { primary: true, disabled: !licensed }));
+      row(g).appendChild(btn(S.brief, () => { close(); closeModal(); runAgent(S.briefRequest, S.briefEcho, { paneTitle: S.briefPane, paneEmoji: "📋" }); }, { primary: true, disabled: !licensed }));
     } else if (visible.includes("import")) {
       const g3 = group("import");
       step(g3, S.importStep, S.importHint);
@@ -7619,6 +7622,7 @@ window.desktop.onAgentEvent((evt) => {
       if (intakeActive && intakeph.classList.contains("flow")) showBriefComplete();
       endTurnGate(); // release serialization AFTER showBriefComplete decided for this turn
       updateSessionGauge(evt.usage, evt.modelUsage); // refresh the context gauge + maybe nudge
+      previewTurnTitle = null;
       if (siteBuildTurn) finishSiteBuildTurn(true); // the promote turn: open the CMS drawer once the site is ready
       if (wpDesignTurn) finishWpDesignTurn();
       // Quiet build finished → reveal the completed design now (both tabs, land on Home) and
@@ -7649,6 +7653,7 @@ window.desktop.onAgentEvent((evt) => {
       clearIntakePending();
       addMsg("error", "✖ " + evt.message);
       endTurnGate(); // release serialization on error too
+      previewTurnTitle = null;
       if (siteBuildTurn) finishSiteBuildTurn(false);
       if (wpDesignTurn) finishWpDesignTurn();
       // Even on error, settle-then-reveal so the designer isn't stuck behind a
@@ -12319,6 +12324,7 @@ async function runAgent(toSend, echoText, opts) {
   // Backstop: no key → no agent turns at all (covers reroll, Art Director, Figma export,
   // and any path that reaches here). The UI already hides/disables these, this is the guard.
   if (!appHasKey) { addMsg("error", COPY.errors.needKey); return; }
+  previewTurnTitle = opts && opts.paneTitle ? { title: opts.paneTitle, emoji: opts.paneEmoji || "✨" } : null;
   // A review turn (Art Director) is READ-ONLY and ISOLATED: it runs in a fresh session
   // with its own persona, must not touch the chat session, must not run the lean-edit
   // reset, and must leave the live design on screen (it isn't building anything).

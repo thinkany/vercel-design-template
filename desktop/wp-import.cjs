@@ -656,7 +656,17 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
   const cls = classifyFields(payload);
   const noteVariants = (name, fields) => { const v = report.variants[name] || (report.variants[name] = {}); for (const [k, val] of Object.entries(fields || {})) { if (purposeOf(cls, name, k) !== "variant") continue; const key = val == null || val === "" ? "(empty)" : typeof val === "object" ? "(object)" : String(val); (v[k] || (v[k] = {}))[key] = ((v[k] || {})[key] || 0) + 1; } };
   const written = [];
-  const writeFile = (rel, text, wpId = null) => { written.push(rel); createdNow.files[rel] = { wp: wpId }; if (dry) return; const abs = path.join(projectDir, rel); fs.mkdirSync(path.dirname(abs), { recursive: true }); fs.writeFileSync(abs, text); };
+  // A content file this import wrote before and the designer has since edited in the
+  // CMS is kept (its hash no longer matches what was written) unless the mapping says
+  // overwriteEdited. Blocks and shared files are not subject to this.
+  const crypto = require("node:crypto");
+  const hashOf = (text) => crypto.createHash("sha1").update(text).digest("hex");
+  const keptEdited = [];
+  const editedSince = (rel) => { const rec = created.files && created.files[rel]; if (!rec || !rec.hash) return false; try { return hashOf(fs.readFileSync(path.join(projectDir, rel), "utf8")) !== rec.hash; } catch { return false; } };
+  const writeFile = (rel, text, wpId = null) => {
+    if (neverOverwrite && !mapping.overwriteEdited && /^content[\/\\](pages|posts|[^\/\\]+)[\/\\][^\/\\]+\.(json|mdx?)$/.test(rel) && !/^content[\/\\](forms|site\.json|types\.json)/.test(rel) && editedSince(rel)) { keptEdited.push(rel); createdNow.files[rel] = created.files[rel]; return; }
+    written.push(rel); createdNow.files[rel] = { wp: wpId, hash: hashOf(text) }; if (dry) return; const abs = path.join(projectDir, rel); fs.mkdirSync(path.dirname(abs), { recursive: true }); fs.writeFileSync(abs, text);
+  };
   const readJson = (rel) => { try { return JSON.parse(fs.readFileSync(path.join(projectDir, rel), "utf8")); } catch { return null; } };
 
   // ---- routes: where every old entry lands, decided before any content is written
@@ -986,6 +996,8 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
   const scan = (v, where, prop) => { if (typeof v === "string") { if (SUSPECT.has(v.trim())) report.suspect.push({ where, prop, value: v }); } else if (Array.isArray(v)) v.forEach((x, i) => scan(x, where, `${prop}[${i}]`)); else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) scan(x, where, prop ? `${prop}.${k}` : k); };
   for (const { id, doc } of pageDocs) doc.blocks.forEach((b, i) => scan(b.props, `${id} › ${b.type} #${i + 1}`, ""));
   report.files = written;
+  report.keptEdited = keptEdited;
+  createdNow.heldRedirects = report.redirectsHeld.filter((h) => h.to !== "(removed)").map((h) => ({ from: h.from, to: h.to }));
   report.idsChanged = idsChanged;
   report.draft = !!draft;
   // A file this import wrote before and did not write this time (an entry whose id
@@ -1005,6 +1017,7 @@ function reportMarkdown(rep) {
   if (rep.blocksCreated && rep.blocksCreated.length) L.push(`- ${rep.blocksCreated.length} block${rep.blocksCreated.length === 1 ? "" : "s"} created, all needing a design pass (Blocks → Needs Design): ${rep.blocksCreated.map((b) => `${b.name}${b.uses ? ` (${b.uses}×${b.options && b.options.length ? `, ${b.options.join(", ")}` : ""})` : ""}${b.kept ? " [kept, already designed]" : ""}`).join("; ")}`);
   if (rep.draft) L.push("- Everything imported is a draft: nothing already in the site was replaced. Publish from the Pages, Posts and Types lists when the blocks are designed.");
   if (rep.idsChanged && rep.idsChanged.length) L.push(`- Ids changed: ${rep.idsChanged.map((x) => `${x.what}: ${x.from} → ${x.to} (${x.why})`).join("; ")}`);
+  if (rep.keptEdited && rep.keptEdited.length) L.push(`- Kept as edited in the CMS (not rewritten): ${rep.keptEdited.map((f) => f.replace(/^content[\/\\]/, "")).join(", ")}. Set overwriteEdited in the mapping to replace them.`);
   if (rep.redirectsHeld && rep.redirectsHeld.length) L.push(`- Redirects held (a live page is at the old address; add them when the draft replaces it): ${rep.redirectsHeld.map((x) => `${x.from} → ${x.to}`).join(", ")}`);
   if (rep.removed && rep.removed.length) L.push(`- Removed from the previous run (no longer produced): ${rep.removed.join(", ")}`);
   if (rep.suspect && rep.suspect.length) L.push(`- ${rep.suspect.length} value${rep.suspect.length === 1 ? "" : "s"} that read as a bare "${rep.suspect[0].value}" (check the source field): ${rep.suspect.map((x) => `${x.where} › ${x.prop}`).join("; ")}`);

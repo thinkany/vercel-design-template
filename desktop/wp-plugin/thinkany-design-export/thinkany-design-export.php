@@ -3,7 +3,7 @@
  * Plugin Name: thinkany design Export
  * Plugin URI:  https://thinkany.design
  * Description: Read-only export of this site's structure and content (ACF field groups, blocks, pages, posts, custom types, menus, media) as one JSON payload, for a redesign in thinkany design. Writes nothing.
- * Version:     0.1.4
+ * Version:     0.1.5
  * Author:      thinkany
  * License:     Proprietary
  * Requires PHP: 7.4
@@ -25,7 +25,7 @@
 if (!defined('ABSPATH')) exit;
 
 final class Thinkany_Export {
-    const VERSION = '0.1.4';
+    const VERSION = '0.1.5';
     const PAYLOAD_VERSION = 1;
     const OPTION = 'thinkany_export_token';
 
@@ -482,6 +482,63 @@ final class Thinkany_Export {
                 }
                 $out[] = ['plugin' => 'wpforms', 'id' => (string) $p->ID, 'title' => $p->post_title, 'fields' => $fields];
             }
+        }
+        // Contact Form 7: the form is a template of tags like [text* your-name placeholder "Name"].
+        if (class_exists('WPCF7_ContactForm')) {
+            foreach ((array) WPCF7_ContactForm::find(['posts_per_page' => -1]) as $cf) {
+                $fields = [];
+                if (preg_match_all('/\[(text|email|tel|url|number|date|textarea|select|checkbox|radio|acceptance|file)(\*?)\s+([^\s\]]+)([^\]]*)\]/', (string) $cf->prop('form'), $m, PREG_SET_ORDER)) {
+                    foreach ($m as $t) {
+                        $type = ['tel' => 'phone', 'acceptance' => 'checkbox', 'file' => 'fileupload', 'url' => 'website'][$t[1]] ?? $t[1];
+                        $choices = [];
+                        if (preg_match_all('/"([^"]*)"/', $t[4], $q)) $choices = $q[1];
+                        $label = preg_match('/placeholder\s+"([^"]*)"/', $t[4], $pl) ? $pl[1] : ucwords(str_replace(['-', '_'], ' ', $t[3]));
+                        if (in_array($t[1], ['select', 'checkbox', 'radio'], true)) { $choices = array_values(array_filter($choices, function ($c) use ($label) { return $c !== $label; })); }
+                        else $choices = [];
+                        $fields[] = ['id' => $t[3], 'type' => $type, 'label' => $label, 'required' => $t[2] === '*', 'choices' => $choices];
+                    }
+                }
+                $out[] = ['plugin' => 'contactform7', 'id' => (string) $cf->id(), 'title' => $cf->title(), 'fields' => $fields];
+            }
+        }
+        // Ninja Forms
+        if (function_exists('Ninja_Forms')) {
+            try {
+                foreach ((array) Ninja_Forms()->form()->get_forms() as $nf) {
+                    $fields = [];
+                    foreach ((array) Ninja_Forms()->form($nf->get_id())->get_fields() as $fl) {
+                        $type = $fl->get_setting('type'); $opts = $fl->get_setting('options');
+                        $fields[] = ['id' => (string) $fl->get_id(), 'type' => ['firstname' => 'text', 'lastname' => 'text', 'listselect' => 'select', 'listradio' => 'radio', 'listcheckbox' => 'checkbox', 'listmultiselect' => 'multiselect', 'submit' => 'submit', 'hr' => 'divider', 'html' => 'html', 'recaptcha' => 'captcha', 'file_upload' => 'fileupload'][$type] ?? $type, 'label' => (string) $fl->get_setting('label'), 'required' => (bool) $fl->get_setting('required'), 'choices' => is_array($opts) ? array_values(array_map(function ($o) { return $o['label'] ?? ''; }, $opts)) : []];
+                    }
+                    $out[] = ['plugin' => 'ninjaforms', 'id' => (string) $nf->get_id(), 'title' => (string) $nf->get_setting('title'), 'fields' => array_values(array_filter($fields, function ($f) { return $f['type'] !== 'submit'; }))];
+                }
+            } catch (\Throwable $e) { /* best effort */ }
+        }
+        // Formidable Forms
+        if (class_exists('FrmForm') && class_exists('FrmField')) {
+            foreach ((array) FrmForm::getAll(['is_template' => 0, 'status' => 'published']) as $ff) {
+                $fields = [];
+                foreach ((array) FrmField::get_all_for_form($ff->id) as $fl) {
+                    $opts = is_array($fl->options) ? array_values(array_map(function ($o) { return is_array($o) ? ($o['label'] ?? '') : (string) $o; }, $fl->options)) : [];
+                    $fields[] = ['id' => (string) $fl->id, 'type' => ['phone' => 'phone', 'user_id' => 'hidden', 'html' => 'html', 'break' => 'pagebreak', 'divider' => 'divider', 'captcha' => 'captcha', 'file' => 'fileupload', 'url' => 'website'][$fl->type] ?? $fl->type, 'label' => (string) $fl->name, 'required' => !empty($fl->required), 'choices' => $opts];
+                }
+                $out[] = ['plugin' => 'formidable', 'id' => (string) $ff->id, 'title' => (string) $ff->name, 'fields' => $fields];
+            }
+        }
+        // Fluent Forms
+        if (function_exists('wpFluent')) {
+            try {
+                foreach ((array) wpFluent()->table('fluentform_forms')->get() as $lf) {
+                    $def = json_decode((string) $lf->form_fields, true); $fields = [];
+                    foreach ((array) ($def['fields'] ?? []) as $fl) {
+                        $el = $fl['element'] ?? ''; $attrs = $fl['attributes'] ?? []; $settings = $fl['settings'] ?? [];
+                        $type = ['input_text' => 'text', 'input_email' => 'email', 'phone' => 'phone', 'input_url' => 'website', 'input_number' => 'number', 'textarea' => 'textarea', 'select' => 'select', 'input_radio' => 'radio', 'input_checkbox' => 'checkbox', 'terms_and_condition' => 'checkbox', 'input_file' => 'fileupload', 'input_hidden' => 'hidden', 'custom_html' => 'html', 'input_name' => 'name', 'address' => 'address', 'recaptcha' => 'captcha'][$el] ?? $el;
+                        $choices = array_values(array_map(function ($o) { return $o['label'] ?? ''; }, (array) ($settings['advanced_options'] ?? [])));
+                        $fields[] = ['id' => (string) ($attrs['name'] ?? ''), 'type' => $type, 'label' => (string) ($settings['label'] ?? ''), 'required' => !empty($settings['validation_rules']['required']['value']), 'choices' => $choices];
+                    }
+                    $out[] = ['plugin' => 'fluentforms', 'id' => (string) $lf->id, 'title' => (string) $lf->title, 'fields' => $fields];
+                }
+            } catch (\Throwable $e) { /* best effort */ }
         }
         return $out;
     }
