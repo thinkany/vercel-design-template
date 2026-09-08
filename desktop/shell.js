@@ -5836,7 +5836,10 @@ function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }
   const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(siteFoldGet(foldKey, false)));
   head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", S.filterHeading));
   const bodyEl = siteEl("div", "site-acc-body"); bodyEl.hidden = !siteFoldGet(foldKey, false);
-  head.addEventListener("click", () => { const now = bodyEl.hidden; siteReveal(bodyEl, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(foldKey, now); setTimeout(paintNote, 260); });
+  // The row boxes show only while the section is open: the actions they feed live in it.
+  const paintBoxes = () => { rows.forEach((r) => { r.box.style.display = sectionOpen ? "" : "none"; }); };
+  let sectionOpen = !bodyEl.hidden;
+  head.addEventListener("click", () => { const now = bodyEl.hidden; sectionOpen = now; siteReveal(bodyEl, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(foldKey, now); paintBoxes(); setTimeout(paintNote, 260); });
   sec.append(head, bodyEl); host.appendChild(sec);
   const bar = siteEl("div"); bar.style.cssText = "display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 8px;";
   const pills = siteEl("div"); pills.style.cssText = "display:flex;gap:4px;";
@@ -5898,6 +5901,7 @@ function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }
       const box = document.createElement("input"); box.type = "checkbox"; box.style.cssText = "margin:0 0 0 10px;flex:none;";
       box.checked = siteSelection.ids.has(it.id);
       if (it.id === "home" && kind === "page") { box.disabled = true; box.style.visibility = "hidden"; }
+      if (!sectionOpen) box.style.display = "none";
       box.addEventListener("click", (e) => { e.stopPropagation(); if (box.checked) siteSelection.ids.add(it.id); else siteSelection.ids.delete(it.id); paintCount(); });
       // One line: grabber, title, box. The address and status move to the tooltip.
       const grip = row.querySelector(".site-grip");
