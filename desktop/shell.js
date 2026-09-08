@@ -5819,16 +5819,21 @@ function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }
   sec.append(head, bodyEl); host.appendChild(sec);
   const bar = siteEl("div"); bar.style.cssText = "display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 8px;";
   const pills = siteEl("div"); pills.style.cssText = "display:flex;gap:4px;";
-  const paintRows = () => { rows.forEach((r) => { r.row.style.display = visible(r) ? "flex" : "none"; }); paintCount(); };
+  // The line above the first row while a filter is on ("Filtered: Drafts"); none for All.
+  const filterNote = siteEl("div", "sess-desc"); filterNote.style.cssText = "margin:0 0 6px;font-weight:500;";
+  const paintNote = () => { const k = cur(); filterNote.textContent = k === "all" ? "" : S.filteredNote(S.statusFilter[k]); filterNote.style.display = k === "all" ? "none" : ""; };
+  const paintRows = () => { rows.forEach((r) => { r.row.style.display = visible(r) ? "flex" : "none"; }); paintNote(); paintCount(); };
+  // The pills: the chosen one is black on white's opposite, so the state reads at a glance.
+  const setOn = (b, on) => { b.classList.toggle("on", on); b.style.background = on ? "#111" : ""; b.style.color = on ? "#fff" : ""; b.style.borderColor = on ? "#111" : ""; };
   for (const [k, label] of Object.entries(S.statusFilter)) {
-    const b = siteEl("button", "site-mini" + (cur() === k ? " on" : ""), label); b.type = "button";
-    b.addEventListener("click", () => { filters[filterKey] = k; pills.querySelectorAll(".site-mini").forEach((x) => x.classList.remove("on")); b.classList.add("on"); paintRows(); });
+    const b = siteEl("button", "site-mini", label); b.type = "button"; setOn(b, cur() === k);
+    b.addEventListener("click", () => { filters[filterKey] = k; pills.querySelectorAll(".site-mini").forEach((x) => setOn(x, x === b)); paintRows(); });
     pills.appendChild(b);
   }
   bar.appendChild(pills);
-  const allWrap = document.createElement("label"); allWrap.style.cssText = "display:inline-flex;align-items:center;gap:6px;margin-left:8px;cursor:pointer;";
-  const allBox = document.createElement("input"); allBox.type = "checkbox"; allBox.title = S.selectAll; allBox.style.margin = "0";
-  const count = siteEl("span", "muted"); count.style.cssText = "font-size:12px;line-height:1;";
+  const allWrap = document.createElement("label"); allWrap.style.cssText = "display:inline-flex;align-items:center;gap:6px;margin-left:8px;cursor:pointer;line-height:16px;";
+  const allBox = document.createElement("input"); allBox.type = "checkbox"; allBox.title = S.selectAll; allBox.style.cssText = "margin:0;width:14px;height:14px;flex:none;vertical-align:middle;";
+  const count = siteEl("span", "muted"); count.style.cssText = "font-size:12px;line-height:16px;display:inline-block;";
   allWrap.append(allBox, count);
   const pub = siteEl("button", "panelbtn", S.publishSelected); pub.style.cssText = "margin:0;width:auto;"; pub.disabled = true;
   const unpub = siteEl("button", "panelbtn", S.unpublishSelected); unpub.style.cssText = "margin:0;width:auto;"; unpub.disabled = true;
@@ -5874,6 +5879,7 @@ function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }
       row.append(text, box); row.style.alignItems = "center";
       rows.push({ id: it.id, draft: !!it.draft, row, box });
       row.style.display = visible(it) ? "flex" : "none";
+      if (rows.length === 1 && row.parentNode) { row.parentNode.insertBefore(filterNote, row); paintNote(); }
       paintCount();
     },
   };

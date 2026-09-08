@@ -474,6 +474,7 @@ window.COPY = {
     },
     // Lists: the status filter and select-all publishing (Pages, Posts, Types).
     filterHeading: "Filter",
+    filteredNote: (label) => `Filtered: ${label}`,
     statusFilter: { all: "All", published: "Published", draft: "Drafts" },
     selectAll: "Select all",
     selectedCount: (n) => (n === 1 ? "1 selected" : `${n} selected`),
