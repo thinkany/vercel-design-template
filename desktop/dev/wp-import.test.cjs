@@ -356,6 +356,7 @@ t("mapping validates, and catches a bad id", () => {
     assert.equal(r.mapping.pages.find((p) => p.wp === 10).page, "home", "the front page keeps its slug id until the transform finds a collision");
     assert.ok(r.mapping.pages.every((p) => p.include === true), "every page is kept");
     assert.equal(r.mapping.types.team.include, true);
+    assert.equal(r.mapping.types.instruction.include, false, "a type with no entries is not defined");
   });
 
   await ta("lossless transform: drafts, generated blocks, nothing overwritten, re-run stable", async () => {

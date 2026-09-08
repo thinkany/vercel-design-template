@@ -1213,9 +1213,10 @@ function createWindow() {
     },
   });
   // The renderer's console rides the app log too (Settings → Logging).
-  mainWindow.webContents.on("console-message", (event, legacyLevel, legacyMessage) => {
-    // Electron ≥ 32 passes one details object; older builds pass (event, level, message).
-    const details = event && typeof event === "object" && "message" in event ? event : { level: legacyLevel, message: legacyMessage };
+  mainWindow.webContents.on("console-message", function (event) {
+    // Electron ≥ 32 passes one details object (and warns when a listener declares the
+    // old extra parameters); older builds pass (event, level, message), read from arguments.
+    const details = event && typeof event === "object" && "message" in event ? event : { level: arguments[1], message: arguments[2] };
     const lvl = typeof details.level === "string" ? details.level : ({ 0: "log", 1: "warn", 2: "error", 3: "error" }[details.level] || "log");
     appLog.write(lvl, "renderer", String(details.message || ""));
   });

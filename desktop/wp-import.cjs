@@ -934,6 +934,8 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
     report.types[wpType] = rep;
   }
   if (typesChanged) writeFile(path.join("content", "types.json"), JSON.stringify(typesFile, null, 2) + "\n");
+  // Every defined type has its folder, so the content loader never warns about a missing one.
+  if (!dry) for (const t of typesFile.types || []) { try { fs.mkdirSync(path.join(projectDir, "content", t.key), { recursive: true }); } catch {} }
 
   // ---- site.json: nav, site name, redirects
   const siteJson = readJson(path.join("content", "site.json")) || { design: "v00", nav: [], footerLinks: [] };
@@ -1531,6 +1533,7 @@ function losslessPlan(p, { existingKeys = [], registrySrc = "", designed = new S
 // content as drafts, types and forms on, menus as the skeleton chose.
 function losslessMapping(p, plan) {
   const sk = mappingSkeleton(p, []);
+  const inv = inventory(p);
   const blocks = {};
   for (const b of plan.blocks) blocks[b.wp] = { block: b.key, fields: b.mapping, carry: false, ...(b.skipWhen ? { skipWhen: b.skipWhen } : {}) };
   const frontPage = Number(p.site && p.site.frontPage);
@@ -1540,7 +1543,9 @@ function losslessMapping(p, plan) {
     const id = isFront ? (slugify(e.title) || "welcome") : pg.page;
     return { wp: pg.wp, title: pg.title, wpPath: pg.wpPath, page: id, ...(isFront ? { slug: id } : {}), parent: null, include: true };
   });
-  const types = Object.fromEntries(Object.entries(sk.types).map(([k, t]) => [k, { ...t, include: true }]));
+  // A custom type with no entries is not defined: a folder-less type only warns at build.
+  const counts = inv.counts.byType || {};
+  const types = Object.fromEntries(Object.entries(sk.types).map(([k, t]) => [k, { ...t, include: (counts[k] || 0) > 0 }]));
   for (const t of Object.values(types)) delete t._about;
   return {
     version: MAPPING_VERSION,

@@ -202,6 +202,20 @@
         ],
         "taxonomies": [],
         "count": 2
+      },
+      {
+        "key": "instruction",
+        "label": "Instructions",
+        "singular": "Instruction",
+        "builtin": false,
+        "hierarchical": false,
+        "hasArchive": false,
+        "rewrite": "instruction",
+        "supports": [
+          "title"
+        ],
+        "taxonomies": [],
+        "count": 0
       }
     ],
     "taxonomies": [
