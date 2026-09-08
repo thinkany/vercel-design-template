@@ -1366,6 +1366,8 @@ const SYNONYMS = [
   ["ctas", "buttons", "links", "actions"],
   ["items", "cards", "steps", "features", "list", "entries", "rows", "blockRepeater", "faqItems", "questions", "logos", "clientLogos"],
   ["quote", "testimonial", "body"],
+  ["q", "question", "title", "heading", "label"],
+  ["a", "answer", "content", "body", "text", "copy"],
   ["author", "byLine", "attribution", "who", "name"],
   ["side", "imageSide", "copySide", "mediaSide", "layout"],
   ["form", "formId", "gravityFormSelect"],
@@ -1379,7 +1381,7 @@ function compatible(a, b) {
   return pairs[`${a}:${b}`] || 0;
 }
 /** Propose src prop → target prop for two field maps (top-level only). */
-function proposePairing(fromFields, toFields) {
+function proposePairing(fromFields, toFields, { leftovers = false } = {}) {
   const top = (f) => Object.keys(f).filter((k) => !k.includes("."));
   const src = top(fromFields); const dst = top(toFields);
   const score = (a, b) => {
@@ -1392,6 +1394,18 @@ function proposePairing(fromFields, toFields) {
   const pairs = {}; const taken = new Set();
   const cands = src.flatMap((a) => dst.map((b) => ({ a, b, s: score(a, b) }))).filter((x) => x.s > 0).sort((x, y) => y.s - x.s);
   for (const c of cands) { if (pairs[c.a] !== undefined || taken.has(c.b)) continue; pairs[c.a] = c.b; taken.add(c.b); }
+  // Leftovers: a target field with exactly one unpaired source of a compatible kind takes it
+  // (an answer field named "a" and an imported "content" field, say). Only where the
+  // designer cannot review the pairing (list items); top-level pairs stay honest guesses.
+  let moved = leftovers;
+  while (moved) {
+    moved = false;
+    for (const b of dst) {
+      if (taken.has(b)) continue;
+      const fits = src.filter((a) => pairs[a] === undefined && compatible(kindOf(fromFields, a), kindOf(toFields, b)) >= 0.7);
+      if (fits.length === 1) { pairs[fits[0]] = b; taken.add(b); moved = true; }
+    }
+  }
   for (const a of src) if (pairs[a] === undefined) pairs[a] = null;
   return { pairs, unpaired: src.filter((a) => !pairs[a]), targetsLeft: dst.filter((b) => !taken.has(b)) };
 }
@@ -1416,8 +1430,14 @@ function remapInstance(props, pairs, fromFields, toFields, targetDefaults = {}) 
     let v = convertValue(props[a], fk, tk);
     if (tk === "list" && Array.isArray(v) && v.length && typeof v[0] === "object") {
       const sub = (f, p) => Object.fromEntries(Object.entries(f).filter(([k]) => k.startsWith(p + ".") && !k.slice(p.length + 1).includes(".")).map(([k, m]) => [k.slice(p.length + 1), m]));
-      const fs = sub(fromFields, a), ts = sub(toFields, b);
-      const inner = Object.keys(ts).length ? proposePairing(Object.keys(fs).length ? fs : Object.fromEntries(Object.keys(v[0]).map((k) => [k, { kind: kindOf({}, k) }])), ts).pairs : null;
+      let fs = sub(fromFields, a); const ts = sub(toFields, b);
+      // Grouped items (FAQ sections each holding questions) into a flat list: flatten
+      // through the one list inside each item when the target's items hold no list.
+      const targetFlat = !Object.values(ts).some((m) => m && m.kind === "list");
+      const innerLists = Object.entries(fs).filter(([, m]) => m && m.kind === "list").map(([k]) => k);
+      const listKey = innerLists.length === 1 ? innerLists[0] : (innerLists.length === 0 ? Object.keys(v[0] || {}).find((k) => Array.isArray(v[0][k]) && v[0][k].length && typeof v[0][k][0] === "object") : null);
+      if (targetFlat && listKey) { v = v.flatMap((g) => (Array.isArray(g[listKey]) ? g[listKey] : [])); fs = sub(fromFields, `${a}.${listKey}`); }
+      const inner = Object.keys(ts).length ? proposePairing(Object.keys(fs).length ? fs : Object.fromEntries(Object.keys(v[0]).map((k) => [k, { kind: kindOf({}, k) }])), ts, { leftovers: true }).pairs : null;
       if (inner) v = v.map((item) => { const o = {}; for (const [ia, ib] of Object.entries(inner)) if (ib && item[ia] !== undefined) o[ib] = convertValue(item[ia], kindOf(fs, ia), kindOf(ts, ib)); return o; }).filter((o) => Object.keys(o).length);
     }
     if (tk === "enum") { const opts = (toFields[b] && toFields[b].options) || []; if (opts.length && !opts.includes(v)) v = opts.includes(String(v).toLowerCase()) ? String(v).toLowerCase() : undefined; }

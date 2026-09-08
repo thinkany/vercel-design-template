@@ -479,6 +479,13 @@ t("mapping validates, and catches a bad id", () => {
     const toL = { items: { kind: "list" }, "items.title": { kind: "string" }, "items.copy": { kind: "richtext" }, "items.image": { kind: "image" } };
     const outL = W.remapInstance({ items: [{ name: "Kids", text: "Play", icon: { src: "/k.png", alt: "" } }] }, { items: "items" }, fromL, toL, { items: [] });
     assert.deepEqual(outL, { items: [{ title: "Kids", copy: "Play", image: { src: "/k.png", alt: "" } }] });
+    // a grouped FAQ (sections holding questions) onto a flat FAQ with q and a
+    const fromF = { heading: { kind: "string" }, faqItems: { kind: "list" }, "faqItems.title": { kind: "string" }, "faqItems.faqGroup": { kind: "list" }, "faqItems.faqGroup.title": { kind: "string" }, "faqItems.faqGroup.content": { kind: "richtext" } };
+    const toF = { heading: { kind: "string" }, items: { kind: "list" }, "items.q": { kind: "string" }, "items.a": { kind: "richtext" } };
+    const pf = W.proposePairing(fromF, toF);
+    assert.equal(pf.pairs.faqItems, "items");
+    const outF = W.remapInstance({ heading: "FAQ", faqItems: [{ title: "Visits", faqGroup: [{ title: "Walk-ins?", content: "Yes." }] }, { title: "Billing", faqGroup: [{ title: "Insurers?", content: "Directly." }] }] }, pf.pairs, fromF, toF, { heading: "", items: [] });
+    assert.deepEqual(outF, { heading: "FAQ", items: [{ q: "Walk-ins?", a: "Yes." }, { q: "Insurers?", a: "Directly." }] });
     // richtext into a plain string loses its marks
     assert.equal(W.convertValue("## Hi\n\nWe **care** [here](/x).", "richtext", "string"), "Hi We care here.");
     const reg = 'import { hero } from "./Hero";\nimport { heroWp } from "./hero-wp";\n\nexport const blocks = {\n  hero,\n  "hero-wp": heroWp,\n};\n';
