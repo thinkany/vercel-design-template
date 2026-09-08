@@ -1930,7 +1930,10 @@ ipcMain.handle("redirects:import", async () => {
 // content/ until the transform runs). The deterministic half lives in wp-import.cjs;
 // the inventory-to-brief and mapping proposals are the /migrate-wordpress skill.
 const wpImport = require("./wp-import.cjs");
-const WP_PLUGIN_FILE = path.join(__dirname, "wp-plugin", "thinkany-export.php");
+// The plugin ships as a folder (wp-content/plugins/thinkany-design-export/), the way
+// WordPress lays plugins out; Save the plugin copies the folder and its file.
+const WP_PLUGIN_DIR = path.join(__dirname, "wp-plugin", "thinkany-design-export");
+const WP_PLUGIN_FOLDER = "thinkany-design-export";
 function wpDir(dir) { return path.join(dir, ".thinkany", "wp-import"); }
 function wpFile(dir, name) { return path.join(wpDir(dir), name); }
 function wpReadPayload(dir) { return readJsonFile(wpFile(dir, "payload.json")); }
@@ -1984,10 +1987,15 @@ function wpStatus() {
 }
 ipcMain.handle("wp:status", () => wpStatus());
 ipcMain.handle("wp:savePlugin", async () => {
-  const res = await dialog.showSaveDialog(mainWindow, { title: "Save the thinkany Export plugin", defaultPath: path.join(app.getPath("downloads"), "thinkany-export.php"), filters: [{ name: "PHP", extensions: ["php"] }] });
-  if (res.canceled || !res.filePath) return { ok: false, canceled: true };
+  const res = await dialog.showOpenDialog(mainWindow, { title: "Where to save the thinkany design Export plugin folder", defaultPath: app.getPath("downloads"), properties: ["openDirectory", "createDirectory"], buttonLabel: "Save here" });
+  if (res.canceled || !res.filePaths[0]) return { ok: false, canceled: true };
+  const dest = path.join(res.filePaths[0], WP_PLUGIN_FOLDER);
   // read + write, not copyFile: the source sits inside app.asar when packaged.
-  try { fs.writeFileSync(res.filePath, fs.readFileSync(WP_PLUGIN_FILE)); return { ok: true, path: res.filePath }; } catch (e) { return { ok: false, error: e.message }; }
+  try {
+    fs.mkdirSync(dest, { recursive: true });
+    for (const f of fs.readdirSync(WP_PLUGIN_DIR)) fs.writeFileSync(path.join(dest, f), fs.readFileSync(path.join(WP_PLUGIN_DIR, f)));
+    return { ok: true, path: dest };
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle("wp:fetch", async (_e, { url, token } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
