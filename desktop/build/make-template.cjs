@@ -18,10 +18,14 @@ const { TEMPLATE_EXCLUDE } = require("../template-exclude.cjs");
 
 const appRoot = path.resolve(__dirname, "..", ".."); // the git worktree root
 const outDir = path.join(appRoot, "desktop", "template");
-// Which commit to snapshot. Production is always `main`; TEMPLATE_REF lets a dev
-// build the snapshot from a feature branch (e.g. TEMPLATE_REF=feature/cms) so
-// `npm run desktop` scaffolds + refresh-on-open exercise that branch's scaffold.
-const ref = process.env.TEMPLATE_REF || "main";
+// Which commit to snapshot: the branch checked out in this worktree (production
+// builds run from `main`, a feature-branch build gets its own scaffold), or
+// TEMPLATE_REF to name one. Only COMMITTED work is in a snapshot: commit first.
+function currentBranch() {
+  try { const b = execSync("git rev-parse --abbrev-ref HEAD", { cwd: appRoot, encoding: "utf8" }).trim(); return b && b !== "HEAD" ? b : "main"; } catch { return "main"; }
+}
+const ref = process.env.TEMPLATE_REF || currentBranch();
+console.log(`[make-template] snapshot from ${ref}${process.env.TEMPLATE_REF ? " (TEMPLATE_REF)" : ""}`);
 
 function run() {
   // Fresh each build — never ship a stale snapshot.

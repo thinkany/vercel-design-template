@@ -22,8 +22,18 @@ the short contract.
 ## Commands
 - `npm run desktop` — run the app unpackaged (dev).
 - `node desktop/build/make-template.cjs` — regenerate the bundled scaffold snapshot from
-  committed `main` (the **local update, no DMG**). Run after committing scaffold changes.
+  the **checked-out branch's committed tree** (the **local update, no DMG**). Run after
+  committing scaffold changes. `TEMPLATE_REF=<ref>` names another ref.
 - `source notarize.env.local && npm run dist` — build + notarize the release DMGs.
+
+## Building from a feature branch
+1. **Commit everything first.** The scaffold snapshot (`predist` → make-template) archives the
+   checked-out branch's committed tree; uncommitted scaffold changes never reach the DMG.
+2. **Sync the licensed skills to derive.** The packaged app has no local `desktop/skills`
+   fallback (that folder is excluded from the DMG); it only knows what derive serves. Run
+   `node desktop/build/sync-skills.cjs`, then commit + deploy the derive repo, or the DMG's
+   slash commands fall back to their stubs.
+3. Then `source notarize.env.local && npm run dist` as usual. `predist` bumps the patch version.
 
 ## Keeping the snapshot clean (when touching the scaffold or app boundary)
 `make-template.cjs` + `desktop/template-exclude.cjs` strip app-internal files (`desktop/`,

@@ -878,7 +878,7 @@ function linkNodeModules(projectDir) {
 // Scaffold a pristine project into targetDir, then link node_modules.
 //
 // Two sources, same result (identical file-for-file):
-//   • Dev (unpackaged): export the clean `main` branch with `git archive main`
+//   • Dev (unpackaged): export the checked-out branch's committed tree with `git archive`
 //     — the worktree has the git repo, no snapshot needed.
 //   • Packaged (.app): a bundled template snapshot at desktop/template/ (built
 //     by build/make-template.cjs before electron-builder) — a packaged app has
@@ -894,7 +894,9 @@ function scaffoldProject(targetDir) {
     const excludes = TEMPLATE_EXCLUDE
       .map((p) => `--exclude="${p}" --exclude="${p}/*"`)
       .join(" ");
-    execSync(`git -C "${appRoot}" archive main | tar -x ${excludes} -C "${targetDir}"`, { stdio: "pipe" });
+    // The branch checked out in the worktree (a feature branch scaffolds its own scaffold), else main.
+    let ref = "main"; try { const b = execSync(`git -C "${appRoot}" rev-parse --abbrev-ref HEAD`, { encoding: "utf8" }).trim(); if (b && b !== "HEAD") ref = b; } catch {}
+    execSync(`git -C "${appRoot}" archive ${ref} | tar -x ${excludes} -C "${targetDir}"`, { stdio: "pipe" });
     // The archived root package.json + CLAUDE.md are the ELECTRON app's; swap in the clean
     // scaffold ones. (The bundled-snapshot branch above already carries the swapped copies
     // from make-template.)
