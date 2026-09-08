@@ -91,7 +91,7 @@ t("skeleton has every slot", () => {
   assert.equal(sk.pages.find((p) => p.wp === 13).page, "team");
   assert.deepEqual(Object.keys(sk.blocks).sort(), ["acf/faq", "acf/features", "acf/form", "acf/hero", "acf/testimonial"]);
   assert.equal(sk.forms.import, true);
-  assert.deepEqual(sk.forms._found, [{ id: "1", plugin: "gravityforms", title: "Contact", fields: 8 }]);
+  assert.deepEqual(sk.forms._found, [{ id: "1", plugin: "gravityforms", title: "Contact", fields: 9 }]);
   assert.deepEqual(sk.blocks["acf/hero"]._wpFields.sort(), ["button", "extra_note", "heading", "hero_copy", "image", "subheading"]);
   assert.deepEqual(sk.blocks["acf/hero"]._layoutFields.sort(), ["deactivate_block", "hero_height", "hide_on_mobile", "padding", "section_id"]);
   assert.equal(sk.blocks["acf/hero"].skipWhen, "deactivate_block");
@@ -235,9 +235,9 @@ t("mapping validates, and catches a bad id", () => {
     // forms: the Gravity form lands in the Forms tab with the site's field types; the block binds to it by its new id
     const contact = JSON.parse(fs.readFileSync(path.join(dir, "content", "forms", "contact.json"), "utf8"));
     assert.equal(contact.name, "Contact");
-    assert.deepEqual(contact.fields.map((f) => [f.id, f.type, f.required]), [["name", "text", true], ["email", "email", true], ["phone", "phone", false], ["i-am", "select", false], ["consent", "checkbox", true], ["message", "textarea", false]]);
-    assert.deepEqual(contact.fields[3].options, ["A patient", "A referrer"]);
-    assert.equal(contact.fields[4].label, "You may contact me");
+    assert.deepEqual(contact.fields.map((f) => [f.id, f.type, f.required]), [["first-name", "text", true], ["last-name", "text", true], ["email", "email", true], ["phone", "phone", false], ["street-address", "text", false], ["address-line-2", "text", false], ["city", "text", false], ["state", "text", false], ["zip-code", "text", false], ["i-am", "select", false], ["consent", "checkbox", true], ["message", "textarea", false]], "compound name and address fields expand to their visible parts");
+    assert.deepEqual(contact.fields[9].options, ["A patient", "A referrer"]);
+    assert.equal(contact.fields[10].label, "You may contact me");
     assert.equal(contact.replyToField, "email");
     assert.equal(rep.forms.length, 1);
     assert.deepEqual(rep.forms[0].skipped, [{ label: "X-rays", type: "fileupload" }], "hidden fields are dropped silently, uploads are named");

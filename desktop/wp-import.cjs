@@ -318,12 +318,35 @@ function mappingSkeleton(p, blocks = []) {
 // ---- forms (Gravity Forms, WPForms) → content/forms/<id>.json --------------------
 // The site's forms are six field types. Anything else is skipped and named.
 const FORM_TYPE = { text: "text", email: "email", phone: "phone", textarea: "textarea", select: "select", radio: "select", multiselect: "select", checkbox: "checkbox", consent: "checkbox", number: "text", website: "text", url: "text", name: "text", date: "text", time: "text", "gdpr-checkbox": "checkbox" };
-const FORM_SKIP = new Set(["hidden", "html", "captcha", "section", "page", "fileupload", "file-upload", "list", "post_title", "post_content", "post_excerpt", "post_tags", "post_category", "post_image", "post_custom_field", "product", "quantity", "total", "shipping", "creditcard", "payment-single", "payment-multiple", "payment-total", "divider", "pagebreak", "password", "signature", "address"]);
+const FORM_SKIP = new Set(["hidden", "html", "captcha", "section", "page", "fileupload", "file-upload", "list", "post_title", "post_content", "post_excerpt", "post_tags", "post_category", "post_image", "post_custom_field", "product", "quantity", "total", "shipping", "creditcard", "payment-single", "payment-multiple", "payment-total", "divider", "pagebreak", "password", "signature"]);
 const FORM_RESERVED = new Set(["form", "website", "_t", "_ab", "submit", "token"]);
+// A compound field (name, address) becomes one field per visible part. Gravity Forms
+// names the parts in `inputs` (with the ones the form hides); WPForms names a format.
+const NAME_LABEL = { prefix: "Prefix", first: "First name", middle: "Middle name", last: "Last name", suffix: "Suffix" };
+const ADDRESS_LABEL = { street: "Street address", street2: "Address line 2", city: "City", state: "State", zip: "ZIP code", country: "Country" };
+function expandCompound(x) {
+  const t = String(x.type || "").toLowerCase();
+  if (t !== "name" && t !== "address") return null;
+  const part = (label) => {
+    const l = String(label || "").toLowerCase();
+    if (t === "name") return /prefix/.test(l) ? "prefix" : /first/.test(l) ? "first" : /middle/.test(l) ? "middle" : /last/.test(l) ? "last" : /suffix/.test(l) ? "suffix" : null;
+    return /line 2|address 2|street 2/.test(l) ? "street2" : /street|address/.test(l) ? "street" : /city|town/.test(l) ? "city" : /state|province|region/.test(l) ? "state" : /zip|postal/.test(l) ? "zip" : /country/.test(l) ? "country" : null;
+  };
+  const labels = t === "name" ? NAME_LABEL : ADDRESS_LABEL;
+  let parts;
+  if (Array.isArray(x.inputs) && x.inputs.length) parts = x.inputs.filter((i) => !i.hidden).map((i) => part(i.label)).filter(Boolean);
+  else if (t === "name") parts = x.format === "simple" ? null : x.format === "first-middle-last" ? ["first", "middle", "last"] : ["first", "last"];
+  else parts = x.scheme === "international" ? ["street", "street2", "city", "state", "zip", "country"] : ["street", "street2", "city", "state", "zip"];
+  if (!parts || !parts.length) return null; // a simple name: one text field, as before
+  const optional = new Set(["prefix", "middle", "suffix", "street2"]);
+  return parts.map((p) => ({ type: p === "country" ? "text" : "text", label: labels[p], required: !!x.required && !optional.has(p), choices: [] }));
+}
 function convertForm(f, slugifyFn) {
   const id = slugifyFn(f.title || `form-${f.id}`) || `form-${f.id}`;
   const fields = []; const skipped = []; const seen = new Set();
-  for (const x of f.fields || []) {
+  const flat = [];
+  for (const x of f.fields || []) { const parts = expandCompound(x); if (parts) flat.push(...parts); else flat.push(x); }
+  for (const x of flat) {
     const t = String(x.type || "").toLowerCase();
     const label = plainText(x.label || "") || t;
     if (FORM_SKIP.has(t) || !FORM_TYPE[t]) { if (!["hidden", "html", "captcha", "section", "page", "divider", "pagebreak"].includes(t)) skipped.push({ label, type: t }); continue; }

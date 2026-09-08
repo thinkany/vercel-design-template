@@ -1012,7 +1012,34 @@
           "type": "name",
           "label": "Name",
           "required": true,
-          "choices": []
+          "choices": [],
+          "inputs": [
+            {
+              "id": "1.2",
+              "label": "Prefix",
+              "hidden": true
+            },
+            {
+              "id": "1.3",
+              "label": "First",
+              "hidden": false
+            },
+            {
+              "id": "1.4",
+              "label": "Middle",
+              "hidden": true
+            },
+            {
+              "id": "1.6",
+              "label": "Last",
+              "hidden": false
+            },
+            {
+              "id": "1.8",
+              "label": "Suffix",
+              "hidden": true
+            }
+          ]
         },
         {
           "id": "2",
@@ -1027,6 +1054,46 @@
           "label": "Phone",
           "required": false,
           "choices": []
+        },
+        {
+          "id": "9",
+          "type": "address",
+          "label": "Address",
+          "required": false,
+          "choices": [],
+          "scheme": "us",
+          "inputs": [
+            {
+              "id": "9.1",
+              "label": "Street Address",
+              "hidden": false
+            },
+            {
+              "id": "9.2",
+              "label": "Address Line 2",
+              "hidden": false
+            },
+            {
+              "id": "9.3",
+              "label": "City",
+              "hidden": false
+            },
+            {
+              "id": "9.4",
+              "label": "State / Province",
+              "hidden": false
+            },
+            {
+              "id": "9.5",
+              "label": "ZIP / Postal Code",
+              "hidden": false
+            },
+            {
+              "id": "9.6",
+              "label": "Country",
+              "hidden": true
+            }
+          ]
         },
         {
           "id": "5",

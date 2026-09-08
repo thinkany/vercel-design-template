@@ -3,7 +3,7 @@
  * Plugin Name: thinkany design Export
  * Plugin URI:  https://thinkany.design
  * Description: Read-only export of this site's structure and content (ACF field groups, blocks, pages, posts, custom types, menus, media) as one JSON payload, for a redesign in thinkany design. Writes nothing.
- * Version:     0.1.2
+ * Version:     0.1.3
  * Author:      thinkany
  * License:     Proprietary
  * Requires PHP: 7.4
@@ -25,7 +25,7 @@
 if (!defined('ABSPATH')) exit;
 
 final class Thinkany_Export {
-    const VERSION = '0.1.2';
+    const VERSION = '0.1.3';
     const PAYLOAD_VERSION = 1;
     const OPTION = 'thinkany_export_token';
 
@@ -450,7 +450,16 @@ final class Thinkany_Export {
         if (class_exists('GFAPI')) {
             foreach ((array) GFAPI::get_forms() as $f) {
                 $fields = [];
-                foreach ((array) ($f['fields'] ?? []) as $fl) $fields[] = ['id' => (string) $fl->id, 'type' => $fl->type, 'label' => $fl->label, 'required' => !empty($fl->isRequired), 'choices' => array_map(function ($c) { return $c['text'] ?? ''; }, is_array($fl->choices) ? $fl->choices : [])];
+                foreach ((array) ($f['fields'] ?? []) as $fl) {
+                    $d = ['id' => (string) $fl->id, 'type' => $fl->type, 'label' => $fl->label, 'required' => !empty($fl->isRequired), 'choices' => array_map(function ($c) { return $c['text'] ?? ''; }, is_array($fl->choices) ? $fl->choices : [])];
+                    // Compound fields (name, address, and any other with inputs): the parts, with the ones the form hides.
+                    if (!empty($fl->inputs) && is_array($fl->inputs)) {
+                        $d['inputs'] = array_values(array_map(function ($in) { return ['id' => (string) ($in['id'] ?? ''), 'label' => (string) ($in['label'] ?? ''), 'hidden' => !empty($in['isHidden'])]; }, $fl->inputs));
+                    }
+                    if (!empty($fl->addressType)) $d['scheme'] = $fl->addressType;
+                    if (!empty($fl->nameFormat)) $d['format'] = $fl->nameFormat;
+                    $fields[] = $d;
+                }
                 $out[] = ['plugin' => 'gravityforms', 'id' => (string) $f['id'], 'title' => $f['title'], 'fields' => $fields];
             }
         }
@@ -458,7 +467,12 @@ final class Thinkany_Export {
             foreach ((array) wpforms()->form->get('', ['orderby' => 'ID']) as $p) {
                 $data = json_decode($p->post_content, true);
                 $fields = [];
-                foreach ((array) ($data['fields'] ?? []) as $fl) $fields[] = ['id' => (string) ($fl['id'] ?? ''), 'type' => $fl['type'] ?? '', 'label' => $fl['label'] ?? '', 'required' => !empty($fl['required']), 'choices' => array_values(array_map(function ($c) { return $c['label'] ?? ''; }, (array) ($fl['choices'] ?? [])))];
+                foreach ((array) ($data['fields'] ?? []) as $fl) {
+                    $d = ['id' => (string) ($fl['id'] ?? ''), 'type' => $fl['type'] ?? '', 'label' => $fl['label'] ?? '', 'required' => !empty($fl['required']), 'choices' => array_values(array_map(function ($c) { return $c['label'] ?? ''; }, (array) ($fl['choices'] ?? [])))];
+                    if (!empty($fl['format'])) $d['format'] = $fl['format'];   // name: simple | first-last | first-middle-last
+                    if (!empty($fl['scheme'])) $d['scheme'] = $fl['scheme'];   // address: us | international
+                    $fields[] = $d;
+                }
                 $out[] = ['plugin' => 'wpforms', 'id' => (string) $p->ID, 'title' => $p->post_title, 'fields' => $fields];
             }
         }
