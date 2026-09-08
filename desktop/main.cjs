@@ -1527,7 +1527,7 @@ function readSiteContent(dir) {
       const all = [...readBlockRegistry(dir), ...Object.values(ib.builtins || {})];
       return {
         // `name` is what the CMS shows (the designer's display name when set); originalName is the block's own.
-        blocks: all.map((b) => ({ ...b, originalName: b.name, name: (typeof names[b.key] === "string" && names[b.key].trim()) || b.name, defaults: ib.defaults[b.key] || {}, templates: ib.templates[b.key] || {}, fields: (ib.fields && ib.fields[b.key]) || {}, needsDesign: !!b.needsDesign, wp: b.wp || null })),
+        blocks: all.map((b) => ({ ...b, originalName: b.name, name: (typeof names[b.key] === "string" && names[b.key].trim()) || b.name, defaults: ib.defaults[b.key] || {}, templates: ib.templates[b.key] || {}, fields: (ib.fields && ib.fields[b.key]) || {}, needsDesign: !!b.needsDesign, wp: b.wp || null, labels: (site.blockFieldLabels && site.blockFieldLabels[b.key]) || {} })),
         marks: ib.marks || {}, // the design's icon set, rendered: { key: "<svg…>" }
         megaMenu: !!ib.megaMenu, // the header renders nav columns → the Navigation tab offers them
       };
@@ -2152,6 +2152,21 @@ ipcMain.handle("wp:editBlock", (_e, { key, renames, removes } = {}) => {
     appLog.write(`[wp] edit block ${key}: ${JSON.stringify(applied)} in ${touched} content file(s)`);
     return { ok: true, changed: r.changed, missing: r.missing, touched };
   } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// Field display labels (Blocks → Edit fields): what the page editor shows for a prop.
+// Recognition only; the prop name in the schema and in content never changes.
+ipcMain.handle("site:saveFieldLabels", (_e, { key, labels } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (typeof key !== "string" || !key) return { ok: false, error: "Which block?" };
+  const p = path.join(siteContentDir(currentProject), "site.json"); const cur = readJsonFile(p) || {};
+  const all = cur.blockFieldLabels && typeof cur.blockFieldLabels === "object" ? { ...cur.blockFieldLabels } : {};
+  const clean = {};
+  for (const [prop, label] of Object.entries(labels && typeof labels === "object" ? labels : {})) { const l = String(label || "").trim(); if (l && /^[A-Za-z_$][\w$.]*$/.test(prop)) clean[prop] = l.slice(0, 60); }
+  if (Object.keys(clean).length) all[key] = clean; else delete all[key];
+  const next = { ...cur, blockFieldLabels: all }; if (!Object.keys(all).length) delete next.blockFieldLabels;
+  try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, labels: clean }; } catch (e) { return { ok: false, error: e.message }; }
 });
 
 // Block display names (the Blocks tab): recognition in the CMS only.

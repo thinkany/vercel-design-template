@@ -19,8 +19,7 @@ app against tax.local. **P1 run on tax.local 2026-09-08**: 12 blocks, 4 draft pa
 entries, form kept, nothing overwritten; fixes from the run landed (held redirects,
 numeric slugs, booleans, stale-file cleanup, schema validation in the report).
 **P2 partly built 2026-09-08**: the Blocks tab's Active and Needs Design sections
-(collapsible, remembered per project), Edit fields (rename, remove; block file and
-every content instance in one step, `wp:editBlock`). Update design and Use an
+(collapsible, remembered per project), Edit fields: a display label per field (stored with the site like block display names, shown in the page editor; the prop name never changes) and remove (block file and every content instance in one step, `wp:editBlock`). Rob 2026-09-08: renaming is the label, never the programmatic name. Update design and Use an
 existing design are placeholders until P3. P4 not built.
 
 ## The idea in one paragraph

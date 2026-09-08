@@ -428,10 +428,8 @@ window.COPY = {
     blockUseExistingSoon: "Arrives with the next update.",
     blockEditor: {
       title: (name) => `Fields of ${name}`,
-      intro: "Rename a field, or remove one you won't need. Content on every page using this block follows in the same step.",
-      shared: "Shared with other imported blocks; edit it in the shared fragment file.",
+      intro: "Name each field the way you want it to read in the page editor, or remove one you won't need. A removed field leaves every page using this block in the same step.",
       remove: "Remove field",
-      undo: "Keep",
       save: "Apply",
       cancel: "Cancel",
       applied: (n) => `Applied${n ? ` to ${n === 1 ? "1 content file" : `${n} content files`}` : ""}.`,

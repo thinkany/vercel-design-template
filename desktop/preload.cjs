@@ -185,6 +185,7 @@ contextBridge.exposeInMainWorld("desktop", {
   wpForget: () => ipcRenderer.invoke("wp:forget"),
   wpEditBlock: (key, renames, removes) => ipcRenderer.invoke("wp:editBlock", { key, renames, removes }),
   saveBlockNames: (names) => ipcRenderer.invoke("site:saveBlockNames", { names }),
+  saveFieldLabels: (key, labels) => ipcRenderer.invoke("site:saveFieldLabels", { key, labels }),
   saveSiteLogos: (logos) => ipcRenderer.invoke("site:saveLogos", { logos }),
   getLlmsDefault: () => ipcRenderer.invoke("site:llmsDefault"),
   setCmsSettings: (patch) => ipcRenderer.invoke("cms:setSettings", patch),

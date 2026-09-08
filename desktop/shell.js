@@ -3599,7 +3599,7 @@ function sitePropsEditor(value, onChange, depth = 0, ctx = {}, at = "") {
     const v = value[key];
     const here = at ? `${at}.${key}` : key; // dotted path, list indices skipped
     const meta = fields[here];
-    const label = key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
+    const label = (ctx.labels && ctx.labels[here]) || key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
     if (typeof v === "boolean") {
       const row = siteEl("label", "toggle-row");
       const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = v;
@@ -3815,7 +3815,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
         b.props = { ...JSON.parse(JSON.stringify(dflt)), ...(b.props || {}) };
         // Fields left, the block as designed right, live (docs/block-editor-preview-spec.md).
         const edit = siteEl("div", "site-block-edit");
-        const ctx = { templates: (def && def.templates) || {}, fields: (def && def.fields) || {} };
+        const ctx = { templates: (def && def.templates) || {}, fields: (def && def.fields) || {}, labels: (def && def.labels) || {} };
         const preview = siteBlockPreview(b.type, () => b.props, {
           onExpand: () => openBlockEditModal({
             title: def ? def.name : b.type, type: b.type, props: b.props, ctx,
@@ -4181,7 +4181,7 @@ function siteBlocksEditor(list, blocks, onChange, stateKey) {
       if (siteRailState.expanded[ek]) {
         const dflt = (def && def.defaults) || {};
         b.props = { ...JSON.parse(JSON.stringify(dflt)), ...(b.props || {}) };
-        host.appendChild(sitePropsEditor(b.props, onChange, 0, { templates: (def && def.templates) || {}, fields: (def && def.fields) || {} }));
+        host.appendChild(sitePropsEditor(b.props, onChange, 0, { templates: (def && def.templates) || {}, fields: (def && def.fields) || {}, labels: (def && def.labels) || {} }));
       }
     });
     if (blocks.length) {
@@ -5612,15 +5612,15 @@ function openBlockFieldsModal(b, onDone) {
   body.appendChild(siteEl("div", "sess-desc", E.intro));
   const note = siteEl("div", "muted"); note.style.cssText = "font-size:12px;margin:6px 0 10px;";
   const top = Object.keys(b.fields || {}).filter((k) => !k.includes("."));
-  const state = { renames: {}, removes: new Set() };
+  const derived = (k) => k.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
+  const labels = { ...(b.labels || {}) };
+  const removes = new Set();
   top.forEach((k) => {
-    const row = siteEl("div", "site-kv"); row.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:8px;";
-    const input = document.createElement("input"); input.className = "field"; input.value = k; input.style.cssText = "margin:0;flex:1;";
-    const kind = siteEl("span", "site-tag", (b.fields[k] && b.fields[k].kind) || "");
-    const rm = siteEl("button", "panelbtn", E.remove); rm.style.cssText = "margin:0;width:auto;";
-    input.addEventListener("input", () => { const v = input.value.trim(); if (v && v !== k) state.renames[k] = v; else delete state.renames[k]; });
-    rm.addEventListener("click", () => { if (state.removes.has(k)) { state.removes.delete(k); rm.textContent = E.remove; input.disabled = false; row.style.opacity = ""; } else { state.removes.add(k); rm.textContent = E.undo; input.disabled = true; row.style.opacity = "0.5"; } });
-    row.append(input, kind, rm); body.appendChild(row);
+    const row = siteEl("div"); row.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:8px;";
+    const input = document.createElement("input"); input.className = "field"; input.value = labels[k] || derived(k); input.style.cssText = "margin:0;width:50%;flex:none;";
+    input.addEventListener("input", () => { const v = input.value.trim(); if (v && v !== derived(k)) labels[k] = v; else delete labels[k]; });
+    const bin = siteTrashBtn(() => { if (removes.has(k)) { removes.delete(k); input.disabled = false; row.style.opacity = ""; } else { removes.add(k); input.disabled = true; row.style.opacity = "0.45"; } }, E.remove);
+    row.append(input, bin); body.appendChild(row);
   });
   body.appendChild(note);
   card.append(head, body); ov.appendChild(card);
@@ -5629,13 +5629,16 @@ function openBlockFieldsModal(b, onDone) {
   cancel.addEventListener("click", close);
   ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
   apply.addEventListener("click", async () => {
-    const renames = state.renames; const removes = Array.from(state.removes);
-    if (!Object.keys(renames).length && !removes.length) { note.textContent = E.nothing; return; }
     apply.disabled = true;
-    const r = await window.desktop.wpEditBlock(b.key, renames, removes);
+    const rm = Array.from(removes);
+    const keep = Object.fromEntries(Object.entries(labels).filter(([k]) => !removes.has(k)));
+    const before = JSON.stringify(b.labels || {});
+    let error = null;
+    if (JSON.stringify(keep) !== before) { const r = await window.desktop.saveFieldLabels(b.key, keep); if (!r || !r.ok) error = (r && r.error) || "Couldn't save the labels."; }
+    if (!error && rm.length) { const r = await window.desktop.wpEditBlock(b.key, {}, rm); if (!r || !r.ok) error = (r && r.error) || "Couldn't remove the fields."; }
     apply.disabled = false;
-    if (!r || !r.ok) { note.textContent = (r && r.error) || "Couldn't apply."; note.style.color = "#e5484d"; return; }
-    close(); if (onDone) onDone(r);
+    if (error) { note.textContent = error; note.style.color = "#e5484d"; return; }
+    close(); if (onDone) onDone();
   });
   document.addEventListener("keydown", onKey, true);
   document.body.appendChild(ov);
