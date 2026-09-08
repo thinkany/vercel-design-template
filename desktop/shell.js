@@ -5619,7 +5619,14 @@ function openBlockFieldsModal(b, onDone) {
     const row = siteEl("div"); row.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:8px;";
     const input = document.createElement("input"); input.className = "field"; input.value = labels[k] || derived(k); input.style.cssText = "margin:0;width:50%;flex:none;";
     input.addEventListener("input", () => { const v = input.value.trim(); if (v && v !== derived(k)) labels[k] = v; else delete labels[k]; });
-    const bin = siteTrashBtn(() => { if (removes.has(k)) { removes.delete(k); input.disabled = false; row.style.opacity = ""; } else { removes.add(k); input.disabled = true; row.style.opacity = "0.45"; } }, E.remove);
+    // The bin marks the field for removal (the box greys out); it becomes an undo icon
+    // of the same size, and a second click brings the field back.
+    const binIcon = siteTrashBtn(() => {}, E.remove).innerHTML;
+    const undoIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>';
+    const bin = siteTrashBtn(() => {
+      if (removes.has(k)) { removes.delete(k); input.disabled = false; row.style.opacity = ""; bin.innerHTML = binIcon; bin.title = E.remove; bin.setAttribute("aria-label", E.remove); }
+      else { removes.add(k); input.disabled = true; row.style.opacity = "0.45"; bin.innerHTML = undoIcon; bin.title = E.undo; bin.setAttribute("aria-label", E.undo); }
+    }, E.remove);
     row.append(input, bin); body.appendChild(row);
   });
   body.appendChild(note);

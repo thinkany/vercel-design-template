@@ -430,6 +430,7 @@ window.COPY = {
       title: (name) => `Fields of ${name}`,
       intro: "Name each field the way you want it to read in the page editor, or remove one you won't need. A removed field leaves every page using this block in the same step.",
       remove: "Remove field",
+      undo: "Keep this field",
       save: "Apply",
       cancel: "Cancel",
       applied: (n) => `Applied${n ? ` to ${n === 1 ? "1 content file" : `${n} content files`}` : ""}.`,
