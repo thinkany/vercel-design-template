@@ -2081,6 +2081,11 @@ ipcMain.handle("wp:transform", async () => {
     for (const b of existing) { if (!/-wp(-\d+)?$/.test(b.key)) continue; const src = readTextSafe(path.join(blocksDir, `${b.key}.tsx`)); if (src && !/needsDesign:\s*true/.test(src)) designed.add(b.key); }
     const plan = wpImport.losslessPlan(payload, { existingKeys: existing.map((b) => b.key), registrySrc, designed });
     // 2. Block files, fragments, the registry. A designed block's file is never touched.
+    // The placeholder the generated blocks render through is CORE: a project scaffolded
+    // before it existed gets it from the app's own copy (the framework refresh carries it
+    // from then on).
+    const placeholderRel = path.join("site", "src", "lib", "placeholder-block.tsx");
+    if (!fs.existsSync(path.join(dir, placeholderRel))) { try { fs.mkdirSync(path.dirname(path.join(dir, placeholderRel)), { recursive: true }); fs.writeFileSync(path.join(dir, placeholderRel), fs.readFileSync(path.join(appRoot, placeholderRel))); } catch (e) { return { ok: false, error: `Couldn't add the placeholder block component to the project (${e.message}).` }; } }
     for (const [rel, src] of Object.entries(plan.files)) { const abs = path.join(dir, rel); fs.mkdirSync(path.dirname(abs), { recursive: true }); fs.writeFileSync(abs, src); }
     // 3. The mapping, generated: the audit trail.
     fs.writeFileSync(wpFile(dir, "mapping.json"), JSON.stringify(plan.mapping, null, 2) + "\n");
