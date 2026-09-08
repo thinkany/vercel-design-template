@@ -3950,7 +3950,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
   if (page.id === "home") {
     // Advanced: overwrite the home page's blocks from another page (after an import, or any time).
     const A = COPY.site.homeAdvanced;
-    const adv = siteFoldInline(A.heading);
+    const adv = siteFold(A.heading, "page:home:advanced", { defaultOpen: false }); // collapsed, after SEO
     adv.body.appendChild(siteEl("div", "k", A.overwriteLabel));
     adv.body.appendChild(siteEl("div", "sess-desc", A.overwriteHint));
     const others = (renderSitePage.pages || []).filter((x) => x.id !== "home");
