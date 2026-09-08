@@ -649,7 +649,36 @@
             "tone": "light",
             "padding": "large",
             "section_id": "top",
-            "deactivate_block": false
+            "deactivate_block": false,
+            "hero_copy": "<h1>Services &amp; care</h1><p>Everything from checkups to implants.</p><p>Same-day slots.</p>"
+          }
+        },
+        {
+          "name": "acf/faq",
+          "blockId": "block_services_faq",
+          "raw": {},
+          "fields": {
+            "faq_title": "Questions",
+            "faq_groups": [
+              {
+                "group": "Visits",
+                "questions": [
+                  {
+                    "question": "Do you take walk-ins?",
+                    "answer": "<p>Yes, most days.</p>"
+                  }
+                ]
+              },
+              {
+                "group": "Billing",
+                "questions": [
+                  {
+                    "question": "Do you bill insurers?",
+                    "answer": "<p>Directly.</p>"
+                  }
+                ]
+              }
+            ]
           }
         }
       ]

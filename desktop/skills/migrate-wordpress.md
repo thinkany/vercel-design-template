@@ -92,6 +92,14 @@ the transform doesn't read.** The transform reads exactly these:
       "ctas[0]": { "from": "button", "each": { "label": "title", "href": "url", "style": "=primary" } },
       "tone": { "from": "tone", "map": { "Light": "light", "Dark": "dark" } }   // old choice labels → the prop's options
     } },
+    "acf/page-hero": { "block": "hero", "fields": {
+      "heading": { "from": "hero_copy", "pick": "heading" },   // one wysiwyg holding headline + intro: the first heading…
+      "body": { "from": "hero_copy", "pick": "rest" }          // …and everything after it
+    } },
+    "acf/faq": { "block": "faq", "fields": {
+      "heading": "faq_title",
+      "items": { "from": "faq_groups", "flatMap": "questions", "each": { "q": "question", "a": "answer" } }   // grouped questions, flattened
+    } },
     "acf/features": { "block": "features", "fields": {
       "heading": "title",
       "items": { "from": "items", "each": { "title": "name", "text": "text", "icon": "icon" } }   // a repeater into a list of objects
@@ -117,7 +125,13 @@ Rules for a good proposal:
 - **Blocks.** Pair each old ACF block with the site block whose fields fit, by
   meaning first (a hero is a hero), then by field shape (heading, body, image, a
   link → hero or feature; a repeater of name/text/icon → features or cards; quote +
-  who → testimonial). `availableBlocks` in the file lists this site's blocks and
+  who → testimonial). **A poor fit is worse than no fit.** An image-beside-copy
+  story, a comparison, a logo strip or a CTA banner forced into a hero stacks
+  heroes on the page and hides content in the wrong place; leave it unmapped, say
+  so, and name the section the site is missing (each is a one-line `/design-block`
+  ask). When the designer adds those blocks and asks again, revisit every block
+  you left unmapped or mapped as a compromise: the mapping file is yours to
+  update, not only to fill. `availableBlocks` in the file lists this site's blocks and
   their prop paths; use those paths exactly. Prop kinds come from
   `.thinkany/blocks.json` (`fields[block][path].kind`): string, richtext, image,
   link, list, enum with its options, boolean, number.
@@ -128,6 +142,10 @@ Rules for a good proposal:
   has a deactivate toggle the skeleton already sets `skipWhen` to it, so instances
   switched off on the old site are skipped; a page block marked `deactivated` in
   the definitions is one of those.
+- **One field, two props.** An old hero often keeps headline and intro in one
+  wysiwyg field. Split it with `pick`: `heading` takes the first heading's text,
+  `rest` takes what follows. Grouped repeaters (FAQ sections each holding
+  questions) flatten into one list with `flatMap: "<sub repeater>"` before `each`.
 - **Fields.** Map only fields whose kinds agree or convert cleanly: text → string,
   wysiwyg → richtext (or string, if the prop is plain text: the tags are stripped),
   image → image, link/url → link, repeater → list with `each`, group → object with

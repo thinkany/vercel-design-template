@@ -522,6 +522,15 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
       let s = spec;
       if (typeof spec === "string") { if (spec.startsWith("=")) { value = spec.slice(1); s = null; } else value = getPath(src, spec); }
       else if (spec && typeof spec === "object") value = spec.from ? getPath(src, spec.from) : spec.value !== undefined ? spec.value : src;
+      // pick: one wysiwyg field that holds a headline and its intro, split in two.
+      // "heading" = the first heading's text; "rest" = everything after it.
+      if (s && s.pick && typeof value === "string") {
+        const m = value.match(/<h[1-6]\b[^>]*>([\s\S]*?)<\/h[1-6]>/i);
+        if (s.pick === "heading") value = m ? plainText(m[1]) : (s.fallback === "first" ? plainText(value.split(/<\/p>/i)[0]) : undefined);
+        else if (s.pick === "rest") value = m ? value.slice(0, m.index) + value.slice(m.index + m[0].length) : value;
+      }
+      // flatMap: a repeater of groups (FAQ sections each holding questions) flattened to one list.
+      if (s && s.flatMap && Array.isArray(value)) value = value.flatMap((g) => (g && Array.isArray(g[s.flatMap]) ? g[s.flatMap] : []));
       const indexed = /\[\d+\]$/.test(target);
       const kind = (s && s.as) || (indexed && s && s.each ? "object" : null) || (indexed && meta.kind === "list" ? null : meta.kind) || (meta.options ? "enum" : undefined) || (typeof value === "object" && value !== null ? (value.image ? "image" : Array.isArray(value) ? "list" : value.url !== undefined ? "link" : "object") : "string");
       const ctx = { where, lost, targetFields, prefix: stripIndex(fullPath) };

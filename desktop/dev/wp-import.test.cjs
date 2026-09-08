@@ -26,7 +26,7 @@ t("inventory counts", () => {
   assert.equal(inv.counts.classicPages, 3);
   assert.equal(inv.counts.forms, 1);
   assert.ok(inv.pages.find((p) => p.id === 10).home);
-  assert.deepEqual(inv.acfBlocks.find((b) => b.name === "acf/hero").fields.sort(), ["button", "extra_note", "heading", "image", "subheading", "tone"]);
+  assert.deepEqual(inv.acfBlocks.find((b) => b.name === "acf/hero").fields.sort(), ["button", "extra_note", "heading", "hero_copy", "image", "subheading", "tone"]);
   assert.deepEqual(inv.acfBlocks.find((b) => b.name === "acf/hero").layoutFields.sort(), ["deactivate_block", "hide_on_mobile", "padding", "section_id"]);
   assert.equal(inv.acfBlocks.find((b) => b.name === "acf/hero").uses, 3);
 });
@@ -52,6 +52,7 @@ const blocks = [
   { key: "hero", name: "Hero", fields: { eyebrow: { kind: "string" }, heading: { kind: "string" }, body: { kind: "richtext" }, image: { kind: "image" }, "image.src": { kind: "string" }, "image.alt": { kind: "string" }, ctas: { kind: "list" }, "ctas.label": { kind: "string" }, "ctas.href": { kind: "string" }, "ctas.style": { kind: "enum", options: ["primary", "secondary"] }, tone: { kind: "enum", options: ["light", "dark"] } } },
   { key: "features", name: "Features", fields: { heading: { kind: "string" }, items: { kind: "list" }, "items.title": { kind: "string" }, "items.text": { kind: "string" }, "items.icon": { kind: "image" } } },
   { key: "prose", name: "Prose", fields: { body: { kind: "richtext" } } },
+  { key: "faq", name: "FAQ", fields: { heading: { kind: "string" }, items: { kind: "list" }, "items.q": { kind: "string" }, "items.a": { kind: "richtext" } } },
   { key: "table", name: "Table", fields: { rows: { kind: "list" }, "rows.cells": { kind: "list" }, header: { kind: "boolean" }, caption: { kind: "string" } } },
 ];
 
@@ -60,13 +61,13 @@ t("skeleton has every slot", () => {
   assert.equal(sk.version, 1);
   assert.equal(sk.pages[0].page, "home");
   assert.equal(sk.pages.find((p) => p.wp === 13).page, "team");
-  assert.deepEqual(Object.keys(sk.blocks).sort(), ["acf/features", "acf/hero", "acf/testimonial"]);
-  assert.deepEqual(sk.blocks["acf/hero"]._wpFields.sort(), ["button", "extra_note", "heading", "image", "subheading", "tone"]);
+  assert.deepEqual(Object.keys(sk.blocks).sort(), ["acf/faq", "acf/features", "acf/hero", "acf/testimonial"]);
+  assert.deepEqual(sk.blocks["acf/hero"]._wpFields.sort(), ["button", "extra_note", "heading", "hero_copy", "image", "subheading", "tone"]);
   assert.deepEqual(sk.blocks["acf/hero"]._layoutFields.sort(), ["deactivate_block", "hide_on_mobile", "padding", "section_id"]);
   assert.equal(sk.blocks["acf/hero"].skipWhen, "deactivate_block");
   assert.equal(sk.nav, "primary");
   assert.equal(sk.types.team.include, false);
-  assert.equal(sk.availableBlocks.length, 4);
+  assert.equal(sk.availableBlocks.length, 5);
 });
 
 t("html → markdown: prose, lists, links, entities, lost nodes, tables as data", () => {
@@ -78,6 +79,17 @@ t("html → markdown: prose, lists, links, entities, lost nodes, tables as data"
   assert.equal(r.segments[1].header, true);
   assert.match(r.segments[2].md, /^after\n\n> q\n\n```\ncode\n```\n\n---\n\n!\[I\]\(\/i\.jpg\)\n\n\*cap\*$/);
   assert.deepEqual(r.lost.map((l) => l.node), ["shortcode [shortcode]", "iframe"]);
+});
+t("pick splits a wysiwyg field into heading and rest", async () => {
+  const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "wp-pick-"));
+  fs.mkdirSync(path.join(dir2, "content"), { recursive: true });
+  const m = { version: 1, pages: [{ wp: 14, page: "services", include: true }], blocks: { "acf/hero": { block: "hero", fields: { heading: { from: "hero_copy", pick: "heading" }, body: { from: "hero_copy", pick: "rest" } } } }, posts: { import: false }, media: { download: false } };
+  const r = await W.transform(dir2, payload, m, { blocks });
+  assert.ok(r.ok, JSON.stringify(r.errors));
+  const doc = JSON.parse(fs.readFileSync(path.join(dir2, "content", "pages", "services.json"), "utf8"));
+  assert.equal(doc.blocks[0].props.heading, "Services & care");
+  assert.equal(doc.blocks[0].props.body, "Everything from checkups to implants.\n\nSame-day slots.");
+  fs.rmSync(dir2, { recursive: true, force: true });
 });
 t("html → markdown: unclosed paragraphs and nested containers", () => {
   const r = W.htmlToMarkdown('<div class="wrap"><p>a<p>b</div><ol><li>1</li><li>2</li></ol>');
@@ -97,6 +109,7 @@ const mapping = {
   blocks: {
     "acf/hero": { block: "hero", skipWhen: "deactivate_block", fields: { heading: "heading", body: "subheading", image: "image", "ctas[0]": { from: "button", each: { label: "title", href: "url", style: "=primary" } }, tone: "tone" } },
     "acf/features": { block: "features", fields: { heading: "title", items: { from: "items", each: { title: "name", text: "text", icon: "icon" } } } },
+    "acf/faq": { block: "faq", fields: { heading: "faq_title", items: { from: "faq_groups", flatMap: "questions", each: { q: "question", a: "answer" } } } },
   },
   prose: { block: "prose", prop: "body" },
   tables: { block: "table", rows: "rows", header: "header", caption: "caption" },
@@ -157,7 +170,7 @@ t("mapping validates, and catches a bad id", () => {
     assert.ok(homeRep.lost.some((l) => l.node === "core/embed" && l.text === "https://www.youtube.com/watch?v=abc"), "the embed is named in the report");
     assert.ok(!homeRep.lost.some((l) => l.node === "prose"), "nothing prose-like was dropped");
     assert.equal(rep.unmappedBlocks["acf/testimonial"], 1);
-    assert.deepEqual(rep.unmappedFields["acf/hero"], ["extra_note"]);
+    assert.deepEqual(rep.unmappedFields["acf/hero"], ["extra_note", "hero_copy"]);
     // about: parent chain + page-level ACF fields reported
     const about = JSON.parse(fs.readFileSync(path.join(dir, "content", "pages", "about.json"), "utf8"));
     assert.equal(about.slug, "about");
@@ -167,6 +180,11 @@ t("mapping validates, and catches a bad id", () => {
     assert.deepEqual(rep.skipped, [{ where: "about", block: "acf/hero", why: "deactivate_block" }]);
     assert.ok(!rep.unmappedFields["acf/hero"].includes("padding") && !rep.unmappedFields["acf/hero"].includes("section_id"), "layout fields are never reported as unmapped");
     assert.ok(rep.pages.find((p) => p.id === "about").lost.some((l) => l.node === "page-fields" && l.text === "sidebar_note"));
+    // services: pick splits one wysiwyg into heading + rest (the mapping's plain "heading" is overridden per page by a second hero mapping below); flatMap flattens grouped FAQ items
+    const services = JSON.parse(fs.readFileSync(path.join(dir, "content", "pages", "services.json"), "utf8"));
+    assert.equal(services.blocks[1].type, "faq");
+    assert.equal(services.blocks[1].props.heading, "Questions");
+    assert.deepEqual(services.blocks[1].props.items, [{ q: "Do you take walk-ins?", a: "Yes, most days." }, { q: "Do you bill insurers?", a: "Directly." }]);
     const team = JSON.parse(fs.readFileSync(path.join(dir, "content", "pages", "team.json"), "utf8"));
     assert.equal(team.parent, "about");
     assert.equal(team.blocks[0].props.body, "## Meet the team\n\nTwo dentists, three hygienists.");
