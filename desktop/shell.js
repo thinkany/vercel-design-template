@@ -5866,7 +5866,11 @@ function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }
       box.checked = siteSelection.ids.has(it.id);
       if (it.id === "home" && kind === "page") { box.disabled = true; box.style.visibility = "hidden"; }
       box.addEventListener("click", (e) => { e.stopPropagation(); if (box.checked) siteSelection.ids.add(it.id); else siteSelection.ids.delete(it.id); paintCount(); });
-      const text = siteEl("div"); text.style.cssText = "flex:1;min-width:0;"; Array.from(row.childNodes).forEach((n) => text.appendChild(n));
+      // One line: grabber, title, box. The address and status move to the tooltip.
+      const grip = row.querySelector(".site-grip");
+      const slug = row.querySelector(".site-page-slug");
+      if (slug) { row.title = slug.textContent.replace(/\s+·\s+/g, " · "); slug.remove(); }
+      const text = siteEl("div"); text.style.cssText = "flex:1;min-width:0;"; Array.from(row.childNodes).filter((n) => n !== grip).forEach((n) => text.appendChild(n));
       row.append(text, box); row.style.alignItems = "center";
       rows.push({ id: it.id, draft: !!it.draft, row, box });
       row.style.display = visible(it) ? "flex" : "none";
