@@ -473,6 +473,7 @@ window.COPY = {
       done: (title, drafted) => `Home page rewritten from "${title}".${drafted ? " That page is now a draft." : ""}`,
     },
     // Lists: the status filter and select-all publishing (Pages, Posts, Types).
+    filterHeading: "Filter",
     statusFilter: { all: "All", published: "Published", draft: "Drafts" },
     selectAll: "Select all",
     selectedCount: (n) => (n === 1 ? "1 selected" : `${n} selected`),
