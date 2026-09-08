@@ -732,7 +732,7 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
       formIdByWp[String(f.id)] = id;
       const rel = path.join("content", "forms", `${id}.json`);
       const existing = readJson(rel);
-      if (existing && formsCfg.overwrite !== true) { report.forms.push({ id, name: doc.name, fields: doc.fields.length, kept: true, skipped }); continue; }
+      if (existing && formsCfg.overwrite !== true) { if (ours.has(rel)) createdNow.files[rel] = created.files[rel]; report.forms.push({ id, name: doc.name, fields: doc.fields.length, kept: true, skipped }); continue; }
       writeFile(rel, JSON.stringify({ ...doc, updated: new Date().toISOString() }, null, 2) + "\n");
       report.forms.push({ id, name: doc.name, fields: doc.fields.length, skipped });
     }
@@ -984,7 +984,15 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
   report.files = written;
   report.idsChanged = idsChanged;
   report.draft = !!draft;
-  if (createdFile && !dry) { try { fs.mkdirSync(path.dirname(createdFile), { recursive: true }); fs.writeFileSync(createdFile, JSON.stringify({ when: new Date().toISOString(), ...createdNow }, null, 2) + "\n"); } catch {} }
+  // A file this import wrote before and did not write this time (an entry whose id
+  // changed, a page dropped from the payload) is its own to remove.
+  report.removed = [];
+  if (createdFile && !dry) {
+    // Only pages, posts and entries: forms carry recipients the designer set, and site.json / types.json are shared.
+    const removable = (rel) => /^content[\/\\](?!forms[\/\\])[^\/\\]+[\/\\][^\/\\]+\.(json|mdx?)$/.test(rel);
+    for (const rel of ours) { if (createdNow.files[rel] || !removable(rel)) continue; try { fs.unlinkSync(path.join(projectDir, rel)); report.removed.push(rel); } catch {} }
+    try { fs.mkdirSync(path.dirname(createdFile), { recursive: true }); fs.writeFileSync(createdFile, JSON.stringify({ when: new Date().toISOString(), ...createdNow }, null, 2) + "\n"); } catch {}
+  }
   return { ok: true, report };
 }
 
@@ -994,6 +1002,7 @@ function reportMarkdown(rep) {
   if (rep.draft) L.push("- Everything imported is a draft: nothing already in the site was replaced. Publish from the Pages, Posts and Types lists when the blocks are designed.");
   if (rep.idsChanged && rep.idsChanged.length) L.push(`- Ids changed: ${rep.idsChanged.map((x) => `${x.what}: ${x.from} → ${x.to} (${x.why})`).join("; ")}`);
   if (rep.redirectsHeld && rep.redirectsHeld.length) L.push(`- Redirects held (a live page is at the old address; add them when the draft replaces it): ${rep.redirectsHeld.map((x) => `${x.from} → ${x.to}`).join(", ")}`);
+  if (rep.removed && rep.removed.length) L.push(`- Removed from the previous run (no longer produced): ${rep.removed.join(", ")}`);
   if (rep.suspect && rep.suspect.length) L.push(`- ${rep.suspect.length} value${rep.suspect.length === 1 ? "" : "s"} that read as a bare "${rep.suspect[0].value}" (check the source field): ${rep.suspect.map((x) => `${x.where} › ${x.prop}`).join("; ")}`);
   if (rep.invalid && rep.invalid.length) L.push(`- ${rep.invalid.length} block${rep.invalid.length === 1 ? "" : "s"} the preview would reject (fix in the page editor): ${rep.invalid.map((x) => `${x.page} › ${x.type} (${x.issues})`).join("; ")}`);
   L.push(`- ${rep.pages.length} pages written, ${rep.posts.imported} posts (${rep.posts.drafts} drafts), ${Object.values(rep.types).reduce((n, t) => n + t.entries, 0)} entries in ${Object.keys(rep.types).length} types`);

@@ -418,6 +418,13 @@ t("mapping validates, and catches a bad id", () => {
     const sj3 = JSON.parse(fs.readFileSync(path.join(dir4, "content", "site.json"), "utf8"));
     assert.ok(!(sj3.redirects || []).some((r) => r.from === "/about-us"), "the redirect from the live page is gone");
     assert.ok(res3.report.redirectsHeld.some((h) => h.from === "/about-us" && h.to === "(removed)"));
+    // a file from an earlier run that this run no longer produces is removed
+    const stale = path.join(dir4, "content", "team", "stale.json"); fs.writeFileSync(stale, "{}");
+    const cj4 = JSON.parse(fs.readFileSync(createdFile, "utf8")); cj4.files["content/team/stale.json"] = { wp: 999 }; fs.writeFileSync(createdFile, JSON.stringify(cj4));
+    const res4 = await run();
+    assert.ok(res4.ok);
+    assert.ok(!fs.existsSync(stale), "the stale file is gone");
+    assert.deepEqual(res4.report.removed, ["content/team/stale.json"]);
     assert.match(W.reportMarkdown({ ...rep, blocksCreated: r.plan.blocks.map((b) => ({ name: b.name, uses: b.uses, options: b.variants })) }), /blocks created, all needing a design pass/);
     fs.rmSync(dir4, { recursive: true, force: true });
   });
