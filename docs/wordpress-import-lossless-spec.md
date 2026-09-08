@@ -1,9 +1,10 @@
 # WordPress import, lossless (the plan of record)
 
 **Status:** spec'd 2026-09-08 from Rob's sequencing after the first real import
-(tax.local into The Dog Bark v01), with two decisions taken on the way: a
-per-block "Use an existing design" action, and renaming of imported blocks'
-fields. **Supersedes** the mapping-first flow in
+(tax.local into The Dog Bark v01). Decisions taken: a per-block "Use an existing
+design" action in the Blocks tab (never before the import); renaming of imported
+blocks' fields; naming automated by the import with a " - wp" suffix as the
+standard; one Prose block per site. Open questions resolved 2026-09-08. **Supersedes** the mapping-first flow in
 [wordpress-migration-spec.md](wordpress-migration-spec.md) (the plugin, the
 payload, field purposes and carried options all stay; the Propose step goes) and
 [design-after-import-spec.md](design-after-import-spec.md) (folded in as the design
@@ -34,8 +35,8 @@ once the blocks are designed.
      post → a reference),
    - shared fragments for field groups that repeat across the theme,
    - a placeholder component and `needsDesign: true`.
-   Plus a generated **Prose** block (one richtext prop) whenever the site has runs
-   of core paragraphs, and the built-in Table for tables.
+   Plus one generated **Prose - wp** block per site (one richtext prop) whenever the
+   site has runs of core paragraphs, and the built-in Table for tables.
 3. **Content.** Pages, posts and custom-type entries written into `content/`, every
    one a draft, with collision-safe ids, in the old block order, with every field
    mapped one-to-one and options carried into their props. Media fetched for
@@ -49,8 +50,7 @@ once the blocks are designed.
    bulk publish, collision-checked.
 
 Nothing in 1 to 4 needs an agent turn. The whole import is deterministic and runs
-from the panel's one button. The agent appears only in step 5, and optionally in a
-naming pass before step 2.
+from the panel's one button. The agent appears only in step 5.
 
 ## 1. Forms
 
@@ -62,15 +62,19 @@ so the generated form block binds on import.
 
 ### Naming
 
-- **Block key**: the deterministic default is the slug of the ACF block title
-  (`alternating-content`). The optional naming pass (the migration skill, one turn,
-  reading the definitions) proposes keys and prop names in the design's vocabulary
-  (`story`, `heading`, `copy`), and the designer can rename in the Blocks tab. A key
-  never collides with an existing block; on collision the import adds `-2`.
+Naming is automated by the import; there is no naming pass (Rob, 2026-09-08).
+
+- **Block name and key.** The display name is the ACF block title with " - wp"
+  appended, always, so an imported block is recognisable beside the design's own
+  and never collides with one ("Hero - wp" beside "Hero"). The key is the slug of
+  that name (`hero-wp`, `alternating-content-wp`). If a key still collides (a second
+  import), the import adds `-2`. The Prose block is "Prose - wp" (`prose-wp`).
 - **Prop names** from the ACF field labels in camelCase (`block_title` labelled
-  "Title" → `title`; `hero_copy` labelled "Copy" → `copy`). Layout fields (step 1)
-  are not props. Names the naming pass or the designer change are recorded in the
-  block's `wp` map (old field → prop) so a re-import still lands.
+  "Title" → `title`; `hero_copy` labelled "Copy" → `copy`), with the theme's common
+  prefixes dropped (`block_`, `hero_`, `cta_`) when the rest is still unique within
+  the block. Layout fields (step 1) are not props. Names the designer changes in the
+  Blocks tab are recorded in the block's `wp` map (old field → prop) so a re-import
+  still lands.
 
 ### Shared fragments
 
@@ -87,8 +91,8 @@ near-copies.
 app reads:
 
 ```tsx
-export const story = defineBlock({
-  name: "Alternating Content",
+export const alternatingContentWp = defineBlock({
+  name: "Alternating Content - wp",
   description: "Imported from WordPress (acf/alternating-content), used 3 times.",
   props: z.object({
     title: z.string().optional(),
@@ -201,9 +205,9 @@ Two collapsible sections:
     agent turn that proposes old prop → existing prop, shown for confirmation, then
     rewrites every instance to the existing block and deletes the generated one.
     For the obvious fits (an imported hero onto the design's hero).
-- A **naming pass** action at the top of Needs Design runs the migration skill once
-  over all undesigned blocks to propose better block and prop names, applied through
-  the same rename path.
+- Renaming a block (its display name and key) is offered in Edit too, through the
+  same synced path: the block file, the registry row and every content instance's
+  `type`.
 
 ## The design pass
 
@@ -249,9 +253,8 @@ Import from WordPress keeps its steps but loses one:
    advanced link shows it, but nothing waits on it.
 4. The report, and a pointer to the Blocks tab's Needs Design section.
 
-"Propose a mapping" and "Start the mapping over" go. The migration skill keeps two
-modes: `inventory` (the brief for a new design, unchanged) and `names` (the naming
-pass). `map` is retired.
+"Propose a mapping" and "Start the mapping over" go. The migration skill keeps one
+mode, `inventory` (the brief for a new design, unchanged). `map` is retired.
 
 ## What is not in scope
 
@@ -282,14 +285,10 @@ pass). `map` is retired.
 P1 alone makes the import lossless and reviewable. P2 to P4 make it usable for a
 real client site without hand-editing files.
 
-## Open questions
+## Resolved questions (Rob, 2026-09-08)
 
-1. Whether the naming pass should run automatically as part of Run the import (one
-   agent turn, a few seconds) or stay a button. Automatic gives good names from the
-   first preview; a button keeps the import fully deterministic.
-2. Prose: one generated block per site, or reuse the built-in richtext rendering
-   with a design pass like any other block. One per site, needing design, is the
-   consistent answer.
-3. Whether "Use an existing design" should also be offered before the import, for
-   a designer who knows the hero will map. It could, from the inventory, but it
-   adds a step back to the flow that just lost one. Default no.
+1. Naming is automated by the import, no agent pass: the " - wp" suffix is the
+   standard, not only a conflict rule.
+2. Prose is one generated block per site.
+3. "Use an existing design" is offered only in the Blocks tab after the import,
+   never before it.
