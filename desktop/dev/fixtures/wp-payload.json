@@ -236,7 +236,16 @@
             "name": "button",
             "label": "Button",
             "type": "link",
-            "required": false
+            "required": false,
+            "conditionalLogic": [
+              [
+                {
+                  "field": "field_h7",
+                  "operator": "==",
+                  "value": "1"
+                }
+              ]
+            ]
           },
           {
             "key": "field_h5",
@@ -247,6 +256,37 @@
             "choices": {
               "light": "Light",
               "dark": "Dark"
+            }
+          },
+          {
+            "key": "field_h6",
+            "name": "side",
+            "label": "Image side",
+            "type": "button_group",
+            "required": false,
+            "choices": {
+              "left": "Left",
+              "right": "Right"
+            },
+            "default_value": "left"
+          },
+          {
+            "key": "field_h7",
+            "name": "show_button",
+            "label": "Show button",
+            "type": "true_false",
+            "required": false,
+            "ui": 1
+          },
+          {
+            "key": "field_h8",
+            "name": "hero_height",
+            "label": "Height",
+            "type": "select",
+            "required": false,
+            "choices": {
+              "short": "Short",
+              "tall": "Tall"
             }
           }
         ]
@@ -445,7 +485,10 @@
               "target": ""
             },
             "tone": "dark",
-            "extra_note": "unused field value"
+            "extra_note": "unused field value",
+            "side": "left",
+            "show_button": true,
+            "hero_height": "tall"
           }
         },
         {
@@ -577,7 +620,10 @@
             "button": null,
             "tone": "light",
             "deactivate_block": true,
-            "hide_on_mobile": false
+            "hide_on_mobile": false,
+            "side": "left",
+            "show_button": false,
+            "hero_height": "tall"
           }
         },
         {
@@ -650,7 +696,10 @@
             "padding": "large",
             "section_id": "top",
             "deactivate_block": false,
-            "hero_copy": "<h1>Services &amp; care</h1><p>Everything from checkups to implants.</p><p>Same-day slots.</p>"
+            "hero_copy": "<h1>Services &amp; care</h1><p>Everything from checkups to implants.</p><p>Same-day slots.</p>",
+            "side": "right",
+            "show_button": false,
+            "hero_height": "tall"
           }
         },
         {

@@ -3,7 +3,7 @@
  * Plugin Name: thinkany Export
  * Plugin URI:  https://thinkany.design
  * Description: Read-only export of this site's structure and content (ACF field groups, blocks, pages, posts, custom types, menus, media) as one JSON payload, for a redesign in thinkany design. Writes nothing.
- * Version:     0.1.0
+ * Version:     0.1.1
  * Author:      thinkany
  * License:     Proprietary
  * Requires PHP: 7.4
@@ -25,7 +25,7 @@
 if (!defined('ABSPATH')) exit;
 
 final class Thinkany_Export {
-    const VERSION = '0.1.0';
+    const VERSION = '0.1.1';
     const PAYLOAD_VERSION = 1;
     const OPTION = 'thinkany_export_token';
 
@@ -208,8 +208,19 @@ final class Thinkany_Export {
                 'key' => $f['key'], 'name' => $f['name'], 'label' => $f['label'], 'type' => $f['type'],
                 'required' => !empty($f['required']),
             ];
-            foreach (['instructions', 'return_format', 'choices', 'multiple', 'min', 'max', 'post_type', 'taxonomy', 'button_label', 'default_value', 'allow_null', 'layout'] as $k) {
+            foreach (['instructions', 'return_format', 'choices', 'multiple', 'min', 'max', 'post_type', 'taxonomy', 'button_label', 'default_value', 'allow_null', 'layout', 'ui', 'ui_on_text', 'ui_off_text'] as $k) {
                 if (isset($f[$k]) && $f[$k] !== '' && $f[$k] !== 0 && $f[$k] !== []) $d[$k] = $f[$k];
+            }
+            // Which fields this one is shown for (ACF's conditional logic): groups of AND rules,
+            // each naming another field by KEY. The importer resolves keys to names.
+            if (!empty($f['conditional_logic']) && is_array($f['conditional_logic'])) {
+                $rules = [];
+                foreach ($f['conditional_logic'] as $group) {
+                    $g = [];
+                    foreach ((array) $group as $r) if (!empty($r['field'])) $g[] = ['field' => $r['field'], 'operator' => $r['operator'] ?? '==', 'value' => $r['value'] ?? ''];
+                    if ($g) $rules[] = $g;
+                }
+                if ($rules) $d['conditionalLogic'] = $rules;
             }
             if (!empty($f['sub_fields']) && is_array($f['sub_fields'])) $d['subFields'] = self::acfFields($f['sub_fields']);
             if ($f['type'] === 'flexible_content' && !empty($f['layouts'])) {

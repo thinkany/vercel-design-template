@@ -26,9 +26,36 @@ t("inventory counts", () => {
   assert.equal(inv.counts.classicPages, 3);
   assert.equal(inv.counts.forms, 1);
   assert.ok(inv.pages.find((p) => p.id === 10).home);
-  assert.deepEqual(inv.acfBlocks.find((b) => b.name === "acf/hero").fields.sort(), ["button", "extra_note", "heading", "hero_copy", "image", "subheading", "tone"]);
-  assert.deepEqual(inv.acfBlocks.find((b) => b.name === "acf/hero").layoutFields.sort(), ["deactivate_block", "hide_on_mobile", "padding", "section_id"]);
+  assert.deepEqual(inv.acfBlocks.find((b) => b.name === "acf/hero").fields.sort(), ["button", "extra_note", "heading", "hero_copy", "image", "subheading"]);
+  assert.deepEqual(inv.acfBlocks.find((b) => b.name === "acf/hero").layoutFields.sort(), ["deactivate_block", "hero_height", "hide_on_mobile", "padding", "section_id"]);
   assert.equal(inv.acfBlocks.find((b) => b.name === "acf/hero").uses, 3);
+});
+t("field purposes: conditional logic, type, usage, name", () => {
+  const c = W.classifyFields(payload)["acf/hero"].byName;
+  assert.equal(c.heading.purpose, "content");
+  assert.equal(c.image.purpose, "content");
+  assert.equal(c.side.purpose, "variant");
+  assert.equal(c.side.inUse, true, "two values across the site");
+  assert.deepEqual(c.side.options, { left: "Left", right: "Right" });
+  assert.equal(c.show_button.purpose, "variant");
+  assert.deepEqual(c.show_button.reveals, ["button"], "a field that gates another is a variant");
+  assert.deepEqual(c.button.revealedBy, ["show_button"]);
+  assert.equal(c.hero_height.purpose, "layout", "tuning the old look is layout, whatever its type");
+  assert.equal(c.tone.purpose, "variant");
+  assert.equal(c.padding.purpose, "layout");
+  assert.equal(c.extra_note.purpose, "content", "a field the definitions don't know is content by default");
+  const inv2 = W.inventory(payload);
+  const hero = inv2.acfBlocks.find((b) => b.name === "acf/hero");
+  assert.deepEqual(hero.variants.filter((v) => v.inUse).map((v) => v.name).sort(), ["show_button", "side", "tone"]);
+  assert.match(W.inventoryMarkdown(inv2), /options: .*side \(Left ×2, Right ×1\)/);
+  const sk = W.mappingSkeleton(payload, []);
+  assert.deepEqual(Object.keys(sk.blocks["acf/hero"]._variants).sort(), ["show_button", "side", "tone"]);
+  assert.deepEqual(sk.blocks["acf/hero"]._variants.side.used, { left: 2, right: 1 });
+  assert.equal(sk.blocks["acf/hero"].carry, true);
+  const d = W.definitionsForSkill(payload);
+  const svc = d.pages.find((p) => p.id === 14);
+  assert.deepEqual(svc.blocks[0].variants, { tone: "light", side: "right", show_button: false });
+  assert.ok(!("hero_height" in (svc.blocks[0].variants || {})) && !("hero_height" in svc.blocks[0].fields));
 });
 t("inventory markdown reads", () => {
   const md = W.inventoryMarkdown(inv);
@@ -62,8 +89,8 @@ t("skeleton has every slot", () => {
   assert.equal(sk.pages[0].page, "home");
   assert.equal(sk.pages.find((p) => p.wp === 13).page, "team");
   assert.deepEqual(Object.keys(sk.blocks).sort(), ["acf/faq", "acf/features", "acf/hero", "acf/testimonial"]);
-  assert.deepEqual(sk.blocks["acf/hero"]._wpFields.sort(), ["button", "extra_note", "heading", "hero_copy", "image", "subheading", "tone"]);
-  assert.deepEqual(sk.blocks["acf/hero"]._layoutFields.sort(), ["deactivate_block", "hide_on_mobile", "padding", "section_id"]);
+  assert.deepEqual(sk.blocks["acf/hero"]._wpFields.sort(), ["button", "extra_note", "heading", "hero_copy", "image", "subheading"]);
+  assert.deepEqual(sk.blocks["acf/hero"]._layoutFields.sort(), ["deactivate_block", "hero_height", "hide_on_mobile", "padding", "section_id"]);
   assert.equal(sk.blocks["acf/hero"].skipWhen, "deactivate_block");
   assert.equal(sk.nav, "primary");
   assert.equal(sk.types.team.include, false);
@@ -151,6 +178,9 @@ t("mapping validates, and catches a bad id", () => {
     assert.deepEqual(hero.props.image, { src: "/images/wp/reception.avif", alt: "Our reception" });
     assert.deepEqual(hero.props.ctas, [{ label: "Book a visit", href: "/about/team", style: "primary" }]);
     assert.equal(hero.props.tone, "dark");
+    assert.deepEqual(hero._wp, { block: "acf/hero", tone: "dark", side: "left", show_button: true }, "the old options ride along under _wp");
+    assert.deepEqual(rep.variants["acf/hero"].side, { left: 1, right: 1 }, "the switched-off About hero is not counted");
+    assert.ok(!("hero_height" in rep.variants["acf/hero"]));
     // features: repeater → list of objects, a failed image falls back to its old URL
     const feat = home.blocks[1];
     assert.equal(feat.type, "features");

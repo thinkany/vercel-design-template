@@ -142,6 +142,15 @@ Rules for a good proposal:
   has a deactivate toggle the skeleton already sets `skipWhen` to it, so instances
   switched off on the old site are skipped; a page block marked `deactivated` in
   the definitions is one of those.
+- **Options are variants, not content.** Each old block's options in use (a side, a
+  layout type, a column count, a switch that reveals fields) are listed under
+  `_variants` in the skeleton with the values used across the site, and per
+  instance under `variants` in the definitions. When the new block has a matching
+  option prop (an enum), map it with `{ "from": "<field>", "map": { "<old>": "<new>" } }`.
+  When it does not, leave it: with `carry: true` (the default) every option value is
+  kept on the imported instance under `_wp` and listed in the report, so the design
+  pass can add the option to the block later. Say in chat which options the new
+  block lacks; a block that needs them is a `/design-block` ask.
 - **One field, two props.** An old hero often keeps headline and intro in one
   wysiwyg field. Split it with `pick`: `heading` takes the first heading's text,
   `rest` takes what follows. Grouped repeaters (FAQ sections each holding

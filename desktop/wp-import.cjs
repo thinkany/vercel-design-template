@@ -61,8 +61,79 @@ function validatePayload(p) {
 // Fields that are the old theme's presentation settings (padding, colors, section ids,
 // hide-on-mobile switches, a deactivate toggle), not content. They have no destination
 // in a new design, so the skeleton, the skill and the report set them aside.
-const LAYOUT_FIELD = /^(section_id|anchor|background(_color|_colour|_image)?(_full)?|bg_color|padding(_top|_bottom)?|margin(_top|_bottom)?|hide_on_(mobile|desktop|tablet)|deactivate(_block)?|disable(d)?|(block_)?settings|settings|copy_side|image_side|image_corners|column_(width|alignment)|alignment|align|auto_format|title_size|text_size|position_[a-z_]+|wider_[a-z_]+|[a-z_]*_height|add_copy_gradient|gradient|overlay|layout(_type)?|color_scheme|colour_scheme|theme|show_schema|add_intro|show_form_title|animation|reveal)$/i;
+const LAYOUT_FIELD = /^(section_id|anchor|background(_color|_colour|_image)?(_full)?|bg_color|padding(_top|_bottom)?|margin(_top|_bottom)?|hide_on_(mobile|desktop|tablet)|deactivate(_block)?|disable(d)?|(block_)?settings|settings|image_corners|auto_format|title_size|text_size|[a-z_]*_height|add_copy_gradient|gradient|overlay|color_scheme|colour_scheme|theme|show_schema|animation|reveal)$/i;
 const isLayoutField = (name) => LAYOUT_FIELD.test(String(name || ""));
+// Names that read as a VARIANT: they change what renders or where, not how it is tuned.
+const VARIANT_FIELD = /^(copy_side|image_side|side|layout(_type)?|variant|style|type|columns?|column_(count|width|alignment)|alignment|align|position_[a-z_]+|wider_[a-z_]+|show_[a-z_]+|add_[a-z_]+|has_[a-z_]+|enable_[a-z_]+|display_[a-z_]+|[a-z_]+_style|[a-z_]+_layout|[a-z_]+_position)$/i;
+const OPTION_TYPES = new Set(["select", "radio", "button_group", "true_false", "checkbox", "number", "range"]);
+const CONTENT_TYPES = new Set(["text", "textarea", "wysiwyg", "email", "url", "image", "file", "gallery", "link", "repeater", "group", "flexible_content", "oembed", "date_picker", "date_time_picker", "time_picker", "color_picker"]);
+const REFERENCE_TYPES = new Set(["post_object", "relationship", "page_link", "taxonomy", "user", "forms", "gravityforms", "gf_form", "gravity_forms"]);
+
+/**
+ * Field purpose, per ACF block (and per custom type): what each field is FOR.
+ *   content    text, images, links, repeaters: the copy that moves
+ *   variant    an option that changes what renders or which fields show (a side,
+ *              a layout type, a column count, a switch that reveals fields)
+ *   layout     the old theme's tuning (padding, colors, section ids): set aside
+ *   reference  points at another entry or a form
+ * Signals, strongest first: ACF conditional logic (a field that gates others is a
+ * variant; a gated field belongs to it), the ACF field type, the values actually
+ * used across the site (an option that never changes is not a variant in use),
+ * then the name. Returns { [blockName]: { fields: [...], byName: {...} } }.
+ */
+function classifyFields(p) {
+  const defs = p.definitions || {};
+  const out = {};
+  const usage = {}; // block → field → value → count (top-level fields on instances)
+  for (const e of p.entries || []) for (const b of e.blocks || []) {
+    if (!b.name.startsWith("acf/") || !b.fields || typeof b.fields !== "object") continue;
+    const u = usage[b.name] || (usage[b.name] = {});
+    for (const [k, v] of Object.entries(b.fields)) {
+      const key = v == null || v === "" ? "(empty)" : typeof v === "object" ? (Array.isArray(v) ? `(list of ${v.length})` : v.image ? "(image)" : v.url !== undefined ? "(link)" : "(object)") : String(v).slice(0, 40);
+      const c = u[k] || (u[k] = {}); c[key] = (c[key] || 0) + 1;
+    }
+  }
+  // Field groups located on a block (ACF location rule param "block").
+  const groupsFor = (name) => (defs.fieldGroups || []).filter((g) => (g.location || []).some((and) => (and || []).some((r) => r && r.param === "block" && String(r.value) === name)));
+  const names = new Set([...(defs.blocks || []).map((b) => b.name), ...Object.keys(usage)]);
+  for (const name of names) {
+    const fields = groupsFor(name).flatMap((g) => g.fields || []);
+    const byKey = Object.fromEntries(fields.map((f) => [f.key, f]));
+    const gates = {}; // gating field name → [revealed field names]
+    for (const f of fields) for (const and of f.conditionalLogic || []) for (const r of and || []) { const g = byKey[r.field]; if (g) (gates[g.name] || (gates[g.name] = [])).push(f.name); }
+    const seen = new Set();
+    const rows = [];
+    const classify = (f) => {
+      const n = f.name; const t = f.type || ""; const u = (usage[name] || {})[n] || {};
+      const values = Object.keys(u).filter((k) => k !== "(empty)");
+      const revealedBy = fields.find((g) => (g.conditionalLogic || []).some((and) => (and || []).some((r) => byKey[r.field] && byKey[r.field].name !== n && g.name === n && byKey[r.field].name)));
+      const gatedBy = (f.conditionalLogic || []).flatMap((and) => (and || []).map((r) => byKey[r.field] && byKey[r.field].name)).filter(Boolean);
+      let purpose;
+      if (isLayoutField(n) && !gates[n]) purpose = "layout";
+      else if (gates[n]) purpose = "variant";
+      else if (REFERENCE_TYPES.has(t) || /form/i.test(n) && (t === "select" || t === "" || t === "forms")) purpose = "reference";
+      else if (OPTION_TYPES.has(t)) purpose = "variant";
+      else if (CONTENT_TYPES.has(t)) purpose = "content";
+      else if (VARIANT_FIELD.test(n)) purpose = "variant";
+      else purpose = t ? "content" : (values.length && values.every((v) => /^(\d+|true|false)$/.test(v)) ? "variant" : "content"); // unknown field: a bare number/boolean reads as an option, anything else as content
+      const row = { name: n, label: f.label || n, type: t || "unknown", purpose, required: !!f.required };
+      if (f.choices) row.options = Object.fromEntries(Object.entries(f.choices).map(([k, v]) => [k, String(v)]));
+      if (t === "true_false") row.options = { 1: f.ui_on_text || "Yes", 0: f.ui_off_text || "No" };
+      if (f.default_value !== undefined) row.default = f.default_value;
+      if (gates[n]) row.reveals = Array.from(new Set(gates[n]));
+      if (gatedBy.length) row.revealedBy = Array.from(new Set(gatedBy));
+      row.usage = u;
+      row.inUse = purpose === "variant" ? (values.length > 1 || values.some((v) => v !== "0" && v !== "false" && v !== String(f.default_value ?? ""))) : values.length > 0;
+      return row;
+    };
+    for (const f of fields) { if (seen.has(f.name)) continue; seen.add(f.name); rows.push(classify(f)); }
+    // Fields seen on instances but absent from the definitions (a field group the export missed): classified by name and value only.
+    for (const n of Object.keys(usage[name] || {})) if (!seen.has(n)) { seen.add(n); rows.push(classify({ name: n, label: n, type: "" })); }
+    out[name] = { fields: rows, byName: Object.fromEntries(rows.map((r) => [r.name, r])) };
+  }
+  return out;
+}
+const purposeOf = (cls, block, field) => (cls[block] && cls[block].byName[field] && cls[block].byName[field].purpose) || (isLayoutField(field) ? "layout" : "content");
 
 function blockNames(entry) {
   return Array.isArray(entry.blocks) ? entry.blocks.map((b) => b.name).filter(Boolean) : [];
@@ -97,7 +168,9 @@ function inventory(p) {
   const images = media.filter((m) => /^image\//.test(m.mime || ""));
   const customTypes = (defs.postTypes || []).filter((t) => !t.builtin).map((t) => ({ key: t.key, label: t.label, count: byType[t.key] || 0 }));
   const menus = ((p.site && p.site.menus) || []).map((m) => ({ slug: m.slug, name: m.name, locations: m.locations || [], items: (m.items || []).length }));
+  const cls = classifyFields(p);
   const fieldsOf = (name) => Array.from(acfBlockFields[name] || []);
+  const ofPurpose = (name, purpose) => (cls[name] ? cls[name].fields.filter((f) => f.purpose === purpose) : fieldsOf(name).filter((f) => (purpose === "layout") === isLayoutField(f)).map((f) => ({ name: f, purpose })));
   return {
     site: { name: p.site && p.site.name, home: p.site && p.site.home, wpVersion: p.site && p.site.wpVersion, seoPlugin: p.site && p.site.seoPlugin, exported: p.exported, plugin: p.plugin },
     counts: {
@@ -109,7 +182,13 @@ function inventory(p) {
     },
     pages,
     blockTypes,
-    acfBlocks: (defs.blocks || []).map((b) => ({ name: b.name, title: b.title, description: b.description || "", uses: blockTypes[b.name] || 0, fields: fieldsOf(b.name).filter((f) => !isLayoutField(f)), layoutFields: fieldsOf(b.name).filter(isLayoutField) })),
+    acfBlocks: (defs.blocks || []).map((b) => ({
+      name: b.name, title: b.title, description: b.description || "", uses: blockTypes[b.name] || 0,
+      fields: ofPurpose(b.name, "content").map((f) => f.name),
+      variants: ofPurpose(b.name, "variant").map((f) => ({ name: f.name, label: f.label, type: f.type, options: f.options || null, usage: f.usage || {}, inUse: !!f.inUse, ...(f.reveals ? { reveals: f.reveals } : {}) })),
+      references: ofPurpose(b.name, "reference").map((f) => f.name),
+      layoutFields: ofPurpose(b.name, "layout").map((f) => f.name),
+    })),
     customTypes,
     taxonomies: (defs.taxonomies || []).map((t) => ({ key: t.key, label: t.label, terms: (t.terms || []).length })),
     forms: (p.forms || []).map((f) => ({ plugin: f.plugin, title: f.title, fields: (f.fields || []).length })),
@@ -139,7 +218,12 @@ function inventoryMarkdown(inv) {
   const used = inv.acfBlocks.filter((b) => b.uses), unused = inv.acfBlocks.filter((b) => !b.uses);
   if (used.length) {
     L.push("", "## Blocks (ACF)", "", "Content fields only; the old theme's layout settings (padding, colors, section ids, hide-on-mobile) are set aside.", "");
-    for (const b of used) L.push(`- ${b.title} \`${b.name}\`, used ${b.uses}×${b.fields.length ? `: ${b.fields.join(", ")}` : ""}`);
+    for (const b of used) {
+      L.push(`- ${b.title} \`${b.name}\`, used ${b.uses}×${b.fields.length ? `: ${b.fields.join(", ")}` : ""}`);
+      const inUse = (b.variants || []).filter((v) => v.inUse);
+      if (inUse.length) L.push(`  options: ${inUse.map((v) => `${v.name} (${Object.entries(v.usage).filter(([k]) => k !== "(empty)").map(([k, n]) => `${(v.options && v.options[k]) || k} ×${n}`).join(", ")})`).join("; ")}`);
+      if ((b.references || []).length) L.push(`  refers to: ${b.references.join(", ")}`);
+    }
   }
   if (unused.length) L.push("", `Registered but unused: ${unused.map((b) => b.title).join(", ")}.`);
   const core = Object.entries(inv.blockTypes).filter(([n]) => !n.startsWith("acf/")).sort((a, b) => b[1] - a[1]);
@@ -152,6 +236,7 @@ function inventoryMarkdown(inv) {
 // field NAMES per ACF block and a short sample value, never the full content.
 function definitionsForSkill(p) {
   const inv = inventory(p);
+  const cls = classifyFields(p);
   const sample = (v) => {
     if (v == null) return null;
     if (typeof v === "string") return plainText(v).slice(0, 80);
@@ -164,7 +249,13 @@ function definitionsForSkill(p) {
   const pages = (p.entries || []).filter((e) => e.type === "page").map((e) => ({
     id: e.id, title: e.title, path: e.path, parent: e.parent || 0, status: e.status, home: inv.pages.find((x) => x.id === e.id)?.home || false,
     classic: !!e.classic,
-    blocks: (e.blocks || []).map((b) => b.name.startsWith("acf/") ? { name: b.name, fields: Object.fromEntries(Object.entries(b.fields || {}).filter(([k]) => !isLayoutField(k)).map(([k, v]) => [k, sample(v)])), ...(b.fields && Object.keys(b.fields).some(isLayoutField) ? { layoutFields: Object.keys(b.fields).filter(isLayoutField), ...(b.fields.deactivate_block || b.fields.deactivate ? { deactivated: true } : {}) } : {}) } : { name: b.name, text: sample(b.rendered || b.html || "") }),
+    blocks: (e.blocks || []).map((b) => {
+      if (!b.name.startsWith("acf/")) return { name: b.name, text: sample(b.rendered || b.html || "") };
+      const f = b.fields || {};
+      const pick = (purpose) => Object.fromEntries(Object.entries(f).filter(([k]) => purposeOf(cls, b.name, k) === purpose).map(([k, v]) => [k, purpose === "content" ? sample(v) : v]));
+      const variants = pick("variant"); const refs = pick("reference");
+      return { name: b.name, fields: pick("content"), ...(Object.keys(variants).length ? { variants } : {}), ...(Object.keys(refs).length ? { references: refs } : {}), ...(f.deactivate_block || f.deactivate ? { deactivated: true } : {}) };
+    }),
     fields: e.fields ? Object.fromEntries(Object.entries(e.fields).map(([k, v]) => [k, sample(v)])) : undefined,
   }));
   return {
@@ -172,7 +263,7 @@ function definitionsForSkill(p) {
     postTypes: (p.definitions && p.definitions.postTypes) || [],
     taxonomies: inv.taxonomies,
     fieldGroups: (p.definitions && p.definitions.fieldGroups) || [],
-    acfBlocks: inv.acfBlocks,
+    acfBlocks: inv.acfBlocks.map((b) => ({ ...b, fieldDetail: cls[b.name] ? cls[b.name].fields.map(({ usage, ...r }) => r) : [] })),
     blocksInUse: inv.blockTypes,
     pages,
     menus: (p.site && p.site.menus) || [],
@@ -199,13 +290,20 @@ function mappingSkeleton(p, blocks = []) {
   const sampleFields = (name) => { const b = inv.acfBlocks.find((x) => x.name === name) || {}; return [...(b.fields || []), ...(b.layoutFields || [])]; };
   return {
     version: MAPPING_VERSION,
-    _about: "Targets are empty until confirmed. A page with include:false is skipped (its old address redirects to the nearest kept ancestor). blocks: old ACF block name → new block key + prop ← field. A field value that starts with = is a constant. skipWhen names an old field that, when set, means the block was switched off on the old site (the instance is skipped).",
+    _about: "Targets are empty until confirmed. A page with include:false is skipped (its old address redirects to the nearest kept ancestor). blocks: old ACF block name → new block key + prop ← field. A field value that starts with = is a constant. skipWhen names an old field that, when set, means the block was switched off on the old site (the instance is skipped). _variants are the old block's options in use (a side, a layout type, a switch that reveals fields): map one to a prop with { from, map } when the new block has such an option; with carry: true (the default) every variant value is also kept on the imported instance under _wp, for the design pass.",
     availableBlocks: blocks.map((b) => ({ key: b.key, name: b.name, fields: Object.keys(b.fields || {}) })),
     pages: inv.pages.sort((a, b) => (a.home ? -1 : b.home ? 1 : a.path.localeCompare(b.path))).map((x) => ({
       wp: x.id, title: x.title, wpPath: x.path, page: x.home ? "home" : slugify(x.path.split("/").filter(Boolean).pop() || x.title), parent: null, include: x.status === "publish" || x.status === "draft",
       ...(x.classic ? { classic: true } : {}), ...(x.fields.length ? { wpFields: x.fields } : {}),
     })),
-    blocks: Object.fromEntries(acfNames.map((n) => { const all = sampleFields(n); const layout = all.filter(isLayoutField); const off = all.find((f) => /^deactivate(_block)?$/.test(f)); return [n, { block: "", fields: {}, ...(off ? { skipWhen: off } : {}), _wpFields: all.filter((f) => !isLayoutField(f)), ...(layout.length ? { _layoutFields: layout } : {}) }]; })),
+    blocks: Object.fromEntries(acfNames.map((n) => {
+      const b = inv.acfBlocks.find((x) => x.name === n) || { fields: sampleFields(n).filter((f) => !isLayoutField(f)), variants: [], references: [], layoutFields: sampleFields(n).filter(isLayoutField) };
+      const off = [...b.fields, ...b.layoutFields, ...b.variants.map((v) => v.name)].find((f) => /^deactivate(_block)?$/.test(f));
+      const variants = b.variants.filter((v) => v.inUse);
+      return [n, { block: "", fields: {}, ...(off ? { skipWhen: off } : {}), carry: true, _wpFields: b.fields,
+        ...(variants.length ? { _variants: Object.fromEntries(variants.map((v) => [v.name, { ...(v.options ? { options: v.options } : {}), used: Object.fromEntries(Object.entries(v.usage).filter(([k]) => k !== "(empty)")), ...(v.reveals ? { reveals: v.reveals } : {}) }])) } : {}),
+        ...(b.references.length ? { _references: b.references } : {}), ...(b.layoutFields.length ? { _layoutFields: b.layoutFields } : {}) }];
+    })),
     prose: { block: "", prop: "" },
     tables: { block: "table", rows: "rows", header: "header", caption: "caption" },
     posts: { import: (inv.counts.posts || 0) > 0, type: "post", categoriesAsTags: true },
@@ -412,7 +510,9 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
   const byWp = Object.fromEntries(entries.map((e) => [e.id, e]));
   const blockFields = Object.fromEntries(blocks.map((b) => [b.key, b.fields || {}]));
   const homeHost = (() => { try { return new URL(site.home).host; } catch { return ""; } })();
-  const report = { pages: [], posts: { imported: 0, drafts: 0, lost: [] }, types: {}, media: { downloaded: 0, failed: [], skipped: 0 }, redirects: 0, redirectsFlagged: [], unmappedBlocks: {}, unmappedFields: {}, skipped: [], files: [] };
+  const report = { pages: [], posts: { imported: 0, drafts: 0, lost: [] }, types: {}, media: { downloaded: 0, failed: [], skipped: 0 }, redirects: 0, redirectsFlagged: [], unmappedBlocks: {}, unmappedFields: {}, skipped: [], variants: {}, files: [] };
+  const cls = classifyFields(payload);
+  const noteVariants = (name, fields) => { const v = report.variants[name] || (report.variants[name] = {}); for (const [k, val] of Object.entries(fields || {})) { if (purposeOf(cls, name, k) !== "variant") continue; const key = val == null || val === "" ? "(empty)" : typeof val === "object" ? "(object)" : String(val); (v[k] || (v[k] = {}))[key] = ((v[k] || {})[key] || 0) + 1; } };
   const written = [];
   const writeFile = (rel, text) => { written.push(rel); if (dry) return; const abs = path.join(projectDir, rel); fs.mkdirSync(path.dirname(abs), { recursive: true }); fs.writeFileSync(abs, text); };
   const readJson = (rel) => { try { return JSON.parse(fs.readFileSync(path.join(projectDir, rel), "utf8")); } catch { return null; } };
@@ -586,12 +686,16 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
         await flushRun();
         const bm = (mapping.blocks || {})[b.name];
         if (bm && bm.skipWhen && b.fields && b.fields[bm.skipWhen]) { report.skipped.push({ where: id, block: b.name, why: bm.skipWhen }); continue; }
-        if (!bm || !bm.block) { dropped.push(b.name); report.unmappedBlocks[b.name] = (report.unmappedBlocks[b.name] || 0) + 1; continue; }
+        if (!bm || !bm.block) { dropped.push(b.name); report.unmappedBlocks[b.name] = (report.unmappedBlocks[b.name] || 0) + 1; noteVariants(b.name, b.fields); continue; }
         const props = await mapFields(bm.fields || {}, b.fields || {}, blockFields[bm.block] || {}, `${id} › ${b.name}`, lost);
         const used = new Set(Object.values(bm.fields || {}).map((s) => typeof s === "string" ? s.split(".")[0] : s && s.from ? String(s.from).split(".")[0] : null));
-        const unmapped = Object.keys(b.fields || {}).filter((k) => !used.has(k) && !isLayoutField(k) && b.fields[k] !== "" && b.fields[k] !== null && b.fields[k] !== false && !(Array.isArray(b.fields[k]) && !b.fields[k].length));
+        const unmapped = Object.keys(b.fields || {}).filter((k) => !used.has(k) && purposeOf(cls, b.name, k) === "content" && b.fields[k] !== "" && b.fields[k] !== null && b.fields[k] !== false && !(Array.isArray(b.fields[k]) && !b.fields[k].length));
         if (unmapped.length) report.unmappedFields[b.name] = Array.from(new Set([...(report.unmappedFields[b.name] || []), ...unmapped]));
-        out.push({ type: bm.block, props });
+        noteVariants(b.name, b.fields);
+        // The old block's options ride along on the instance (under _wp: unknown to the
+        // block's schema, so stripped at build, kept in content for the design pass).
+        const carried = bm.carry === false ? {} : Object.fromEntries(Object.entries(b.fields || {}).filter(([k, v]) => purposeOf(cls, b.name, k) === "variant" && v !== "" && v != null && typeof v !== "object"));
+        out.push({ type: bm.block, props, ...(Object.keys(carried).length ? { _wp: { block: b.name, ...carried } } : {}) });
       } else if (!nonProse(b, id, lost)) run.push(coreHtml(b));
     }
     await flushRun();
@@ -697,6 +801,8 @@ function reportMarkdown(rep) {
   const ub = Object.entries(rep.unmappedBlocks);
   if (ub.length) L.push("", "## Blocks with no destination (dropped)", "", ...ub.map(([n, k]) => `- ${n} ×${k}`));
   if (rep.skipped && rep.skipped.length) L.push("", "## Switched off on the old site (skipped)", "", ...rep.skipped.map((x) => `- ${x.where}: ${x.block}`));
+  const vr = Object.entries(rep.variants || {}).map(([n, fs]) => [n, Object.entries(fs).filter(([, c]) => Object.keys(c).some((k) => k !== "(empty)"))]).filter(([, fs]) => fs.length);
+  if (vr.length) L.push("", "## Options seen on the old blocks", "", "Kept on each imported instance under _wp, for the design pass.", "", ...vr.map(([n, fs]) => `- ${n}: ${fs.map(([f, c]) => `${f} (${Object.entries(c).map(([k, x]) => `${k} ×${x}`).join(", ")})`).join("; ")}`));
   const uf = Object.entries(rep.unmappedFields);
   if (uf.length) L.push("", "## Fields with no destination", "", ...uf.map(([n, fs]) => `- ${n}: ${fs.join(", ")}`));
   L.push("", "## Pages", "");
@@ -713,4 +819,4 @@ function reportMarkdown(rep) {
   return L.join("\n");
 }
 
-module.exports = { PAYLOAD_KIND, PAYLOAD_VERSION, MAPPING_VERSION, fetchPayload, validatePayload, inventory, inventoryMarkdown, definitionsForSkill, mappingSkeleton, validateMapping, htmlToMarkdown, transform, reportMarkdown, slugify };
+module.exports = { PAYLOAD_KIND, PAYLOAD_VERSION, MAPPING_VERSION, fetchPayload, validatePayload, inventory, inventoryMarkdown, definitionsForSkill, mappingSkeleton, validateMapping, classifyFields, htmlToMarkdown, transform, reportMarkdown, slugify };
