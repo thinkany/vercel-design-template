@@ -1381,7 +1381,8 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode, mo
   // SDK never expands the scaffold's stub. Unlicensed (no cache) → falls through
   // and the stub does its job: it tells the designer the skill needs the app.
   const expanded = skillsClient && skillsClient.expandPrompt(prompt);
-  if (expanded) prompt = expanded.prompt;
+  if (expanded) { prompt = expanded.prompt; appLog.write("info", "agent", `skill ${expanded.name} expanded`); }
+  else if (typeof prompt === "string" && /^\/[a-z0-9-]+/.test(prompt)) appLog.write("warn", "agent", `no playbook for ${prompt.split(/\s/)[0]} (known: ${skillsClient ? skillsClient.names().join(", ") || "none" : "no skills client"}); the SDK expands the project's stub, if it has one`);
   const { runPrompt } = await import(pathToFileURL(path.join(__dirname, "agent.mjs")).href);
   const onEvent = (evt) => {
     if (appLog.isEnabled() && evt && evt.type !== "text") {

@@ -116,8 +116,13 @@ function createSkillsClient({ safeStorage, userDataDir, localDir, log = () => {}
     } finally { clearTimeout(t); }
   }
 
+  // SKILLS_LOCAL=1: the on-disk playbooks only. Otherwise the cache, with the on-disk
+  // playbooks beneath it for any name the cache lacks: a skill still in development
+  // (desktop/skills is not in the packaged app, so this only ever applies in dev).
   function skills() {
-    return process.env.SKILLS_LOCAL && localDir ? localSkills() : state.skills;
+    if (process.env.SKILLS_LOCAL && localDir) return localSkills();
+    if (localDir && fs.existsSync(localDir)) return { ...localSkills(), ...state.skills };
+    return state.skills;
   }
   function has(name) { return !!skills()[name]; }
   function names() { return Object.keys(skills()); }
