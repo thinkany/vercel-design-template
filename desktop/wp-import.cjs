@@ -520,6 +520,23 @@ function setPath(obj, p, value) {
   cur[parts[parts.length - 1]] = value;
 }
 const stripIndex = (p) => String(p).replace(/\[\d+\]/g, "").replace(/\.\d+(?=\.|$)/g, "");
+// Lists mapped by index (ctas[1] with no ctas[0]) leave holes; a hole is not a block prop.
+function compact(v) {
+  if (Array.isArray(v)) return v.filter((x) => x !== undefined && x !== null).map(compact);
+  if (v && typeof v === "object") { for (const k of Object.keys(v)) v[k] = compact(v[k]); return v; }
+  return v;
+}
+// The block's own defaults beneath the imported props (what the CMS does when a block is
+// added), so a prop the old block never had is present with its default and the build
+// validates. Imported lists win whole; a default's seeded example item never leaks in.
+function withDefaults(defaults, props) {
+  if (!defaults || typeof defaults !== "object" || Array.isArray(defaults)) return props;
+  const out = { ...defaults };
+  for (const [k, v] of Object.entries(props || {})) {
+    out[k] = v && typeof v === "object" && !Array.isArray(v) && defaults[k] && typeof defaults[k] === "object" && !Array.isArray(defaults[k]) ? withDefaults(defaults[k], v) : v;
+  }
+  return out;
+}
 
 function seoOf(e) {
   const s = e.seo || {}; const out = {};
@@ -538,6 +555,7 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
   const entries = payload.entries || [];
   const byWp = Object.fromEntries(entries.map((e) => [e.id, e]));
   const blockFields = Object.fromEntries(blocks.map((b) => [b.key, b.fields || {}]));
+  const blockDefaults = Object.fromEntries(blocks.map((b) => [b.key, b.defaults || null]));
   const homeHost = (() => { try { return new URL(site.home).host; } catch { return ""; } })();
   const report = { pages: [], posts: { imported: 0, drafts: 0, lost: [] }, types: {}, forms: [], media: { downloaded: 0, failed: [], skipped: 0 }, redirects: 0, redirectsFlagged: [], unmappedBlocks: {}, unmappedFields: {}, skipped: [], variants: {}, files: [] };
   const cls = classifyFields(payload);
@@ -741,7 +759,7 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
         // The old block's options ride along on the instance (under _wp: unknown to the
         // block's schema, so stripped at build, kept in content for the design pass).
         const carried = bm.carry === false ? {} : Object.fromEntries(Object.entries(b.fields || {}).filter(([k, v]) => purposeOf(cls, b.name, k) === "variant" && v !== "" && v != null && typeof v !== "object"));
-        out.push({ type: bm.block, props, ...(Object.keys(carried).length ? { _wp: { block: b.name, ...carried } } : {}) });
+        out.push({ type: bm.block, props: withDefaults(blockDefaults[bm.block], compact(props)), ...(Object.keys(carried).length ? { _wp: { block: b.name, ...carried } } : {}) });
       } else if (!nonProse(b, id, lost)) run.push(coreHtml(b));
     }
     await flushRun();

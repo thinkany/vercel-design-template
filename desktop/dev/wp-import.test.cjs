@@ -76,7 +76,7 @@ t("definitions for the skill carry names and samples, not content", () => {
 });
 
 const blocks = [
-  { key: "hero", name: "Hero", fields: { eyebrow: { kind: "string" }, heading: { kind: "string" }, body: { kind: "richtext" }, image: { kind: "image" }, "image.src": { kind: "string" }, "image.alt": { kind: "string" }, ctas: { kind: "list" }, "ctas.label": { kind: "string" }, "ctas.href": { kind: "string" }, "ctas.style": { kind: "enum", options: ["primary", "secondary"] }, tone: { kind: "enum", options: ["light", "dark"] } } },
+  { key: "hero", name: "Hero", defaults: { eyebrow: "", heading: "", body: "", image: { src: "", alt: "" }, ctas: [{ label: "", href: "", style: "primary" }], tone: "light" }, fields: { eyebrow: { kind: "string" }, heading: { kind: "string" }, body: { kind: "richtext" }, image: { kind: "image" }, "image.src": { kind: "string" }, "image.alt": { kind: "string" }, ctas: { kind: "list" }, "ctas.label": { kind: "string" }, "ctas.href": { kind: "string" }, "ctas.style": { kind: "enum", options: ["primary", "secondary"] }, tone: { kind: "enum", options: ["light", "dark"] } } },
   { key: "features", name: "Features", fields: { heading: { kind: "string" }, items: { kind: "list" }, "items.title": { kind: "string" }, "items.text": { kind: "string" }, "items.icon": { kind: "image" } } },
   { key: "prose", name: "Prose", fields: { body: { kind: "richtext" } } },
   { key: "form", name: "Form", fields: { form: { kind: "form" }, heading: { kind: "string" }, intro: { kind: "richtext" } } },
@@ -109,6 +109,18 @@ t("html → markdown: prose, lists, links, entities, lost nodes, tables as data"
   assert.equal(r.segments[1].header, true);
   assert.match(r.segments[2].md, /^after\n\n> q\n\n```\ncode\n```\n\n---\n\n!\[I\]\(\/i\.jpg\)\n\n\*cap\*$/);
   assert.deepEqual(r.lost.map((l) => l.node), ["shortcode [shortcode]", "iframe"]);
+});
+t("a list mapped by index with a missing first item has no hole", async () => {
+  const dir3 = fs.mkdtempSync(path.join(os.tmpdir(), "wp-hole-"));
+  fs.mkdirSync(path.join(dir3, "content"), { recursive: true });
+  const m = { version: 1, pages: [{ wp: 14, page: "services", include: true }], blocks: { "acf/hero": { block: "hero", fields: { heading: "heading", "ctas[0]": { from: "missing_button", each: { label: "title", href: "url" } }, "ctas[1]": { from: "button", each: { label: "title", href: "url" } } } } }, posts: { import: false }, forms: { import: false }, media: { download: false } };
+  const svcHero = payload.entries.find((e) => e.id === 14).blocks[0]; svcHero.fields.button = { title: "Call", url: "tel:1" };
+  const r = await W.transform(dir3, payload, m, { blocks });
+  assert.ok(r.ok, JSON.stringify(r.errors));
+  const doc = JSON.parse(fs.readFileSync(path.join(dir3, "content", "pages", "services.json"), "utf8"));
+  assert.deepEqual(doc.blocks[0].props.ctas, [{ label: "Call", href: "tel:1" }]);
+  delete svcHero.fields.button;
+  fs.rmSync(dir3, { recursive: true, force: true });
 });
 t("pick splits a wysiwyg field into heading and rest", async () => {
   const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "wp-pick-"));
@@ -180,7 +192,8 @@ t("mapping validates, and catches a bad id", () => {
     assert.equal(hero.props.heading, "Gentle care, every visit");
     assert.equal(hero.props.body, "We look after families across the harbor.\n\nSame-day appointments & weekend hours.");
     assert.deepEqual(hero.props.image, { src: "/images/wp/reception.avif", alt: "Our reception" });
-    assert.deepEqual(hero.props.ctas, [{ label: "Book a visit", href: "/about/team", style: "primary" }]);
+    assert.deepEqual(hero.props.ctas, [{ label: "Book a visit", href: "/about/team", style: "primary" }], "an imported list wins whole over the default's example item");
+    assert.equal(hero.props.eyebrow, "", "a prop the old block never had is present with its default");
     assert.equal(hero.props.tone, "dark");
     assert.deepEqual(hero._wp, { block: "acf/hero", tone: "dark", side: "left", show_button: true }, "the old options ride along under _wp");
     assert.deepEqual(rep.variants["acf/hero"].side, { left: 1, right: 1 }, "the switched-off About hero is not counted");

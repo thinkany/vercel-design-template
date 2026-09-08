@@ -1934,7 +1934,7 @@ function wpReadPayload(dir) { return readJsonFile(wpFile(dir, "payload.json")); 
 function wpBlocks(dir) {
   const ib = introspectBlocks(dir);
   const all = [...readBlockRegistry(dir), ...Object.values(ib.builtins || {})];
-  return all.map((b) => ({ key: b.key, name: b.name, fields: (ib.fields && ib.fields[b.key]) || {} }));
+  return all.map((b) => ({ key: b.key, name: b.name, fields: (ib.fields && ib.fields[b.key]) || {}, defaults: (ib.defaults && ib.defaults[b.key]) || null }));
 }
 // Write the payload and the files derived from it (the inventory the card shows, the
 // slim definitions the skill reads). One place, so a fetch and a file load agree.
