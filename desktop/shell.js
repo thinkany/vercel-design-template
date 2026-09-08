@@ -5928,26 +5928,7 @@ async function renderWpImport(host, { compact = false } = {}) {
       const r3 = row();
       r3.appendChild(btn(S.brief, () => { closeModal(); runAgent(S.briefRequest, S.briefEcho); }, { primary: true, disabled: !licensed }));
     } else if (st.payload) {
-      // 3. the mapping
-      step(S.mapStep, S.mapHint);
-      wrap.appendChild(siteEl("div", "sess-desc", st.mappingFilled ? S.mappingReady : st.mapping ? S.mappingEmpty : S.mappingMissing));
-      const r3 = row();
-      r3.appendChild(btn(S.propose, async () => {
-        const r = await window.desktop.wpSkeleton(); if (!r || !r.ok) { err((r && r.error) || "Couldn't start the mapping."); return; }
-        closeModal(); runAgent(S.proposeRequest, S.proposeEcho);
-      }, { primary: !st.mappingFilled, disabled: !licensed }));
-      r3.appendChild(btn(S.reveal, async () => { const r = await window.desktop.wpSkeleton(); if (r && r.ok) window.desktop.wpRevealMapping(); else if (r) err(r.error); }, { disabled: !licensed }));
-      if (st.mapping) {
-        let armed = false;
-        const restart = btn(S.restart, async () => {
-          if (!armed) { armed = true; restart.textContent = S.restartConfirm; restart.style.whiteSpace = "normal"; restart.style.textAlign = "left"; return; }
-          const r = await window.desktop.wpSkeleton(true); if (!r || !r.ok) { err((r && r.error) || "Couldn't restart the mapping."); return; }
-          await paint(); siteFlash(status, S.restarted);
-        }, { disabled: !licensed });
-        restart.style.opacity = "0.75"; r3.appendChild(restart);
-      }
-
-      // 4. the import
+      // 3. the import: one button; everything lands as drafts and undesigned blocks
       step(S.importStep, S.importHint);
       const r4 = row();
       const runBtn = btn(wpBusy === "import" ? S.running : S.run, async () => {
@@ -5957,11 +5938,12 @@ async function renderWpImport(host, { compact = false } = {}) {
         if (!r || !r.ok) { runBtn.disabled = false; runBtn.textContent = S.run; err((r && r.error) || "The import failed."); return; }
         await paint();
         openWpTextModal(S.reportTitle, r.markdown);
-      }, { primary: st.mappingFilled, disabled: !licensed || !st.mappingFilled || wpBusy === "import", title: !st.mapping ? S.needMapping : !st.mappingFilled ? S.needFilled : "" });
+      }, { primary: true, disabled: !licensed || wpBusy === "import" });
       r4.appendChild(runBtn);
+      r4.appendChild(btn(S.reveal, async () => { const r = await window.desktop.wpRevealMapping(); if (r && r.error) err(r.error); }));
       if (st.report) {
         const rep = st.report;
-        wrap.appendChild(siteEl("div", "sess-desc", `${S.done(rep)}${rep.when ? ` ${new Date(rep.when).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}.` : ""}`));
+        wrap.appendChild(siteEl("div", "sess-desc", `${S.done(rep)}${rep.when ? ` ${new Date(rep.when).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}.` : ""}${rep.blocks ? ` ${S.nextDesign}` : ""}`));
         const r4b = row();
         r4b.appendChild(btn(S.viewReport, async () => { const r = await window.desktop.wpReport(); if (r && r.ok) openWpTextModal(S.reportTitle, r.markdown); else if (r) err(r.error); }));
       }

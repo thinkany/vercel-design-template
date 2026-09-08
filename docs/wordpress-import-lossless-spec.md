@@ -8,7 +8,14 @@ standard; one Prose block per site. Open questions resolved 2026-09-08. **Supers
 [wordpress-migration-spec.md](wordpress-migration-spec.md) (the plugin, the
 payload, field purposes and carried options all stay; the Propose step goes) and
 [design-after-import-spec.md](design-after-import-spec.md) (folded in as the design
-pass). Not built.
+pass). **P1 BUILT 2026-09-08** on `feature/wordpress-migration`: `needsDesign` and
+`wp` on the block contract, the placeholder component, the block generator (props
+from fields, enums from options, shared fragments, Prose - wp), the registry
+insertion, the generated mapping, the draft-only never-overwrite transform with
+`created.json`, the verification-first report, and the panel's one Run the import
+button. Verified by the fixture test (17 cases) and a real site build that compiles
+the generated blocks and renders them through the placeholder. Not yet run in the
+app against tax.local. P2 to P4 not built.
 
 ## The idea in one paragraph
 

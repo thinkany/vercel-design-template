@@ -1,5 +1,5 @@
 ---
-description: Migrate a WordPress site into this project, two steps that read the app's WordPress import. "inventory" turns what the old site holds into a brief for the new design; "map" proposes where each old block and field lands among this site's blocks, for the designer to confirm before the import runs
+description: Migrate a WordPress site into this project. "inventory" turns what the app's WordPress import holds into a brief for the new design; the import itself runs from the app's panel
 ---
 
 This is a **licensed thinkany design skill**. Its playbook is delivered by the

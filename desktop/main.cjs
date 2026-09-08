@@ -1975,7 +1975,7 @@ function wpStatus() {
     licensed: siteLicensed(), project: true, dir: wpDir(dir), siteReady: site.ready,
     payload: inv ? { site: inv.site, counts: inv.counts, fetched: source.fetched || null, url: source.url || null, file: source.file || null } : null,
     mapping: !!mapping, mappingFilled: filled, mappingPath: wpFile(dir, "mapping.json"),
-    report: report ? { pages: report.pages.length, posts: report.posts.imported, redirects: report.redirects, media: report.media, unmappedBlocks: Object.keys(report.unmappedBlocks || {}).length, when: report.when || null } : null,
+    report: report ? { pages: report.pages.length, posts: report.posts.imported, redirects: report.redirects, media: report.media, unmappedBlocks: Object.keys(report.unmappedBlocks || {}).length, blocks: (report.blocksCreated || []).length, when: report.when || null } : null,
   };
 }
 ipcMain.handle("wp:status", () => wpStatus());
@@ -2035,19 +2035,20 @@ ipcMain.handle("wp:skeleton", (_e, { reset } = {}) => {
 ipcMain.handle("wp:revealMapping", () => {
   if (!currentProject) return { ok: false };
   const p = wpFile(currentProject, "mapping.json");
-  if (!fs.existsSync(p)) return { ok: false, error: "There's no mapping file yet." };
-  shell.showItemInFolder(p); return { ok: true };
+  if (fs.existsSync(p)) shell.showItemInFolder(p); else if (fs.existsSync(wpDir(currentProject))) shell.openPath(wpDir(currentProject)); else return { ok: false, error: "Nothing has been imported yet." };
+  return { ok: true };
 });
-// Run the transform: payload + mapping → content/, media through the same conversion as
-// uploads, redirects into site.json, and a report beside the payload. Re-runnable.
+// Run the import (docs/wordpress-import-lossless-spec.md): forms, one generated block
+// per old block in use (placeholder component, needsDesign), every page, post and
+// entry as a draft, nothing already in the site replaced, media through the same
+// conversion as uploads, redirects, and a report that verifies. The mapping is
+// generated from the plan and kept as the audit trail. Re-runnable.
 ipcMain.handle("wp:transform", async () => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   const dir = currentProject;
   if (!siteReady(dir).ready) return { ok: false, error: "Build the site first (promote the approved design), then run the import." };
   const payload = wpReadPayload(dir); if (!payload) return { ok: false, error: "Nothing has been imported yet." };
-  const mapping = readJsonFile(wpFile(dir, "mapping.json")); if (!mapping) return { ok: false, error: "The mapping file is missing or isn't valid JSON." };
-  const blocks = wpBlocks(dir);
   const settings = loadCmsSettings(dir).media;
   const tmp = path.join(app.getPath("temp"), "thinkany-wp-media"); fs.mkdirSync(tmp, { recursive: true });
   const token = (readJsonFile(wpFile(dir, "source.json")) || {}).token || "";
@@ -2071,14 +2072,30 @@ ipcMain.handle("wp:transform", async () => {
     return `/images/${folder}/${base}${ext}`;
   };
   try {
-    const r = await wpImport.transform(dir, payload, mapping, { blocks, fetchMedia, blogPath: blogPathOf(siteJsonOf(dir)) });
+    // 1. The plan: blocks to generate, from the site's registry and what is already designed.
+    const blocksDir = path.join(dir, "site", "blocks");
+    const registryPath = path.join(blocksDir, "index.ts");
+    const registrySrc = readTextSafe(registryPath);
+    const existing = wpBlocks(dir);
+    const designed = new Set();
+    for (const b of existing) { if (!/-wp(-\d+)?$/.test(b.key)) continue; const src = readTextSafe(path.join(blocksDir, `${b.key}.tsx`)); if (src && !/needsDesign:\s*true/.test(src)) designed.add(b.key); }
+    const plan = wpImport.losslessPlan(payload, { existingKeys: existing.map((b) => b.key), registrySrc, designed });
+    // 2. Block files, fragments, the registry. A designed block's file is never touched.
+    for (const [rel, src] of Object.entries(plan.files)) { const abs = path.join(dir, rel); fs.mkdirSync(path.dirname(abs), { recursive: true }); fs.writeFileSync(abs, src); }
+    // 3. The mapping, generated: the audit trail.
+    fs.writeFileSync(wpFile(dir, "mapping.json"), JSON.stringify(plan.mapping, null, 2) + "\n");
+    // 4. Content. Generated blocks carry their own field kinds; the site's other blocks come from introspection.
+    const known = new Set(plan.blocks.map((b) => b.key));
+    const blocks = [...existing.filter((b) => !known.has(b.key)), ...plan.blocks];
+    const r = await wpImport.transform(dir, payload, plan.mapping, { blocks, fetchMedia, blogPath: blogPathOf(siteJsonOf(dir)), draft: true, neverOverwrite: true, createdFile: wpFile(dir, "created.json") });
     if (!r.ok) return { ok: false, errors: r.errors, error: r.errors.join("\n") };
-    const report = { ...r.report, when: new Date().toISOString() };
+    const report = { ...r.report, when: new Date().toISOString(), blocksCreated: [...plan.plan.blocks.map((b) => ({ key: b.key, name: b.name, wp: b.wp, uses: b.uses, options: b.variants, kept: designed.has(b.key) })), ...(plan.plan.prose ? [{ key: "prose-wp", name: "Prose - wp", wp: "core/*", uses: 0, options: [], kept: designed.has("prose-wp") }] : [])] };
     fs.writeFileSync(wpFile(dir, "report.json"), JSON.stringify(report, null, 2) + "\n");
     fs.writeFileSync(wpFile(dir, "report.md"), wpImport.reportMarkdown(report));
-    appLog.write(`[wp] transform: ${report.pages.length} pages, ${report.posts.imported} posts, ${report.redirects} redirects, ${report.media.downloaded} media (${report.media.failed.length} failed)`);
+    try { fs.rmSync(path.join(dir, ".thinkany", "blocks.json"), { force: true }); } catch {} // the registry changed: re-introspect on the next read
+    appLog.write(`[wp] import: ${report.blocksCreated.length} blocks, ${report.pages.length} pages, ${report.posts.imported} posts, ${report.redirects} redirects, ${report.media.downloaded} media (${report.media.failed.length} failed)`);
     return { ok: true, status: wpStatus(), markdown: wpImport.reportMarkdown(report) };
-  } catch (e) { appLog.write(`[wp] transform failed: ${e.stack || e.message}`); return { ok: false, error: e.message }; }
+  } catch (e) { appLog.write(`[wp] import failed: ${e.stack || e.message}`); return { ok: false, error: e.message }; }
 });
 ipcMain.handle("wp:report", () => {
   if (!currentProject) return { ok: false, error: "No project is open." };

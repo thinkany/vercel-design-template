@@ -1,13 +1,11 @@
 ---
-description: Migrate a WordPress site into this project, two steps that read the app's WordPress import. "inventory" turns what the old site holds into a brief for the new design; "map" proposes where each old block and field lands among this site's blocks, for the designer to confirm before the import runs
+description: Migrate a WordPress site into this project. "inventory" turns what the app's WordPress import holds into a brief for the new design; the import itself runs from the app's panel
 ---
 
 Invoke this from the app's **Import from WordPress** panel (Site → Settings), or when
 the designer asks to **migrate / move / import a WordPress site**, **use the old site
 as the brief**, or **map the old content onto the new blocks**. The argument after the
-command picks the step: `inventory` or `map`. With no argument, look at what exists
-(§1) and pick: no mapping file yet and the site isn't built → `inventory`; the site is
-built → `map`.
+command picks the step; today there is one, `inventory`.
 
 The app has already fetched the site into `.thinkany/wp-import/`. You read those
 files; you never contact the WordPress site and never write into `content/`. The
@@ -73,129 +71,12 @@ Sections, in order:
 Keep it under a page. Facts only from the files; where the files don't say, don't
 guess.
 
-## 3. `map`: propose the mapping
+## 3. `map`: retired
 
-The mapping file is `.thinkany/wp-import/mapping.json`. If it does not exist, say so
-and stop: the app writes the skeleton (Propose a mapping does that first). Read it
-and fill the empty targets. **Edit the file in place, keep every key, add nothing
-the transform doesn't read.** The transform reads exactly these:
-
-```jsonc
-{
-  "version": 1,
-  "pages": [ { "wp": 12, "title": "About Us", "wpPath": "/about-us", "page": "about", "parent": null, "include": true } ],
-  "blocks": {
-    "acf/hero": { "block": "hero", "fields": {
-      "heading": "heading",                       // target prop ← old field name
-      "body": "subheading",                       // a wysiwyg field into a richtext prop converts to the site's markdown
-      "image": "image",                           // an ACF image into an image prop: fetched and converted
-      "ctas[0]": { "from": "button", "each": { "label": "title", "href": "url", "style": "=primary" } },
-      "tone": { "from": "tone", "map": { "Light": "light", "Dark": "dark" } }   // old choice labels → the prop's options
-    } },
-    "acf/page-hero": { "block": "hero", "fields": {
-      "heading": { "from": "hero_copy", "pick": "heading" },   // one wysiwyg holding headline + intro: the first heading…
-      "body": { "from": "hero_copy", "pick": "rest" }          // …and everything after it
-    } },
-    "acf/faq": { "block": "faq", "fields": {
-      "heading": "faq_title",
-      "items": { "from": "faq_groups", "flatMap": "questions", "each": { "q": "question", "a": "answer" } }   // grouped questions, flattened
-    } },
-    "acf/features": { "block": "features", "fields": {
-      "heading": "title",
-      "items": { "from": "items", "each": { "title": "name", "text": "text", "icon": "icon" } }   // a repeater into a list of objects
-    } }
-  },
-  "prose": { "block": "prose", "prop": "body" },   // where runs of ordinary paragraphs/headings/lists land; empty = dropped and reported
-  "tables": { "block": "table", "rows": "rows", "header": "header", "caption": "caption" },
-  "posts": { "import": true, "type": "post", "categoriesAsTags": true },
-  "types": { "testimonial": { "include": true, "key": "testimonial", "label": "Testimonials", "singular": "Testimonial", "path": "/testimonials",
-             "fields": { "quote": "quote", "by_line": "byLine", "client_photo": "photo" } } },   // OLD field name → NEW camelCase key, always in that order
-  "nav": { "main": "primary", "footer": ["footer-one", "footer-two"] },   // null / [] keeps the design's own menu; several footer menus become columns
-  "forms": { "import": true },   // every Gravity Forms / WPForms form becomes a form in the Forms tab
-  "media": { "download": true, "folder": "wp" }
-}
-```
-
-Rules for a good proposal:
-
-- **Pages.** Keep the app's page ids unless one is unclear. `home` is the front
-  page. A page that is clearly retired (a draft "old promotions", an empty page,
-  the posts page that the blog replaces) gets `include: false`; say why in one line
-  in chat, not in the file. Nested pages keep `parent: null`: the transform follows
-  the old parent chain on its own. Set `parent` only to move a page.
-- **Blocks.** Pair each old ACF block with the site block whose fields fit, by
-  meaning first (a hero is a hero), then by field shape (heading, body, image, a
-  link → hero or feature; a repeater of name/text/icon → features or cards; quote +
-  who → testimonial). **A poor fit is worse than no fit.** An image-beside-copy
-  story, a comparison, a logo strip or a CTA banner forced into a hero stacks
-  heroes on the page and hides content in the wrong place; leave it unmapped, say
-  so, and name the section the site is missing (each is a one-line `/design-block`
-  ask). When the designer adds those blocks and asks again, revisit every block
-  you left unmapped or mapped as a compromise: the mapping file is yours to
-  update, not only to fill. `availableBlocks` in the file lists this site's blocks and
-  their prop paths; use those paths exactly. Prop kinds come from
-  `.thinkany/blocks.json` (`fields[block][path].kind`): string, richtext, image,
-  link, list, enum with its options, boolean, number.
-- **Layout settings are not content.** The old theme's presentation knobs (padding,
-  background colors, section ids, hide on mobile, column widths, a deactivate
-  toggle) are listed per block as `_layoutFields` in the skeleton and `layoutFields`
-  in the definitions. Never map them: the new design decides layout. When a block
-  has a deactivate toggle the skeleton already sets `skipWhen` to it, so instances
-  switched off on the old site are skipped; a page block marked `deactivated` in
-  the definitions is one of those.
-- **Options are variants, not content.** Each old block's options in use (a side, a
-  layout type, a column count, a switch that reveals fields) are listed under
-  `_variants` in the skeleton with the values used across the site, and per
-  instance under `variants` in the definitions. When the new block has a matching
-  option prop (an enum), map it with `{ "from": "<field>", "map": { "<old>": "<new>" } }`.
-  When it does not, leave it: with `carry: true` (the default) every option value is
-  kept on the imported instance under `_wp` and listed in the report, so the design
-  pass can add the option to the block later. Say in chat which options the new
-  block lacks; a block that needs them is a `/design-block` ask.
-- **One field, two props.** An old hero often keeps headline and intro in one
-  wysiwyg field. Split it with `pick`: `heading` takes the first heading's text,
-  `rest` takes what follows. Grouped repeaters (FAQ sections each holding
-  questions) flatten into one list with `flatMap: "<sub repeater>"` before `each`.
-- **Fields.** Map only fields whose kinds agree or convert cleanly: text → string,
-  wysiwyg → richtext (or string, if the prop is plain text: the tags are stripped),
-  image → image, link/url → link, repeater → list with `each`, group → object with
-  `each`, select/radio → enum with a `map` when the labels differ, true_false →
-  boolean. Never point two old fields at one prop. Leave a prop out rather than
-  force a fit; the report lists unmapped fields and the designer decides.
-- **Forms.** The old site's forms (Gravity Forms, WPForms) are imported into the
-  Forms tab with their fields, under an id made from the form's title
-  (`_found` in the skeleton lists them). An old Form block binds to its form
-  through the built-in `form` block: `"form": "<the reference field>"` resolves the
-  old form to the new id, plus `heading` and `intro` from the block's own fields.
-  Prefer that over a promoted Contact section with fixed fields whenever the old
-  form has more than name, email and message; say which fields would drop
-  otherwise. Recipients and delivery are set by the designer in the Forms tab.
-- **Prose.** If the site has a block whose one richtext prop is meant for running
-  copy (a Prose, Text, Article or Rich text block), name it in `prose`. If not, say
-  so in chat: runs of paragraphs will be dropped and listed, and a prose block is a
-  one-line ask to `/design-block`.
-- **Tables.** Keep `tables` pointing at the built-in `table` block unless the site
-  has its own.
-- **Types.** Include a custom type when its entries are real content (team, services,
-  locations). Keys are lowercase with dashes; paths start with `/`. The skeleton
-  pre-fills `fields` as **old field name → new camelCase key** from the type's field
-  groups; keep that direction (the left side is the WordPress name, the right side
-  is the new key), rename a key only to read better, and never swap the sides. The
-  kind comes from the ACF type unless you set one.
-- **Nav.** Two parts: `main` is the menu in the primary/header location, `footer`
-  the footer menus (`_menus` in the skeleton lists them all with their locations).
-  Several footer menus become footer columns headed by each menu's name, which is
-  how WordPress footers are usually built. **Leave the skeleton's choices as they
-  are**: importing the menus is the designer's call, not yours. When the old links
-  point nowhere, say so in chat and tell the designer that `main: null` and
-  `footer: []` keep the design's own menus. External links and page links both
-  carry over.
-- **Posts.** Import unless the site has none worth keeping; categories become tags.
-
-After writing the file, tell the designer, in section terms, what lands where, what
-has no destination and why, and that the next step is **Run the import** in the
-panel (they can open the mapping file first to change anything). Do not run the
-import yourself; there is no command for it, by design.
+The import no longer needs a mapping proposed: every old block becomes a block of
+this site with the same fields (docs/wordpress-import-lossless-spec.md), and the
+panel's Run the import does it. If asked to map, say so in one line and point at
+Run the import in Site → Settings → Import from WordPress.
 
 ## 4. If something is missing
 

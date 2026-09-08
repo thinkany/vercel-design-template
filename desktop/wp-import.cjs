@@ -621,9 +621,28 @@ function seoOf(e) {
   return out;
 }
 
-async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia = null, blogPath = "blog", dry = false } = {}) {
+async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia = null, blogPath = "blog", dry = false, draft = false, neverOverwrite = false, createdFile = null } = {}) {
   const errors = validateMapping(mapping, blocks);
   if (errors.length) return { ok: false, errors };
+  // Lossless mode: everything a draft, and a file the import did not write before is
+  // never replaced (an id in the way gets a distinct one; the report says so).
+  const created = createdFile ? (() => { try { return JSON.parse(fs.readFileSync(createdFile, "utf8")); } catch { return { files: {} }; } })() : { files: {} };
+  const ours = new Set(Object.keys(created.files || {}));
+  const createdNow = { files: {} };
+  const exists = (rel) => { try { fs.accessSync(path.join(projectDir, rel)); return true; } catch { return false; } };
+  const idsChanged = [];
+  // A free id for a new file under `dirRel`: the wanted id, else one made from the title, else -2, -3…
+  const freeId = (dirRel, ext, wanted, title, what) => {
+    if (!neverOverwrite) return wanted;
+    const taken = (id) => exists(path.join(dirRel, `${id}${ext}`)) && !ours.has(path.join(dirRel, `${id}${ext}`));
+    if (!taken(wanted)) return wanted;
+    const alt = slugify(title || "");
+    const cands = [alt && alt !== wanted ? alt : null, `${wanted}-wp`].filter(Boolean);
+    let id = cands.find((c) => !taken(c)); let n = 2;
+    while (!id || taken(id)) { id = `${wanted}-${n++}`; }
+    idsChanged.push({ what, from: wanted, to: id, why: "already in the site" });
+    return id;
+  };
   const site = payload.site || {};
   const entries = payload.entries || [];
   const byWp = Object.fromEntries(entries.map((e) => [e.id, e]));
@@ -634,12 +653,15 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
   const cls = classifyFields(payload);
   const noteVariants = (name, fields) => { const v = report.variants[name] || (report.variants[name] = {}); for (const [k, val] of Object.entries(fields || {})) { if (purposeOf(cls, name, k) !== "variant") continue; const key = val == null || val === "" ? "(empty)" : typeof val === "object" ? "(object)" : String(val); (v[k] || (v[k] = {}))[key] = ((v[k] || {})[key] || 0) + 1; } };
   const written = [];
-  const writeFile = (rel, text) => { written.push(rel); if (dry) return; const abs = path.join(projectDir, rel); fs.mkdirSync(path.dirname(abs), { recursive: true }); fs.writeFileSync(abs, text); };
+  const writeFile = (rel, text, wpId = null) => { written.push(rel); createdNow.files[rel] = { wp: wpId }; if (dry) return; const abs = path.join(projectDir, rel); fs.mkdirSync(path.dirname(abs), { recursive: true }); fs.writeFileSync(abs, text); };
   const readJson = (rel) => { try { return JSON.parse(fs.readFileSync(path.join(projectDir, rel), "utf8")); } catch { return null; } };
 
   // ---- routes: where every old entry lands, decided before any content is written
   const pageMap = new Map(); // wp id → { id, slug, parent, include, ... }
-  for (const pg of mapping.pages || []) pageMap.set(Number(pg.wp), pg);
+  for (let pg of mapping.pages || []) {
+    if (neverOverwrite && pg.include !== false) { const e = byWp[pg.wp] || {}; const id = freeId(path.join("content", "pages"), ".json", pg.page, e.title, `page "${e.title || pg.page}"`); if (id !== pg.page) pg = { ...pg, page: id, slug: id }; } // a new id is the route too: the old one is taken
+    pageMap.set(Number(pg.wp), pg);
+  }
   const pageIdOf = (wp) => { const pg = pageMap.get(Number(wp)); return pg && pg.include !== false ? pg.page : null; };
   const routeOfPage = (wp, guard = 0) => {
     const pg = pageMap.get(Number(wp)); if (!pg || pg.include === false || guard > 16) return null;
@@ -811,7 +833,8 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
 
   // ---- pages
   const pageDocs = [];
-  for (const pg of mapping.pages || []) {
+  for (const pg0 of mapping.pages || []) {
+    const pg = pageMap.get(Number(pg0.wp)) || pg0;
     const e = byWp[pg.wp]; if (!e) continue;
     if (pg.include === false) continue;
     const id = pg.page; const lost = []; const dropped = []; const out = [];
@@ -840,12 +863,12 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
     const pageContentFields = Object.keys(e.fields || {}).filter((k) => !isLayoutField(k) && e.fields[k] !== "" && e.fields[k] != null && e.fields[k] !== false);
     if (pageContentFields.length && !pg.fields) lost.push({ where: id, node: "page-fields", text: pageContentFields.join(", ") });
     const parentId = pg.parent != null ? pg.parent : (e.parent ? pageIdOf(e.parent) : null);
-    const doc = { title: plainText(e.title) || id, ...(id !== "home" ? { slug: pg.slug || id } : {}), ...(parentId && id !== "home" ? { parent: parentId } : {}), ...(Number.isFinite(e.order) ? { order: e.order } : {}), ...(e.status !== "publish" ? { draft: true } : {}), seo: seoOf(e), blocks: out };
+    const doc = { title: plainText(e.title) || id, ...(id !== "home" ? { slug: pg.slug || id } : {}), ...(parentId && id !== "home" ? { parent: parentId } : {}), ...(Number.isFinite(e.order) ? { order: e.order } : {}), ...(draft || e.status !== "publish" ? { draft: true } : {}), seo: seoOf(e), blocks: out };
     if (doc.seo.image) { const img = await media(typeof doc.seo.image === "string" ? doc.seo.image : doc.seo.image); if (img) doc.seo.image = img.src; }
-    pageDocs.push({ id, doc });
+    pageDocs.push({ id, doc, wp: e.id });
     report.pages.push({ id, title: doc.title, route: "/" + (routeOfPage(e.id) || ""), from: e.path, blocks: out.length, dropped, lost, classic: !!e.classic, draft: !!doc.draft });
   }
-  for (const { id, doc } of pageDocs) writeFile(path.join("content", "pages", `${id}.json`), JSON.stringify(doc, null, 2) + "\n");
+  for (const { id, doc, wp } of pageDocs) writeFile(path.join("content", "pages", `${id}.json`), JSON.stringify(doc, null, 2) + "\n", wp);
 
   // ---- posts
   if (postsCfg.import !== false) {
@@ -856,11 +879,11 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
       for (const l of r.lost) lost.push({ where: e.slug, ...l });
       const body = r.segments.map((s) => s.kind === "md" ? s.md : s.rows.map((row) => `| ${row.join(" | ")} |`).join("\n")).join("\n\n"); // a table in a post stays as a pipe table (text)
       for (const t of r.tables) lost.push({ where: e.slug, node: "table-as-text", text: `${t.rows.length} rows` });
-      const slug = slugify(e.slug || e.title) || `post-${e.id}`;
+      const slug = freeId(path.join("content", "posts"), ".md", slugify(e.slug || e.title) || `post-${e.id}`, e.title, `post "${e.title}"`);
       const tags = (e.terms || []).filter((t) => t.taxonomy === "post_tag" || (postsCfg.categoriesAsTags !== false && t.taxonomy === "category")).map((t) => t.name).filter((n) => n && n.toLowerCase() !== "uncategorized");
       const cover = e.featuredImage ? await media(Number(e.featuredImage)) : null;
-      const fm = { title: plainText(e.title), date: String(e.date || "").slice(0, 10), updated: e.modified || undefined, description: plainText(e.excerpt) || (seoOf(e).description || ""), image: cover ? cover.src : "", tags: Array.from(new Set(tags)), draft: e.status !== "publish", seo: (() => { const s = seoOf(e); delete s.description; return s; })() };
-      writeFile(path.join("content", "posts", `${slug}.md`), serializeFrontmatter(fm) + "\n" + body + "\n");
+      const fm = { title: plainText(e.title), ...(slug !== (slugify(e.slug || e.title) || `post-${e.id}`) ? {} : {}), date: String(e.date || "").slice(0, 10), updated: e.modified || undefined, description: plainText(e.excerpt) || (seoOf(e).description || ""), image: cover ? cover.src : "", tags: Array.from(new Set(tags)), draft: draft || e.status !== "publish", seo: (() => { const s = seoOf(e); delete s.description; return s; })() };
+      writeFile(path.join("content", "posts", `${slug}.md`), serializeFrontmatter(fm) + "\n" + body + "\n", e.id);
       report.posts.imported++; if (fm.draft) report.posts.drafts++; report.posts.lost.push(...lost);
     }
   }
@@ -885,12 +908,13 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
       fields.push(f);
     }
     const tdef = { key: t.key, label: t.label || def.label || wpType, ...(t.singular || def.singular ? { singular: t.singular || def.singular } : {}), path: t.path || `/${t.key}`, fields, template: Array.isArray(t.template) ? t.template : [], ...(t.index !== false ? { index: { title: t.label || def.label || wpType } } : {}) };
-    const i = typesFile.types.findIndex((x) => x.key === t.key); if (i >= 0) typesFile.types[i] = tdef; else typesFile.types.push(tdef);
-    typesChanged = true;
+    const i = typesFile.types.findIndex((x) => x.key === t.key);
+    if (i >= 0 && neverOverwrite && !(created.types || []).includes(t.key)) { idsChanged.push({ what: `type "${t.key}"`, from: t.key, to: t.key, why: "already defined in the site, definition kept; entries added" }); }
+    else { if (i >= 0) typesFile.types[i] = tdef; else typesFile.types.push(tdef); typesChanged = true; (createdNow.types || (createdNow.types = [])).push(t.key); }
     const rep = { key: t.key, entries: 0, lost: [] };
     for (const e of entries.filter((x) => x.type === wpType)) {
-      const slug = slugify(e.slug || e.title) || `${t.key}-${e.id}`;
-      const doc = { title: plainText(e.title), slug, ...(e.status !== "publish" ? { draft: true } : {}), seo: seoOf(e) };
+      const slug = freeId(path.join("content", t.key), ".json", slugify(e.slug || e.title) || `${t.key}-${e.id}`, e.title, `${t.key} "${e.title}"`);
+      const doc = { title: plainText(e.title), slug, ...(draft || e.status !== "publish" ? { draft: true } : {}), seo: seoOf(e) };
       const lost = [];
       for (const f of fields) {
         const wpField = Object.keys(t.fields).find((k) => (typeof t.fields[k] === "string" ? t.fields[k] : t.fields[k].key) === f.key);
@@ -900,7 +924,7 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
         if (v !== undefined && v !== "") doc[f.key] = f.kind === "reference" && v && typeof v === "object" ? slugify(v.slug || "") : v;
       }
       if (t.featuredImageField && e.featuredImage) { const img = await media(Number(e.featuredImage)); if (img) doc[t.featuredImageField] = img; }
-      writeFile(path.join("content", t.key, `${slug}.json`), JSON.stringify(doc, null, 2) + "\n");
+      writeFile(path.join("content", t.key, `${slug}.json`), JSON.stringify(doc, null, 2) + "\n", e.id);
       rep.entries++; rep.lost.push(...lost);
     }
     report.types[wpType] = rep;
@@ -934,11 +958,17 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
   writeFile(path.join("content", "site.json"), JSON.stringify(siteJson, null, 2) + "\n");
 
   report.files = written;
+  report.idsChanged = idsChanged;
+  report.draft = !!draft;
+  if (createdFile && !dry) { try { fs.mkdirSync(path.dirname(createdFile), { recursive: true }); fs.writeFileSync(createdFile, JSON.stringify({ when: new Date().toISOString(), ...createdNow }, null, 2) + "\n"); } catch {} }
   return { ok: true, report };
 }
 
 function reportMarkdown(rep) {
   const L = ["# Import report", ""];
+  if (rep.blocksCreated && rep.blocksCreated.length) L.push(`- ${rep.blocksCreated.length} block${rep.blocksCreated.length === 1 ? "" : "s"} created, all needing a design pass (Blocks → Needs Design): ${rep.blocksCreated.map((b) => `${b.name}${b.uses ? ` (${b.uses}×${b.options && b.options.length ? `, ${b.options.join(", ")}` : ""})` : ""}${b.kept ? " [kept, already designed]" : ""}`).join("; ")}`);
+  if (rep.draft) L.push("- Everything imported is a draft: nothing already in the site was replaced. Publish from the Pages, Posts and Types lists when the blocks are designed.");
+  if (rep.idsChanged && rep.idsChanged.length) L.push(`- Ids changed: ${rep.idsChanged.map((x) => `${x.what} → ${x.to} (${x.why})`).join("; ")}`);
   L.push(`- ${rep.pages.length} pages written, ${rep.posts.imported} posts (${rep.posts.drafts} drafts), ${Object.values(rep.types).reduce((n, t) => n + t.entries, 0)} entries in ${Object.keys(rep.types).length} types`);
   if (rep.forms && rep.forms.length) L.push(`- ${rep.forms.length} form${rep.forms.length === 1 ? "" : "s"} in the Forms tab (${rep.forms.map((f) => `${f.name}: ${f.fields} fields${f.kept ? ", already there, left as is" : ""}${f.skipped.length ? `, ${f.skipped.length} skipped` : ""}`).join("; ")}). Recipients and delivery are set in the Forms tab.`);
   L.push(`- ${rep.media.downloaded} images brought in${rep.media.failed.length ? `, ${rep.media.failed.length} failed` : ""}${rep.media.skipped ? `, ${rep.media.skipped} left at their old address` : ""}`);
@@ -968,4 +998,335 @@ function reportMarkdown(rep) {
   return L.join("\n");
 }
 
-module.exports = { PAYLOAD_KIND, PAYLOAD_VERSION, MAPPING_VERSION, fetchPayload, validatePayload, inventory, inventoryMarkdown, definitionsForSkill, mappingSkeleton, validateMapping, classifyFields, convertForm, htmlToMarkdown, transform, reportMarkdown, slugify };
+// ---- lossless import: one generated block per old block in use ------------------
+// docs/wordpress-import-lossless-spec.md. Every old ACF block in use becomes a block
+// file in site/blocks with the same content fields as props, its options as enums,
+// shared fragments for field groups the theme repeats, and the placeholder component
+// (needsDesign: true). The mapping the transform consumes is generated from the plan,
+// so the import needs no proposal.
+
+const ACF_PROP = { text: "string", textarea: "string", email: "string", url: "string", password: "string", date_picker: "string", date_time_picker: "string", time_picker: "string", color_picker: "string", oembed: "string", file: "string", wysiwyg: "richtext", image: "image", gallery: "images", link: "link", page_link: "string", number: "number", range: "number", true_false: "boolean", select: "enum", radio: "enum", button_group: "enum", checkbox: "strings", repeater: "list", group: "object", post_object: "string", relationship: "strings", taxonomy: "strings", user: "string" };
+const FORM_TYPES = new Set(["forms", "gravityforms", "gf_form", "gravity_forms"]);
+const IDENT_RESERVED = new Set(["type", "props", "key", "children", "className", "style", "default", "class", "function", "import", "export", "new", "delete", "in", "of"]);
+
+function camelName(s) { return camel(String(s || "").replace(/[^A-Za-z0-9]+/g, " ")); }
+function pascal(s) { const c = camelName(s); return c ? c[0].toUpperCase() + c.slice(1) : "Block"; }
+function jsString(s) { return JSON.stringify(String(s)); }
+// A zod-safe enum value from an ACF choice: its label when that reads as a slug, else the key.
+function enumValue(key, label) {
+  const fromLabel = slugify(String(label || "")).replace(/-/g, "-");
+  const v = fromLabel && fromLabel.length <= 24 ? fromLabel : slugify(String(key || "")) || "option";
+  return v;
+}
+
+// Infer a prop kind from an instance value when the definitions don't know the field.
+function kindFromValue(v) {
+  if (v === null || v === undefined) return "string";
+  if (typeof v === "boolean") return "boolean";
+  if (typeof v === "number") return "number";
+  if (typeof v === "string") return /<[a-z][^>]*>/i.test(v) || v.length > 160 ? "richtext" : "string";
+  if (Array.isArray(v)) { if (!v.length) return "strings"; const f = v[0]; if (f && typeof f === "object") return f.image ? "images" : "list"; return "strings"; }
+  if (typeof v === "object") { if (v.image) return "image"; if (v.url !== undefined && "title" in v) return "link"; if (v.post) return "string"; return "object"; }
+  return "string";
+}
+
+/**
+ * One prop per content field, from the field definition (ACF) or, failing that,
+ * from the values seen. Sub-fields recurse (repeaters, groups). Names come from
+ * labels in camelCase, unique within the block.
+ */
+function propsFor(defs, samples, used, prefix = "") {
+  const props = []; const taken = new Set();
+  const pick = (label, name) => {
+    let base = camelName(label) || camelName(name) || "field";
+    if (IDENT_RESERVED.has(base) || /^\d/.test(base)) base = camelName(name) || `${base}Value`;
+    let out = base; let n = 2;
+    while (taken.has(out)) out = camelName(name) !== base && !taken.has(camelName(name)) ? camelName(name) : `${base}${n++}`;
+    taken.add(out); return out;
+  };
+  const byName = new Map(defs.map((d) => [d.name, d]));
+  const names = Array.from(new Set([...defs.map((d) => d.name), ...Object.keys(samples || {})]));
+  for (const name of names) {
+    if (!name || !used(name)) continue;
+    const d = byName.get(name) || {};
+    const t = d.type || "";
+    let kind = FORM_TYPES.has(t) || (!t && /form/i.test(name) && samples && samples[name] && typeof samples[name] === "object") ? "form" : ACF_PROP[t] || (t ? "string" : kindFromValue(samples ? samples[name] : undefined));
+    if (t === "select" && d.multiple) kind = "strings";
+    if (t === "flexible_content") continue; // no destination in a fixed schema; reported by the transform as unmapped
+    const prop = { prop: pick(d.label, name), wp: name, label: d.label || words(name), kind };
+    if (kind === "enum") {
+      const choices = d.choices && Object.keys(d.choices).length ? Object.entries(d.choices) : Array.from(new Set(Object.keys((d.usage || {})).filter((k) => !k.startsWith("(")))).map((k) => [k, k]);
+      const map = {}; const opts = [];
+      for (const [k, lab] of choices) { let v = enumValue(k, lab); while (opts.includes(v)) v = `${v}-2`; opts.push(v); map[k] = v; }
+      if (!opts.length) { prop.kind = "string"; } else { prop.options = opts; prop.optionMap = map; prop.optionLabels = Object.fromEntries(choices.map(([k, lab]) => [map[k], String(lab)])); }
+    }
+    if (kind === "list" || kind === "object") {
+      const subDefs = d.subFields || [];
+      const sampleItem = samples && samples[name] ? (Array.isArray(samples[name]) ? samples[name].find((x) => x && typeof x === "object") : samples[name]) : null;
+      const subSamples = sampleItem && typeof sampleItem === "object" ? sampleItem : {};
+      prop.items = propsFor(subDefs, subSamples, () => true, `${prefix}${name}.`);
+      if (!prop.items.length) { prop.kind = kind === "list" ? "strings" : "string"; delete prop.items; }
+    }
+    props.push(prop);
+  }
+  return props;
+}
+function words(k) { return String(k || "").replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()); }
+
+// Zod source for one prop.
+function zodFor(p) {
+  switch (p.kind) {
+    case "string": return "z.string().optional()";
+    case "richtext": return "richtext.optional()";
+    case "image": return "image.optional()";
+    case "images": return "z.array(image).default([])";
+    case "link": return "link.optional()";
+    case "number": return "z.number().optional()";
+    case "boolean": return "z.boolean().default(false)";
+    case "strings": return "z.array(z.string()).default([])";
+    case "form": return "formRef.optional()";
+    case "enum": return `z.enum([${p.options.map(jsString).join(", ")}]).default(${jsString(p.options[0])})`;
+    case "list": return `z.array(z.object({\n${p.items.map((i) => `      ${i.prop}: ${zodFor(i)},`).join("\n")}\n    })).default([])`;
+    case "object": return `z.object({\n${p.items.map((i) => `      ${i.prop}: ${zodFor(i)},`).join("\n")}\n    }).optional()`;
+    default: return "z.string().optional()";
+  }
+}
+// The field-kind map the transform reads (the same shape introspection gives).
+function fieldKinds(props, out = {}, at = "") {
+  for (const p of props) {
+    const path = at ? `${at}.${p.prop}` : p.prop;
+    switch (p.kind) {
+      case "image": out[path] = { kind: "image" }; out[`${path}.src`] = { kind: "string" }; out[`${path}.alt`] = { kind: "string" }; break;
+      case "images": out[path] = { kind: "list" }; out[`${path}.src`] = { kind: "string" }; out[`${path}.alt`] = { kind: "string" }; break;
+      case "link": out[path] = { kind: "link" }; out[`${path}.label`] = { kind: "string" }; out[`${path}.href`] = { kind: "string" }; break;
+      case "enum": out[path] = { kind: "enum", options: p.options.slice() }; break;
+      case "list": out[path] = { kind: "list" }; fieldKinds(p.items, out, path); break;
+      case "object": out[path] = { kind: "object" }; fieldKinds(p.items, out, path); break;
+      case "strings": out[path] = { kind: "string" }; break; // a list of strings: the editor's list kind lives on the template
+      default: out[path] = { kind: p.kind === "richtext" ? "richtext" : p.kind === "form" ? "form" : p.kind };
+    }
+  }
+  return out;
+}
+function defaultsFor(props) {
+  const out = {};
+  for (const p of props) {
+    if (p.kind === "string" || p.kind === "richtext") out[p.prop] = "";
+    else if (p.kind === "boolean") out[p.prop] = false;
+    else if (p.kind === "enum") out[p.prop] = p.options[0];
+    else if (p.kind === "list" || p.kind === "strings" || p.kind === "images") out[p.prop] = [];
+  }
+  return out;
+}
+// The transform's field mapping for one block: prop ← old field, options through a map, lists with each.
+function mappingFor(props) {
+  const fields = {};
+  for (const p of props) {
+    if (p.kind === "enum" && p.optionMap) fields[p.prop] = { from: p.wp, map: p.optionMap };
+    else if (p.kind === "list" && p.items) fields[p.prop] = { from: p.wp, each: mappingFor(p.items) };
+    else if (p.kind === "object" && p.items) fields[p.prop] = { from: p.wp, each: mappingFor(p.items) };
+    else fields[p.prop] = p.wp;
+  }
+  return fields;
+}
+
+/**
+ * The plan: every ACF block in use → { key, name, ident, file, wp, uses, props,
+ * fragment, fields, defaults, mapping }, the shared fragments, and whether a Prose
+ * block is needed. `existingKeys` are the site's block keys (a key never collides).
+ */
+function planBlocks(p, { existingKeys = [] } = {}) {
+  const cls = classifyFields(p);
+  const inv = inventory(p);
+  const defs = p.definitions || {};
+  const titles = Object.fromEntries((defs.blocks || []).map((b) => [b.name, b.title || b.name.replace(/^acf\//, "")]));
+  const inUse = Object.entries(inv.blockTypes).filter(([n, k]) => n.startsWith("acf/") && k > 0).map(([n]) => n).sort();
+  const taken = new Set(existingKeys);
+  // Field definitions per block from the groups located on it, plus one sample instance's values.
+  const groupsFor = (name) => (defs.fieldGroups || []).filter((g) => (g.location || []).some((and) => (and || []).some((r) => r && r.param === "block" && String(r.value) === name)));
+  const samplesFor = (name) => { const merged = {}; for (const e of p.entries || []) for (const b of e.blocks || []) if (b.name === name && b.fields) for (const [k, v] of Object.entries(b.fields)) if (merged[k] === undefined || merged[k] === null || merged[k] === "" || (Array.isArray(merged[k]) && !merged[k].length)) merged[k] = v; return merged; };
+  const blocks = [];
+  for (const wpName of inUse) {
+    const c = cls[wpName] || { fields: [], byName: {} };
+    const fieldDefs = groupsFor(wpName).flatMap((g) => g.fields || []).filter((f) => f && f.name && !["tab", "message", "accordion"].includes(f.type));
+    // Definitions the classifier saw but the groups missed (instances only) get a stub with the usage.
+    for (const row of c.fields) if (!fieldDefs.some((f) => f.name === row.name)) fieldDefs.push({ name: row.name, label: row.label, type: row.type === "unknown" ? "" : row.type, usage: row.usage });
+    for (const f of fieldDefs) { const row = c.byName[f.name]; if (row && row.usage) f.usage = row.usage; }
+    const samples = samplesFor(wpName);
+    const used = (name) => { const purpose = purposeOf(cls, wpName, name); if (purpose === "layout") return false; if (purpose === "variant") return !!(c.byName[name] && c.byName[name].inUse); return true; };
+    const props = propsFor(fieldDefs, samples, used);
+    const title = titles[wpName] || words(wpName.replace(/^acf\//, ""));
+    const name = `${title} - wp`;
+    let key = slugify(name); let n = 2; const base = key;
+    while (taken.has(key)) key = `${base}-${n++}`;
+    taken.add(key);
+    const ident = camelName(key);
+    const off = fieldDefs.map((f) => f.name).find((f) => /^deactivate(_block)?$/.test(f));
+    const variants = c.fields.filter((f) => f.purpose === "variant" && f.inUse).map((f) => f.name);
+    blocks.push({ wp: wpName, title, name, key, ident, file: `${key}.tsx`, uses: inv.blockTypes[wpName] || 0, props, variants, skipWhen: off || null,
+      fields: fieldKinds(props), defaults: defaultsFor(props), mapping: mappingFor(props),
+      wpMap: { block: wpName, fields: Object.fromEntries(props.map((x) => [x.wp, x.prop])), options: Object.fromEntries(props.filter((x) => x.optionMap).map((x) => [x.wp, x.optionMap])) } });
+  }
+  // Shared fragments: top-level props whose (old name, kind) appear on two or more blocks, grouped by the exact set of blocks they share.
+  const sig = (x) => `${x.wp}|${x.kind}`;
+  const where = {};
+  for (const b of blocks) for (const x of b.props) if (!x.items && x.kind !== "enum" && x.kind !== "form") (where[sig(x)] || (where[sig(x)] = new Set())).add(b.key);
+  const bySet = {};
+  for (const [s, set] of Object.entries(where)) { if (set.size < 2) continue; const k = Array.from(set).sort().join(","); (bySet[k] || (bySet[k] = [])).push(s); }
+  const fragments = [];
+  const fragTaken = new Set();
+  for (const [setKey, sigs] of Object.entries(bySet)) {
+    if (sigs.length < 2) continue;
+    const sample = blocks.find((b) => b.key === setKey.split(",")[0]);
+    const members = sigs.map((s) => sample.props.find((x) => sig(x) === s)).filter(Boolean);
+    if (members.length < 2) continue;
+    let fname = camelName(members.slice(0, 3).map((x) => x.prop).join(" ")) + "Fields"; let n = 2; const base = fname;
+    while (fragTaken.has(fname)) fname = `${base}${n++}`;
+    fragTaken.add(fname);
+    fragments.push({ name: fname, props: members.map((x) => ({ prop: x.prop, kind: x.kind })), blocks: setKey.split(","), sigs });
+  }
+  for (const b of blocks) {
+    b.fragments = fragments.filter((f) => f.blocks.includes(b.key)).map((f) => f.name);
+    b.fragmentProps = new Set(fragments.filter((f) => f.blocks.includes(b.key)).flatMap((f) => f.sigs));
+  }
+  const prose = (p.entries || []).some((e) => e.classic ? !!(e.html || "").trim() : (e.blocks || []).some((b) => !b.name.startsWith("acf/")));
+  return { blocks, fragments, prose, cls };
+}
+
+// ---- source emitters ------------------------------------------------------------
+const HEADER = "// ©2026 thinkany llc. All rights reserved.\n";
+function fragmentsSource(fragments) {
+  const L = [HEADER, "// Prop fragments shared by the blocks the WordPress import generated (KEEP tier):", "// field groups the old theme repeated across blocks, written once. Blocks compose", "// them with .merge(). Edit freely; the import rewrites this file only on a re-run.", 'import { z } from "astro/zod";', 'import { richtext, formRef } from "../../src/lib/blocks";', 'import { image, link } from "./schema";', ""];
+  for (const f of fragments) {
+    L.push(`/** Shared by ${f.blocks.join(", ")}. */`);
+    L.push(`export const ${f.name} = z.object({`);
+    for (const x of f.props) L.push(`  ${x.prop}: ${zodFor(x)},`);
+    L.push("});", "");
+  }
+  return L.join("\n");
+}
+function blockSource(b, usesFragments) {
+  const own = b.props.filter((x) => !b.fragmentProps || !b.fragmentProps.has(`${x.wp}|${x.kind}`) || x.items || x.kind === "enum" || x.kind === "form");
+  const needs = { richtext: false, formRef: false, image: false, link: false };
+  const scan = (props) => { for (const x of props) { if (x.kind === "richtext") needs.richtext = true; if (x.kind === "form") needs.formRef = true; if (x.kind === "image" || x.kind === "images") needs.image = true; if (x.kind === "link") needs.link = true; if (x.items) scan(x.items); } };
+  scan(own);
+  const blocksImports = ["defineBlock", ...(needs.richtext ? ["richtext"] : []), ...(needs.formRef ? ["formRef"] : [])];
+  const schemaImports = [...(needs.image ? ["image"] : []), ...(needs.link ? ["link"] : [])];
+  const L = [HEADER];
+  L.push(`// ${b.name}: imported from WordPress (${b.wp}), used ${b.uses} time${b.uses === 1 ? "" : "s"}. Needs a design`);
+  L.push("// pass (Blocks → Needs Design → Update design): the schema is the content, the");
+  L.push("// placeholder renders it plainly until then. Do not edit the schema here; rename or");
+  L.push("// remove fields from the Blocks tab so content stays in sync.");
+  L.push('import { z } from "astro/zod";');
+  L.push(`import { ${blocksImports.join(", ")} } from "../src/lib/blocks";`);
+  L.push('import { Placeholder } from "../src/lib/placeholder-block";');
+  if (schemaImports.length) L.push(`import { ${schemaImports.join(", ")} } from "./lib/schema";`);
+  if (usesFragments && b.fragments.length) L.push(`import { ${b.fragments.join(", ")} } from "./lib/wp-fields";`);
+  L.push("");
+  const ownLines = own.map((x) => `  ${x.prop}: ${zodFor(x)},${x.kind === "enum" && x.optionLabels ? ` // ${x.wp}: ${x.options.map((o) => x.optionLabels[o]).join(" | ")}` : ""}`);
+  const base = usesFragments && b.fragments.length ? b.fragments.reduce((acc, f, i) => (i === 0 ? f : `${acc}.merge(${f})`), "") : null;
+  if (base) L.push(`const props = ${base}.merge(z.object({`, ...ownLines, "}));");
+  else L.push("const props = z.object({", ...ownLines, "});");
+  L.push("");
+  L.push(`export const ${b.ident} = defineBlock({`);
+  L.push(`  name: ${jsString(b.name)},`);
+  L.push(`  description: ${jsString(`Imported from WordPress (${b.wp}), used ${b.uses} time${b.uses === 1 ? "" : "s"}. Needs a design pass.`)},`);
+  L.push("  props,");
+  L.push(`  component: (p: z.infer<typeof props>) => <Placeholder name=${jsString(b.name)} props={p as Record<string, unknown>} />,`);
+  L.push("  needsDesign: true,");
+  L.push(`  wp: ${JSON.stringify(b.wpMap)},`);
+  L.push("});", "");
+  return L.join("\n");
+}
+function proseSource() {
+  return [HEADER,
+    "// Prose - wp: running copy from the WordPress import (paragraphs, headings, lists",
+    "// between the old site's blocks, and classic pages). One per site. Needs a design",
+    "// pass like any imported block.",
+    'import { z } from "astro/zod";',
+    'import { defineBlock, richtext } from "../src/lib/blocks";',
+    'import { Placeholder } from "../src/lib/placeholder-block";',
+    "",
+    "const props = z.object({",
+    "  body: richtext.optional(),",
+    "});",
+    "",
+    "export const proseWp = defineBlock({",
+    '  name: "Prose - wp",',
+    '  description: "Running copy imported from WordPress. Needs a design pass.",',
+    "  props,",
+    '  component: (p: z.infer<typeof props>) => <Placeholder name="Prose - wp" props={p as Record<string, unknown>} />,',
+    "  needsDesign: true,",
+    '  wp: { block: "core/*", fields: { html: "body" } },',
+    "});", ""].join("\n");
+}
+// Add rows to site/blocks/index.ts: an import per block and an entry in `blocks`. Idempotent.
+function registryWith(src, rows) {
+  let out = src;
+  for (const r of rows) {
+    const importLine = `import { ${r.ident} } from "./${r.file.replace(/\.tsx$/, "")}";`;
+    if (!out.includes(importLine)) {
+      const lastImport = Array.from(out.matchAll(/^import .*;$/gm)).pop();
+      out = lastImport ? out.slice(0, lastImport.index + lastImport[0].length) + "\n" + importLine + out.slice(lastImport.index + lastImport[0].length) : importLine + "\n" + out;
+    }
+    const row = `  "${r.key}": ${r.ident},`;
+    if (!new RegExp(`^\\s*"?${r.key.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}"?\\s*:`, "m").test(out)) {
+      const m = out.match(/export const blocks[^=]*=\s*\{([\s\S]*?)\n\};/);
+      if (m) { const head = m[0].slice(0, m[0].indexOf("{") + 1); const body = m[1].replace(/\s+$/, ""); out = out.replace(m[0], `${head}${body}\n${row}\n};`); }
+      else out += `\nexport const blocks = {\n${row}\n};\n`;
+    }
+  }
+  return out;
+}
+
+/**
+ * The files the lossless import writes for its blocks, and the mapping the transform
+ * consumes. `registrySrc` is the current site/blocks/index.ts; `existingKeys` the
+ * site's block keys; `designed` the keys whose file exists with needsDesign false
+ * (kept as they are, still mapped by the plan's prop names).
+ */
+function losslessPlan(p, { existingKeys = [], registrySrc = "", designed = new Set() } = {}) {
+  const plan = planBlocks(p, { existingKeys: existingKeys.filter((k) => !k.endsWith("-wp") && !/-wp-\d+$/.test(k)) });
+  const files = {};
+  const useFragments = plan.fragments.length > 0;
+  if (useFragments) files["site/blocks/lib/wp-fields.ts"] = fragmentsSource(plan.fragments);
+  for (const b of plan.blocks) if (!designed.has(b.key)) files[`site/blocks/${b.file}`] = blockSource(b, useFragments);
+  const rows = plan.blocks.map((b) => ({ key: b.key, ident: b.ident, file: b.file }));
+  if (plan.prose) { if (!designed.has("prose-wp")) files["site/blocks/prose-wp.tsx"] = proseSource(); rows.push({ key: "prose-wp", ident: "proseWp", file: "prose-wp.tsx" }); }
+  files["site/blocks/index.ts"] = registryWith(registrySrc, rows);
+  const blocks = plan.blocks.map((b) => ({ key: b.key, name: b.name, fields: b.fields, defaults: b.defaults }));
+  if (plan.prose) blocks.push({ key: "prose-wp", name: "Prose - wp", fields: { body: { kind: "richtext" } }, defaults: { body: "" } });
+  const mapping = losslessMapping(p, plan);
+  return { plan, files, blocks, mapping };
+}
+
+// The generated mapping: every block to its generated block, every page kept, all
+// content as drafts, types and forms on, menus as the skeleton chose.
+function losslessMapping(p, plan) {
+  const sk = mappingSkeleton(p, []);
+  const blocks = {};
+  for (const b of plan.blocks) blocks[b.wp] = { block: b.key, fields: b.mapping, carry: false, ...(b.skipWhen ? { skipWhen: b.skipWhen } : {}) };
+  const frontPage = Number(p.site && p.site.frontPage);
+  const pages = sk.pages.map((pg) => {
+    const e = (p.entries || []).find((x) => x.id === pg.wp) || {};
+    const isFront = pg.wp === frontPage;
+    const id = isFront ? (slugify(e.title) || "welcome") : pg.page;
+    return { wp: pg.wp, title: pg.title, wpPath: pg.wpPath, page: id, ...(isFront ? { slug: id } : {}), parent: null, include: true };
+  });
+  const types = Object.fromEntries(Object.entries(sk.types).map(([k, t]) => [k, { ...t, include: true }]));
+  for (const t of Object.values(types)) delete t._about;
+  return {
+    version: MAPPING_VERSION,
+    _about: "Generated by the lossless import (docs/wordpress-import-lossless-spec.md): every old block lands in its own generated block, every page, post and entry as a draft, nothing overwritten. Kept as the audit trail; edit only for a re-run.",
+    pages, blocks,
+    prose: plan.prose ? { block: "prose-wp", prop: "body" } : { block: "", prop: "" },
+    tables: { block: "table", rows: "rows", header: "header", caption: "caption" },
+    posts: { import: true, type: "post", categoriesAsTags: true },
+    types,
+    nav: { main: sk.nav.main, footer: sk.nav.footer },
+    forms: { import: true },
+    media: { download: true, folder: "wp" },
+  };
+}
+
+module.exports = { PAYLOAD_KIND, PAYLOAD_VERSION, MAPPING_VERSION, fetchPayload, validatePayload, inventory, inventoryMarkdown, definitionsForSkill, mappingSkeleton, validateMapping, classifyFields, convertForm, htmlToMarkdown, transform, reportMarkdown, slugify, planBlocks, losslessPlan, losslessMapping, registryWith, blockSource, fragmentsSource };

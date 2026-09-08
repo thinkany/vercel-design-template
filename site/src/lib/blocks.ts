@@ -39,6 +39,19 @@ export interface BlockDef<S extends ZodTypeAny = ZodTypeAny> {
    * appear only once per page (FAQPage) are merged across instances.
    */
   schema?: (props: z.infer<S>) => Record<string, unknown> | Record<string, unknown>[] | undefined;
+  /**
+   * An imported block that has not had its design pass yet: it renders through the
+   * placeholder (site/src/lib/placeholder-block.tsx), the Blocks tab lists it under
+   * Needs Design, and the Art Director and Figma export skip it. The design pass
+   * (/design-block --from-brief) replaces the component and clears this.
+   */
+  needsDesign?: boolean;
+  /**
+   * Where an imported block came from (docs/wordpress-import-lossless-spec.md):
+   * the old block's name, old field → prop, and old option value → enum value, so
+   * a re-import lands in the same props after the designer renames them.
+   */
+  wp?: { block: string; fields: Record<string, string>; options?: Record<string, Record<string, string>> };
 }
 
 /** Site chrome: the header/footer rendered around every page by the layout. */

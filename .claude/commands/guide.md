@@ -28,9 +28,9 @@ the preview/stop note. Use roughly this content, lightly adapted to the moment:
 - **/design-block:** once the site exists, design a new section for it: it becomes a
   block with editable content in the Pages panel, placed on the page you name.
 - **/migrate-wordpress:** moving a WordPress site over. `inventory` turns what the
-  old site holds into a brief for the new design; `map` proposes where each old
-  block and field lands in this site's blocks. The app's Import from WordPress panel
-  (Site → Settings) fetches the old site and runs the import itself.
+  old site holds into a brief for the new design. The app's Import from WordPress
+  panel (Site → Settings) fetches the old site and runs the import itself: every old
+  section becomes a block to design, every page a draft.
 - **/upgrade:** pull the latest template version into this project. Overlays the
   framework files, keeps your work (`.env`, your designs, your palette) untouched,
   and walks you through the diff. The dashboard's "Update available" button does the

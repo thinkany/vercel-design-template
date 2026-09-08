@@ -320,5 +320,96 @@ t("mapping validates, and catches a bad id", () => {
   });
 
   fs.rmSync(dir, { recursive: true, force: true });
+
+  // ---- lossless import: generated blocks, drafts, nothing overwritten
+  t("plan: one generated block per old block in use, props from fields, enums from options", () => {
+    const reg = fs.readFileSync(path.join(__dirname, "..", "..", "site", "blocks", "index.ts"), "utf8");
+    const r = W.losslessPlan(payload, { existingKeys: ["hero", "table", "code", "form"], registrySrc: reg });
+    const hero = r.plan.blocks.find((b) => b.wp === "acf/hero");
+    assert.equal(hero.key, "hero-wp"); assert.equal(hero.name, "Hero - wp"); assert.equal(hero.ident, "heroWp");
+    const kinds = Object.fromEntries(hero.props.map((x) => [x.prop, x.kind]));
+    assert.deepEqual(kinds, { heading: "string", subheading: "richtext", image: "image", button: "link", tone: "enum", imageSide: "enum", showButton: "boolean", extraNote: "string", heroCopy: "richtext" });
+    assert.ok(!hero.props.some((x) => ["padding", "section_id", "hero_height", "hide_on_mobile", "deactivate_block"].includes(x.wp)), "layout fields are not props");
+    assert.deepEqual(hero.props.find((x) => x.prop === "imageSide").options, ["left", "right"]);
+    assert.equal(hero.skipWhen, "deactivate_block");
+    const feat = r.plan.blocks.find((b) => b.wp === "acf/features");
+    const items = feat.props.find((x) => x.prop === "items");
+    assert.equal(items.kind, "list");
+    assert.deepEqual(items.items.map((x) => [x.prop, x.kind]), [["name", "string"], ["text", "string"], ["icon", "image"]]);
+    assert.deepEqual(feat.mapping.items, { from: "items", each: { name: "name", text: "text", icon: "icon" } });
+    const form = r.plan.blocks.find((b) => b.wp === "acf/form");
+    assert.equal(form.props.find((x) => x.wp === "gravity_form_select").kind, "form");
+    assert.ok(r.plan.prose, "core paragraphs on pages → a Prose block");
+    assert.ok(r.files["site/blocks/prose-wp.tsx"].includes('name: "Prose - wp"'));
+    const src = r.files["site/blocks/hero-wp.tsx"];
+    assert.match(src, /imageSide: z\.enum\(\["left", "right"\]\)\.default\("left"\)/);
+    assert.match(src, /needsDesign: true/);
+    assert.match(src, /component: \(p: z\.infer<typeof props>\) => <Placeholder name="Hero - wp"/);
+    const idx = r.files["site/blocks/index.ts"];
+    assert.match(idx, /import \{ heroWp \} from "\.\/hero-wp";/);
+    assert.match(idx, /\n  "hero-wp": heroWp,\n/);
+    assert.match(idx, /\n  hero,\n/, "the design's own rows stay");
+    assert.equal(W.registryWith(idx, [{ key: "hero-wp", ident: "heroWp", file: "hero-wp.tsx" }]), idx, "registry insertion is idempotent");
+    assert.equal(r.mapping.blocks["acf/hero"].block, "hero-wp");
+    assert.equal(r.mapping.blocks["acf/hero"].carry, false);
+    assert.deepEqual(r.mapping.prose, { block: "prose-wp", prop: "body" });
+    assert.equal(r.mapping.pages.find((p) => p.wp === 10).page, "home", "the front page keeps its slug id until the transform finds a collision");
+    assert.ok(r.mapping.pages.every((p) => p.include === true), "every page is kept");
+    assert.equal(r.mapping.types.team.include, true);
+  });
+
+  await ta("lossless transform: drafts, generated blocks, nothing overwritten, re-run stable", async () => {
+    const dir4 = fs.mkdtempSync(path.join(os.tmpdir(), "wp-lossless-"));
+    fs.mkdirSync(path.join(dir4, "content", "pages"), { recursive: true });
+    fs.mkdirSync(path.join(dir4, "content", "posts"), { recursive: true });
+    const homeBefore = JSON.stringify({ title: "Home", blocks: [{ type: "hero", props: { heading: "The design's own home" } }] }, null, 2);
+    fs.writeFileSync(path.join(dir4, "content", "pages", "home.json"), homeBefore);
+    fs.writeFileSync(path.join(dir4, "content", "posts", "brushing-tips-for-kids.md"), "---\ntitle: Existing post\ndate: 2020-01-01\n---\n\nKeep me.\n");
+    fs.writeFileSync(path.join(dir4, "content", "site.json"), JSON.stringify({ design: "v01", nav: [], footerLinks: [] }));
+    fs.writeFileSync(path.join(dir4, "content", "types.json"), JSON.stringify({ types: [] }));
+    const r = W.losslessPlan(payload, { existingKeys: ["hero", "table"], registrySrc: "export const blocks = {\n  hero,\n};\n" });
+    const tableBlock = { key: "table", name: "Table", fields: { rows: { kind: "list" }, "rows.cells": { kind: "list" }, header: { kind: "boolean" }, caption: { kind: "string" } } };
+    const createdFile = path.join(dir4, ".thinkany", "wp-import", "created.json");
+    const run = () => W.transform(dir4, payload, r.mapping, { blocks: [...r.blocks, tableBlock], fetchMedia: async (att, folder) => `/images/${folder}/${att.filename}`, draft: true, neverOverwrite: true, createdFile });
+    const res = await run();
+    assert.ok(res.ok, JSON.stringify(res.errors));
+    const rep = res.report;
+    // the design's home is untouched; the imported front page took its title as id, a draft
+    assert.equal(fs.readFileSync(path.join(dir4, "content", "pages", "home.json"), "utf8"), homeBefore);
+    const welcome = JSON.parse(fs.readFileSync(path.join(dir4, "content", "pages", "home-wp.json"), "utf8"));
+    assert.equal(welcome.draft, true);
+    assert.equal(welcome.slug, "home-wp");
+    assert.deepEqual(rep.idsChanged.map((x) => x.to), ["home-wp", "brushing-tips-for-kids-wp"]);
+    // blocks: every old block landed in its generated block, in order, with options as props
+    assert.deepEqual(welcome.blocks.map((b) => b.type), ["hero-wp", "features-wp", "prose-wp", "table", "prose-wp", "testimonial-wp"]);
+    const hero = welcome.blocks[0];
+    assert.equal(hero.props.heading, "Gentle care, every visit");
+    assert.equal(hero.props.imageSide, "left");
+    assert.equal(hero.props.tone, "dark");
+    assert.equal(hero.props.showButton, true);
+    assert.deepEqual(hero.props.button, { label: "Book a visit", href: "/about-us/team" }, "links point at the imported pages' routes");
+    assert.equal(hero._wp, undefined, "options are props now, nothing rides along");
+    assert.equal(welcome.blocks[1].props.items.length, 2);
+    assert.equal(welcome.blocks[1].props.items[0].icon.src, "/images/wp/kids.png");
+    assert.equal(welcome.blocks[5].props.quote, "Best dentist in town.");
+    assert.match(welcome.blocks[2].props.body, /^## Opening hours/);
+    assert.deepEqual(rep.unmappedBlocks, {});
+    // the existing post is kept; the imported one got a distinct slug, a draft
+    assert.match(fs.readFileSync(path.join(dir4, "content", "posts", "brushing-tips-for-kids.md"), "utf8"), /Keep me/);
+    assert.match(fs.readFileSync(path.join(dir4, "content", "posts", "brushing-tips-for-kids-wp.md"), "utf8"), /\ndraft: true\n/);
+    // entries are drafts
+    const ana = JSON.parse(fs.readFileSync(path.join(dir4, "content", "team", "ana-reyes.json"), "utf8"));
+    assert.equal(ana.draft, true);
+    // the log of what was written exists and a re-run rewrites its own files without new ids
+    const created = JSON.parse(fs.readFileSync(createdFile, "utf8"));
+    assert.ok(created.files["content/pages/home-wp.json"]);
+    const res2 = await run();
+    assert.ok(res2.ok);
+    assert.deepEqual(res2.report.idsChanged.map((x) => x.to), ["home-wp", "brushing-tips-for-kids-wp"], "the same ids the second time");
+    assert.ok(!fs.existsSync(path.join(dir4, "content", "pages", "home-wp-2.json")));
+    assert.match(W.reportMarkdown({ ...rep, blocksCreated: r.plan.blocks.map((b) => ({ name: b.name, uses: b.uses, options: b.variants })) }), /blocks created, all needing a design pass/);
+    fs.rmSync(dir4, { recursive: true, force: true });
+  });
+
   console.log(`${passed} passed${process.exitCode ? ", with failures" : ""}`);
 })();
