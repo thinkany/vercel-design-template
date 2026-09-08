@@ -68,6 +68,34 @@ under `.thinkany/references/`, with the distilled read in
 - Say in one line, in the close, what you took from the reference, so the
   designer knows what to tweak next.
 
+## 1c. From a brief: an imported block (`--from-brief <key>`)
+
+The app's WordPress import (docs in the app: wordpress-import-lossless-spec) creates
+blocks with their content already in place and a placeholder look. The Blocks tab's
+**Update design** sends `/design-block --from-brief <key>` with, optionally, a line of
+direction from the designer. This mode changes the inputs, not the contract:
+
+- **Read the brief first**: `.thinkany/wp-import/briefs/<key>.json` (and its `.md`):
+  what the section is for, where it sits on which pages, its fields with real sample
+  copy, its options with the values in use, the images already fetched. Then read
+  the block file itself, `site/blocks/<key>.tsx`.
+- **The schema is the contract.** Keep every prop, its name and its kind, exactly as
+  the file has them; the designer named them and content already uses them. Do not
+  add or remove a prop (fields change through the Blocks tab, before the pass).
+  Replace the `Placeholder` component with the block's own component, in this
+  design's visual language, as in §2; remove the placeholder import.
+- **Render every option value.** An enum prop (`side`, `layout`, `tone`) is a real
+  variation: a `side` renders both sides, a `layout` with two values renders two
+  layouts, even where one is used once. Nothing is left to a single hard-coded case.
+- **Mark it designed**: set `needsDesign: false` and keep the `wp` map as it is.
+  The Blocks tab moves the block to Active from that.
+- **Content stays.** Do not rewrite the imported instances' copy. When the block has
+  an option whose values are not all on the block's first page, add one instance per
+  missing value to that page, next to the existing one, copying its content, so the
+  designer reviews every value at once (say so when you close).
+- The designer's direction line, when present, wins over the brief's suggestions.
+- Close as in §5, plus one line naming the option values and where to see them.
+
 ## 2. The block contract (the same one `/promote-blocks` uses)
 
 One file `site/blocks/<Name>.tsx`:

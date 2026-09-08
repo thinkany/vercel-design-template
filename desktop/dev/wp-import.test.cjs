@@ -443,6 +443,25 @@ t("mapping validates, and catches a bad id", () => {
     fs.rmSync(d, { recursive: true, force: true });
   });
 
+  t("briefs: fields with samples, options with usage, where used, real images", () => {
+    const r = W.losslessPlan(payload, { existingKeys: ["hero"], registrySrc: "export const blocks = {\n  hero,\n};\n" });
+    const pages = [
+      { id: "welcome", title: "Welcome", blocks: [{ type: "hero-wp", props: { heading: "Gentle care", subheading: "We look after families.", image: { src: "/images/wp/reception.avif", alt: "" }, imageSide: "left", tone: "dark" } }, { type: "features-wp", props: { title: "Why", items: [{ name: "Kids", text: "Play" }] } }] },
+      { id: "services", title: "Services", blocks: [{ type: "hero-wp", props: { heading: "Services", imageSide: "right", tone: "light" } }, { type: "prose-wp", props: { body: "## Hours" } }] },
+    ];
+    const briefs = W.buildBriefs(r.plan, pages);
+    const hero = briefs["hero-wp"].json;
+    assert.equal(hero.uses, 2);
+    assert.deepEqual(hero.where.map((w) => `${w.page}:${w.position}/${w.of}`), ["welcome:1/2", "services:1/2"]);
+    assert.deepEqual(hero.fields.find((f) => f.prop === "heading").samples, ["Gentle care", "Services"]);
+    assert.deepEqual(hero.options.find((o) => o.prop === "imageSide").values.map((v) => `${v.value}:${v.used}`), ["left:1", "right:1"]);
+    assert.deepEqual(hero.images, ["/images/wp/reception.avif"]);
+    assert.equal(hero.instances.length, 2);
+    assert.match(briefs["hero-wp"].md, /## Options[\s\S]*Image side[\s\S]*Render every value/);
+    assert.match(briefs["features-wp"].md, /\*\*Items\*\* \(list: Name string, Text string, Icon image\)/);
+    assert.ok(briefs["prose-wp"], "the prose block has a brief too");
+    assert.equal(briefs["prose-wp"].json.uses, 1);
+  });
   t("edit a generated block: rename and remove props, in the file and in content", () => {
     const r = W.losslessPlan(payload, { existingKeys: ["hero"], registrySrc: "export const blocks = {\n  hero,\n};\n" });
     const feat = r.files["site/blocks/features-wp.tsx"];

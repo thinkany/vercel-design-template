@@ -183,6 +183,7 @@ contextBridge.exposeInMainWorld("desktop", {
   wpTransform: () => ipcRenderer.invoke("wp:transform"),
   wpReport: () => ipcRenderer.invoke("wp:report"),
   wpFiles: () => ipcRenderer.invoke("wp:files"),
+  wpBrief: (key) => ipcRenderer.invoke("wp:brief", { key }),
   wpForget: () => ipcRenderer.invoke("wp:forget"),
   wpEditBlock: (key, renames, removes) => ipcRenderer.invoke("wp:editBlock", { key, renames, removes }),
   saveBlockNames: (names) => ipcRenderer.invoke("site:saveBlockNames", { names }),

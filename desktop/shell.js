@@ -5571,7 +5571,9 @@ function renderSiteBlocks(data) {
       const acts = siteEl("div"); acts.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;";
       const edit = siteEl("button", "panelbtn", S.blockEdit); edit.style.cssText = "margin:0;width:auto;";
       edit.addEventListener("click", () => openBlockFieldsModal(b, () => { if (RAILS.site.classList.contains("active")) openModal("site"); }));
-      const design = siteEl("button", "panelbtn primary", S.blockUpdateDesign); design.style.cssText = "margin:0;width:auto;"; design.disabled = true; design.title = S.blockUpdateDesignSoon;
+      const design = siteEl("button", "panelbtn primary", wpDesignTurn === b.key ? S.blockDesignRunning : S.blockUpdateDesign); design.style.cssText = "margin:0;width:auto;";
+      design.disabled = !appHasKey || !!wpDesignTurn; if (!appHasKey) design.title = COPY.errors.needKey;
+      design.addEventListener("click", () => openBlockDesignModal(b));
       const use = siteEl("button", "panelbtn", S.blockUseExisting); use.style.cssText = "margin:0;width:auto;"; use.disabled = true; use.title = S.blockUseExistingSoon;
       acts.append(design, edit, use); el.appendChild(acts);
     }
@@ -5594,6 +5596,53 @@ function renderSiteBlocks(data) {
   wrap.appendChild(section("blocks-active", S.blocksActive, S.blocksActiveDesc, active, false, !needs.length));
   wrap.appendChild(status);
   return wrap;
+}
+
+// Update design on an imported block: a line of direction, the brief under a heading,
+// then one /design-block --from-brief turn. The Blocks tab re-renders when it ends.
+let wpDesignTurn = null; // the block key being designed, while the turn runs
+function openBlockDesignModal(b) {
+  const D = COPY.site.blockDesign;
+  const ov = siteEl("div", "blockedit");
+  const card = siteEl("div", "blockedit-card");
+  const head = siteEl("div", "blockedit-head");
+  head.appendChild(siteEl("div", "blockedit-title", D.title(b.name)));
+  const acts = siteEl("div", "blockedit-acts");
+  const cancel = siteEl("button", "panelbtn", D.cancel); cancel.style.cssText = "margin:0;width:auto;";
+  const go = siteEl("button", "panelbtn primary", D.go); go.style.cssText = "margin:0;width:auto;";
+  acts.append(cancel, go); head.appendChild(acts);
+  const body = siteEl("div", "blockedit-fields"); body.style.cssText = "flex:1;overflow:auto;padding:16px 20px;";
+  body.appendChild(siteEl("div", "sess-desc", D.intro));
+  const input = document.createElement("textarea"); input.className = "field"; input.placeholder = D.placeholder; input.style.minHeight = "56px";
+  body.appendChild(input);
+  const note = siteEl("div", "muted"); note.style.cssText = "font-size:12px;margin:6px 0 10px;"; body.appendChild(note);
+  // the brief, folded
+  const sec = siteEl("div", "site-acc"); const h = siteEl("button", "site-acc-head"); h.type = "button"; h.setAttribute("aria-expanded", "false");
+  h.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", D.briefLink));
+  const bb = siteEl("div", "site-acc-body"); bb.hidden = true; let loaded = false;
+  h.addEventListener("click", async () => { const now = bb.hidden; if (now && !loaded) { loaded = true; const r = await window.desktop.wpBrief(b.key); const pre = document.createElement("pre"); pre.style.cssText = "white-space:pre-wrap;word-break:break-word;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:8px 0;color:#1a1a1a;"; pre.textContent = r && r.ok ? r.markdown : (r && r.error) || ""; bb.appendChild(pre); } siteReveal(bb, now); sec.classList.toggle("open", now); h.setAttribute("aria-expanded", String(now)); });
+  sec.append(h, bb); body.appendChild(sec);
+  card.append(head, body); ov.appendChild(card);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey, true); };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  cancel.addEventListener("click", close);
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  go.addEventListener("click", async () => {
+    const r = await window.desktop.wpBrief(b.key);
+    if (!r || !r.ok) { note.textContent = (r && r.error) || "No brief."; note.style.color = "#e5484d"; return; }
+    wpDesignTurn = b.key;
+    close(); closeModal();
+    runAgent(D.request(b.key, input.value.trim()), D.echo(b.name));
+  });
+  document.addEventListener("keydown", onKey, true);
+  document.body.appendChild(ov);
+  input.focus();
+  return { close };
+}
+// The design turn ended: the block file now says whether it is designed; re-render.
+function finishWpDesignTurn() {
+  wpDesignTurn = null;
+  if (RAILS.site.classList.contains("active")) { siteRailState.tab = "blocks"; openModal("site"); }
 }
 
 // The fields of an imported block: rename, remove; applied to the block file and every
@@ -7358,6 +7407,7 @@ window.desktop.onAgentEvent((evt) => {
       endTurnGate(); // release serialization AFTER showBriefComplete decided for this turn
       updateSessionGauge(evt.usage, evt.modelUsage); // refresh the context gauge + maybe nudge
       if (siteBuildTurn) finishSiteBuildTurn(true); // the promote turn: open the CMS drawer once the site is ready
+      if (wpDesignTurn) finishWpDesignTurn();
       // Quiet build finished → reveal the completed design now (both tabs, land on Home) and
       // open the chat for iteration. Nothing showed during the build.
       if (quietBuildActive) { finishQuietBuild(); break; }
@@ -7387,6 +7437,7 @@ window.desktop.onAgentEvent((evt) => {
       addMsg("error", "✖ " + evt.message);
       endTurnGate(); // release serialization on error too
       if (siteBuildTurn) finishSiteBuildTurn(false);
+      if (wpDesignTurn) finishWpDesignTurn();
       // Even on error, settle-then-reveal so the designer isn't stuck behind a
       // cover (the chat carries the error detail).
       if (quietBuildActive) { finishQuietBuild(); break; } // reveal + open chat (the error is in it)

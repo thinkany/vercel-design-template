@@ -19,8 +19,15 @@ app against tax.local. **P1 run on tax.local 2026-09-08**: 12 blocks, 4 draft pa
 entries, form kept, nothing overwritten; fixes from the run landed (held redirects,
 numeric slugs, booleans, stale-file cleanup, schema validation in the report).
 **P2 partly built 2026-09-08**: the Blocks tab's Active and Needs Design sections
-(collapsible, remembered per project), Edit fields: a display label per field (stored with the site like block display names, shown in the page editor; the prop name never changes) and remove (block file and every content instance in one step, `wp:editBlock`). Rob 2026-09-08: renaming is the label, never the programmatic name. Update design and Use an
-existing design are placeholders until P3. P4 not built.
+(collapsible, remembered per project), Edit fields: a display label per field (stored with the site like block display names, shown in the page editor; the prop name never changes) and remove (block file and every content instance in one step, `wp:editBlock`). Rob 2026-09-08: renaming is the label, never the programmatic name. **P3 BUILT 2026-09-08**: the import writes a brief per block
+(`.thinkany/wp-import/briefs/<key>.json` and `.md`: where used, fields with real
+samples, options with usage, images, instances); the design-block playbook gains
+§1c, the `--from-brief <key>` mode (schema is the contract, every option value
+renders, `needsDesign: false`, one instance per missing option value on the first
+page); Update design in the Blocks tab opens a one-line direction prompt with the
+brief folded under it and runs the turn; the Blocks tab re-renders when the turn
+ends. The import modal replaced the inline panel (staged like Get Designing).
+Not yet run on tax.local. Use an existing design and P4 not built.
 
 ## The idea in one paragraph
 

@@ -2113,10 +2113,23 @@ ipcMain.handle("wp:transform", async () => {
     const report = { ...r.report, invalid, when: new Date().toISOString(), blocksCreated: [...plan.plan.blocks.map((b) => ({ key: b.key, name: b.name, wp: b.wp, uses: b.uses, options: b.variants, kept: designed.has(b.key) })), ...(plan.plan.prose ? [{ key: "prose-wp", name: "Prose - wp", wp: "core/*", uses: 0, options: [], kept: designed.has("prose-wp") }] : [])] };
     fs.writeFileSync(wpFile(dir, "report.json"), JSON.stringify(report, null, 2) + "\n");
     fs.writeFileSync(wpFile(dir, "report.md"), wpImport.reportMarkdown(report));
+    // Briefs for the design pass, from the pages just written.
+    try {
+      const pages = (r.report.files || []).filter((f) => /^content[\/\\]pages[\/\\][^\/\\]+\.json$/.test(f)).map((f) => { const d = readJsonFile(path.join(dir, f)) || {}; return { id: path.basename(f, ".json"), title: d.title, blocks: d.blocks || [] }; });
+      const briefs = wpImport.buildBriefs(plan.plan, pages);
+      const bdir = wpFile(dir, "briefs"); fs.mkdirSync(bdir, { recursive: true });
+      for (const [key, b] of Object.entries(briefs)) { fs.writeFileSync(path.join(bdir, `${key}.json`), JSON.stringify(b.json, null, 2) + "\n"); fs.writeFileSync(path.join(bdir, `${key}.md`), b.md); }
+    } catch (e) { appLog.write(`[wp] briefs: ${e.message}`); }
     try { fs.rmSync(path.join(dir, ".thinkany", "blocks.json"), { force: true }); } catch {} // the registry changed: re-introspect on the next read
     appLog.write(`[wp] import: ${report.blocksCreated.length} blocks, ${report.pages.length} pages, ${report.posts.imported} posts, ${report.redirects} redirects, ${report.media.downloaded} media (${report.media.failed.length} failed)`);
     return { ok: true, status: wpStatus(), markdown: wpImport.reportMarkdown(report) };
   } catch (e) { appLog.write(`[wp] import failed: ${e.stack || e.message}`); return { ok: false, error: e.message }; }
+});
+ipcMain.handle("wp:brief", (_e, { key } = {}) => {
+  if (!currentProject || typeof key !== "string" || !/^[a-z0-9-]+$/.test(key)) return { ok: false, error: "Which block?" };
+  const j = readJsonFile(wpFile(currentProject, path.join("briefs", `${key}.json`)));
+  if (!j) return { ok: false, error: "There's no brief for that block yet. Run the import to write one." };
+  return { ok: true, brief: j, markdown: readTextSafe(wpFile(currentProject, path.join("briefs", `${key}.md`))) };
 });
 ipcMain.handle("wp:files", () => {
   if (!currentProject) return { ok: false, error: "No project is open." };

@@ -423,7 +423,17 @@ window.COPY = {
     blockFields: (list) => `Fields: ${list}`,
     blockEdit: "Edit fields",
     blockUpdateDesign: "Update design",
-    blockUpdateDesignSoon: "The design pass arrives with the next update.",
+    blockDesignRunning: "Designing…",
+    blockDesign: {
+      title: (name) => `Design ${name}`,
+      intro: "The block keeps its fields and its content; the design pass gives it this site's look, with every option rendered. Add a line of direction if you have one.",
+      placeholder: "e.g. photo left, copy right, like the hero's image treatment",
+      briefLink: "The brief",
+      go: "Send to the designer",
+      cancel: "Cancel",
+      request: (key, direction) => `/design-block --from-brief ${key}${direction ? `\n\nDirection: ${direction}` : ""}`,
+      echo: (name) => `Design ${name} from its imported content`,
+    },
     blockUseExisting: "Use an existing design",
     blockUseExistingSoon: "Arrives with the next update.",
     blockEditor: {

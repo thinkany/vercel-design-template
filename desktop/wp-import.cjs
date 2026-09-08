@@ -1318,6 +1318,42 @@ function registryWith(src, rows) {
 }
 
 /**
+ * Briefs for the design pass (docs/wordpress-import-lossless-spec.md): one per
+ * generated block, built from the plan and the pages the import wrote, so the
+ * design-block skill designs against real copy, real images and the options in use.
+ * `pages` are the written page docs ({ id, title, blocks }). Returns
+ * { [key]: { json, md } }.
+ */
+function buildBriefs(plan, pages, { proseKey = "prose-wp" } = {}) {
+  const out = {};
+  const words = (k) => String(k || "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/^./, (c) => c.toUpperCase());
+  const sampleOf = (v) => { if (v == null || v === "") return null; if (typeof v === "string") return v.replace(/\s+/g, " ").trim().slice(0, 140); if (typeof v === "boolean" || typeof v === "number") return v; if (Array.isArray(v)) return `[${v.length} item${v.length === 1 ? "" : "s"}${v[0] && typeof v[0] === "object" ? `: ${Object.keys(v[0]).join(", ")}` : ""}]`; if (v.src) return v.src; if (v.href !== undefined) return `${v.label || ""} → ${v.href}`; return `{${Object.keys(v).join(", ")}}`; };
+  const specs = [...plan.blocks.map((b) => ({ key: b.key, name: b.name, wp: b.wp, title: b.title, uses: b.uses, props: b.props, fields: b.fields })), ...(plan.prose ? [{ key: proseKey, name: "Prose - wp", wp: "core/*", title: "Prose", uses: 0, props: [{ prop: "body", label: "Body", kind: "richtext", wp: "html" }], fields: { body: { kind: "richtext" } } }] : [])];
+  for (const b of specs) {
+    const where = []; const instances = [];
+    for (const p of pages) (p.blocks || []).forEach((inst, i) => { if (inst.type !== b.key) return; where.push({ page: p.id, title: p.title, position: i + 1, of: p.blocks.length }); if (instances.length < 3) instances.push({ page: p.id, position: i + 1, props: inst.props }); });
+    const fields = b.props.filter((x) => x.kind !== "enum").map((x) => {
+      const samples = []; for (const inst of instances) { const s = sampleOf(inst.props[x.prop]); if (s !== null && !samples.includes(s)) samples.push(s); }
+      return { prop: x.prop, label: x.label || words(x.prop), kind: x.kind, ...(x.items ? { items: x.items.map((i) => ({ prop: i.prop, label: i.label || words(i.prop), kind: i.kind })) } : {}), samples: samples.slice(0, 3) };
+    });
+    const options = b.props.filter((x) => x.kind === "enum").map((x) => {
+      const used = {}; for (const p of pages) for (const inst of p.blocks || []) if (inst.type === b.key && inst.props[x.prop] !== undefined) used[inst.props[x.prop]] = (used[inst.props[x.prop]] || 0) + 1;
+      return { prop: x.prop, label: x.label || words(x.prop), values: x.options.map((v) => ({ value: v, label: (x.optionLabels && x.optionLabels[v]) || words(v), used: used[v] || 0 })) };
+    });
+    const images = Array.from(new Set(instances.flatMap((inst) => JSON.stringify(inst.props).match(/"\/images\/[^"]+"/g) || []).map((s) => JSON.parse(s))));
+    const json = { block: b.key, name: b.name, from: b.wp, uses: where.length, where, fields, options, images, instances, written: new Date().toISOString() };
+    const L = [`# ${b.name}`, "", `Imported from WordPress (${b.wp}). ${where.length ? `Used ${where.length} time${where.length === 1 ? "" : "s"}: ${where.map((w) => `${w.title || w.page} (block ${w.position} of ${w.of})`).join("; ")}.` : "Not placed on a page yet."}`, ""];
+    L.push("## Fields", "");
+    for (const f of fields) L.push(`- **${f.label}** (${f.kind}${f.items ? `: ${f.items.map((i) => `${i.label} ${i.kind}`).join(", ")}` : ""})${f.samples.length ? `: ${f.samples.map((s) => typeof s === "string" ? `"${s}"` : String(s)).join(" · ")}` : ""}`);
+    if (options.length) { L.push("", "## Options", ""); for (const o of options) L.push(`- **${o.label}**: ${o.values.map((v) => `${v.label}${v.used ? ` (used ${v.used}×)` : ""}`).join(", ")}. Render every value.`); }
+    if (images.length) L.push("", "## Images", "", ...images.map((i) => `- ${i}`));
+    if (instances.length) { L.push("", "## An instance, as imported", "", "```json", JSON.stringify(instances[0].props, null, 2), "```"); }
+    out[b.key] = { json, md: L.join("\n") + "\n" };
+  }
+  return out;
+}
+
+/**
  * Edit a generated block's schema in place (Blocks → Needs Design → Edit): rename
  * props, remove props. Works on the source the emitter wrote: the prop lines inside
  * `const props = …z.object({ … })` and the one-line `wp:` map. A prop that lives in a
@@ -1421,4 +1457,4 @@ function losslessMapping(p, plan) {
   };
 }
 
-module.exports = { PAYLOAD_KIND, PAYLOAD_VERSION, MAPPING_VERSION, fetchPayload, validatePayload, inventory, inventoryMarkdown, definitionsForSkill, mappingSkeleton, validateMapping, classifyFields, convertForm, htmlToMarkdown, transform, reportMarkdown, slugify, planBlocks, losslessPlan, losslessMapping, registryWith, blockSource, fragmentsSource, editBlockSource, editInstanceProps };
+module.exports = { PAYLOAD_KIND, PAYLOAD_VERSION, MAPPING_VERSION, fetchPayload, validatePayload, inventory, inventoryMarkdown, definitionsForSkill, mappingSkeleton, validateMapping, classifyFields, convertForm, htmlToMarkdown, transform, reportMarkdown, slugify, planBlocks, losslessPlan, losslessMapping, registryWith, blockSource, fragmentsSource, editBlockSource, editInstanceProps, buildBriefs };
