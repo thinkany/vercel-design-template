@@ -446,6 +446,18 @@ window.COPY = {
       applied: (n) => `Applied${n ? ` to ${n === 1 ? "1 content file" : `${n} content files`}` : ""}.`,
       nothing: "No changes.",
     },
+    // Home page → Advanced: overwrite its blocks with another page's (after an import, or any time).
+    homeAdvanced: {
+      heading: "Advanced",
+      overwriteLabel: "Overwrite the home page's content from another page",
+      overwriteHint: "Replaces the home page's blocks with the chosen page's blocks. Title and search settings stay. The chosen page becomes a draft if it isn't one already, so the same sections aren't published twice.",
+      pick: "Choose a page…",
+      button: "Overwrite the home page",
+      confirmTitle: "Overwrite the home page?",
+      confirm: (title, n, alreadyDraft) => `The home page's blocks are replaced with the ${n === 1 ? "1 block" : `${n} blocks`} from "${title}". This happens at once and can't be undone from here. ${alreadyDraft ? `"${title}" stays a draft.` : `"${title}" becomes a draft, so its sections are published once, on the home page.`}`,
+      confirmOk: "Overwrite",
+      done: (title, drafted) => `Home page rewritten from "${title}".${drafted ? " That page is now a draft." : ""}`,
+    },
     blocksDesc: "Every block this site can use: the ones promoted from the design, plus the built-in ones every site has. Give a block a name that's easier to recognise when composing pages; the block itself doesn't change.",
     blockBuiltIn: "Built in",
     blockOriginal: (n) => `Design name: ${n}`,

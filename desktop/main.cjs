@@ -2196,6 +2196,26 @@ ipcMain.handle("site:saveFieldLabels", (_e, { key, labels } = {}) => {
   try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, labels: clean }; } catch (e) { return { ok: false, error: e.message }; }
 });
 
+// Overwrite the home page's blocks with another page's (the page editor's Advanced
+// section on Home; after an import, or any time). Only the blocks move: the home
+// page keeps its title and SEO. The source page becomes a draft if it wasn't, so the
+// same sections are not published twice.
+ipcMain.handle("site:replaceHomeBlocks", (_e, { from } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!validPageId(from) || from === "home") return { ok: false, error: "Pick another page." };
+  const src = readJsonFile(pageFile(currentProject, from)); if (!src) return { ok: false, error: "That page doesn't exist." };
+  const home = readJsonFile(pageFile(currentProject, "home")) || { title: "Home", seo: {}, blocks: [] };
+  try {
+    home.blocks = JSON.parse(JSON.stringify(Array.isArray(src.blocks) ? src.blocks : []));
+    fs.writeFileSync(pageFile(currentProject, "home"), JSON.stringify(home, null, 2) + "\n");
+    let drafted = false;
+    if (!src.draft) { src.draft = true; fs.writeFileSync(pageFile(currentProject, from), JSON.stringify(src, null, 2) + "\n"); drafted = true; }
+    appLog.write(`[cms] home blocks replaced from ${from} (${home.blocks.length} blocks${drafted ? ", source drafted" : ""})`);
+    return { ok: true, blocks: home.blocks.length, drafted };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
 // Block display names (the Blocks tab): recognition in the CMS only.
 ipcMain.handle("site:saveBlockNames", (_e, { names } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };

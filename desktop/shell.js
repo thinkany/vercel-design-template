@@ -3942,6 +3942,31 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
     if (kids.length) actions.appendChild(siteEl("span", "sess-desc", COPY.site.deletePageHasChildren(kids.length))).style.margin = "0";
   }
   body.appendChild(sf.sec); // SEO last
+  if (page.id === "home") {
+    // Advanced: overwrite the home page's blocks from another page (after an import, or any time).
+    const A = COPY.site.homeAdvanced;
+    const adv = siteFoldInline(A.heading);
+    adv.body.appendChild(siteEl("div", "k", A.overwriteLabel));
+    adv.body.appendChild(siteEl("div", "sess-desc", A.overwriteHint));
+    const others = (renderSitePage.pages || []).filter((x) => x.id !== "home");
+    const rowA = siteEl("div"); rowA.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 8px;";
+    const sel = document.createElement("select"); sel.className = "field"; sel.style.cssText = "margin:0;width:auto;max-width:60%;";
+    const o0 = document.createElement("option"); o0.value = ""; o0.textContent = A.pick; sel.appendChild(o0);
+    others.forEach((x) => { const o = document.createElement("option"); o.value = x.id; o.textContent = `${x.title}${x.draft ? ` (${COPY.site.statusDraft})` : ""}`; sel.appendChild(o); });
+    const go = siteEl("button", "panelbtn", A.button); go.style.cssText = "margin:0;width:auto;"; go.disabled = true;
+    const noteA = siteEl("div", "sess-desc"); noteA.style.margin = "0";
+    sel.addEventListener("change", () => { go.disabled = !sel.value; });
+    go.addEventListener("click", async () => {
+      const x = others.find((p) => p.id === sel.value); if (!x) return;
+      if (!(await askConfirm({ title: A.confirmTitle, message: A.confirm(x.title, (x.blocks || []).length, !!x.draft), okLabel: A.confirmOk, danger: true }))) return;
+      go.disabled = true;
+      const r = await window.desktop.replaceHomeBlocks(x.id);
+      if (r && r.ok) { dirty = false; siteFlash(noteA, A.done(x.title, r.drafted)); refresh(); }
+      else { go.disabled = false; noteA.textContent = (r && r.error) || "Couldn't overwrite."; noteA.style.color = "#e5484d"; }
+    });
+    rowA.append(sel, go); adv.body.append(rowA, noteA);
+    body.appendChild(adv.sec);
+  }
   body.appendChild(actions);
   card.appendChild(body);
   return card;
