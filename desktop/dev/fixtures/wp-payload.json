@@ -620,7 +620,11 @@
             "who": "A patient"
           }
         }
-      ]
+      ],
+      "fields": {
+        "page_head_scripts": "<script></script>",
+        "intro_note": "Welcome!"
+      }
     },
     {
       "id": 11,
@@ -752,7 +756,11 @@
             "heading": "Services",
             "subheading": "<p>Everything from checkups to implants.</p>",
             "image": null,
-            "button": null,
+            "button": {
+              "title": "Hidden button",
+              "url": "/x",
+              "target": ""
+            },
             "tone": "light",
             "padding": "large",
             "section_id": "top",

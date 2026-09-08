@@ -61,7 +61,7 @@ function validatePayload(p) {
 // Fields that are the old theme's presentation settings (padding, colors, section ids,
 // hide-on-mobile switches, a deactivate toggle), not content. They have no destination
 // in a new design, so the skeleton, the skill and the report set them aside.
-const LAYOUT_FIELD = /^(section_id|anchor|background(_color|_colour|_image)?(_full)?|bg_color|padding(_top|_bottom)?|margin(_top|_bottom)?|hide_on_(mobile|desktop|tablet)|deactivate(_block)?|disable(d)?|(block_)?settings|settings|image_corners|auto_format|title_size|text_size|[a-z_]*_height|add_copy_gradient|gradient|overlay|color_scheme|colour_scheme|theme|show_schema|animation|reveal)$/i;
+const LAYOUT_FIELD = /^((page_)?(head|header|footer|body)_scripts?|page_styles?|custom_(css|js|scripts?)|tracking_(code|scripts?)|section_id|anchor|background(_color|_colour|_image)?(_full)?|bg_color|padding(_top|_bottom)?|margin(_top|_bottom)?|hide_on_(mobile|desktop|tablet)|deactivate(_block)?|disable(d)?|(block_)?settings|settings|image_corners|auto_format|title_size|text_size|[a-z_]*_height|add_copy_gradient|gradient|overlay|color_scheme|colour_scheme|theme|show_schema|animation|reveal)$/i;
 const isLayoutField = (name) => LAYOUT_FIELD.test(String(name || ""));
 // Names that read as a VARIANT: they change what renders or where, not how it is tuned.
 const VARIANT_FIELD = /^(copy_side|image_side|side|layout(_type)?|variant|style|type|columns?|column_(count|width|alignment)|alignment|align|position_[a-z_]+|wider_[a-z_]+|show_[a-z_]+|add_[a-z_]+|has_[a-z_]+|enable_[a-z_]+|display_[a-z_]+|[a-z_]+_style|[a-z_]+_layout|[a-z_]+_position)$/i;
@@ -109,6 +109,8 @@ function classifyFields(p) {
       const values = Object.keys(u).filter((k) => k !== "(empty)");
       const revealedBy = fields.find((g) => (g.conditionalLogic || []).some((and) => (and || []).some((r) => byKey[r.field] && byKey[r.field].name !== n && g.name === n && byKey[r.field].name)));
       const gatedBy = (f.conditionalLogic || []).flatMap((and) => (and || []).map((r) => byKey[r.field] && byKey[r.field].name)).filter(Boolean);
+      // The rules themselves (AND groups, OR between groups), by field NAME, so the transform can test an instance.
+      const gateRules = (f.conditionalLogic || []).map((and) => (and || []).filter((r) => byKey[r.field]).map((r) => ({ field: byKey[r.field].name, operator: r.operator || "==", value: r.value ?? "" }))).filter((g) => g.length);
       let purpose;
       if (isLayoutField(n) && !gates[n]) purpose = "layout";
       else if (gates[n]) purpose = "variant";
@@ -122,7 +124,7 @@ function classifyFields(p) {
       if (t === "true_false") row.options = { 1: f.ui_on_text || "Yes", 0: f.ui_off_text || "No" };
       if (f.default_value !== undefined) row.default = f.default_value;
       if (gates[n]) row.reveals = Array.from(new Set(gates[n]));
-      if (gatedBy.length) row.revealedBy = Array.from(new Set(gatedBy));
+      if (gatedBy.length) { row.revealedBy = Array.from(new Set(gatedBy)); row.gateRules = gateRules; }
       row.usage = u;
       row.inUse = purpose === "variant" ? (values.length > 1 || values.some((v) => v !== "0" && v !== "false" && v !== String(f.default_value ?? ""))) : values.length > 0;
       return row;
@@ -135,6 +137,34 @@ function classifyFields(p) {
   return out;
 }
 const purposeOf = (cls, block, field) => (cls[block] && cls[block].byName[field] && cls[block].byName[field].purpose) || (isLayoutField(field) ? "layout" : "content");
+// Is a gated field shown on this instance? ACF: OR between groups, AND within a group.
+function gateOpen(rules, fields) {
+  if (!rules || !rules.length) return true;
+  const truthy = (v) => !(v === "" || v == null || v === false || v === "0" || v === 0);
+  const test = (r) => {
+    const v = fields[r.field]; const want = String(r.value ?? "");
+    switch (r.operator) {
+      case "!=": return String(v ?? "") !== want;
+      case "!=empty": return truthy(v);
+      case "==empty": return !truthy(v);
+      case "==pattern": try { return new RegExp(want).test(String(v ?? "")); } catch { return true; }
+      case "==contains": return String(v ?? "").includes(want);
+      default: return want === "1" || want === "" ? (want === "" ? String(v ?? "") === "" : truthy(v) && (v === true || String(v) === "1" || String(v) === want || String(v) === "true")) : String(v ?? "") === want;
+    }
+  };
+  return rules.some((group) => group.every(test));
+}
+// The instance's fields with the ones hidden by an off switch removed (and named).
+function visibleFields(cls, block, fields, where, lost) {
+  const c = cls[block]; if (!c || !fields) return fields || {};
+  const out = {};
+  for (const [k, v] of Object.entries(fields)) {
+    const row = c.byName[k];
+    if (row && row.gateRules && !gateOpen(row.gateRules, fields)) { if (v !== "" && v != null && v !== false) lost.push({ where, node: "hidden-on-old-site", text: k }); continue; }
+    out[k] = v;
+  }
+  return out;
+}
 
 function blockNames(entry) {
   return Array.isArray(entry.blocks) ? entry.blocks.map((b) => b.name).filter(Boolean) : [];
@@ -573,7 +603,8 @@ function compact(v) {
 // validates. Imported lists win whole; a default's seeded example item never leaks in.
 function withDefaults(defaults, props) {
   if (!defaults || typeof defaults !== "object" || Array.isArray(defaults)) return props;
-  const out = { ...defaults };
+  const out = {};
+  for (const [k, v] of Object.entries(defaults)) out[k] = Array.isArray(v) ? [] : v;
   for (const [k, v] of Object.entries(props || {})) {
     out[k] = v && typeof v === "object" && !Array.isArray(v) && defaults[k] && typeof defaults[k] === "object" && !Array.isArray(defaults[k]) ? withDefaults(defaults[k], v) : v;
   }
@@ -775,7 +806,7 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
   const coreHtml = (b) => b.rendered || b.html || "";
   // Core blocks that are not prose: they have no destination in a richtext prop, so they
   // are named in the report (with their address) instead of leaking a bare URL into copy.
-  const NON_PROSE = /^(core\/(embed|video|audio|html|shortcode|file|gallery|buttons?|cover|media-text|social-links?|calendar|rss|search|latest-(posts|comments)|archives|categories|tag-cloud|navigation|query|post-template)|core-embed\/|jetpack\/|woocommerce\/)/;
+  const NON_PROSE = /^(core\/(embed|video|audio|shortcode|file|gallery|buttons?|cover|media-text|social-links?|calendar|rss|search|latest-(posts|comments)|archives|categories|tag-cloud|navigation|query|post-template)|core-embed\/|jetpack\/|woocommerce\/)/;
   const nonProse = (b, where, lost) => { if (!NON_PROSE.test(b.name)) return false; lost.push({ where, node: b.name, text: (b.attrs && (b.attrs.url || b.attrs.href)) || plainText(b.html || "").slice(0, 80) }); return true; };
 
   // ---- pages
@@ -793,9 +824,10 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
         const bm = (mapping.blocks || {})[b.name];
         if (bm && bm.skipWhen && b.fields && b.fields[bm.skipWhen]) { report.skipped.push({ where: id, block: b.name, why: bm.skipWhen }); continue; }
         if (!bm || !bm.block) { dropped.push(b.name); report.unmappedBlocks[b.name] = (report.unmappedBlocks[b.name] || 0) + 1; noteVariants(b.name, b.fields); continue; }
-        const props = await mapFields(bm.fields || {}, b.fields || {}, blockFields[bm.block] || {}, `${id} › ${b.name}`, lost);
+        const shown = visibleFields(cls, b.name, b.fields || {}, id, lost);
+        const props = await mapFields(bm.fields || {}, shown, blockFields[bm.block] || {}, `${id} › ${b.name}`, lost);
         const used = new Set(Object.values(bm.fields || {}).map((s) => typeof s === "string" ? s.split(".")[0] : s && s.from ? String(s.from).split(".")[0] : null));
-        const unmapped = Object.keys(b.fields || {}).filter((k) => !used.has(k) && purposeOf(cls, b.name, k) === "content" && b.fields[k] !== "" && b.fields[k] !== null && b.fields[k] !== false && !(Array.isArray(b.fields[k]) && !b.fields[k].length));
+        const unmapped = Object.keys(shown).filter((k) => !used.has(k) && purposeOf(cls, b.name, k) === "content" && shown[k] !== "" && shown[k] !== null && shown[k] !== false && !(Array.isArray(shown[k]) && !shown[k].length));
         if (unmapped.length) report.unmappedFields[b.name] = Array.from(new Set([...(report.unmappedFields[b.name] || []), ...unmapped]));
         noteVariants(b.name, b.fields);
         // The old block's options ride along on the instance (under _wp: unknown to the
@@ -805,7 +837,8 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
       } else if (!nonProse(b, id, lost)) run.push(coreHtml(b));
     }
     await flushRun();
-    if (e.fields && Object.keys(e.fields).length && !pg.fields) lost.push({ where: id, node: "page-fields", text: Object.keys(e.fields).join(", ") });
+    const pageContentFields = Object.keys(e.fields || {}).filter((k) => !isLayoutField(k) && e.fields[k] !== "" && e.fields[k] != null && e.fields[k] !== false);
+    if (pageContentFields.length && !pg.fields) lost.push({ where: id, node: "page-fields", text: pageContentFields.join(", ") });
     const parentId = pg.parent != null ? pg.parent : (e.parent ? pageIdOf(e.parent) : null);
     const doc = { title: plainText(e.title) || id, ...(id !== "home" ? { slug: pg.slug || id } : {}), ...(parentId && id !== "home" ? { parent: parentId } : {}), ...(Number.isFinite(e.order) ? { order: e.order } : {}), ...(e.status !== "publish" ? { draft: true } : {}), seo: seoOf(e), blocks: out };
     if (doc.seo.image) { const img = await media(typeof doc.seo.image === "string" ? doc.seo.image : doc.seo.image); if (img) doc.seo.image = img.src; }
@@ -910,11 +943,12 @@ function reportMarkdown(rep) {
   if (rep.forms && rep.forms.length) L.push(`- ${rep.forms.length} form${rep.forms.length === 1 ? "" : "s"} in the Forms tab (${rep.forms.map((f) => `${f.name}: ${f.fields} fields${f.kept ? ", already there, left as is" : ""}${f.skipped.length ? `, ${f.skipped.length} skipped` : ""}`).join("; ")}). Recipients and delivery are set in the Forms tab.`);
   L.push(`- ${rep.media.downloaded} images brought in${rep.media.failed.length ? `, ${rep.media.failed.length} failed` : ""}${rep.media.skipped ? `, ${rep.media.skipped} left at their old address` : ""}`);
   L.push(`- ${rep.redirects} redirects added${rep.redirectsFlagged.length ? ` (${rep.redirectsFlagged.length} pages not kept, sent to the nearest kept page)` : ""}`);
+  if (rep.nav && (rep.nav.main || (rep.nav.footer || []).length)) L.push(`- Navigation: ${rep.nav.main ? `header menu from "${rep.nav.main}"` : "header menu kept"}${(rep.nav.footer || []).length ? `; footer from ${rep.nav.footer.map((n) => `"${n}"`).join(", ")}${rep.nav.footer.length > 1 ? " as columns" : ""}` : ""}.`);
   const ub = Object.entries(rep.unmappedBlocks);
   if (ub.length) L.push("", "## Blocks with no destination (dropped)", "", ...ub.map(([n, k]) => `- ${n} ×${k}`));
   if (rep.skipped && rep.skipped.length) L.push("", "## Switched off on the old site (skipped)", "", ...rep.skipped.map((x) => `- ${x.where}: ${x.block}`));
-  if (rep.nav && (rep.nav.main || (rep.nav.footer || []).length)) L.push(`- Navigation: ${rep.nav.main ? `header menu from "${rep.nav.main}"` : "header menu kept"}${(rep.nav.footer || []).length ? `; footer from ${rep.nav.footer.map((n) => `"${n}"`).join(", ")}${rep.nav.footer.length > 1 ? " as columns" : ""}` : ""}.`);
-  const vr = Object.entries(rep.variants || {}).map(([n, fs]) => [n, Object.entries(fs).filter(([, c]) => Object.keys(c).some((k) => k !== "(empty)"))]).filter(([, fs]) => fs.length);
+  const OFF = new Set(["(empty)", "false", "0"]);
+  const vr = Object.entries(rep.variants || {}).map(([n, fs]) => [n, Object.entries(fs).filter(([, c]) => Object.keys(c).some((k) => !OFF.has(k)))]).filter(([, fs]) => fs.length);
   if (vr.length) L.push("", "## Options seen on the old blocks", "", "Kept on each imported instance under _wp, for the design pass.", "", ...vr.map(([n, fs]) => `- ${n}: ${fs.map(([f, c]) => `${f} (${Object.entries(c).map(([k, x]) => `${k} ×${x}`).join(", ")})`).join("; ")}`));
   const uf = Object.entries(rep.unmappedFields);
   if (uf.length) L.push("", "## Fields with no destination", "", ...uf.map(([n, fs]) => `- ${n}: ${fs.join(", ")}`));

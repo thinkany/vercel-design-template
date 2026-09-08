@@ -116,12 +116,12 @@ t("a list mapped by index with a missing first item has no hole", async () => {
   const dir3 = fs.mkdtempSync(path.join(os.tmpdir(), "wp-hole-"));
   fs.mkdirSync(path.join(dir3, "content"), { recursive: true });
   const m = { version: 1, pages: [{ wp: 14, page: "services", include: true }], blocks: { "acf/hero": { block: "hero", fields: { heading: "heading", "ctas[0]": { from: "missing_button", each: { label: "title", href: "url" } }, "ctas[1]": { from: "button", each: { label: "title", href: "url" } } } } }, posts: { import: false }, forms: { import: false }, media: { download: false } };
-  const svcHero = payload.entries.find((e) => e.id === 14).blocks[0]; svcHero.fields.button = { title: "Call", url: "tel:1" };
+  const svcHero = payload.entries.find((e) => e.id === 14).blocks[0]; const keep = svcHero.fields.button; svcHero.fields.button = { title: "Call", url: "tel:1" }; svcHero.fields.show_button = true;
   const r = await W.transform(dir3, payload, m, { blocks });
   assert.ok(r.ok, JSON.stringify(r.errors));
   const doc = JSON.parse(fs.readFileSync(path.join(dir3, "content", "pages", "services.json"), "utf8"));
   assert.deepEqual(doc.blocks[0].props.ctas, [{ label: "Call", href: "tel:1" }]);
-  delete svcHero.fields.button;
+  svcHero.fields.button = keep; svcHero.fields.show_button = false;
   fs.rmSync(dir3, { recursive: true, force: true });
 });
 t("pick splits a wysiwyg field into heading and rest", async () => {
@@ -232,6 +232,9 @@ t("mapping validates, and catches a bad id", () => {
     assert.ok(rep.pages.find((p) => p.id === "about").lost.some((l) => l.node === "page-fields" && l.text === "sidebar_note"));
     // services: pick splits one wysiwyg into heading + rest (the mapping's plain "heading" is overridden per page by a second hero mapping below); flatMap flattens grouped FAQ items
     const services = JSON.parse(fs.readFileSync(path.join(dir, "content", "pages", "services.json"), "utf8"));
+    assert.deepEqual(services.blocks[0].props.ctas, [], "a button behind an off switch is not imported, and an absent list starts empty");
+    assert.ok(rep.pages.find((p) => p.id === "services").lost.some((l) => l.node === "hidden-on-old-site" && l.text === "button"));
+    assert.ok(rep.pages.find((p) => p.id === "home").lost.some((l) => l.node === "page-fields" && l.text === "intro_note"), "script slots are layout; real page fields are still named");
     assert.equal(services.blocks[1].type, "faq");
     assert.equal(services.blocks[1].props.heading, "Questions");
     assert.deepEqual(services.blocks[1].props.items, [{ q: "Do you take walk-ins?", a: "Yes, most days." }, { q: "Do you bill insurers?", a: "Directly." }]);
