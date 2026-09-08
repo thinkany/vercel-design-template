@@ -1,5 +1,9 @@
 # Design after import (step 2 of the WordPress migration)
 
+**Folded 2026-09-08** into [wordpress-import-lossless-spec.md](wordpress-import-lossless-spec.md)
+as its design pass (the Blocks tab's Needs Design section and `/design-block
+--from-brief`). Kept for the brief format and the reasoning.
+
 **Status:** spec'd 2026-09-08 from Rob's direction after the first real import
 (tax.local into The Dog Bark v01). Not built. Follows step 1 (field purposes and
 carried options) in [wordpress-migration-spec.md](wordpress-migration-spec.md).

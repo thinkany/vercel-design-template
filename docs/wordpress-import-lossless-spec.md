@@ -1,0 +1,295 @@
+# WordPress import, lossless (the plan of record)
+
+**Status:** spec'd 2026-09-08 from Rob's sequencing after the first real import
+(tax.local into The Dog Bark v01), with two decisions taken on the way: a
+per-block "Use an existing design" action, and renaming of imported blocks'
+fields. **Supersedes** the mapping-first flow in
+[wordpress-migration-spec.md](wordpress-migration-spec.md) (the plugin, the
+payload, field purposes and carried options all stay; the Propose step goes) and
+[design-after-import-spec.md](design-after-import-spec.md) (folded in as the design
+pass). Not built.
+
+## The idea in one paragraph
+
+Import everything, design later. Every old block in use becomes a new block in the
+site with the same content fields, its options as real props, and a placeholder
+component that renders the content plainly with a "Needs design" marker. Every
+page, post and entry lands as a **draft**, never touching what the design already
+has. Forms come first so blocks can bind to them. The report is a verification, not
+a loss list. Then the Blocks tab shows what needs a design, one block at a time, in
+the current motif, with real content on real pages, and publishing happens in bulk
+once the blocks are designed.
+
+## Sequence
+
+1. **Forms.** Every form the payload carries lands in the Forms tab (as now:
+   Gravity Forms and WPForms, compound fields expanded, existing forms never
+   overwritten).
+2. **Blocks.** One new block per old ACF block **in use**, named well, with:
+   - one prop per content field (kind from the ACF type: text → string, wysiwyg →
+     richtext, image, link, repeater → list of objects, group → object, select →
+     enum, true/false → boolean, number),
+   - one enum prop per **option in use** (step 1's variants), with the values used,
+   - references resolved (a form select → the built-in form binding; a featured
+     post → a reference),
+   - shared fragments for field groups that repeat across the theme,
+   - a placeholder component and `needsDesign: true`.
+   Plus a generated **Prose** block (one richtext prop) whenever the site has runs
+   of core paragraphs, and the built-in Table for tables.
+3. **Content.** Pages, posts and custom-type entries written into `content/`, every
+   one a draft, with collision-safe ids, in the old block order, with every field
+   mapped one-to-one and options carried into their props. Media fetched for
+   everything that references it. Redirects for every old address whose route
+   changed.
+4. **Report.** What was created, by type, with counts and names: forms, blocks
+   (needs design), pages, posts, entries, images, redirects, menus; then the short
+   list of what the site can't hold (embeds, uploads, hidden fields), per page.
+5. **Design pass.** Blocks tab → Needs Design → Update design, one block per turn.
+6. **Publish.** Pages / Posts / Types lists gain a draft filter and select-all with
+   bulk publish, collision-checked.
+
+Nothing in 1 to 4 needs an agent turn. The whole import is deterministic and runs
+from the panel's one button. The agent appears only in step 5, and optionally in a
+naming pass before step 2.
+
+## 1. Forms
+
+As built. A form's id comes from its title; an existing id is kept and reported as
+"already there, left as is". The old Form block's reference resolves to the new id
+so the generated form block binds on import.
+
+## 2. Blocks
+
+### Naming
+
+- **Block key**: the deterministic default is the slug of the ACF block title
+  (`alternating-content`). The optional naming pass (the migration skill, one turn,
+  reading the definitions) proposes keys and prop names in the design's vocabulary
+  (`story`, `heading`, `copy`), and the designer can rename in the Blocks tab. A key
+  never collides with an existing block; on collision the import adds `-2`.
+- **Prop names** from the ACF field labels in camelCase (`block_title` labelled
+  "Title" → `title`; `hero_copy` labelled "Copy" → `copy`). Layout fields (step 1)
+  are not props. Names the naming pass or the designer change are recorded in the
+  block's `wp` map (old field → prop) so a re-import still lands.
+
+### Shared fragments
+
+Field groups that repeat across blocks (the tax theme's `block_title` +
+`block_copy` on nine blocks; the CTA pair `cta_button` + `cta_button_two`) are
+generated once into `site/blocks/lib/wp-fields.ts` as zod fragments, and each
+block's schema composes them. A fragment is a set of field names and kinds seen
+together on two or more blocks. The designer sees one prop shape, not nine
+near-copies.
+
+### The generated block file
+
+`site/blocks/<key>.tsx`, in the same shape as a promoted block, plus metadata the
+app reads:
+
+```tsx
+export const story = defineBlock({
+  name: "Alternating Content",
+  description: "Imported from WordPress (acf/alternating-content), used 3 times.",
+  props: z.object({
+    title: z.string().optional(),
+    copy: richtext.optional(),
+    image: image.optional(),
+    side: z.enum(["left", "right"]).default("left"),      // from copy_side: copy__left ×2, copy__right ×1
+  }),
+  component: Placeholder,          // site/src/lib/placeholder-block.tsx, CORE
+  needsDesign: true,
+  wp: { block: "acf/alternating-content", fields: { block_title: "title", block_copy: "copy", image: "image", copy_side: "side" }, options: { copy_side: { copy__left: "left", copy__right: "right" } } },
+});
+```
+
+`needsDesign` and `wp` are new optional fields on `BlockDef` (CORE). The registry
+row in `site/blocks/index.ts` is added like a promoted block's.
+
+### The placeholder component
+
+One CORE component, `site/src/lib/placeholder-block.tsx`, renders any props
+object plainly in the design's tokens: strings as headings or lines by length,
+richtext through `Rich`, images at their size, links as buttons, lists as stacked
+items, enums and booleans as small labels, nested objects indented. A visible
+"Needs design" ribbon with the block's name, shown in the app's preview and the
+local site, never on a published site (drafts don't publish, and a designed block
+has its own component). It exists so every imported page previews and the site
+builds before any design work.
+
+### Undesigned blocks elsewhere
+
+- **Art Director** skips them (they are not the designer's work yet).
+- **Figma export** skips them.
+- **The block picker** in the CMS lists them under a "Needs design" group, so a
+  designer can still place one on a page if they want.
+
+## 3. Content
+
+### Never overwrite
+
+The import creates; it never replaces. Ids are made from the old slug, and on
+collision with anything already in `content/` (the design's `home`, a post with the
+same slug) the import uses a distinct id from the old title, then `-2`. The report
+lists every id that changed and why.
+
+### Drafts
+
+Every imported page, post and entry is written with `draft: true`. Drafts preview
+in the app and in local dev and are left out of the build, as today. Home imports as
+`welcome` (its old title), a draft, and the design's home stays the home page until
+the designer decides otherwise.
+
+### Pages in the old block order
+
+Every old block instance becomes an instance of its generated block, in order. Runs
+of core blocks become Prose instances; tables become Table instances; a Custom HTML
+block converts as prose. Fields hidden by an off switch on the old site stay behind
+and are named in the report (step 1). Options land in their enum props, and `_wp`
+is no longer needed for anything that mapped, so it is written only for values that
+did not (rare).
+
+### Posts, entries, media, redirects, menus
+
+As built: posts as markdown drafts; entries as JSON drafts under their type;
+images through the media converter into `public/images/wp/`; a 301 for every old
+address whose route changed; menus as header nav and footer columns, both optional.
+
+### Re-running
+
+A re-run finds its own previous output by the `wp` ids the import records
+(`.thinkany/wp-import/created.json`: every file it wrote and the old id behind it)
+and rewrites those, never anything else. A page the designer has since edited is
+skipped and listed, unless the designer chooses "overwrite my edits" for that run.
+
+## 4. The report
+
+Verification first, losses second:
+
+```
+# Import report
+Forms: Contact Us (7 fields)
+Blocks created (need design): Alternating Content (3 uses, side: left/right), Testimonials (2, layout), Book CTA, Client Marquee, Table, Steps, FAQ, Form, Hero, WYSIWYG, WYSIWYG Columns, Prose
+Pages (drafts): Welcome (was Home, id welcome, 9 blocks), Testimonials (4), Testing (3), Privacy Policy (24)
+Posts (drafts): 1     Testimonials (entries, drafts): 5     Images: 26 (26 without alt)
+Redirects: 2          Menus: header from "Main Nav"; footer from "Footer One", "Footer Two", "Footer Three" as columns
+Ids changed: home → welcome (the design's home page keeps its place)
+
+## What the site can't hold
+- Welcome: core/embed (https://youtube.com/…)
+- Contact Us form: X-rays (file upload)
+- Welcome › Form: form title, intro (hidden on the old site)
+```
+
+Shown in the panel after the run (as now) and kept as `report.md`.
+
+## 5. The Blocks tab
+
+Two collapsible sections:
+
+- **Active**: the design's blocks, as today. No field editing here: a designed
+  block's schema is the designer's work and changes through `/design-block`.
+- **Needs Design**: shown only when at least one block has `needsDesign`. Each row:
+  the block's name, "imported from <old block>, used N×", its fields, its options,
+  and three actions:
+  - **Edit** opens the block's fields: **rename** a prop, **remove** a prop. Both
+    rewrite the block file (schema and `wp` map) and every content instance of the
+    block (the prop renamed or removed in each page, entry and template), in one
+    step, so content and schema never drift. Adding a field is not offered here;
+    that is a design decision and belongs to Update design.
+  - **Update design** runs the design pass for this block (below).
+  - **Use an existing design** offers the Active blocks; picking one runs a short
+    agent turn that proposes old prop → existing prop, shown for confirmation, then
+    rewrites every instance to the existing block and deletes the generated one.
+    For the obvious fits (an imported hero onto the design's hero).
+- A **naming pass** action at the top of Needs Design runs the migration skill once
+  over all undesigned blocks to propose better block and prop names, applied through
+  the same rename path.
+
+## The design pass
+
+**Update design** on a row runs `/design-block --from-brief <key>`: the design-block
+skill's normal contract (one block, in the design's visual language, registered,
+placed) with a flag that changes the inputs:
+
+- The schema **already exists** and is the contract. The skill designs the component
+  for it, keeps every prop, renders every enum value (a `side` renders both sides, a
+  `layout` renders both layouts), and never adds or removes a prop. Field changes
+  belong to Edit, before the pass.
+- **The brief** (`.thinkany/wp-import/briefs/<key>.json` and `.md`, written by the
+  import from the classification and the real instances: where used, field samples,
+  options with counts, two or three full instances) tells the skill what the section
+  is for and shows it real copy and images.
+- **Design language**, optional: the button opens a one-line prompt prefilled from
+  the brief ("Image beside copy, used three times on Welcome, with a left or right
+  side"). The designer adds direction or leaves it.
+- **Placement for review**: the block is already on the imported pages with real
+  content. The skill sets `needsDesign: false`, and the app's preview reloads the
+  page it is on. When the block has an option, the preview lands on a page where
+  both values occur, or the skill places one instance per value on the block's first
+  page so the designer sees both at once (Rob: yes).
+- The row moves from Needs Design to Active.
+
+## 6. Publishing
+
+- **Pages, Posts, Types** lists gain a filter: **All / Published / Draft**.
+- Each list gains **select** (per row, select all) and **Publish selected** and
+  **Unpublish selected**. Publish flips `draft` off after a **collision check**: a
+  draft whose route is already taken by a published page is refused and named
+  ("/ is the design's Home; rename this page's slug or unpublish Home first").
+- Single-page Publish, as today, gets the same check.
+
+## The panel after this change
+
+Import from WordPress keeps its steps but loses one:
+
+1. The plugin (as now).
+2. The content: fetch or load, then the inventory (as now).
+3. **Run the import**: one button. Everything in the sequence runs. The mapping
+   file is still written (`mapping.json`, generated, the audit trail), and an
+   advanced link shows it, but nothing waits on it.
+4. The report, and a pointer to the Blocks tab's Needs Design section.
+
+"Propose a mapping" and "Start the mapping over" go. The migration skill keeps two
+modes: `inventory` (the brief for a new design, unchanged) and `names` (the naming
+pass). `map` is retired.
+
+## What is not in scope
+
+- Core WordPress blocks with no home (embeds, galleries, files) stay in the report,
+  not on the punch list (Rob: leave those to the report; revisit later).
+- Other form plugins (the to-do list in the migration spec).
+- Editing a designed block's fields from the Blocks tab.
+- Merging two generated blocks into one, or splitting one (a design decision made
+  through `/design-block` after the pass).
+
+## Phases
+
+- **P1 Blocks and content.** `BlockDef` gains `needsDesign` and `wp`; the placeholder
+  component; the block generator (keys, props, enums from variants, shared
+  fragments, Prose); the content writer with draft-only, collision-safe ids, old
+  block order, `created.json`; the report as verification. The panel's Run the
+  import does all of it. Verifiable on the tax site: every page previews, every
+  block placeholder shows its content, the site builds (drafts excluded).
+- **P2 The Blocks tab.** Active and Needs Design sections; Edit (rename, remove,
+  synced to content); Use an existing design; the naming pass; the block picker's
+  Needs design group; Art Director and Figma export skip undesigned blocks.
+- **P3 The design pass.** `/design-block --from-brief`: briefs written by the
+  import, the flag in the design-block skill, the one-line design language prompt,
+  both-values placement, `needsDesign` cleared, the row moving to Active.
+- **P4 Publishing.** The All / Published / Draft filter, select-all, bulk publish and
+  unpublish with the collision check, on Pages, Posts and Types.
+
+P1 alone makes the import lossless and reviewable. P2 to P4 make it usable for a
+real client site without hand-editing files.
+
+## Open questions
+
+1. Whether the naming pass should run automatically as part of Run the import (one
+   agent turn, a few seconds) or stay a button. Automatic gives good names from the
+   first preview; a button keeps the import fully deterministic.
+2. Prose: one generated block per site, or reuse the built-in richtext rendering
+   with a design pass like any other block. One per site, needing design, is the
+   consistent answer.
+3. Whether "Use an existing design" should also be offered before the import, for
+   a designer who knows the hero will map. It could, from the inventory, but it
+   adds a step back to the flow that just lost one. Default no.

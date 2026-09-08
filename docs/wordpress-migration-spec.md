@@ -1,5 +1,10 @@
 # WordPress migration (an existing ACF Pro site into a new design)
 
+**Superseded 2026-09-08** by [wordpress-import-lossless-spec.md](wordpress-import-lossless-spec.md)
+(the plan of record: import everything as undesigned blocks and drafts, design
+after). The plugin, payload, field purposes and carried options below stay; the
+mapping-first flow (Propose a mapping) is retired by that spec.
+
 **Status:** spec'd 2026-09-07 from Rob's idea (a plugin that reads the fields and
 content as a proof of concept) and the follow-up discussion. **Proof of concept
 BUILT 2026-09-07 on `feature/wordpress-migration`** (not merged, not app-tested,
