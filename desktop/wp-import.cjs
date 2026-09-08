@@ -384,6 +384,13 @@ function validateMapping(m, blocks = []) {
     if (!t || t.include === false) continue;
     if (!/^[a-z][a-z0-9-]*$/.test(String(t.key || "")) || ["pages", "posts", "site", "types", "collections"].includes(t.key)) errors.push(`Type "${wpType}" needs a usable key; got "${t.key}".`);
     if (!/^\/[a-z0-9-]*$/.test(String(t.path || ""))) errors.push(`Type "${wpType}" needs a path like /team; got "${t.path}".`);
+    // fields: old field name → new camelCase key (the site's fieldDef rule), never reserved.
+    for (const [wpField, spec] of Object.entries(t.fields || {})) {
+      const key = typeof spec === "string" ? spec : spec && spec.key;
+      if (!key) continue;
+      if (!/^[a-z][a-zA-Z0-9]*$/.test(String(key))) errors.push(`Type "${wpType}": field "${wpField}" maps to "${key}", which isn't a camelCase key (like byLine). Check the direction: old field name → new key.`);
+      if (["title", "slug", "seo", "blocks", "draft"].includes(String(key))) errors.push(`Type "${wpType}": "${key}" is reserved on every entry.`);
+    }
   }
   return errors;
 }

@@ -164,9 +164,10 @@ const mapping = {
 
 t("mapping validates, and catches a bad id", () => {
   assert.deepEqual(W.validateMapping(mapping, blocks), []);
-  const bad = JSON.parse(JSON.stringify(mapping)); bad.pages[2].page = "About Us"; bad.blocks["acf/hero"].block = "nope";
+  const bad = JSON.parse(JSON.stringify(mapping)); bad.pages[2].page = "About Us"; bad.blocks["acf/hero"].block = "nope"; bad.types.team.fields = { byLine: "by_line" };
   const errs = W.validateMapping(bad, blocks);
-  assert.equal(errs.length, 2);
+  assert.equal(errs.length, 3);
+  assert.match(errs[2], /camelCase key .* Check the direction/);
 });
 
 (async () => {
