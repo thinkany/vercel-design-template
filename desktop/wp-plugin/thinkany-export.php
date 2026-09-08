@@ -3,7 +3,7 @@
  * Plugin Name: thinkany design Export
  * Plugin URI:  https://thinkany.design
  * Description: Read-only export of this site's structure and content (ACF field groups, blocks, pages, posts, custom types, menus, media) as one JSON payload, for a redesign in thinkany design. Writes nothing.
- * Version:     0.1.3
+ * Version:     0.1.4
  * Author:      thinkany
  * License:     Proprietary
  * Requires PHP: 7.4
@@ -25,7 +25,7 @@
 if (!defined('ABSPATH')) exit;
 
 final class Thinkany_Export {
-    const VERSION = '0.1.3';
+    const VERSION = '0.1.4';
     const PAYLOAD_VERSION = 1;
     const OPTION = 'thinkany_export_token';
 
@@ -72,7 +72,8 @@ final class Thinkany_Export {
         $row = function ($label, $value) use ($copyIcon, $checkIcon) {
             return '<div class="ta-row"><div class="ta-k">' . esc_html($label) . '</div>'
                 . '<div class="ta-v"><code class="ta-code">' . esc_html($value) . '</code>'
-                . '<button type="button" class="ta-copy" data-copy="' . esc_attr($value) . '" aria-label="Copy ' . esc_attr($label) . '" title="Copy"><span class="ta-ic-copy">' . $copyIcon . '</span><span class="ta-ic-done">' . $checkIcon . '</span></button></div></div>';
+                . '<button type="button" class="ta-copy" data-copy="' . esc_attr($value) . '" aria-label="Copy ' . esc_attr($label) . '" title="Copy"><span class="ta-ic-copy">' . $copyIcon . '</span><span class="ta-ic-done">' . $checkIcon . '</span></button>'
+                . '<span class="ta-copied" role="status" aria-live="polite"></span></div></div>';
         };
         ?>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -94,6 +95,8 @@ final class Thinkany_Export {
           .ta-copy.is-done .ta-ic-copy { display: none; }
           .ta-copy.is-done .ta-ic-done { display: inline-flex; }
           .ta-copy.is-done { background: #111; color: #fff; }
+          .ta-copied { font-size: 12px; font-weight: 500; color: #111; opacity: 0; transition: opacity 120ms; white-space: nowrap; }
+          .ta-copied.is-on { opacity: 1; }
           .ta-meta { font-size: 13px; font-weight: 300; color: #111; margin: 14px 0 22px; }
           .ta-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
           .ta-btn { font-family: 'Inter', system-ui, sans-serif; font-size: 13px; font-weight: 500; color: #fff; background: #111; border: 1px solid #111; border-radius: 999px; padding: 9px 18px; cursor: pointer; }
@@ -128,7 +131,11 @@ final class Thinkany_Export {
             Array.prototype.forEach.call(buttons, function (b) {
               b.addEventListener('click', function () {
                 var text = b.getAttribute('data-copy') || '';
-                var done = function () { b.classList.add('is-done'); setTimeout(function () { b.classList.remove('is-done'); }, 1400); };
+                var msg = b.parentNode.querySelector('.ta-copied');
+                var done = function () {
+                  b.classList.add('is-done'); if (msg) { msg.textContent = 'Copied'; msg.classList.add('is-on'); }
+                  setTimeout(function () { b.classList.remove('is-done'); if (msg) { msg.classList.remove('is-on'); setTimeout(function () { msg.textContent = ''; }, 150); } }, 1400);
+                };
                 if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { fallback(text); done(); });
                 else { fallback(text); done(); }
               });
