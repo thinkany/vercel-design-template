@@ -5966,10 +5966,14 @@ async function renderSiteSettings(host, data, st) {
 let wpBusy = null; // "fetch" | "import" while one runs, so a repaint keeps the running note
 // The import modal (docs/wordpress-import-lossless-spec.md): the expanded-content
 // overlay's frame, kept open through the whole flow and repainted in place, so a
-// fetch or an import never resets the tab behind it. Sections expand under links.
+// fetch or an import never resets the tab behind it. The steps arrive one stage at a
+// time, like Get Designing: the current stage at full opacity, finished stages muted,
+// the next stage fading in on success. Sections expand under headings.
 let wpModalOpen = new Set(); // which expandable sections are open, kept across repaints
+let wpStyleInjected = false;
 function openWpImportModal() {
   const S = COPY.site.settings.wp;
+  if (!wpStyleInjected) { wpStyleInjected = true; const st = document.createElement("style"); st.textContent = ".wp-stage{transition:opacity .35s ease;}.wp-stage.muted{opacity:.5;}.wp-stage.muted:hover,.wp-stage.muted:focus-within{opacity:1;}.wp-stage.enter{opacity:0;}"; document.head.appendChild(st); }
   const ov = siteEl("div", "blockedit");
   const card = siteEl("div", "blockedit-card");
   const head = siteEl("div", "blockedit-head");
@@ -5984,19 +5988,31 @@ function openWpImportModal() {
   cancel.addEventListener("click", close);
   document.addEventListener("keydown", onKey, true);
   document.body.appendChild(ov);
-  // transient messages survive a repaint
-  const msgs = { plugin: null, fetch: null, run: null };
+  const msgs = { plugin: null, fetch: null, run: null }; // transient lines that survive a repaint
+  let shown = new Set(); // stages on screen after the last paint, to know what is new
+  // Which stage is current: the latest thing that happened decides.
+  const stageOf = (st) => {
+    if (!st.payload) return "fetch";
+    const fetched = st.payload.fetched ? Date.parse(st.payload.fetched) : 0;
+    const ran = st.report && st.report.when ? Date.parse(st.report.when) : 0;
+    if (!st.siteReady) return "brief";
+    return ran && ran >= fetched ? "done" : "import";
+  };
   const paint = async () => {
-    body.innerHTML = "";
     const st = await window.desktop.wpStatus().catch(() => null);
     if (!st || !st.project) return;
+    body.innerHTML = "";
     const licensed = st.licensed !== false && appHasKey;
-    const step = (label, hint) => { body.appendChild(siteEl("div", "k", label)).style.cssText = "margin-top:14px;font-weight:600;"; if (hint) body.appendChild(siteEl("div", "sess-desc", hint)); };
-    const row = () => { const r = siteEl("div"); r.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 8px;"; body.appendChild(r); return r; };
+    const stage = stageOf(st);
+    const order = ["fetch", stage === "brief" ? "brief" : "import", "done"];
+    const visible = order.slice(0, order.indexOf(stage === "brief" ? "brief" : stage) + 1);
+    const groups = {};
+    const group = (key) => { const g = siteEl("div", "wp-stage" + (key !== (stage === "brief" ? "brief" : stage) ? " muted" : "") + (!shown.has(key) && shown.size ? " enter" : "")); groups[key] = g; body.appendChild(g); return g; };
+    const step = (host, label, hint) => { host.appendChild(siteEl("div", "k", label)).style.cssText = "margin-top:14px;font-weight:600;"; if (hint) host.appendChild(siteEl("div", "sess-desc", hint)); };
+    const row = (host) => { const r = siteEl("div"); r.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 8px;"; host.appendChild(r); return r; };
     const btn = (label, onClick, { primary, disabled, title } = {}) => { const b = siteEl("button", primary ? "panelbtn primary" : "panelbtn", label); b.style.cssText = "margin:0;width:auto;"; if (disabled) b.disabled = true; if (title) b.title = title; b.addEventListener("click", onClick); return b; };
-    const message = (m) => { if (!m) return; const e = siteEl("div", "sess-desc", m.text); e.style.cssText = `margin:2px 0 6px;color:${m.ok ? "#1a7f37" : "#c0261e"};`; body.appendChild(e); };
-    // An expandable section under a link: a heading you click, a body that folds.
-    const expander = (key, label, render) => {
+    const message = (host, m) => { if (!m) return; const e = siteEl("div", "sess-desc", m.text); e.style.cssText = `margin:2px 0 6px;color:${m.ok ? "#1a7f37" : "#c0261e"};`; host.appendChild(e); };
+    const expander = (host, key, label, render) => {
       const sec = siteEl("div", "site-acc" + (wpModalOpen.has(key) ? " open" : "")); sec.style.margin = "4px 0";
       const h = siteEl("button", "site-acc-head"); h.type = "button"; h.setAttribute("aria-expanded", String(wpModalOpen.has(key)));
       h.appendChild(siteEl("span", "site-acc-title", label));
@@ -6005,22 +6021,21 @@ function openWpImportModal() {
       const fill = async () => { if (rendered) return; rendered = true; await render(b); };
       if (!b.hidden) fill();
       h.addEventListener("click", async () => { const now = b.hidden; if (now) await fill(); siteReveal(b, now); sec.classList.toggle("open", now); h.setAttribute("aria-expanded", String(now)); if (now) wpModalOpen.add(key); else wpModalOpen.delete(key); });
-      sec.append(h, b); body.appendChild(sec);
+      sec.append(h, b); host.appendChild(sec);
     };
     const pre = (text) => { const p = document.createElement("pre"); p.style.cssText = "white-space:pre-wrap;word-break:break-word;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:8px 0;color:#1a1a1a;"; p.textContent = text || ""; return p; };
 
-    // 1. the plugin
-    step(S.pluginStep, S.pluginHint);
-    row().appendChild(btn(S.savePlugin, async () => { const r = await window.desktop.wpSavePlugin(); if (r && r.ok) { msgs.plugin = { ok: true, text: S.pluginSaved(r.path) }; paint(); } else if (r && r.error) { msgs.plugin = { ok: false, text: r.error }; paint(); } }));
-    message(msgs.plugin);
-
-    // 2. the content
-    step(S.fetchStep);
+    // Stage 1: the plugin and the content, together.
+    const g1 = group("fetch");
+    step(g1, S.pluginStep, S.pluginHint);
+    row(g1).appendChild(btn(S.savePlugin, async () => { const r = await window.desktop.wpSavePlugin(); if (r && r.ok) msgs.plugin = { ok: true, text: S.pluginSaved(r.path) }; else if (r && r.error) msgs.plugin = { ok: false, text: r.error }; if (r && !r.canceled) paint(); }));
+    message(g1, msgs.plugin);
+    step(g1, S.fetchStep);
     const url = siteField(S.url, (st.payload && st.payload.url) || "", { placeholder: S.urlPlaceholder, type: "url" });
     const token = siteField(S.token, "", { placeholder: S.tokenPlaceholder, type: "password" });
     url.wrap.style.marginBottom = "4px"; token.wrap.style.marginBottom = "4px";
-    body.append(url.wrap, token.wrap);
-    const r2 = row();
+    g1.append(url.wrap, token.wrap);
+    const r2 = row(g1);
     const fetchBtn = btn(wpBusy === "fetch" ? S.fetching : S.fetch, async () => {
       const u = url.input.value.trim(), t = token.input.value.trim();
       if (!u || !t) return;
@@ -6031,21 +6046,23 @@ function openWpImportModal() {
       msgs.run = null; if (r && r.ok) wpModalOpen.add("inventory");
       paint();
     }, { primary: true, disabled: !licensed || wpBusy === "fetch", title: licensed ? "" : COPY.site.notLicensed });
-    const fileBtn = btn(S.loadFile, async () => { const r = await window.desktop.wpLoadFile(); if (!r || r.canceled) return; msgs.fetch = r.ok ? { ok: true, text: S.fetchOk(r.inventory && r.inventory.site && r.inventory.site.name, r.inventory.counts) } : { ok: false, text: r.error || S.fetchFail }; if (r.ok) wpModalOpen.add("inventory"); paint(); }, { disabled: !licensed, title: S.loadFileHint });
+    const fileBtn = btn(S.loadFile, async () => { const r = await window.desktop.wpLoadFile(); if (!r || r.canceled) return; msgs.fetch = r.ok ? { ok: true, text: S.fetchOk(r.inventory && r.inventory.site && r.inventory.site.name, r.inventory.counts) } : { ok: false, text: r.error || S.fetchFail }; msgs.run = null; if (r.ok) wpModalOpen.add("inventory"); paint(); }, { disabled: !licensed, title: S.loadFileHint });
     r2.append(fetchBtn, fileBtn);
-    message(msgs.fetch);
+    message(g1, msgs.fetch);
     if (st.payload) {
-      if (!msgs.fetch) { const when = st.payload.fetched ? new Date(st.payload.fetched).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : ""; body.appendChild(siteEl("div", "sess-desc", `${st.payload.site.name || st.payload.url || st.payload.file || ""}: ${S.summary(st.payload.counts)}${when ? ` Fetched ${when}.` : ""}`)); }
-      expander("inventory", S.inventoryLink, async (b) => { const r = await window.desktop.wpInventory(); b.appendChild(pre(r && r.ok ? r.markdown : (r && r.error) || "")); });
+      if (!msgs.fetch) { const when = st.payload.fetched ? new Date(st.payload.fetched).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : ""; g1.appendChild(siteEl("div", "sess-desc", `${st.payload.site.name || st.payload.url || st.payload.file || ""}: ${S.summary(st.payload.counts)}${when ? ` Fetched ${when}.` : ""}`)); }
+      expander(g1, "inventory", S.inventoryLink, async (b) => { const r = await window.desktop.wpInventory(); b.appendChild(pre(r && r.ok ? r.markdown : (r && r.error) || "")); });
     }
 
-    // 3. the import (or, before the site is built, the brief)
-    if (st.payload && !st.siteReady) {
-      step(S.briefStep, S.briefHint);
-      row().appendChild(btn(S.brief, () => { close(); closeModal(); runAgent(S.briefRequest, S.briefEcho); }, { primary: true, disabled: !licensed }));
-    } else if (st.payload) {
-      step(S.importStep, S.importHint);
-      const r3 = row();
+    // Stage 2: the import (or, before the site is built, the brief).
+    if (visible.includes("brief")) {
+      const g = group("brief");
+      step(g, S.briefStep, S.briefHint);
+      row(g).appendChild(btn(S.brief, () => { close(); closeModal(); runAgent(S.briefRequest, S.briefEcho); }, { primary: true, disabled: !licensed }));
+    } else if (visible.includes("import")) {
+      const g3 = group("import");
+      step(g3, S.importStep, S.importHint);
+      const r3 = row(g3);
       const runBtn = btn(wpBusy === "import" ? S.running : S.run, async () => {
         wpBusy = "import"; runBtn.disabled = true; runBtn.textContent = S.running;
         const r = await window.desktop.wpTransform();
@@ -6055,28 +6072,30 @@ function openWpImportModal() {
         paint();
       }, { primary: true, disabled: !licensed || wpBusy === "import" });
       r3.appendChild(runBtn);
-      expander("files", S.filesLink, async (b) => {
+      expander(g3, "files", S.filesLink, async (b) => {
         b.appendChild(siteEl("div", "sess-desc", S.filesHint));
         const r = await window.desktop.wpFiles();
         if (r && r.ok) { const list = siteEl("div"); list.style.cssText = "font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;"; r.files.forEach((f) => list.appendChild(siteEl("div", "", `${f.name}  ${f.size >= 1024 ? `${Math.round(f.size / 1024)} KB` : `${f.size} B`}`))); b.appendChild(list); }
         const reveal = siteEl("button", "panelbtn", S.filesReveal); reveal.style.cssText = "margin:6px 0 0;width:auto;"; reveal.addEventListener("click", () => window.desktop.wpRevealMapping()); b.appendChild(reveal);
       });
-      message(msgs.run);
-      if (st.report) {
-        if (!msgs.run) body.appendChild(siteEl("div", "sess-desc", `${S.done(st.report)}${st.report.when ? ` ${new Date(st.report.when).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}.` : ""}`));
-        expander("report", S.reportLink, async (b) => { const r = await window.desktop.wpReport(); b.appendChild(pre(r && r.ok ? r.markdown : (r && r.error) || "")); });
-        // 4. next steps, then a button per tab
-        step(S.nextTitle);
-        const ol = document.createElement("ol"); ol.style.cssText = "margin:4px 0 10px 18px;padding:0;font-size:12.5px;line-height:1.55;color:#333;";
-        S.nextSteps.forEach((t) => { const li = document.createElement("li"); li.textContent = t; li.style.margin = "0 0 4px"; ol.appendChild(li); });
-        body.appendChild(ol);
-        body.appendChild(siteEl("div", "k", S.goTo)).style.cssText = "margin-top:6px;font-weight:600;";
-        const r5 = row();
-        for (const [tab, label] of Object.entries(COPY.site.tabs)) { if (tab === "settings") continue; r5.appendChild(btn(label, () => { ov.remove(); document.removeEventListener("keydown", onKey, true); ensureCmsTab(tab); })); }
-      }
+      message(g3, msgs.run);
+    }
+
+    // Stage 3: the report, next steps, and a button per tab.
+    if (visible.includes("done") && st.report) {
+      const g4 = group("done");
+      if (!msgs.run) g4.appendChild(siteEl("div", "sess-desc", `${S.done(st.report)}${st.report.when ? ` ${new Date(st.report.when).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}.` : ""}`)).style.marginTop = "14px";
+      expander(g4, "report", S.reportLink, async (b) => { const r = await window.desktop.wpReport(); b.appendChild(pre(r && r.ok ? r.markdown : (r && r.error) || "")); });
+      step(g4, S.nextTitle);
+      const ol = document.createElement("ol"); ol.style.cssText = "margin:4px 0 10px 18px;padding:0;font-size:12.5px;line-height:1.55;color:#333;";
+      S.nextSteps.forEach((t) => { const li = document.createElement("li"); li.textContent = t; li.style.margin = "0 0 4px"; ol.appendChild(li); });
+      g4.appendChild(ol);
+      g4.appendChild(siteEl("div", "k", S.goTo)).style.cssText = "margin-top:6px;font-weight:600;";
+      const r5 = row(g4);
+      for (const [tab, label] of Object.entries(COPY.site.tabs)) { if (tab === "settings") continue; r5.appendChild(btn(label, () => { ov.remove(); document.removeEventListener("keydown", onKey, true); ensureCmsTab(tab); })); }
     }
     if (st.payload) {
-      const rf = row(); rf.style.marginTop = "14px";
+      const rf = row(body); rf.style.marginTop = "14px";
       let armed = false;
       const forget = btn(S.forget, async () => {
         if (!armed) { armed = true; forget.textContent = S.forgetConfirm; forget.style.whiteSpace = "normal"; forget.style.textAlign = "left"; return; }
@@ -6084,6 +6103,9 @@ function openWpImportModal() {
       });
       forget.style.opacity = "0.75"; rf.appendChild(forget);
     }
+    // A stage that just arrived fades in; a stage that just finished eases back.
+    requestAnimationFrame(() => { for (const g of Object.values(groups)) g.classList.remove("enter"); });
+    shown = new Set(Object.keys(groups));
   };
   paint();
   return { close };
