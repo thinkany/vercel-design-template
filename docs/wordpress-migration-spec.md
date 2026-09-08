@@ -236,6 +236,17 @@ deterministic before any UI is built.
 3. **Rich text and tables**: promote to a Table block (see the section above).
    The prose subset stays as it is.
 
+## To do
+
+- **Other form plugins.** The plugin reads Gravity Forms and WPForms today. Add
+  Contact Form 7 (fields parsed from its shortcode-style form template), Ninja
+  Forms, Formidable, Fluent Forms and WS Form, each into the same payload shape
+  (`forms[]`: id, plugin, title, fields with type, label, required, choices), so
+  they import into the Forms tab and an old form block binds to them the same way.
+  Until then those forms appear in the report as an unresolved reference.
+- **Step 2 of block options** (spec after step 1 is tested on the tax site): block
+  briefs for unmapped blocks and a `/design-block` from-WordPress mode.
+
 ## Assumptions and open questions
 
 - ACF Pro with block-based content is the primary target; classic-content sites
