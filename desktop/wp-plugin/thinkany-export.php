@@ -3,7 +3,7 @@
  * Plugin Name: thinkany Export
  * Plugin URI:  https://thinkany.design
  * Description: Read-only export of this site's structure and content (ACF field groups, blocks, pages, posts, custom types, menus, media) as one JSON payload, for a redesign in thinkany design. Writes nothing.
- * Version:     0.1.1
+ * Version:     0.1.2
  * Author:      thinkany
  * License:     Proprietary
  * Requires PHP: 7.4
@@ -25,7 +25,7 @@
 if (!defined('ABSPATH')) exit;
 
 final class Thinkany_Export {
-    const VERSION = '0.1.1';
+    const VERSION = '0.1.2';
     const PAYLOAD_VERSION = 1;
     const OPTION = 'thinkany_export_token';
 
@@ -63,20 +63,79 @@ final class Thinkany_Export {
     public static function page() {
         if (!current_user_can('manage_options')) return;
         $token = self::token();
-        $url = esc_url(rest_url('thinkany/v1/export'));
+        $url = rest_url('thinkany/v1/export');
+        $home = home_url('/');
         $acf = function_exists('acf_get_field_groups') ? 'found' : 'not found (page and block fields will be missing)';
-        echo '<div class="wrap"><h1>thinkany Export</h1>';
-        if (!empty($_GET['rotated'])) echo '<div class="notice notice-success"><p>A new token was generated. Paste the new one into the app.</p></div>';
-        echo '<p>This plugin only reads. Paste the address and token below into thinkany design (Site → Settings → Import from WordPress).</p>';
-        echo '<table class="form-table"><tr><th>Site address</th><td><code>' . esc_html(home_url('/')) . '</code></td></tr>';
-        echo '<tr><th>Token</th><td><code style="user-select:all">' . esc_html($token) . '</code></td></tr>';
-        echo '<tr><th>Endpoint</th><td><code>' . $url . '</code></td></tr>';
-        echo '<tr><th>ACF</th><td>' . esc_html($acf) . '</td></tr></table>';
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
-        wp_nonce_field('thinkany_export_rotate');
-        echo '<input type="hidden" name="action" value="thinkany_export_rotate" />';
-        submit_button('Generate a new token', 'secondary');
-        echo '</form><p><em>Deactivate the plugin once the export is done.</em></p></div>';
+        // The app's admin look: white ground, black copy, a pill button, 1px-stroke icons.
+        $copyIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+        $checkIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>';
+        $row = function ($label, $value) use ($copyIcon, $checkIcon) {
+            return '<div class="ta-row"><div class="ta-k">' . esc_html($label) . '</div>'
+                . '<div class="ta-v"><code class="ta-code">' . esc_html($value) . '</code>'
+                . '<button type="button" class="ta-copy" data-copy="' . esc_attr($value) . '" aria-label="Copy ' . esc_attr($label) . '" title="Copy"><span class="ta-ic-copy">' . $copyIcon . '</span><span class="ta-ic-done">' . $checkIcon . '</span></button></div></div>';
+        };
+        ?>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+        <style>
+          .ta-wrap { max-width: 720px; margin: 24px 0 0; font-family: 'Inter', system-ui, sans-serif; color: #111; }
+          .ta-card { background: #fff; border: 1px solid #e6e6e6; border-radius: 8px; padding: 28px 32px; }
+          .ta-card h1 { font-family: 'DM Sans', system-ui, sans-serif; font-weight: 700; font-size: 22px; letter-spacing: -0.01em; margin: 0 0 6px; color: #111; padding: 0; }
+          .ta-lead { font-weight: 300; font-size: 14px; line-height: 1.6; color: #111; margin: 0 0 22px; }
+          .ta-row { display: grid; grid-template-columns: 140px 1fr; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid #ececec; }
+          .ta-row:last-of-type { border-bottom: 1px solid #ececec; }
+          .ta-k { font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #111; }
+          .ta-v { display: flex; align-items: center; gap: 10px; min-width: 0; }
+          .ta-code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #111; background: #fafafa; border: 1px solid #ececec; border-radius: 4px; padding: 6px 10px; user-select: all; }
+          .ta-copy { flex: none; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; background: #fff; color: #111; border: 1px solid #111; border-radius: 999px; cursor: pointer; padding: 0; }
+          .ta-copy:hover { background: #111; color: #fff; }
+          .ta-copy .ta-ic-done { display: none; }
+          .ta-copy.is-done .ta-ic-copy { display: none; }
+          .ta-copy.is-done .ta-ic-done { display: inline-flex; }
+          .ta-copy.is-done { background: #111; color: #fff; }
+          .ta-meta { font-size: 13px; font-weight: 300; color: #111; margin: 14px 0 22px; }
+          .ta-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+          .ta-btn { font-family: 'Inter', system-ui, sans-serif; font-size: 13px; font-weight: 500; color: #fff; background: #111; border: 1px solid #111; border-radius: 999px; padding: 9px 18px; cursor: pointer; }
+          .ta-btn:hover { background: #333; border-color: #333; }
+          .ta-note { font-size: 12.5px; font-weight: 300; color: #111; margin: 0; }
+          .ta-ok { background: #fff; border: 1px solid #111; border-radius: 6px; padding: 10px 14px; font-size: 13px; margin: 0 0 18px; }
+        </style>
+        <div class="wrap ta-wrap">
+          <div class="ta-card">
+            <h1>thinkany Export</h1>
+            <p class="ta-lead">This plugin only reads. Paste the address and token into thinkany design under Site → Settings → Import from WordPress.</p>
+            <?php if (!empty($_GET['rotated'])) echo '<div class="ta-ok">A new token was generated. Paste the new one into the app.</div>'; ?>
+            <?php echo $row('Site address', $home); echo $row('Token', $token); echo $row('Endpoint', $url); ?>
+            <div class="ta-meta">ACF: <?php echo esc_html($acf); ?></div>
+            <div class="ta-actions">
+              <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin:0">
+                <?php wp_nonce_field('thinkany_export_rotate'); ?>
+                <input type="hidden" name="action" value="thinkany_export_rotate" />
+                <button type="submit" class="ta-btn">Generate a new token</button>
+              </form>
+              <p class="ta-note">Deactivate the plugin once the export is done.</p>
+            </div>
+          </div>
+        </div>
+        <script>
+          (function () {
+            var buttons = document.querySelectorAll('.ta-copy');
+            function fallback(text) {
+              var ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+              document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e) {} document.body.removeChild(ta);
+            }
+            Array.prototype.forEach.call(buttons, function (b) {
+              b.addEventListener('click', function () {
+                var text = b.getAttribute('data-copy') || '';
+                var done = function () { b.classList.add('is-done'); setTimeout(function () { b.classList.remove('is-done'); }, 1400); };
+                if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { fallback(text); done(); });
+                else { fallback(text); done(); }
+              });
+            });
+          })();
+        </script>
+        <?php
     }
 
     // ---- REST -----------------------------------------------------------------
