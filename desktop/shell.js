@@ -5583,7 +5583,7 @@ function renderSiteBlocks(data) {
   const section = (key, title, desc, items, imported, openDefault) => {
     const sec = siteEl("div", "site-acc" + (siteFoldGet(key, openDefault) ? " open" : ""));
     const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(siteFoldGet(key, openDefault)));
-    head.appendChild(siteEl("span", "site-acc-title", `${title} (${items.length})`));
+    head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", `${title} (${items.length})`));
     const body = siteEl("div", "site-acc-body"); body.hidden = !siteFoldGet(key, openDefault);
     body.appendChild(siteEl("div", "sess-desc", desc));
     items.forEach((b, i) => body.appendChild(card(b, i, imported)));
@@ -6015,7 +6015,7 @@ function openWpImportModal() {
     const expander = (host, key, label, render) => {
       const sec = siteEl("div", "site-acc" + (wpModalOpen.has(key) ? " open" : "")); sec.style.margin = "4px 0";
       const h = siteEl("button", "site-acc-head"); h.type = "button"; h.setAttribute("aria-expanded", String(wpModalOpen.has(key)));
-      h.appendChild(siteEl("span", "site-acc-title", label));
+      h.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", label));
       const b = siteEl("div", "site-acc-body"); b.hidden = !wpModalOpen.has(key);
       let rendered = false;
       const fill = async () => { if (rendered) return; rendered = true; await render(b); };
@@ -6043,10 +6043,10 @@ function openWpImportModal() {
       const r = await window.desktop.wpFetch(u, t);
       wpBusy = null;
       msgs.fetch = r && r.ok ? { ok: true, text: S.fetchOk(r.inventory && r.inventory.site && r.inventory.site.name, r.inventory.counts) } : { ok: false, text: (r && r.error) || S.fetchFail };
-      msgs.run = null; if (r && r.ok) wpModalOpen.add("inventory");
+      msgs.run = null;
       paint();
     }, { primary: true, disabled: !licensed || wpBusy === "fetch", title: licensed ? "" : COPY.site.notLicensed });
-    const fileBtn = btn(S.loadFile, async () => { const r = await window.desktop.wpLoadFile(); if (!r || r.canceled) return; msgs.fetch = r.ok ? { ok: true, text: S.fetchOk(r.inventory && r.inventory.site && r.inventory.site.name, r.inventory.counts) } : { ok: false, text: r.error || S.fetchFail }; msgs.run = null; if (r.ok) wpModalOpen.add("inventory"); paint(); }, { disabled: !licensed, title: S.loadFileHint });
+    const fileBtn = btn(S.loadFile, async () => { const r = await window.desktop.wpLoadFile(); if (!r || r.canceled) return; msgs.fetch = r.ok ? { ok: true, text: S.fetchOk(r.inventory && r.inventory.site && r.inventory.site.name, r.inventory.counts) } : { ok: false, text: r.error || S.fetchFail }; msgs.run = null; paint(); }, { disabled: !licensed, title: S.loadFileHint });
     r2.append(fetchBtn, fileBtn);
     message(g1, msgs.fetch);
     if (st.payload) {
@@ -6068,7 +6068,6 @@ function openWpImportModal() {
         const r = await window.desktop.wpTransform();
         wpBusy = null;
         msgs.run = r && r.ok ? { ok: true, text: S.importOk } : { ok: false, text: (r && r.error) || S.importFail };
-        if (r && r.ok) wpModalOpen.add("report");
         paint();
       }, { primary: true, disabled: !licensed || wpBusy === "import" });
       r3.appendChild(runBtn);
