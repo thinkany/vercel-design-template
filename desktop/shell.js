@@ -6087,7 +6087,7 @@ function openWpImportModal() {
     const r2 = row(g1);
     const fetchBtn = btn(wpBusy === "fetch" ? S.fetching : S.fetch, async () => {
       const u = url.input.value.trim(), t = token.input.value.trim();
-      if (!u || !t) return;
+      if (!u || !t) { msgs.fetch = { ok: false, text: S.fetchNeeds(u, t) }; await paint(); const again = body.querySelector(u ? 'input[type="password"]' : 'input[type="url"]'); if (again) again.focus(); return; }
       wpBusy = "fetch"; fetchBtn.disabled = true; fetchBtn.textContent = S.fetching;
       const r = await window.desktop.wpFetch(u, t);
       wpBusy = null;

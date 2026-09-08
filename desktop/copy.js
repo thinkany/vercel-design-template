@@ -1003,6 +1003,7 @@ window.COPY = {
         modalCancel: "Cancel",
         fetchOk: (name, c) => `Fetched ${name || "the site"}: ${c.pages} pages, ${c.posts} posts, ${c.images} images${c.forms ? `, ${c.forms} forms` : ""}.`,
         fetchFail: "The fetch didn't complete.",
+        fetchNeeds: (url, token) => !url && !token ? "Enter the site address and the token from Settings → thinkany design Export." : !url ? "Enter the site address (starting with http:// or https://)." : "Enter the token from Settings → thinkany design Export on the WordPress site.",
         inventoryLink: "What the site holds",
         filesLink: "The import files",
         filesHint: "Kept beside the project under .thinkany/wp-import. The mapping is the audit trail of where everything landed.",
