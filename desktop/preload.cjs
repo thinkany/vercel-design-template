@@ -191,6 +191,7 @@ contextBridge.exposeInMainWorld("desktop", {
   saveBlockNames: (names) => ipcRenderer.invoke("site:saveBlockNames", { names }),
   saveFieldLabels: (key, labels) => ipcRenderer.invoke("site:saveFieldLabels", { key, labels }),
   replaceHomeBlocks: (from) => ipcRenderer.invoke("site:replaceHomeBlocks", { from }),
+  setPublished: (kind, key, ids, published) => ipcRenderer.invoke("site:setPublished", { kind, key, ids, published }),
   saveSiteLogos: (logos) => ipcRenderer.invoke("site:saveLogos", { logos }),
   getLlmsDefault: () => ipcRenderer.invoke("site:llmsDefault"),
   setCmsSettings: (patch) => ipcRenderer.invoke("cms:setSettings", patch),

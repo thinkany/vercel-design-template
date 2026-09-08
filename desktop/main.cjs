@@ -2263,6 +2263,57 @@ ipcMain.handle("wp:useExisting", (_e, { key, target, pairs } = {}) => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 
+// Publish or unpublish several pages, posts or entries at once (the lists' select
+// all). Publishing checks the address first: a draft whose route a published page
+// already serves is refused and the page in the way is named. The published site
+// never carries a draft; this only flips which ones are drafts.
+ipcMain.handle("site:setPublished", (_e, { kind, key, ids, published } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const dir = currentProject; const list = Array.isArray(ids) ? ids.filter(validPageId) : [];
+  if (!list.length) return { ok: false, error: "Nothing selected." };
+  const done = []; const refused = [];
+  try {
+    if (kind === "page") {
+      const byId = readPagesIndex(dir);
+      const routeOf = (id) => pageRouteOf(id, byId);
+      const docs = {}; for (const id of Object.keys(byId)) docs[id] = readJsonFile(pageFile(dir, id)) || {};
+      for (const id of list) {
+        if (id === "home" || !docs[id]) continue;
+        if (published) {
+          const route = routeOf(id);
+          // Any published page at the same route, including one published earlier in this batch.
+          const by = Object.keys(byId).find((o) => o !== id && !docs[o].draft && routeOf(o) === route);
+          if (by) { refused.push({ id, title: docs[id].title || id, by: docs[by].title || by, route: "/" + route }); continue; }
+          delete docs[id].draft;
+        } else docs[id].draft = true;
+        fs.writeFileSync(pageFile(dir, id), JSON.stringify(docs[id], null, 2) + "\n"); done.push(id);
+      }
+    } else if (kind === "post") {
+      const posts = readPosts(dir);
+      for (const id of list) {
+        const p = posts.find((x) => x.id === id); if (!p) continue;
+        if (published) { const by = posts.find((o) => o.id !== id && !o.draft && (o.slug || o.id) === (p.slug || p.id)); if (by) { refused.push({ id, title: p.title, by: by.title, route: `/${blogPathOf(siteJsonOf(dir))}/${p.slug || p.id}` }); continue; } }
+        const file = path.join(postsDir(dir), p.file); const { data, body, unknown } = parseFrontmatter(readTextSafe(file));
+        if (published) delete data.draft; else data.draft = true;
+        fs.writeFileSync(file, serializeFrontmatter(data, unknown) + "\n" + body.replace(/^\s*\n/, "")); done.push(id);
+      }
+    } else if (kind === "entry") {
+      if (!validTypeKey(key)) return { ok: false, error: "Which type?" };
+      const entries = readEntries(dir, key);
+      for (const id of list) {
+        const e = entries.find((x) => x.id === id); if (!e) continue;
+        const doc = readJsonFile(entryFile(dir, key, id)); if (!doc) continue;
+        if (published) { const by = entries.find((o) => o.id !== id && !o.draft && (o.slug || o.id) === (e.slug || e.id)); if (by) { refused.push({ id, title: e.title, by: by.title, route: `/${key}/${e.slug || e.id}` }); continue; } delete doc.draft; }
+        else doc.draft = true;
+        fs.writeFileSync(entryFile(dir, key, id), JSON.stringify(doc, null, 2) + "\n"); done.push(id);
+      }
+    } else return { ok: false, error: "Pages, posts or entries." };
+    appLog.write(`[cms] ${published ? "publish" : "unpublish"} ${kind}: ${done.length} done, ${refused.length} refused`);
+    return { ok: true, done, refused };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
 // Block display names (the Blocks tab): recognition in the CMS only.
 ipcMain.handle("site:saveBlockNames", (_e, { names } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };

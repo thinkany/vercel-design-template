@@ -33,7 +33,13 @@ heading/title, body/copy, image/photo/icon, cta/button, items/cards…), shown f
 designer to adjust, then every instance rewritten to the design's block (lists pair
 their item fields the same way, richtext into a plain string loses its marks) and the
 generated block removed with its brief and labels. Home → Advanced → overwrite from
-another page also landed. P4 not built.
+another page also landed. **P4 BUILT 2026-09-08**: the Pages, Posts and each type's
+entries lists gain a status filter (All / Published / Drafts), a checkbox per row
+with select all, and Publish selected / Unpublish selected behind a confirmation;
+publishing checks each address against the published pages (including earlier
+items in the same batch) and refuses the ones in the way, naming the page
+(`site:setPublished`). A draft is never on the published site (unchanged); this
+only decides which items are drafts.
 
 ## The idea in one paragraph
 

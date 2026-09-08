@@ -4342,11 +4342,13 @@ function renderSiteTypesList(left, right, ctx, refresh) {
     row.addEventListener("click", () => { siteRailState.selected = { kind: "type", id: t.key }; refresh(); });
     left.appendChild(row);
     const list = siteEl("div"); list.style.cssText = "margin:0 0 6px 14px;";
+    const entryStatus = (ctx.entries[t.key] || []).length ? siteStatusBar({ host: list, kind: "entry", typeKey: t.key, items: ctx.entries[t.key] || [], refresh, filterKey: `entries:${t.key}` }) : null;
     (ctx.entries[t.key] || []).forEach((e) => {
       const er = siteEl("div", "site-list-row" + (sel && sel.kind === "entry" && sel.id === t.key + "/" + e.id ? " active" : ""));
       er.style.padding = "6px 10px";
       er.append(siteEl("div", "site-page-title", e.title), siteEl("div", "site-page-slug", "/" + (e.slug || e.id) + (e.draft ? "  ·  " + S.draftTag : "")));
       er.addEventListener("click", () => { siteRailState.selected = { kind: "entry", id: t.key + "/" + e.id }; refresh(); });
+      if (entryStatus) entryStatus.rowBox(er, e);
       list.appendChild(er);
     });
     const addRow = siteEl("div"); addRow.dataset.tour = "cms-add-entry"; addRow.style.cssText = "display:flex;gap:6px;align-items:center;margin:2px 0 6px;";
@@ -5795,6 +5797,65 @@ function openBlockFieldsModal(b, onDone) {
   return { close };
 }
 
+// The status bar above a list (Pages, Posts, a type's entries): a filter (All /
+// Published / Drafts), select all, and Publish / Unpublish selected. Each row gets
+// a checkbox from rowBox(); rows the filter hides are hidden by refresh().
+let siteSelection = { key: null, ids: new Set() };
+function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }) {
+  const S = COPY.site;
+  if (siteSelection.key !== `${kind}:${typeKey || ""}`) siteSelection = { key: `${kind}:${typeKey || ""}`, ids: new Set() };
+  const filters = siteRailState.statusFilter || (siteRailState.statusFilter = {});
+  const cur = () => filters[filterKey] || "all";
+  const bar = siteEl("div"); bar.style.cssText = "display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 8px;";
+  const pills = siteEl("div"); pills.style.cssText = "display:flex;gap:4px;";
+  const rows = []; // { id, draft, row, box }
+  const visible = (it) => cur() === "all" || (cur() === "draft" ? !!it.draft : !it.draft);
+  const paintRows = () => { rows.forEach((r) => { r.row.hidden = !visible(r); }); paintCount(); };
+  for (const [k, label] of Object.entries(S.statusFilter)) {
+    const b = siteEl("button", "site-mini" + (cur() === k ? " on" : ""), label); b.type = "button";
+    b.addEventListener("click", () => { filters[filterKey] = k; pills.querySelectorAll(".site-mini").forEach((x) => x.classList.remove("on")); b.classList.add("on"); paintRows(); });
+    pills.appendChild(b);
+  }
+  bar.appendChild(pills);
+  const allBox = document.createElement("input"); allBox.type = "checkbox"; allBox.title = S.selectAll; allBox.style.margin = "0 0 0 8px";
+  const count = siteEl("span", "muted"); count.style.fontSize = "12px";
+  const pub = siteEl("button", "panelbtn", S.publishSelected); pub.style.cssText = "margin:0;width:auto;"; pub.disabled = true;
+  const unpub = siteEl("button", "panelbtn", S.unpublishSelected); unpub.style.cssText = "margin:0;width:auto;"; unpub.disabled = true;
+  const note = siteEl("div", "sess-desc"); note.style.margin = "0 0 8px";
+  const paintCount = () => { const n = siteSelection.ids.size; count.textContent = n ? S.selectedCount(n) : ""; pub.disabled = !n; unpub.disabled = !n; const vis = rows.filter((r) => !r.row.hidden); allBox.checked = vis.length > 0 && vis.every((r) => siteSelection.ids.has(r.id)); };
+  allBox.addEventListener("change", () => { rows.filter((r) => !r.row.hidden && r.id !== "home").forEach((r) => { if (allBox.checked) siteSelection.ids.add(r.id); else siteSelection.ids.delete(r.id); r.box.checked = allBox.checked; }); paintCount(); });
+  const act = async (published) => {
+    const ids = Array.from(siteSelection.ids); if (!ids.length) return;
+    const ok = await askConfirm({ title: published ? S.publishConfirmTitle(ids.length) : S.unpublishConfirmTitle(ids.length), message: published ? S.publishConfirm(ids.length) : S.unpublishConfirm(ids.length), okLabel: published ? S.publishOk : S.unpublishOk, danger: !published });
+    if (!ok) return;
+    const r = await window.desktop.setPublished(kind, typeKey, ids, published);
+    if (!r || !r.ok) { note.textContent = (r && r.error) || "Couldn't change that."; note.style.color = "#e5484d"; return; }
+    siteSelection.ids.clear();
+    const msg = published ? S.publishedDone(r.done.length, r.refused.length) : S.unpublishedDone(r.done.length);
+    siteRailState.lastStatusNote = { key: siteSelection.key, text: [msg, ...r.refused.map(S.publishRefused)].join(" ") };
+    refresh();
+  };
+  pub.addEventListener("click", () => act(true)); unpub.addEventListener("click", () => act(false));
+  bar.append(allBox, count, pub, unpub);
+  host.appendChild(bar);
+  if (siteRailState.lastStatusNote && siteRailState.lastStatusNote.key === siteSelection.key) { note.textContent = siteRailState.lastStatusNote.text; siteRailState.lastStatusNote = null; }
+  host.appendChild(note);
+  return {
+    // Call for each row: adds the checkbox (not for home) and registers it with the filter.
+    rowBox(row, it) {
+      const box = document.createElement("input"); box.type = "checkbox"; box.style.cssText = "margin:0 8px 0 0;flex:none;";
+      box.checked = siteSelection.ids.has(it.id);
+      if (it.id === "home" && kind === "page") { box.disabled = true; box.style.visibility = "hidden"; }
+      box.addEventListener("click", (e) => { e.stopPropagation(); if (box.checked) siteSelection.ids.add(it.id); else siteSelection.ids.delete(it.id); paintCount(); });
+      row.insertBefore(box, row.firstChild); row.style.display = "flex"; row.style.alignItems = "center";
+      const text = siteEl("div"); text.style.flex = "1"; Array.from(row.childNodes).filter((n) => n !== box).forEach((n) => text.appendChild(n)); row.appendChild(text);
+      rows.push({ id: it.id, draft: !!it.draft, row, box });
+      row.hidden = !visible(it);
+      paintCount();
+    },
+  };
+}
+
 // The image optimization sliders (quality + largest width). The Settings tab's Images
 // section and the Media tab's Image Settings panel both render this, and both write the
 // same project setting (setCmsSettings), so a change in either place is the change.
@@ -6502,6 +6563,7 @@ async function renderSite(body) {
     addPage.dataset.tour = "cms-add-page";
     const pageItems = data.pages.map((p) => ({ id: p.id, title: p.title, sub: p.id === "home" ? COPY.site.homeSlug : "/" + (p.route || p.slug || p.id), tags: [] }));
     const pageTools = siteListTools({ left, right, placeholder: COPY.site.searchPages, items: pageItems, onOpen: (id) => openItem("page", id), addRow: addPage, tourId: "cms-page" });
+    const pageStatus = siteStatusBar({ host: left, kind: "page", items: data.pages, refresh, filterKey: "pages" });
     // A tree: children indented under their parent (home first, then by title). Drag a
     // page onto another to nest it; drop between pages to sit at that level.
     const kids = (pid) => data.pages.filter((p) => (p.parent || null) === pid && p.id !== "home").sort((a, b) => ((a.order ?? 1e9) - (b.order ?? 1e9)) || a.title.localeCompare(b.title));
@@ -6510,6 +6572,7 @@ async function renderSite(body) {
       const row = listRow(p.title, (p.id === "home" ? COPY.site.homeSlug : "/" + (p.route || p.slug || p.id)) + (p.draft ? "  ·  " + COPY.site.draftTag : ""), cur && cur.id === p.id, () => openItem("page", p.id));
       row.style.marginLeft = depth * PAGE_INDENT + "px";
       sitePageDraggable(row, p, data.pages, refresh, depth);
+      pageStatus.rowBox(row, p);
       left.appendChild(row);
     };
     const home = data.pages.find((p) => p.id === "home"); if (home) pageRow(home, 0);
@@ -6532,8 +6595,9 @@ async function renderSite(body) {
     const postSub = (p) => p.draft ? COPY.site.draftTag : (p.date || "");
     const postItems = posts.map((p) => ({ id: p.id, title: p.title, sub: postSub(p), tags: p.tags || [] }));
     const postTools = siteListTools({ left, right, placeholder: COPY.site.searchPosts, items: postItems, onOpen: (id) => openItem("post", id), addRow: addPost, tags: true, tourId: "cms-post" });
+    const postStatus = siteStatusBar({ host: left, kind: "post", items: posts, refresh, filterKey: "posts" });
     if (!posts.length) left.appendChild(siteEl("div", "sess-desc", COPY.site.noPosts));
-    posts.forEach((p) => left.appendChild(listRow(p.title, postSub(p), cur && cur.id === p.id, () => openItem("post", p.id))));
+    posts.forEach((p) => { const row = listRow(p.title, postSub(p), cur && cur.id === p.id, () => openItem("post", p.id)); postStatus.rowBox(row, p); left.appendChild(row); });
     renderSitePost.allTags = [...new Set(posts.flatMap((p) => p.tags || []))].sort((a, b) => a.localeCompare(b)); // the tag picker's options
     if (cur) right.appendChild(renderSitePost(posts.find((p) => p.id === cur.id), refresh));
     postTools.later();
