@@ -97,7 +97,8 @@ function classifyFields(p) {
   const groupsFor = (name) => (defs.fieldGroups || []).filter((g) => (g.location || []).some((and) => (and || []).some((r) => r && r.param === "block" && String(r.value) === name)));
   const names = new Set([...(defs.blocks || []).map((b) => b.name), ...Object.keys(usage)]);
   for (const name of names) {
-    const fields = groupsFor(name).flatMap((g) => g.fields || []);
+    // Tabs, messages and accordions are editor chrome with no name and no value.
+    const fields = groupsFor(name).flatMap((g) => g.fields || []).filter((f) => f && f.name && !["tab", "message", "accordion"].includes(f.type));
     const byKey = Object.fromEntries(fields.map((f) => [f.key, f]));
     const gates = {}; // gating field name → [revealed field names]
     for (const f of fields) for (const and of f.conditionalLogic || []) for (const r of and || []) { const g = byKey[r.field]; if (g) (gates[g.name] || (gates[g.name] = [])).push(f.name); }
@@ -128,7 +129,7 @@ function classifyFields(p) {
     };
     for (const f of fields) { if (seen.has(f.name)) continue; seen.add(f.name); rows.push(classify(f)); }
     // Fields seen on instances but absent from the definitions (a field group the export missed): classified by name and value only.
-    for (const n of Object.keys(usage[name] || {})) if (!seen.has(n)) { seen.add(n); rows.push(classify({ name: n, label: n, type: "" })); }
+    for (const n of Object.keys(usage[name] || {})) if (n && !seen.has(n)) { seen.add(n); rows.push(classify({ name: n, label: n, type: "" })); }
     out[name] = { fields: rows, byName: Object.fromEntries(rows.map((r) => [r.name, r])) };
   }
   return out;
@@ -155,7 +156,7 @@ function inventory(p) {
       blockTypes[b.name] = (blockTypes[b.name] || 0) + 1;
       if (b.name.startsWith("acf/") && b.fields && typeof b.fields === "object") {
         const set = acfBlockFields[b.name] || (acfBlockFields[b.name] = new Set());
-        for (const k of Object.keys(b.fields)) set.add(k);
+        for (const k of Object.keys(b.fields)) if (k) set.add(k);
       }
     }
   }

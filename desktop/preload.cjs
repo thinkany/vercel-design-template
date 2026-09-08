@@ -178,7 +178,7 @@ contextBridge.exposeInMainWorld("desktop", {
   wpFetch: (url, token) => ipcRenderer.invoke("wp:fetch", { url, token }),
   wpLoadFile: () => ipcRenderer.invoke("wp:loadFile"),
   wpInventory: () => ipcRenderer.invoke("wp:inventory"),
-  wpSkeleton: () => ipcRenderer.invoke("wp:skeleton"),
+  wpSkeleton: (reset) => ipcRenderer.invoke("wp:skeleton", { reset: !!reset }),
   wpRevealMapping: () => ipcRenderer.invoke("wp:revealMapping"),
   wpTransform: () => ipcRenderer.invoke("wp:transform"),
   wpReport: () => ipcRenderer.invoke("wp:report"),

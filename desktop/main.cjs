@@ -2017,12 +2017,14 @@ ipcMain.handle("wp:inventory", () => {
 });
 // The mapping file the designer (or the /migrate-wordpress skill) fills in: every slot
 // present, targets empty. Never overwritten once it exists.
-ipcMain.handle("wp:skeleton", () => {
+ipcMain.handle("wp:skeleton", (_e, { reset } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   const payload = wpReadPayload(currentProject); if (!payload) return { ok: false, error: "Nothing has been imported yet." };
   wpRefreshDerived(currentProject); // the skill reads definitions.json next
   const p = wpFile(currentProject, "mapping.json");
+  // reset: the previous mapping is kept beside the new skeleton, never deleted.
+  if (fs.existsSync(p) && reset) { try { fs.renameSync(p, wpFile(currentProject, `mapping-${new Date().toISOString().replace(/[:.]/g, "-")}.json`)); } catch (e) { return { ok: false, error: e.message }; } }
   if (fs.existsSync(p)) return { ok: true, path: p, existed: true };
   try {
     const blocks = siteReady(currentProject).ready ? wpBlocks(currentProject) : [];

@@ -5937,6 +5937,15 @@ async function renderWpImport(host, { compact = false } = {}) {
         closeModal(); runAgent(S.proposeRequest, S.proposeEcho);
       }, { primary: !st.mappingFilled, disabled: !licensed }));
       r3.appendChild(btn(S.reveal, async () => { const r = await window.desktop.wpSkeleton(); if (r && r.ok) window.desktop.wpRevealMapping(); else if (r) err(r.error); }, { disabled: !licensed }));
+      if (st.mapping) {
+        let armed = false;
+        const restart = btn(S.restart, async () => {
+          if (!armed) { armed = true; restart.textContent = S.restartConfirm; restart.style.whiteSpace = "normal"; restart.style.textAlign = "left"; return; }
+          const r = await window.desktop.wpSkeleton(true); if (!r || !r.ok) { err((r && r.error) || "Couldn't restart the mapping."); return; }
+          await paint(); siteFlash(status, S.restarted);
+        }, { disabled: !licensed });
+        restart.style.opacity = "0.75"; r3.appendChild(restart);
+      }
 
       // 4. the import
       step(S.importStep, S.importHint);
