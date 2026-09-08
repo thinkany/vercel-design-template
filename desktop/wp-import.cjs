@@ -740,8 +740,9 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
   async function coerce(kind, value, spec, ctx) {
     if (value === undefined || value === null) return undefined;
     switch (kind) {
-      case "image": { if (typeof value === "string" && !/^https?:|^\//.test(value)) return undefined; const img = await media(typeof value === "object" && value.image ? value : typeof value === "number" ? value : String(value)); return img || undefined; }
+      case "image": { if (value === false || value === "" || (typeof value === "string" && !/^https?:|^\//.test(value))) return undefined; if (typeof value === "object" && !value.image && !value.url) return undefined; const img = await media(typeof value === "object" && value.image ? value : typeof value === "number" ? value : typeof value === "object" ? value.url : String(value)); return img || undefined; }
       case "link": {
+        if (value === false || value === "" || value === 0) return undefined;
         if (typeof value === "string") return value ? { label: "", href: rewriteUrl(value) } : undefined;
         if (value && typeof value === "object") { const href = rewriteUrl(value.url || value.href || (value.post ? value.url : "")); return href ? { label: plainText(value.title || value.label || ""), href } : undefined; }
         return undefined;
@@ -951,7 +952,19 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
   if (site.name && !(siteJson.seo && siteJson.seo.siteName)) siteJson.seo = { ...(siteJson.seo || {}), siteName: site.name };
   const have = new Map((siteJson.redirects || []).map((r) => [r.from.toLowerCase(), r]));
   let added = 0;
-  const addRedirect = (from, to) => { if (!from || from === "/" || from === to || have.has(from.toLowerCase())) return; have.set(from.toLowerCase(), { from, to, type: 301 }); added++; };
+  // Routes the site serves today (pages, posts, entries the import did not write): a
+  // redirect from one of those would send a live page to a draft. Held and reported.
+  const liveRoutes = new Set();
+  if (draft) {
+    try { const idx = {}; for (const f of fs.readdirSync(path.join(projectDir, "content", "pages"))) { if (!f.endsWith(".json")) continue; const rel = path.join("content", "pages", f); if (createdNow.files[rel]) continue; const d = readJson(rel) || {}; idx[f.replace(/\.json$/, "")] = d; } const route = (id) => { const parts = []; let cur = id, g = 0; while (cur && idx[cur] && g++ < 16) { if (cur === "home") break; parts.unshift(idx[cur].slug ?? cur); cur = idx[cur].parent; } return "/" + parts.join("/"); }; for (const id of Object.keys(idx)) liveRoutes.add(route(id).replace(/\/$/, "") || "/"); } catch {}
+    try { for (const f of fs.readdirSync(path.join(projectDir, "content", "posts"))) { if (!/\.mdx?$/.test(f)) continue; const rel = path.join("content", "posts", f); if (createdNow.files[rel]) continue; const fm = (fs.readFileSync(path.join(projectDir, rel), "utf8").match(/^---\n([\s\S]*?)\n---/) || [])[1] || ""; const slug = ((fm.match(/^slug:[ \t]*"?([^"\n]+)"?/m) || [])[1] || f.replace(/\.mdx?$/, "")).trim(); liveRoutes.add(`/${blogPath}/${slug}`); } } catch {}
+  }
+  report.redirectsHeld = [];
+  const addRedirect = (from, to) => {
+    if (!from || from === "/" || from === to || have.has(from.toLowerCase())) return;
+    if (draft && liveRoutes.has(from)) { report.redirectsHeld.push({ from, to, why: "a live page is at this address" }); return; }
+    have.set(from.toLowerCase(), { from, to, type: 301 }); added++;
+  };
   for (const [from, to] of oldToNew) if (from !== to) addRedirect(from, to || "/");
   if (added) siteJson.redirects = Array.from(have.values());
   report.redirects = added;
@@ -968,7 +981,9 @@ function reportMarkdown(rep) {
   const L = ["# Import report", ""];
   if (rep.blocksCreated && rep.blocksCreated.length) L.push(`- ${rep.blocksCreated.length} block${rep.blocksCreated.length === 1 ? "" : "s"} created, all needing a design pass (Blocks → Needs Design): ${rep.blocksCreated.map((b) => `${b.name}${b.uses ? ` (${b.uses}×${b.options && b.options.length ? `, ${b.options.join(", ")}` : ""})` : ""}${b.kept ? " [kept, already designed]" : ""}`).join("; ")}`);
   if (rep.draft) L.push("- Everything imported is a draft: nothing already in the site was replaced. Publish from the Pages, Posts and Types lists when the blocks are designed.");
-  if (rep.idsChanged && rep.idsChanged.length) L.push(`- Ids changed: ${rep.idsChanged.map((x) => `${x.what} → ${x.to} (${x.why})`).join("; ")}`);
+  if (rep.idsChanged && rep.idsChanged.length) L.push(`- Ids changed: ${rep.idsChanged.map((x) => `${x.what}: ${x.from} → ${x.to} (${x.why})`).join("; ")}`);
+  if (rep.redirectsHeld && rep.redirectsHeld.length) L.push(`- Redirects held (a live page is at the old address; add them when the draft replaces it): ${rep.redirectsHeld.map((x) => `${x.from} → ${x.to}`).join(", ")}`);
+  if (rep.invalid && rep.invalid.length) L.push(`- ${rep.invalid.length} block${rep.invalid.length === 1 ? "" : "s"} the preview would reject (fix in the page editor): ${rep.invalid.map((x) => `${x.page} › ${x.type} (${x.issues})`).join("; ")}`);
   L.push(`- ${rep.pages.length} pages written, ${rep.posts.imported} posts (${rep.posts.drafts} drafts), ${Object.values(rep.types).reduce((n, t) => n + t.entries, 0)} entries in ${Object.keys(rep.types).length} types`);
   if (rep.forms && rep.forms.length) L.push(`- ${rep.forms.length} form${rep.forms.length === 1 ? "" : "s"} in the Forms tab (${rep.forms.map((f) => `${f.name}: ${f.fields} fields${f.kept ? ", already there, left as is" : ""}${f.skipped.length ? `, ${f.skipped.length} skipped` : ""}`).join("; ")}). Recipients and delivery are set in the Forms tab.`);
   L.push(`- ${rep.media.downloaded} images brought in${rep.media.failed.length ? `, ${rep.media.failed.length} failed` : ""}${rep.media.skipped ? `, ${rep.media.skipped} left at their old address` : ""}`);
@@ -979,13 +994,13 @@ function reportMarkdown(rep) {
   if (rep.skipped && rep.skipped.length) L.push("", "## Switched off on the old site (skipped)", "", ...rep.skipped.map((x) => `- ${x.where}: ${x.block}`));
   const OFF = new Set(["(empty)", "false", "0"]);
   const vr = Object.entries(rep.variants || {}).map(([n, fs]) => [n, Object.entries(fs).filter(([, c]) => Object.keys(c).some((k) => !OFF.has(k)))]).filter(([, fs]) => fs.length);
-  if (vr.length) L.push("", "## Options seen on the old blocks", "", "Kept on each imported instance under _wp, for the design pass.", "", ...vr.map(([n, fs]) => `- ${n}: ${fs.map(([f, c]) => `${f} (${Object.entries(c).map(([k, x]) => `${k} ×${x}`).join(", ")})`).join("; ")}`));
+  if (vr.length) L.push("", "## Options seen on the old blocks", "", rep.draft ? "Each is a prop on its generated block now." : "Kept on each imported instance under _wp, for the design pass.", "", ...vr.map(([n, fs]) => `- ${n}: ${fs.map(([f, c]) => `${f} (${Object.entries(c).map(([k, x]) => `${k} ×${x}`).join(", ")})`).join("; ")}`));
   const uf = Object.entries(rep.unmappedFields);
   if (uf.length) L.push("", "## Fields with no destination", "", ...uf.map(([n, fs]) => `- ${n}: ${fs.join(", ")}`));
   L.push("", "## Pages", "");
   for (const p of rep.pages) {
     L.push(`### ${p.title} → ${p.route}${p.draft ? " (draft)" : ""}${p.classic ? " (classic HTML)" : ""}`);
-    L.push(`${p.blocks} blocks${p.from && p.from !== p.route ? `, redirected from ${p.from}` : ""}`);
+    L.push(`${p.blocks} blocks${p.from && p.from !== p.route && p.from !== "/" ? `, was ${p.from}` : ""}`);
     for (const d of p.dropped) L.push(`- dropped block ${d}`);
     for (const l of p.lost) L.push(`- lost ${l.node}${l.text ? `: ${l.text}` : ""}`);
     L.push("");

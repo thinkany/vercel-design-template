@@ -263,6 +263,17 @@ Import from WordPress keeps its steps but loses one:
 "Propose a mapping" and "Start the mapping over" go. The migration skill keeps one
 mode, `inventory` (the brief for a new design, unchanged). `map` is retired.
 
+## To do (from the first lossless run on tax.local, 2026-09-08)
+
+- **Link fields in the CMS.** Any prop that holds an `href` (a CTA, a button, a nav
+  link) is a plain text field in the block editor today. It should be a picker over
+  the site's pages, posts, entries and in-page anchors, with "type a URL" for
+  anything else. A CMS feature, not import-specific, but the import makes it
+  pressing: imported buttons point at old addresses.
+- **Held redirects** (an old address that is a live page today) should be applied
+  automatically when the draft that replaces it is published, from the record the
+  import keeps.
+
 ## What is not in scope
 
 - Core WordPress blocks with no home (embeds, galleries, files) stay in the report,

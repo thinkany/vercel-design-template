@@ -203,4 +203,36 @@ function renderMarks(dir, esbuild, req) {
   }
 }
 
-module.exports = { introspectBlocks, zodDefault, zodFields, renderMarks, headerAcceptsColumns, blocksMtime };
+// Every block instance in content/pages (and entries with their own blocks) parsed
+// against the registry's schemas, the way the preview and the build do. Returns the
+// ones that fail, with the issue text, so an import can report them instead of a
+// designer meeting "This block needs more content" in the editor.
+function validateContent(dir, { esbuild } = {}) {
+  const out = [];
+  let registry = {};
+  try {
+    if (!esbuild) esbuild = require("esbuild");
+    const result = esbuild.buildSync({ entryPoints: [path.join(dir, "site", "blocks", "index.ts")], bundle: true, write: false, platform: "node", format: "cjs", target: "node20", jsx: "automatic", tsconfig: path.join(dir, "site", "tsconfig.json"), logLevel: "silent", external: ["react", "react-dom", "react/jsx-runtime", "lucide-react", "motion", "motion/*", "astro/zod", "astro:*"] });
+    const { createRequire } = require("node:module");
+    const req = createRequire(path.join(dir, "package.json"));
+    const mod = { exports: {} };
+    new Function("require", "module", "exports", "__filename", "__dirname", result.outputFiles[0].text)(req, mod, mod.exports, path.join(dir, "site", "blocks", "index.ts"), path.join(dir, "site", "blocks"));
+    registry = mod.exports.blocks || {};
+    const bfile = path.join(dir, "site", "src", "lib", "builtin-blocks.tsx");
+    if (fs.existsSync(bfile)) { try { const br = esbuild.buildSync({ entryPoints: [bfile], bundle: true, write: false, platform: "node", format: "cjs", target: "node20", jsx: "automatic", tsconfig: path.join(dir, "site", "tsconfig.json"), logLevel: "silent", external: ["react", "react-dom", "react/jsx-runtime", "lucide-react", "motion", "motion/*", "astro/zod", "astro:*"] }); const bm = { exports: {} }; new Function("require", "module", "exports", "__filename", "__dirname", br.outputFiles[0].text)(req, bm, bm.exports, bfile, path.dirname(bfile)); registry = { ...(bm.exports.builtinBlocks || {}), ...registry }; } catch {} }
+  } catch (e) { return { ok: false, error: e.message, invalid: [] }; }
+  const check = (where, blocks) => {
+    (Array.isArray(blocks) ? blocks : []).forEach((b, i) => {
+      if (!b || typeof b.type !== "string") return;
+      const def = registry[b.type];
+      if (!def) { out.push({ page: where, index: i, type: b.type, issues: "unknown block" }); return; }
+      const parsed = def.props.safeParse(b.props || {});
+      if (!parsed.success) out.push({ page: where, index: i, type: b.type, issues: (parsed.error.issues || []).map((x) => `${x.path.join(".") || "(root)"}: ${x.message}`).join("; ") });
+    });
+  };
+  const pagesDir = path.join(dir, "content", "pages");
+  try { for (const f of fs.readdirSync(pagesDir)) { if (!f.endsWith(".json")) continue; const d = readJsonFile(path.join(pagesDir, f)); if (d) check(f.replace(/\.json$/, ""), d.blocks); } } catch {}
+  return { ok: true, invalid: out };
+}
+
+module.exports = { introspectBlocks, zodDefault, zodFields, renderMarks, headerAcceptsColumns, blocksMtime, validateContent };

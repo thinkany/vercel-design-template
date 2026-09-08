@@ -2094,7 +2094,11 @@ ipcMain.handle("wp:transform", async () => {
     const blocks = [...existing.filter((b) => !known.has(b.key)), ...plan.blocks];
     const r = await wpImport.transform(dir, payload, plan.mapping, { blocks, fetchMedia, blogPath: blogPathOf(siteJsonOf(dir)), draft: true, neverOverwrite: true, createdFile: wpFile(dir, "created.json") });
     if (!r.ok) return { ok: false, errors: r.errors, error: r.errors.join("\n") };
-    const report = { ...r.report, when: new Date().toISOString(), blocksCreated: [...plan.plan.blocks.map((b) => ({ key: b.key, name: b.name, wp: b.wp, uses: b.uses, options: b.variants, kept: designed.has(b.key) })), ...(plan.plan.prose ? [{ key: "prose-wp", name: "Prose - wp", wp: "core/*", uses: 0, options: [], kept: designed.has("prose-wp") }] : [])] };
+    // Every written page's blocks parsed against the live schemas, so a block the preview
+    // would reject is in the report, not a surprise in the editor.
+    let invalid = [];
+    try { const v = require("./block-schema.cjs").validateContent(dir, { esbuild: require(unpacked(path.join(appRoot, "node_modules", "esbuild"))) }); if (v.ok) { const wrote = new Set(r.report.files || []); invalid = v.invalid.filter((x) => wrote.has(path.join("content", "pages", `${x.page}.json`))); } } catch (e) { appLog.write(`[wp] validate: ${e.message}`); }
+    const report = { ...r.report, invalid, when: new Date().toISOString(), blocksCreated: [...plan.plan.blocks.map((b) => ({ key: b.key, name: b.name, wp: b.wp, uses: b.uses, options: b.variants, kept: designed.has(b.key) })), ...(plan.plan.prose ? [{ key: "prose-wp", name: "Prose - wp", wp: "core/*", uses: 0, options: [], kept: designed.has("prose-wp") }] : [])] };
     fs.writeFileSync(wpFile(dir, "report.json"), JSON.stringify(report, null, 2) + "\n");
     fs.writeFileSync(wpFile(dir, "report.md"), wpImport.reportMarkdown(report));
     try { fs.rmSync(path.join(dir, ".thinkany", "blocks.json"), { force: true }); } catch {} // the registry changed: re-introspect on the next read
