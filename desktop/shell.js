@@ -3666,7 +3666,9 @@ function sitePropsEditor(value, onChange, depth = 0, ctx = {}, at = "") {
       // A bare path prop: the upload field, writing the path back (no alt to keep).
       box.appendChild(siteImageControl(v, (next) => { value[key] = next ? next.src : ""; onChange(); }, { label, noAlt: true }));
     } else if (typeof v === "string") {
-      const { wrap, input } = siteField(label, v, { textarea: v.length > 60 || /\n/.test(v) });
+      const isHref = key === "href"; // an address: the link picker, never a textarea
+      const { wrap, input } = siteField(label, v, { textarea: !isHref && (v.length > 60 || /\n/.test(v)) });
+      if (isHref) { input.setAttribute("list", siteLinkListId()); input.placeholder = COPY.site.linkHref; input.autocomplete = "off"; }
       input.addEventListener("input", () => { value[key] = input.value; onChange(); });
       box.appendChild(wrap);
     } else if (Array.isArray(v)) {
@@ -4078,7 +4080,7 @@ function siteTypeFieldControl(f, value, onChange, ctx) {
     get = () => cur;
   } else if (f.kind === "link") {
     const lab = document.createElement("input"); lab.className = "field"; lab.placeholder = S.linkLabel; lab.value = (value && value.label) || "";
-    const href = document.createElement("input"); href.className = "field"; href.placeholder = S.linkHref; href.value = (value && value.href) || "";
+    const href = document.createElement("input"); href.className = "field"; href.placeholder = S.linkHref; href.value = (value && value.href) || ""; href.setAttribute("list", siteLinkListId()); href.autocomplete = "off";
     lab.addEventListener("input", change); href.addEventListener("input", change); wrap.append(lab, href);
     get = () => (href.value.trim() ? { label: lab.value.trim(), href: href.value.trim() } : "");
   } else if (f.kind === "list") {
@@ -5325,6 +5327,22 @@ function sitePageDraggable(row, p, pages, refresh, depth = 0) {
   row.addEventListener("drop", (e) => { if (!ok()) return; e.preventDefault(); sitePageDrop({ p, zone: zone(e), grandparent: grandparent(), pages, refresh }); });
 }
 
+// The link picker every href field shares (block props, type entries, the nav): one
+// datalist on the document, rebuilt from the current site content when the drawer
+// renders. Chromium shows it as a combo: pick a page, section, post, entry or file,
+// or type any address.
+let siteLinkOptionsCache = [];
+function siteLinkListId() {
+  const id = "site-link-list";
+  let dl = document.getElementById(id);
+  if (!dl) { dl = document.createElement("datalist"); dl.id = id; document.body.appendChild(dl); }
+  if (dl.dataset.count !== String(siteLinkOptionsCache.length) || dl.dataset.stamp !== siteLinkOptionsCache.stamp) {
+    dl.innerHTML = "";
+    siteLinkOptionsCache.forEach((o) => { const opt = document.createElement("option"); opt.value = o.href; opt.label = `${o.label} · ${COPY.site.navGroups[o.group] || o.group}`; dl.appendChild(opt); });
+    dl.dataset.count = String(siteLinkOptionsCache.length); dl.dataset.stamp = siteLinkOptionsCache.stamp || "";
+  }
+  return id;
+}
 function siteLinkOptions(data, posts, ctx) {
   const out = [];
   data.pages.forEach((p) => out.push({ group: "pages", label: p.title, href: "/" + (p.id === "home" ? "" : (p.route || p.slug || p.id)) }));
@@ -6544,6 +6562,7 @@ async function renderSite(body) {
   const siteUrl = (data.liveUrl || configured || COPY.site.siteUrlPlaceholder).replace(/\/$/, "");
   const siteFiles = await window.desktop.listMedia("file").catch(() => []); // the link picker's Files group
   const ctx = { types: typesData.types || [], entries: typesData.entries || {}, blocks: data.blocks, forms: siteForms, pages: data.pages, delivery, siteUrl, files: siteFiles };
+  siteLinkOptionsCache = siteLinkOptions(data, posts, ctx); siteLinkOptionsCache.stamp = String(Date.now());
   mediaIndex = await window.desktop.listMedia().catch(() => []); // thumbnails for image fields
   siteMarks = data.marks || {};
   siteBlogPath = (data.site && data.site.blogPath) || "blog";
