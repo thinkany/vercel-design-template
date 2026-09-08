@@ -5815,13 +5815,18 @@ function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }
   const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(siteFoldGet(foldKey, false)));
   head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", S.filterHeading));
   const bodyEl = siteEl("div", "site-acc-body"); bodyEl.hidden = !siteFoldGet(foldKey, false);
-  head.addEventListener("click", () => { const now = bodyEl.hidden; siteReveal(bodyEl, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(foldKey, now); });
+  head.addEventListener("click", () => { const now = bodyEl.hidden; siteReveal(bodyEl, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(foldKey, now); setTimeout(paintNote, 260); });
   sec.append(head, bodyEl); host.appendChild(sec);
   const bar = siteEl("div"); bar.style.cssText = "display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 8px;";
   const pills = siteEl("div"); pills.style.cssText = "display:flex;gap:4px;";
   // The line above the first row while a filter is on ("Filtered: Drafts"); none for All.
   const filterNote = siteEl("div", "sess-desc"); filterNote.style.cssText = "margin:0 0 6px;font-weight:500;";
-  const paintNote = () => { const k = cur(); filterNote.textContent = k === "all" ? "" : S.filteredNote(S.statusFilter[k]); filterNote.style.display = k === "all" ? "none" : ""; };
+  // Shown only while the section is closed and a filter is on; placed before the first row once it is in the column.
+  const paintNote = () => {
+    const k = cur(); const show = k !== "all" && bodyEl.hidden;
+    if (!filterNote.parentNode && rows[0] && rows[0].row.parentNode) rows[0].row.parentNode.insertBefore(filterNote, rows[0].row);
+    filterNote.textContent = show ? S.filteredNote(S.statusFilter[k]) : ""; filterNote.style.display = show ? "" : "none";
+  };
   const paintRows = () => { rows.forEach((r) => { r.row.style.display = visible(r) ? "flex" : "none"; }); paintNote(); paintCount(); };
   // The pills: the chosen one is black on white's opposite, so the state reads at a glance.
   const setOn = (b, on) => { b.classList.toggle("on", on); b.style.background = on ? "#111" : ""; b.style.color = on ? "#fff" : ""; b.style.borderColor = on ? "#111" : ""; };
@@ -5831,9 +5836,11 @@ function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }
     pills.appendChild(b);
   }
   bar.appendChild(pills);
-  const allWrap = document.createElement("label"); allWrap.style.cssText = "display:inline-flex;align-items:center;gap:6px;margin-left:8px;cursor:pointer;line-height:16px;";
-  const allBox = document.createElement("input"); allBox.type = "checkbox"; allBox.title = S.selectAll; allBox.style.cssText = "margin:0;width:14px;height:14px;flex:none;vertical-align:middle;";
-  const count = siteEl("span", "muted"); count.style.cssText = "font-size:12px;line-height:16px;display:inline-block;";
+  // A span, not a label: the drawer styles labels as block rows. Clicking the text toggles the box.
+  const allWrap = siteEl("span"); allWrap.style.cssText = "display:flex;align-items:center;gap:6px;margin-left:8px;cursor:pointer;height:20px;";
+  const allBox = document.createElement("input"); allBox.type = "checkbox"; allBox.title = S.selectAll; allBox.style.cssText = "margin:0;width:14px;height:14px;flex:none;display:block;";
+  const count = siteEl("span", "muted"); count.style.cssText = "font-size:12px;line-height:14px;display:block;";
+  count.addEventListener("click", () => { allBox.checked = !allBox.checked; allBox.dispatchEvent(new Event("change")); });
   allWrap.append(allBox, count);
   const pub = siteEl("button", "panelbtn", S.publishSelected); pub.style.cssText = "margin:0;width:auto;"; pub.disabled = true;
   const unpub = siteEl("button", "panelbtn", S.unpublishSelected); unpub.style.cssText = "margin:0;width:auto;"; unpub.disabled = true;
@@ -5879,7 +5886,7 @@ function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }
       row.append(text, box); row.style.alignItems = "center";
       rows.push({ id: it.id, draft: !!it.draft, row, box });
       row.style.display = visible(it) ? "flex" : "none";
-      if (rows.length === 1 && row.parentNode) { row.parentNode.insertBefore(filterNote, row); paintNote(); }
+      if (rows.length === 1) requestAnimationFrame(paintNote); // the row joins the column right after this call
       paintCount();
     },
   };
