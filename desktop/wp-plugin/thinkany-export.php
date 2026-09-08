@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: thinkany Export
+ * Plugin Name: thinkany design Export
  * Plugin URI:  https://thinkany.design
  * Description: Read-only export of this site's structure and content (ACF field groups, blocks, pages, posts, custom types, menus, media) as one JSON payload, for a redesign in thinkany design. Writes nothing.
  * Version:     0.1.2
@@ -14,7 +14,7 @@
  *   One GET endpoint (and a WP-CLI command) that returns the site as data:
  *     GET /wp-json/thinkany/v1/export        header  X-Thinkany-Token: <token>
  *     wp thinkany export [--out=<file>]
- *   The token is generated on activation and shown under Settings → thinkany Export.
+ *   The token is generated on activation and shown under Settings → thinkany design Export.
  *
  * WHAT THIS NEVER DOES
  *   Write to the database, touch uploads, or change any option other than its own
@@ -58,7 +58,7 @@ final class Thinkany_Export {
 
     // ---- admin page -------------------------------------------------------------
     public static function menu() {
-        add_options_page('thinkany Export', 'thinkany Export', 'manage_options', 'thinkany-export', [__CLASS__, 'page']);
+        add_options_page('thinkany design Export', 'thinkany design Export', 'manage_options', 'thinkany-export', [__CLASS__, 'page']);
     }
     public static function page() {
         if (!current_user_can('manage_options')) return;
@@ -103,7 +103,7 @@ final class Thinkany_Export {
         </style>
         <div class="wrap ta-wrap">
           <div class="ta-card">
-            <h1>thinkany Export</h1>
+            <h1>thinkany design Export</h1>
             <p class="ta-lead">This plugin only reads. Paste the address and token into thinkany design under Site → Settings → Import from WordPress.</p>
             <?php if (!empty($_GET['rotated'])) echo '<div class="ta-ok">A new token was generated. Paste the new one into the app.</div>'; ?>
             <?php echo $row('Site address', $home); echo $row('Token', $token); echo $row('Endpoint', $url); ?>
