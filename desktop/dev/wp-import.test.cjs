@@ -409,9 +409,9 @@ t("mapping validates, and catches a bad id", () => {
     assert.ok(!fs.existsSync(path.join(dir4, "content", "pages", "home-wp-2.json")));
     // a redirect this import added earlier, from an address that is a live page now, is removed on the re-run
     const sj = JSON.parse(fs.readFileSync(path.join(dir4, "content", "site.json"), "utf8"));
-    sj.redirects = [...(sj.redirects || []), { from: "/about-us", to: "/about-us", type: 301 }];
+    sj.redirects = [...(sj.redirects || []), { from: "/about-us", to: "/about-us/team", type: 301 }];
     fs.writeFileSync(path.join(dir4, "content", "site.json"), JSON.stringify(sj));
-    const cj = JSON.parse(fs.readFileSync(createdFile, "utf8")); cj.redirects = ["/about-us"]; fs.writeFileSync(createdFile, JSON.stringify(cj));
+    // (not recorded as this import's own: the rule works from the redirect's target being one of its drafts)
     fs.writeFileSync(path.join(dir4, "content", "pages", "about-live.json"), JSON.stringify({ title: "About", slug: "about-us", blocks: [] }));
     const res3 = await run();
     assert.ok(res3.ok);

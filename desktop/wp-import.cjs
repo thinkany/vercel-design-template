@@ -940,7 +940,7 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
   // Navigation: `nav` is { main, footer } (a bare string is the main menu, the old shape).
   const navCfg = typeof mapping.nav === "string" || mapping.nav === null ? { main: mapping.nav, footer: [] } : (mapping.nav || {});
   const menuOf = (ref) => (site.menus || []).find((m) => m.slug === ref || String(m.id) === String(ref) || m.name === ref);
-  const hrefOf = (it) => { if (it.object === "page" && it.objectId) { const r = routeOfPage(it.objectId); if (r != null) return "/" + r; } return rewriteUrl(it.url); };
+  const hrefOf = (it) => { if (it.object === "page" && it.objectId) { const r = routeOfPage(it.objectId); if (r != null) return "/" + r; } return rewriteUrl(it.url) || "#"; }; // a dead link (WordPress gives false) stays clickable without reloading
   const menuTree = (menu) => { const items = [...(menu.items || [])].sort((a, b) => a.order - b.order); return items.filter((it) => !it.parent).map((it) => ({ label: plainText(it.title), href: hrefOf(it), links: items.filter((c) => c.parent === it.id).map((c) => ({ label: plainText(c.title), href: hrefOf(c) })) })); };
   const mainMenu = navCfg.main ? menuOf(navCfg.main) : null;
   if (mainMenu) { siteJson.nav = menuTree(mainMenu).map((n) => (n.links.length ? n : { label: n.label, href: n.href })); siteJson.manageNav = true; }
@@ -964,7 +964,9 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
   }
   report.redirectsHeld = [];
   const addedBefore = new Set((created.redirects || []).map((f) => String(f).toLowerCase()));
-  if (draft) for (const from of Array.from(have.keys())) if (addedBefore.has(from) && liveRoutes.has(from)) { have.delete(from); report.redirectsHeld.push({ from, to: "(removed)", why: "a live page is at this address; the redirect this import added earlier was removed" }); }
+  // A redirect from a live page to one of this import's drafts is wrong whoever added it.
+  const draftRoutes = new Set(report.pages.map((p) => p.route.replace(/\/$/, "") || "/"));
+  if (draft) for (const [from, r] of Array.from(have.entries())) { const to = String(r.to || "").replace(/\/$/, "") || "/"; if (liveRoutes.has(from) && (addedBefore.has(from) || draftRoutes.has(to) || (postsCfg.import !== false && to.startsWith(`/${blogPath}/`) && to.endsWith("-wp")))) { have.delete(from); report.redirectsHeld.push({ from, to: "(removed)", why: "a live page is at this address; the redirect to the imported draft was removed" }); } }
   createdNow.redirects = [];
   const addRedirect = (from, to) => {
     if (!from || from === "/" || from === to || have.has(from.toLowerCase())) return;
