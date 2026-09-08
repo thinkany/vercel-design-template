@@ -1479,6 +1479,10 @@ function readBlockRegistry(dir) {
       const nm = fsrc.match(/name:\s*"([^"]+)"/); const ds = fsrc.match(/description:\s*"([^"]+)"/);
       if (nm) entry.name = nm[1];
       if (ds) entry.description = ds[1];
+      // Imported blocks (docs/wordpress-import-lossless-spec.md): the Blocks tab lists them under Needs Design.
+      if (/needsDesign:\s*true/.test(fsrc)) entry.needsDesign = true;
+      const wm = fsrc.match(/^\s*wp:\s*(\{.*\}),\s*$/m); if (wm) { try { entry.wp = JSON.parse(wm[1]); } catch {} }
+      entry.file = file + (file.endsWith(".tsx") ? "" : ".tsx");
     }
     out.push(entry);
   }
@@ -1523,7 +1527,7 @@ function readSiteContent(dir) {
       const all = [...readBlockRegistry(dir), ...Object.values(ib.builtins || {})];
       return {
         // `name` is what the CMS shows (the designer's display name when set); originalName is the block's own.
-        blocks: all.map((b) => ({ ...b, originalName: b.name, name: (typeof names[b.key] === "string" && names[b.key].trim()) || b.name, defaults: ib.defaults[b.key] || {}, templates: ib.templates[b.key] || {}, fields: (ib.fields && ib.fields[b.key]) || {} })),
+        blocks: all.map((b) => ({ ...b, originalName: b.name, name: (typeof names[b.key] === "string" && names[b.key].trim()) || b.name, defaults: ib.defaults[b.key] || {}, templates: ib.templates[b.key] || {}, fields: (ib.fields && ib.fields[b.key]) || {}, needsDesign: !!b.needsDesign, wp: b.wp || null })),
         marks: ib.marks || {}, // the design's icon set, rendered: { key: "<svg…>" }
         megaMenu: !!ib.megaMenu, // the header renders nav columns → the Navigation tab offers them
       };
@@ -2115,6 +2119,39 @@ ipcMain.handle("wp:report", () => {
 ipcMain.handle("wp:forget", () => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   try { fs.rmSync(wpDir(currentProject), { recursive: true, force: true }); return { ok: true, status: wpStatus() }; } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// Edit an imported block's fields (Blocks → Needs Design → Edit): rename or remove
+// props in the block file and in every content instance of the block, in one step,
+// so schema and content never drift. Only blocks still needing design; a designed
+// block's schema changes through /design-block.
+ipcMain.handle("wp:editBlock", (_e, { key, renames, removes } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const dir = currentProject;
+  const reg = readBlockRegistry(dir).find((b) => b.key === key);
+  if (!reg) return { ok: false, error: "That block isn't in the site." };
+  if (!reg.needsDesign) return { ok: false, error: "That block has been designed; change its fields through the design pass." };
+  const file = path.join(dir, "site", "blocks", reg.file);
+  const src = readTextSafe(file); if (!src) return { ok: false, error: "Couldn't read the block file." };
+  const r = wpImport.editBlockSource(src, { renames: renames || {}, removes: removes || [] });
+  if (!r.changed.length) return { ok: false, error: r.missing.length ? `Nothing changed: ${r.missing.join("; ")}.` : "Nothing to change." };
+  try {
+    fs.writeFileSync(file, r.source);
+    // content: pages, entries with their own blocks, type templates
+    const applied = { renames: Object.fromEntries(r.changed.filter((c) => c.rename).map((c) => [c.rename, c.to])), removes: r.changed.filter((c) => c.remove).map((c) => c.remove) };
+    let touched = 0;
+    const fix = (doc) => { let hit = false; for (const b of doc.blocks || []) { if (b.type !== key) continue; const e = wpImport.editInstanceProps(b.props, applied); if (e.changed) { b.props = e.props; hit = true; } } return hit; };
+    const pagesDir = path.join(siteContentDir(dir), "pages");
+    for (const f of (() => { try { return fs.readdirSync(pagesDir); } catch { return []; } })()) { if (!f.endsWith(".json")) continue; const p = path.join(pagesDir, f); const doc = readJsonFile(p); if (doc && fix(doc)) { fs.writeFileSync(p, JSON.stringify(doc, null, 2) + "\n"); touched++; } }
+    for (const t of readTypes(dir)) {
+      for (const e of readEntries(dir, t.key)) { const p = entryFile(dir, t.key, e.id); const doc = readJsonFile(p); if (doc && Array.isArray(doc.blocks) && fix(doc)) { fs.writeFileSync(p, JSON.stringify(doc, null, 2) + "\n"); touched++; } }
+      if (Array.isArray(t.template) && fix({ blocks: t.template })) { const types = readTypes(dir); const i = types.findIndex((x) => x.key === t.key); if (i >= 0) { types[i].template = t.template; writeTypes(dir, types); touched++; } }
+    }
+    try { fs.rmSync(path.join(dir, ".thinkany", "blocks.json"), { force: true }); } catch {}
+    appLog.write(`[wp] edit block ${key}: ${JSON.stringify(applied)} in ${touched} content file(s)`);
+    return { ok: true, changed: r.changed, missing: r.missing, touched };
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 
 // Block display names (the Blocks tab): recognition in the CMS only.

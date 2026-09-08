@@ -15,7 +15,13 @@ insertion, the generated mapping, the draft-only never-overwrite transform with
 `created.json`, the verification-first report, and the panel's one Run the import
 button. Verified by the fixture test (17 cases) and a real site build that compiles
 the generated blocks and renders them through the placeholder. Not yet run in the
-app against tax.local. P2 to P4 not built.
+app against tax.local. **P1 run on tax.local 2026-09-08**: 12 blocks, 4 draft pages,
+entries, form kept, nothing overwritten; fixes from the run landed (held redirects,
+numeric slugs, booleans, stale-file cleanup, schema validation in the report).
+**P2 partly built 2026-09-08**: the Blocks tab's Active and Needs Design sections
+(collapsible, remembered per project), Edit fields (rename, remove; block file and
+every content instance in one step, `wp:editBlock`). Update design and Use an
+existing design are placeholders until P3. P4 not built.
 
 ## The idea in one paragraph
 

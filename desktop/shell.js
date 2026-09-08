@@ -3346,6 +3346,8 @@ function siteFoldInline(title) { const sec = siteEl("div", "site-sub"); sec.appe
 let siteFolds = {}; // key → false when folded (absent = open)
 let siteFoldsTimer = null;
 let siteFoldsPending = {}; // every change since the last save (a quick run of clicks is one write)
+// Is a fold open? Absent = the section's default (the Settings sections default open).
+function siteFoldGet(key, dflt = true) { return key in siteFolds ? siteFolds[key] !== false : dflt; }
 function siteFoldSet(key, open) {
   siteFolds[key] = open;
   siteFoldsPending[key] = open;
@@ -5544,27 +5546,100 @@ function renderSiteBlocks(data) {
   const names = {}; data.blocks.forEach((b) => { if (b.name !== b.originalName) names[b.key] = b.name; });
   const status = siteEl("div"); status.style.cssText = "min-height:18px;";
   let timer = null;
-  const save = () => { clearTimeout(timer); timer = setTimeout(async () => { const r = await window.desktop.saveBlockNames(names); status.innerHTML = ""; if (r && r.ok) siteFlash(status, S.saved); else if (r && r.error) { const e = siteEl("div", "sess-desc", r.error); e.style.color = "#c0261e"; status.appendChild(e); } }, 1000); };
+  const save = () => { clearTimeout(timer); timer = setTimeout(async () => { const r = await window.desktop.saveBlockNames(names); status.innerHTML = ""; if (r && r.ok) siteFlash(status, S.saved); else if (r && r.error) { const e = siteEl("div", "sess-desc", r.error); e.style.color = "#c0261e"; status.appendChild(e); } }, 600); };
   const usage = (key) => data.pages.filter((p) => (p.blocks || []).some((b) => b.type === key)).map((p) => p.title);
-  data.blocks.forEach((b, i) => {
-    const card = siteEl("div", "site-item");
-    if (i === 0) card.dataset.tour = "cms-block-card";
+  const card = (b, i, imported) => {
+    const el = siteEl("div", "site-item");
+    if (i === 0 && !imported) el.dataset.tour = "cms-block-card";
     const head = siteEl("div"); head.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:6px;";
     const name = document.createElement("input"); name.className = "field"; name.style.cssText = "margin:0;flex:1;font-weight:600;"; name.value = b.name; name.placeholder = b.originalName;
     name.addEventListener("input", () => { const v = name.value.trim(); if (v && v !== b.originalName) names[b.key] = v; else delete names[b.key]; save(); });
     head.appendChild(name);
     if (b.builtin) head.appendChild(siteEl("span", "site-tag", S.blockBuiltIn));
-    card.appendChild(head);
+    if (imported) head.appendChild(siteEl("span", "site-tag", S.blocksNeedsDesign));
+    el.appendChild(head);
     const meta = siteEl("div", "sess-desc");
     const parts = [S.blockOriginal(b.originalName)];
-    if (b.description) parts.push(b.description);
+    if (imported && b.wp) parts.push(S.blockImportedFrom(b.wp.block, usage(b.key).length ? data.pages.reduce((n, p) => n + (p.blocks || []).filter((x) => x.type === b.key).length, 0) : 0));
+    else if (b.description) parts.push(b.description);
     const on = usage(b.key); parts.push(on.length ? S.blockUsedOn(on) : S.blockUnused);
     meta.textContent = parts.join("  ·  ");
-    card.appendChild(meta);
-    wrap.appendChild(card);
-  });
+    el.appendChild(meta);
+    if (imported) {
+      const top = Object.keys(b.fields || {}).filter((k) => !k.includes("."));
+      if (top.length) el.appendChild(siteEl("div", "sess-desc", S.blockFields(top.join(", "))));
+      const acts = siteEl("div"); acts.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;";
+      const edit = siteEl("button", "panelbtn", S.blockEdit); edit.style.cssText = "margin:0;width:auto;";
+      edit.addEventListener("click", () => openBlockFieldsModal(b, () => { if (RAILS.site.classList.contains("active")) openModal("site"); }));
+      const design = siteEl("button", "panelbtn primary", S.blockUpdateDesign); design.style.cssText = "margin:0;width:auto;"; design.disabled = true; design.title = S.blockUpdateDesignSoon;
+      const use = siteEl("button", "panelbtn", S.blockUseExisting); use.style.cssText = "margin:0;width:auto;"; use.disabled = true; use.title = S.blockUseExistingSoon;
+      acts.append(design, edit, use); el.appendChild(acts);
+    }
+    return el;
+  };
+  const active = data.blocks.filter((b) => !b.needsDesign);
+  const needs = data.blocks.filter((b) => b.needsDesign);
+  // Two collapsible sections; Needs design only exists once something was imported.
+  const section = (key, title, desc, items, imported, openDefault) => {
+    const sec = siteEl("div", "site-acc" + (siteFoldGet(key, openDefault) ? " open" : ""));
+    const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(siteFoldGet(key, openDefault)));
+    head.appendChild(siteEl("span", "site-acc-title", `${title} (${items.length})`));
+    const body = siteEl("div", "site-acc-body"); body.hidden = !siteFoldGet(key, openDefault);
+    body.appendChild(siteEl("div", "sess-desc", desc));
+    items.forEach((b, i) => body.appendChild(card(b, i, imported)));
+    head.addEventListener("click", () => { const now = body.hidden; siteReveal(body, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(key, now); });
+    sec.append(head, body); return sec;
+  };
+  if (needs.length) wrap.appendChild(section("blocks-needs", S.blocksNeedsDesign, S.blocksNeedsDesignDesc, needs, true, true));
+  wrap.appendChild(section("blocks-active", S.blocksActive, S.blocksActiveDesc, active, false, !needs.length));
   wrap.appendChild(status);
   return wrap;
+}
+
+// The fields of an imported block: rename, remove; applied to the block file and every
+// content instance in one step (wp:editBlock).
+function openBlockFieldsModal(b, onDone) {
+  const E = COPY.site.blockEditor;
+  const ov = siteEl("div", "blockedit");
+  const card = siteEl("div", "blockedit-card");
+  const head = siteEl("div", "blockedit-head");
+  head.appendChild(siteEl("div", "blockedit-title", E.title(b.name)));
+  const acts = siteEl("div", "blockedit-acts");
+  const cancel = siteEl("button", "panelbtn", E.cancel); cancel.style.cssText = "margin:0;width:auto;";
+  const apply = siteEl("button", "panelbtn primary", E.save); apply.style.cssText = "margin:0;width:auto;";
+  acts.append(cancel, apply); head.appendChild(acts);
+  const body = siteEl("div", "blockedit-fields"); body.style.cssText = "flex:1;overflow:auto;padding:16px 20px;";
+  body.appendChild(siteEl("div", "sess-desc", E.intro));
+  const note = siteEl("div", "muted"); note.style.cssText = "font-size:12px;margin:6px 0 10px;";
+  const top = Object.keys(b.fields || {}).filter((k) => !k.includes("."));
+  const state = { renames: {}, removes: new Set() };
+  top.forEach((k) => {
+    const row = siteEl("div", "site-kv"); row.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:8px;";
+    const input = document.createElement("input"); input.className = "field"; input.value = k; input.style.cssText = "margin:0;flex:1;";
+    const kind = siteEl("span", "site-tag", (b.fields[k] && b.fields[k].kind) || "");
+    const rm = siteEl("button", "panelbtn", E.remove); rm.style.cssText = "margin:0;width:auto;";
+    input.addEventListener("input", () => { const v = input.value.trim(); if (v && v !== k) state.renames[k] = v; else delete state.renames[k]; });
+    rm.addEventListener("click", () => { if (state.removes.has(k)) { state.removes.delete(k); rm.textContent = E.remove; input.disabled = false; row.style.opacity = ""; } else { state.removes.add(k); rm.textContent = E.undo; input.disabled = true; row.style.opacity = "0.5"; } });
+    row.append(input, kind, rm); body.appendChild(row);
+  });
+  body.appendChild(note);
+  card.append(head, body); ov.appendChild(card);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey, true); };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  cancel.addEventListener("click", close);
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  apply.addEventListener("click", async () => {
+    const renames = state.renames; const removes = Array.from(state.removes);
+    if (!Object.keys(renames).length && !removes.length) { note.textContent = E.nothing; return; }
+    apply.disabled = true;
+    const r = await window.desktop.wpEditBlock(b.key, renames, removes);
+    apply.disabled = false;
+    if (!r || !r.ok) { note.textContent = (r && r.error) || "Couldn't apply."; note.style.color = "#e5484d"; return; }
+    close(); if (onDone) onDone(r);
+  });
+  document.addEventListener("keydown", onKey, true);
+  document.body.appendChild(ov);
+  return { close };
 }
 
 // The image optimization sliders (quality + largest width). The Settings tab's Images

@@ -1318,6 +1318,60 @@ function registryWith(src, rows) {
 }
 
 /**
+ * Edit a generated block's schema in place (Blocks → Needs Design → Edit): rename
+ * props, remove props. Works on the source the emitter wrote: the prop lines inside
+ * `const props = …z.object({ … })` and the one-line `wp:` map. A prop that lives in a
+ * shared fragment (wp-fields.ts) is not in this file and is left alone; the caller
+ * reports it. Returns { source, changed: [...], missing: [...] }.
+ */
+function editBlockSource(src, { renames = {}, removes = [] } = {}) {
+  let out = src; const changed = []; const missing = [];
+  const propLine = (name) => new RegExp(`^(\\s{2})${name.replace(/[$]/g, "\\$&")}: (.*)$`, "m");
+  for (const name of removes) {
+    const m = out.match(propLine(name));
+    if (!m) { missing.push(name); continue; }
+    const start = m.index;
+    let end = start + m[0].length + 1; // one-line prop: through its newline
+    if (/[{[]\s*$/.test(m[2])) { // multi-line (a list or object): through the closing line at four-space depth
+      const rest = out.slice(end); let consumed = 0;
+      for (const line of rest.split("\n")) { consumed += line.length + 1; if (/^\s{4}\}\)/.test(line)) break; }
+      end += consumed;
+    }
+    out = out.slice(0, start) + out.slice(end);
+    changed.push({ remove: name });
+  }
+  for (const [from, to] of Object.entries(renames)) {
+    if (!to || from === to) continue;
+    if (!/^[a-z][A-Za-z0-9]*$/.test(to)) { missing.push(`${from} → ${to} (not a camelCase name)`); continue; }
+    const m = out.match(propLine(from));
+    if (!m) { missing.push(from); continue; }
+    if (propLine(to).test(out)) { missing.push(`${from} → ${to} (a prop with that name exists)`); continue; }
+    out = out.replace(propLine(from), `$1${to}: $2`);
+    changed.push({ rename: from, to });
+  }
+  // the wp map: old field → prop
+  const wm = out.match(/^  wp: (\{.*\}),$/m);
+  if (wm) {
+    try {
+      const wp = JSON.parse(wm[1]);
+      for (const [old, prop] of Object.entries(wp.fields || {})) { if (changed.some((c) => c.remove === prop)) delete wp.fields[old]; else { const r = changed.find((c) => c.rename === prop); if (r) wp.fields[old] = r.to; } }
+      out = out.replace(wm[0], `  wp: ${JSON.stringify(wp)},`);
+    } catch {}
+  }
+  return { source: out, changed, missing };
+}
+// The same edit applied to a block instance's props (top-level keys only).
+function editInstanceProps(props, { renames = {}, removes = [] } = {}) {
+  const out = {}; let changed = false;
+  for (const [k, v] of Object.entries(props || {})) {
+    if (removes.includes(k)) { changed = true; continue; }
+    const nk = renames[k] && renames[k] !== k ? renames[k] : k; if (nk !== k) changed = true;
+    out[nk] = v;
+  }
+  return { props: out, changed };
+}
+
+/**
  * The files the lossless import writes for its blocks, and the mapping the transform
  * consumes. `registrySrc` is the current site/blocks/index.ts; `existingKeys` the
  * site's block keys; `designed` the keys whose file exists with needsDesign false
@@ -1367,4 +1421,4 @@ function losslessMapping(p, plan) {
   };
 }
 
-module.exports = { PAYLOAD_KIND, PAYLOAD_VERSION, MAPPING_VERSION, fetchPayload, validatePayload, inventory, inventoryMarkdown, definitionsForSkill, mappingSkeleton, validateMapping, classifyFields, convertForm, htmlToMarkdown, transform, reportMarkdown, slugify, planBlocks, losslessPlan, losslessMapping, registryWith, blockSource, fragmentsSource };
+module.exports = { PAYLOAD_KIND, PAYLOAD_VERSION, MAPPING_VERSION, fetchPayload, validatePayload, inventory, inventoryMarkdown, definitionsForSkill, mappingSkeleton, validateMapping, classifyFields, convertForm, htmlToMarkdown, transform, reportMarkdown, slugify, planBlocks, losslessPlan, losslessMapping, registryWith, blockSource, fragmentsSource, editBlockSource, editInstanceProps };

@@ -443,5 +443,24 @@ t("mapping validates, and catches a bad id", () => {
     fs.rmSync(d, { recursive: true, force: true });
   });
 
+  t("edit a generated block: rename and remove props, in the file and in content", () => {
+    const r = W.losslessPlan(payload, { existingKeys: ["hero"], registrySrc: "export const blocks = {\n  hero,\n};\n" });
+    const feat = r.files["site/blocks/features-wp.tsx"];
+    const e = W.editBlockSource(feat, { renames: { title: "heading" }, removes: ["items"] });
+    assert.deepEqual(e.changed, [{ remove: "items" }, { rename: "title", to: "heading" }]);
+    assert.deepEqual(e.missing, []);
+    assert.ok(!/items:/.test(e.source), "the multi-line list prop is gone");
+    assert.ok(!/name: z\.string\(\)\.optional\(\),\n      text/.test(e.source), "its item lines went with it");
+    assert.match(e.source, /^  heading: z\.string\(\)\.optional\(\),$/m);
+    assert.match(e.source, /^export const featuresWp = defineBlock/m, "the definition is intact");
+    const wp = JSON.parse(e.source.match(/^  wp: (\{.*\}),$/m)[1]);
+    assert.deepEqual(wp.fields, { title: "heading" });
+    const bad = W.editBlockSource(feat, { renames: { title: "Not Camel" }, removes: ["nope"] });
+    assert.deepEqual(bad.changed, []);
+    assert.equal(bad.missing.length, 2);
+    const inst = W.editInstanceProps({ title: "Why", items: [{ name: "a" }], extra: 1 }, { renames: { title: "heading" }, removes: ["items"] });
+    assert.deepEqual(inst, { props: { heading: "Why", extra: 1 }, changed: true });
+  });
+
   console.log(`${passed} passed${process.exitCode ? ", with failures" : ""}`);
 })();
