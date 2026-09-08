@@ -79,6 +79,7 @@ const blocks = [
   { key: "hero", name: "Hero", fields: { eyebrow: { kind: "string" }, heading: { kind: "string" }, body: { kind: "richtext" }, image: { kind: "image" }, "image.src": { kind: "string" }, "image.alt": { kind: "string" }, ctas: { kind: "list" }, "ctas.label": { kind: "string" }, "ctas.href": { kind: "string" }, "ctas.style": { kind: "enum", options: ["primary", "secondary"] }, tone: { kind: "enum", options: ["light", "dark"] } } },
   { key: "features", name: "Features", fields: { heading: { kind: "string" }, items: { kind: "list" }, "items.title": { kind: "string" }, "items.text": { kind: "string" }, "items.icon": { kind: "image" } } },
   { key: "prose", name: "Prose", fields: { body: { kind: "richtext" } } },
+  { key: "form", name: "Form", fields: { form: { kind: "form" }, heading: { kind: "string" }, intro: { kind: "richtext" } } },
   { key: "faq", name: "FAQ", fields: { heading: { kind: "string" }, items: { kind: "list" }, "items.q": { kind: "string" }, "items.a": { kind: "richtext" } } },
   { key: "table", name: "Table", fields: { rows: { kind: "list" }, "rows.cells": { kind: "list" }, header: { kind: "boolean" }, caption: { kind: "string" } } },
 ];
@@ -88,13 +89,15 @@ t("skeleton has every slot", () => {
   assert.equal(sk.version, 1);
   assert.equal(sk.pages[0].page, "home");
   assert.equal(sk.pages.find((p) => p.wp === 13).page, "team");
-  assert.deepEqual(Object.keys(sk.blocks).sort(), ["acf/faq", "acf/features", "acf/hero", "acf/testimonial"]);
+  assert.deepEqual(Object.keys(sk.blocks).sort(), ["acf/faq", "acf/features", "acf/form", "acf/hero", "acf/testimonial"]);
+  assert.equal(sk.forms.import, true);
+  assert.deepEqual(sk.forms._found, [{ id: "1", plugin: "gravityforms", title: "Contact", fields: 8 }]);
   assert.deepEqual(sk.blocks["acf/hero"]._wpFields.sort(), ["button", "extra_note", "heading", "hero_copy", "image", "subheading"]);
   assert.deepEqual(sk.blocks["acf/hero"]._layoutFields.sort(), ["deactivate_block", "hero_height", "hide_on_mobile", "padding", "section_id"]);
   assert.equal(sk.blocks["acf/hero"].skipWhen, "deactivate_block");
   assert.equal(sk.nav, "primary");
   assert.equal(sk.types.team.include, false);
-  assert.equal(sk.availableBlocks.length, 5);
+  assert.equal(sk.availableBlocks.length, 6);
 });
 
 t("html → markdown: prose, lists, links, entities, lost nodes, tables as data", () => {
@@ -137,6 +140,7 @@ const mapping = {
     "acf/hero": { block: "hero", skipWhen: "deactivate_block", fields: { heading: "heading", body: "subheading", image: "image", "ctas[0]": { from: "button", each: { label: "title", href: "url", style: "=primary" } }, tone: "tone" } },
     "acf/features": { block: "features", fields: { heading: "title", items: { from: "items", each: { title: "name", text: "text", icon: "icon" } } } },
     "acf/faq": { block: "faq", fields: { heading: "faq_title", items: { from: "faq_groups", flatMap: "questions", each: { q: "question", a: "answer" } } } },
+    "acf/form": { block: "form", fields: { form: "gravity_form_select", heading: "form_title" } },
   },
   prose: { block: "prose", prop: "body" },
   tables: { block: "table", rows: "rows", header: "header", caption: "caption" },
@@ -215,6 +219,17 @@ t("mapping validates, and catches a bad id", () => {
     assert.equal(services.blocks[1].type, "faq");
     assert.equal(services.blocks[1].props.heading, "Questions");
     assert.deepEqual(services.blocks[1].props.items, [{ q: "Do you take walk-ins?", a: "Yes, most days." }, { q: "Do you bill insurers?", a: "Directly." }]);
+    // forms: the Gravity form lands in the Forms tab with the site's field types; the block binds to it by its new id
+    const contact = JSON.parse(fs.readFileSync(path.join(dir, "content", "forms", "contact.json"), "utf8"));
+    assert.equal(contact.name, "Contact");
+    assert.deepEqual(contact.fields.map((f) => [f.id, f.type, f.required]), [["name", "text", true], ["email", "email", true], ["phone", "phone", false], ["i-am", "select", false], ["consent", "checkbox", true], ["message", "textarea", false]]);
+    assert.deepEqual(contact.fields[3].options, ["A patient", "A referrer"]);
+    assert.equal(contact.fields[4].label, "You may contact me");
+    assert.equal(contact.replyToField, "email");
+    assert.equal(rep.forms.length, 1);
+    assert.deepEqual(rep.forms[0].skipped, [{ label: "X-rays", type: "fileupload" }], "hidden fields are dropped silently, uploads are named");
+    assert.equal(services.blocks[2].type, "form");
+    assert.deepEqual(services.blocks[2].props, { form: "contact", heading: "Get in touch" });
     const team = JSON.parse(fs.readFileSync(path.join(dir, "content", "pages", "team.json"), "utf8"));
     assert.equal(team.parent, "about");
     assert.equal(team.blocks[0].props.body, "## Meet the team\n\nTwo dentists, three hygienists.");

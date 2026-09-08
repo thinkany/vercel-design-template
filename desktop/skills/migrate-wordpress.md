@@ -111,6 +111,7 @@ the transform doesn't read.** The transform reads exactly these:
   "types": { "team": { "include": true, "key": "team", "label": "Team", "singular": "Team member", "path": "/team",
              "fields": { "role": "role", "bio": { "key": "bio" }, "photo": "photo", "accepting": "accepting" } } },
   "nav": "primary",
+  "forms": { "import": true },   // every Gravity Forms / WPForms form becomes a form in the Forms tab
   "media": { "download": true, "folder": "wp" }
 }
 ```
@@ -161,6 +162,14 @@ Rules for a good proposal:
   `each`, select/radio → enum with a `map` when the labels differ, true_false →
   boolean. Never point two old fields at one prop. Leave a prop out rather than
   force a fit; the report lists unmapped fields and the designer decides.
+- **Forms.** The old site's forms (Gravity Forms, WPForms) are imported into the
+  Forms tab with their fields, under an id made from the form's title
+  (`_found` in the skeleton lists them). An old Form block binds to its form
+  through the built-in `form` block: `"form": "<the reference field>"` resolves the
+  old form to the new id, plus `heading` and `intro` from the block's own fields.
+  Prefer that over a promoted Contact section with fixed fields whenever the old
+  form has more than name, email and message; say which fields would drop
+  otherwise. Recipients and delivery are set by the designer in the Forms tab.
 - **Prose.** If the site has a block whose one richtext prop is meant for running
   copy (a Prose, Text, Article or Rich text block), name it in `prose`. If not, say
   so in chat: runs of paragraphs will be dropped and listed, and a prose block is a

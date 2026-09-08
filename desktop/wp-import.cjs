@@ -310,8 +310,36 @@ function mappingSkeleton(p, blocks = []) {
     posts: { import: (inv.counts.posts || 0) > 0, type: "post", categoriesAsTags: true },
     types: Object.fromEntries(inv.customTypes.map((t) => [t.key, { include: false, key: slugify(t.key), label: t.label, path: `/${slugify(t.key)}`, fields: {} }])),
     nav: primary ? primary.slug : null,
+    forms: { import: (p.forms || []).length > 0, _found: (p.forms || []).map((f) => ({ id: String(f.id), plugin: f.plugin, title: f.title, fields: (f.fields || []).length })) },
     media: { download: true, folder: "wp" },
   };
+}
+
+// ---- forms (Gravity Forms, WPForms) → content/forms/<id>.json --------------------
+// The site's forms are six field types. Anything else is skipped and named.
+const FORM_TYPE = { text: "text", email: "email", phone: "phone", textarea: "textarea", select: "select", radio: "select", multiselect: "select", checkbox: "checkbox", consent: "checkbox", number: "text", website: "text", url: "text", name: "text", date: "text", time: "text", "gdpr-checkbox": "checkbox" };
+const FORM_SKIP = new Set(["hidden", "html", "captcha", "section", "page", "fileupload", "file-upload", "list", "post_title", "post_content", "post_excerpt", "post_tags", "post_category", "post_image", "post_custom_field", "product", "quantity", "total", "shipping", "creditcard", "payment-single", "payment-multiple", "payment-total", "divider", "pagebreak", "password", "signature", "address"]);
+const FORM_RESERVED = new Set(["form", "website", "_t", "_ab", "submit", "token"]);
+function convertForm(f, slugifyFn) {
+  const id = slugifyFn(f.title || `form-${f.id}`) || `form-${f.id}`;
+  const fields = []; const skipped = []; const seen = new Set();
+  for (const x of f.fields || []) {
+    const t = String(x.type || "").toLowerCase();
+    const label = plainText(x.label || "") || t;
+    if (FORM_SKIP.has(t) || !FORM_TYPE[t]) { if (!["hidden", "html", "captcha", "section", "page", "divider", "pagebreak"].includes(t)) skipped.push({ label, type: t }); continue; }
+    let fid = slugifyFn(label) || `field-${x.id}`;
+    if (FORM_RESERVED.has(fid)) fid = `field-${fid}`;
+    while (seen.has(fid)) fid = `${fid}-2`;
+    seen.add(fid);
+    const out = { id: fid, type: FORM_TYPE[t], label, required: !!x.required, placeholder: "", help: "" };
+    if (out.type === "select") { out.options = (x.choices || []).map(plainText).filter(Boolean); if (!out.options.length) { skipped.push({ label, type: t, why: "no choices" }); continue; } }
+    // a single-choice checkbox keeps its one choice as the label (a consent line)
+    if (out.type === "checkbox" && (x.choices || []).length === 1 && plainText(x.choices[0])) out.label = plainText(x.choices[0]);
+    if (out.type === "checkbox" && (x.choices || []).length > 1) { out.type = "select"; out.options = x.choices.map(plainText).filter(Boolean); }
+    fields.push(out);
+  }
+  const email = fields.find((x) => x.type === "email");
+  return { id, doc: { name: plainText(f.title || id), fields, submit: { label: "Send" }, after: { mode: "message", message: "Thanks, your message was sent.", page: null }, recipients: "", replyTo: "", replyToField: email ? email.id : "", recaptcha: false }, skipped };
 }
 
 function validateMapping(m, blocks = []) {
@@ -511,7 +539,7 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
   const byWp = Object.fromEntries(entries.map((e) => [e.id, e]));
   const blockFields = Object.fromEntries(blocks.map((b) => [b.key, b.fields || {}]));
   const homeHost = (() => { try { return new URL(site.home).host; } catch { return ""; } })();
-  const report = { pages: [], posts: { imported: 0, drafts: 0, lost: [] }, types: {}, media: { downloaded: 0, failed: [], skipped: 0 }, redirects: 0, redirectsFlagged: [], unmappedBlocks: {}, unmappedFields: {}, skipped: [], variants: {}, files: [] };
+  const report = { pages: [], posts: { imported: 0, drafts: 0, lost: [] }, types: {}, forms: [], media: { downloaded: 0, failed: [], skipped: 0 }, redirects: 0, redirectsFlagged: [], unmappedBlocks: {}, unmappedFields: {}, skipped: [], variants: {}, files: [] };
   const cls = classifyFields(payload);
   const noteVariants = (name, fields) => { const v = report.variants[name] || (report.variants[name] = {}); for (const [k, val] of Object.entries(fields || {})) { if (purposeOf(cls, name, k) !== "variant") continue; const key = val == null || val === "" ? "(empty)" : typeof val === "object" ? "(object)" : String(val); (v[k] || (v[k] = {}))[key] = ((v[k] || {})[key] || 0) + 1; } };
   const written = [];
@@ -579,6 +607,22 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
     } catch (e) { report.media.failed.push({ id: att.id, url: att.url, error: e.message }); mediaCache.set(key, att.url); return { src: att.url, alt }; }
   }
 
+  // ---- forms: written first so a block can bind to one by its new id
+  const formsCfg = mapping.forms || {};
+  const formIdByWp = {}; // old plugin form id → content/forms id
+  if (formsCfg.import !== false && Array.isArray(payload.forms)) {
+    for (const f of payload.forms) {
+      const { id, doc, skipped } = convertForm(f, slugify);
+      formIdByWp[String(f.id)] = id;
+      const rel = path.join("content", "forms", `${id}.json`);
+      const existing = readJson(rel);
+      if (existing && formsCfg.overwrite !== true) { report.forms.push({ id, name: doc.name, fields: doc.fields.length, kept: true, skipped }); continue; }
+      writeFile(rel, JSON.stringify({ ...doc, updated: new Date().toISOString() }, null, 2) + "\n");
+      report.forms.push({ id, name: doc.name, fields: doc.fields.length, skipped });
+    }
+  }
+  const formRef = (v) => { const raw = v && typeof v === "object" ? (v.id ?? v.ID ?? v.form_id ?? v.value) : v; const key = raw == null ? "" : String(raw); return formIdByWp[key] || (Object.values(formIdByWp).includes(slugify(key)) ? slugify(key) : undefined); };
+
   // ---- values by target kind
   async function coerce(kind, value, spec, ctx) {
     if (value === undefined || value === null) return undefined;
@@ -611,6 +655,7 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
         return arr.map(plainText).filter(Boolean);
       }
       case "object": return spec && spec.each ? mapFields(spec.each, value, ctx.targetFields, ctx.where, ctx.lost, ctx.prefix) : undefined;
+      case "form": { const id = formRef(value); if (!id) ctx.lost.push({ where: ctx.where, node: "form-reference", text: String(value && typeof value === "object" ? (value.title || value.id) : value) }); return id; }
       default: { const str = plainText(value); return /^(https?:\/\/\S+|\/[^\s]*)$/.test(str) ? rewriteUrl(str) : str; }
     }
   }
@@ -797,6 +842,7 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
 function reportMarkdown(rep) {
   const L = ["# Import report", ""];
   L.push(`- ${rep.pages.length} pages written, ${rep.posts.imported} posts (${rep.posts.drafts} drafts), ${Object.values(rep.types).reduce((n, t) => n + t.entries, 0)} entries in ${Object.keys(rep.types).length} types`);
+  if (rep.forms && rep.forms.length) L.push(`- ${rep.forms.length} form${rep.forms.length === 1 ? "" : "s"} in the Forms tab (${rep.forms.map((f) => `${f.name}: ${f.fields} fields${f.kept ? ", already there, left as is" : ""}${f.skipped.length ? `, ${f.skipped.length} skipped` : ""}`).join("; ")}). Recipients and delivery are set in the Forms tab.`);
   L.push(`- ${rep.media.downloaded} images brought in${rep.media.failed.length ? `, ${rep.media.failed.length} failed` : ""}${rep.media.skipped ? `, ${rep.media.skipped} left at their old address` : ""}`);
   L.push(`- ${rep.redirects} redirects added${rep.redirectsFlagged.length ? ` (${rep.redirectsFlagged.length} pages not kept, sent to the nearest kept page)` : ""}`);
   const ub = Object.entries(rep.unmappedBlocks);
@@ -816,8 +862,10 @@ function reportMarkdown(rep) {
   }
   if (rep.posts.lost.length) { L.push("## Posts: lost content", ""); for (const l of rep.posts.lost) L.push(`- ${l.where}: ${l.node}${l.text ? ` (${l.text})` : ""}`); L.push(""); }
   for (const [k, t] of Object.entries(rep.types)) if (t.lost.length) { L.push(`## ${k}: lost content`, ""); for (const l of t.lost) L.push(`- ${l.where}: ${l.node}${l.text ? ` (${l.text})` : ""}`); L.push(""); }
+  const fsk = (rep.forms || []).filter((f) => f.skipped.length);
+  if (fsk.length) { L.push("## Form fields the site can't take", ""); for (const f of fsk) for (const x of f.skipped) L.push(`- ${f.name}: ${x.label} (${x.type}${x.why ? `, ${x.why}` : ""})`); L.push(""); }
   if (rep.media.failed.length) { L.push("## Images that could not be fetched", ""); for (const f of rep.media.failed) L.push(`- ${f.url}: ${f.error}`); L.push(""); }
   return L.join("\n");
 }
 
-module.exports = { PAYLOAD_KIND, PAYLOAD_VERSION, MAPPING_VERSION, fetchPayload, validatePayload, inventory, inventoryMarkdown, definitionsForSkill, mappingSkeleton, validateMapping, classifyFields, htmlToMarkdown, transform, reportMarkdown, slugify };
+module.exports = { PAYLOAD_KIND, PAYLOAD_VERSION, MAPPING_VERSION, fetchPayload, validatePayload, inventory, inventoryMarkdown, definitionsForSkill, mappingSkeleton, validateMapping, classifyFields, convertForm, htmlToMarkdown, transform, reportMarkdown, slugify };

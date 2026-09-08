@@ -414,6 +414,14 @@
         "category": "harbor",
         "mode": "preview",
         "supports": {}
+      },
+      {
+        "name": "acf/form",
+        "title": "Form",
+        "description": "",
+        "category": "",
+        "mode": "",
+        "supports": {}
       }
     ],
     "optionsPages": [
@@ -729,6 +737,18 @@
               }
             ]
           }
+        },
+        {
+          "name": "acf/form",
+          "blockId": "block_services_form",
+          "raw": {},
+          "fields": {
+            "gravity_form_select": {
+              "id": "1",
+              "title": "Contact"
+            },
+            "form_title": "Get in touch"
+          }
         }
       ]
     },
@@ -989,7 +1009,7 @@
       "fields": [
         {
           "id": "1",
-          "type": "text",
+          "type": "name",
           "label": "Name",
           "required": true,
           "choices": []
@@ -999,6 +1019,46 @@
           "type": "email",
           "label": "Email",
           "required": true,
+          "choices": []
+        },
+        {
+          "id": "4",
+          "type": "phone",
+          "label": "Phone",
+          "required": false,
+          "choices": []
+        },
+        {
+          "id": "5",
+          "type": "radio",
+          "label": "I am",
+          "required": false,
+          "choices": [
+            "A patient",
+            "A referrer"
+          ]
+        },
+        {
+          "id": "6",
+          "type": "checkbox",
+          "label": "Consent",
+          "required": true,
+          "choices": [
+            "You may contact me"
+          ]
+        },
+        {
+          "id": "7",
+          "type": "hidden",
+          "label": "Source",
+          "required": false,
+          "choices": []
+        },
+        {
+          "id": "8",
+          "type": "fileupload",
+          "label": "X-rays",
+          "required": false,
           "choices": []
         },
         {
