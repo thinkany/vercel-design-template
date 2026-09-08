@@ -5839,7 +5839,7 @@ function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }
   // A span, not a label: the drawer styles labels as block rows. Clicking the text toggles the box.
   const allWrap = siteEl("span"); allWrap.style.cssText = "display:flex;align-items:center;gap:6px;margin-left:8px;cursor:pointer;height:20px;";
   const allBox = document.createElement("input"); allBox.type = "checkbox"; allBox.title = S.selectAll; allBox.style.cssText = "margin:0;width:14px;height:14px;flex:none;display:block;";
-  const count = siteEl("span", "muted"); count.style.cssText = "font-size:12px;line-height:14px;display:block;";
+  const count = siteEl("span", "muted"); count.style.cssText = "font-size:12px;line-height:14px;display:block;margin:0;"; // .muted carries a top margin
   count.addEventListener("click", () => { allBox.checked = !allBox.checked; allBox.dispatchEvent(new Event("change")); });
   allWrap.append(allBox, count);
   const pub = siteEl("button", "panelbtn", S.publishSelected); pub.style.cssText = "margin:0;width:auto;"; pub.disabled = true;
