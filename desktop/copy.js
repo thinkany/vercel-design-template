@@ -1042,7 +1042,7 @@ window.COPY = {
         brief: "Summarize as a brief",
         briefRequest: "/migrate-wordpress inventory",
         briefEcho: "Summarize the WordPress import as a brief",
-        briefPane: "Reading the old site",
+        briefPane: "Importing WordPress Content",
         reveal: "Show the import files",
         open: "Import from WordPress…",
         modalTitle: "Import from WordPress",
