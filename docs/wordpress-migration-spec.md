@@ -244,6 +244,12 @@ deterministic before any UI is built.
   (`forms[]`: id, plugin, title, fields with type, label, required, choices), so
   they import into the Forms tab and an old form block binds to them the same way.
   Until then those forms appear in the report as an unresolved reference.
+- **The right pane while the skill runs.** A migration turn (Summarize as a brief,
+  Propose a mapping) is not a design edit, but the preview pane shows the generic
+  running state (`COPY.preview.updatingDesign`, "Updating your design", set in
+  shell.js around the placeholder title). Give these turns their own title and
+  icon ("Reading the old site", "Proposing where the content lands") the way the
+  Art Director review has its own, keyed off the request the panel sends.
 - **Step 2 of block options** (spec after step 1 is tested on the tax site): block
   briefs for unmapped blocks and a `/design-block` from-WordPress mode.
 
