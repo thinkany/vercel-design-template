@@ -462,6 +462,28 @@ t("mapping validates, and catches a bad id", () => {
     assert.ok(briefs["prose-wp"], "the prose block has a brief too");
     assert.equal(briefs["prose-wp"].json.uses, 1);
   });
+  t("use an existing design: pairing by name and kind, instance remap, registry removal", () => {
+    const from = { heading: { kind: "string" }, subheading: { kind: "richtext" }, image: { kind: "image" }, button: { kind: "link" }, tone: { kind: "enum", options: ["light", "dark"] }, imageSide: { kind: "enum", options: ["left", "right"] }, extraNote: { kind: "string" } };
+    const to = { eyebrow: { kind: "string" }, heading: { kind: "string" }, body: { kind: "richtext" }, image: { kind: "image" }, "image.src": { kind: "string" }, ctas: { kind: "list" }, "ctas.label": { kind: "string" }, "ctas.href": { kind: "string" }, side: { kind: "enum", options: ["left", "right"] } };
+    const p = W.proposePairing(from, to);
+    assert.equal(p.pairs.heading, "heading");
+    assert.equal(p.pairs.subheading, "body", "a synonym pairs richtext to richtext");
+    assert.equal(p.pairs.image, "image");
+    assert.equal(p.pairs.imageSide, "side");
+    assert.equal(p.pairs.button, null, "a link does not pair with a list of links on its own");
+    assert.ok(p.unpaired.includes("extraNote"));
+    const out = W.remapInstance({ heading: "Hi", subheading: "We **care**.", image: { src: "/i.avif", alt: "" }, imageSide: "right", tone: "dark", extraNote: "x" }, { ...p.pairs, button: null }, from, to, { eyebrow: "", heading: "", body: "", ctas: [{ label: "", href: "" }], side: "left" });
+    assert.deepEqual(out, { eyebrow: "", heading: "Hi", body: "We **care**.", image: { src: "/i.avif", alt: "" }, ctas: [], side: "right" });
+    // lists pair their item fields by name
+    const fromL = { items: { kind: "list" }, "items.name": { kind: "string" }, "items.text": { kind: "string" }, "items.icon": { kind: "image" } };
+    const toL = { items: { kind: "list" }, "items.title": { kind: "string" }, "items.copy": { kind: "richtext" }, "items.image": { kind: "image" } };
+    const outL = W.remapInstance({ items: [{ name: "Kids", text: "Play", icon: { src: "/k.png", alt: "" } }] }, { items: "items" }, fromL, toL, { items: [] });
+    assert.deepEqual(outL, { items: [{ title: "Kids", copy: "Play", image: { src: "/k.png", alt: "" } }] });
+    // richtext into a plain string loses its marks
+    assert.equal(W.convertValue("## Hi\n\nWe **care** [here](/x).", "richtext", "string"), "Hi We care here.");
+    const reg = 'import { hero } from "./Hero";\nimport { heroWp } from "./hero-wp";\n\nexport const blocks = {\n  hero,\n  "hero-wp": heroWp,\n};\n';
+    assert.equal(W.registryWithout(reg, "hero-wp", "heroWp"), 'import { hero } from "./Hero";\n\nexport const blocks = {\n  hero,\n};\n');
+  });
   t("edit a generated block: rename and remove props, in the file and in content", () => {
     const r = W.losslessPlan(payload, { existingKeys: ["hero"], registrySrc: "export const blocks = {\n  hero,\n};\n" });
     const feat = r.files["site/blocks/features-wp.tsx"];

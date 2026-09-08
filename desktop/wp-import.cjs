@@ -1353,6 +1353,85 @@ function buildBriefs(plan, pages, { proseKey = "prose-wp" } = {}) {
   return out;
 }
 
+// ---- use an existing design: an imported block's content onto one of the design's blocks
+// Field kinds by dotted path (the introspection shape) on both sides; a pairing is
+// proposed from names and kinds, the designer confirms, and every instance is
+// rewritten to the existing block. Deterministic, no model turn.
+const SYNONYMS = [
+  ["heading", "title", "headline", "blockTitle", "name", "label"],
+  ["body", "copy", "text", "intro", "description", "blockCopy", "content", "subheading", "lead", "summary"],
+  ["eyebrow", "kicker", "overline", "tagline", "superTitle"],
+  ["image", "photo", "picture", "media", "img", "icon", "logo", "backgroundImage", "heroImage"],
+  ["cta", "button", "link", "ctaButton", "primaryCta", "action"],
+  ["ctas", "buttons", "links", "actions"],
+  ["items", "cards", "steps", "features", "list", "entries", "rows", "blockRepeater", "faqItems", "questions", "logos", "clientLogos"],
+  ["quote", "testimonial", "body"],
+  ["author", "byLine", "attribution", "who", "name"],
+  ["side", "imageSide", "copySide", "mediaSide", "layout"],
+  ["form", "formId", "gravityFormSelect"],
+];
+const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const synGroup = (name) => { const n = norm(name); return SYNONYMS.map((g, i) => (g.some((x) => norm(x) === n) ? i : -1)).filter((i) => i >= 0); };
+const kindOf = (fields, p) => (fields[p] && fields[p].kind) || "string";
+function compatible(a, b) {
+  if (a === b) return 1;
+  const pairs = { "string:richtext": 0.9, "richtext:string": 0.7, "enum:string": 0.6, "string:enum": 0.5, "number:string": 0.5, "boolean:string": 0.2, "strings:list": 0.4, "list:strings": 0.4 };
+  return pairs[`${a}:${b}`] || 0;
+}
+/** Propose src prop → target prop for two field maps (top-level only). */
+function proposePairing(fromFields, toFields) {
+  const top = (f) => Object.keys(f).filter((k) => !k.includes("."));
+  const src = top(fromFields); const dst = top(toFields);
+  const score = (a, b) => {
+    const k = compatible(kindOf(fromFields, a), kindOf(toFields, b)); if (!k) return 0;
+    const na = norm(a), nb = norm(b);
+    let s = 0;
+    if (na === nb) s = 1; else if (na.includes(nb) || nb.includes(na)) s = 0.8; else { const ga = synGroup(a), gb = synGroup(b); if (ga.some((g) => gb.includes(g))) s = 0.7; }
+    return s ? s * k : 0;
+  };
+  const pairs = {}; const taken = new Set();
+  const cands = src.flatMap((a) => dst.map((b) => ({ a, b, s: score(a, b) }))).filter((x) => x.s > 0).sort((x, y) => y.s - x.s);
+  for (const c of cands) { if (pairs[c.a] !== undefined || taken.has(c.b)) continue; pairs[c.a] = c.b; taken.add(c.b); }
+  for (const a of src) if (pairs[a] === undefined) pairs[a] = null;
+  return { pairs, unpaired: src.filter((a) => !pairs[a]), targetsLeft: dst.filter((b) => !taken.has(b)) };
+}
+// One value moved between kinds.
+function convertValue(v, fromKind, toKind) {
+  if (v === undefined || v === null) return undefined;
+  if (fromKind === toKind) return v;
+  if (toKind === "richtext") return typeof v === "string" ? v : plainText(v);
+  if (toKind === "string") { if (typeof v === "string") return v.replace(/^#{1,6}\s+/gm, "").replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\n{2,}/g, " ").trim(); return plainText(v); }
+  if (toKind === "enum") return typeof v === "string" ? v : undefined;
+  if (toKind === "list" && Array.isArray(v)) return v.map((x) => (typeof x === "string" ? { text: x } : x));
+  if (toKind === "strings" && Array.isArray(v)) return v.map(plainText).filter(Boolean);
+  return v;
+}
+/** An instance's props rewritten for the target block. Lists pair their item fields by name. */
+function remapInstance(props, pairs, fromFields, toFields, targetDefaults = {}) {
+  const out = JSON.parse(JSON.stringify(targetDefaults || {}));
+  for (const k of Object.keys(out)) if (Array.isArray(out[k])) out[k] = [];
+  for (const [a, b] of Object.entries(pairs)) {
+    if (!b || props[a] === undefined) continue;
+    const fk = kindOf(fromFields, a), tk = kindOf(toFields, b);
+    let v = convertValue(props[a], fk, tk);
+    if (tk === "list" && Array.isArray(v) && v.length && typeof v[0] === "object") {
+      const sub = (f, p) => Object.fromEntries(Object.entries(f).filter(([k]) => k.startsWith(p + ".") && !k.slice(p.length + 1).includes(".")).map(([k, m]) => [k.slice(p.length + 1), m]));
+      const fs = sub(fromFields, a), ts = sub(toFields, b);
+      const inner = Object.keys(ts).length ? proposePairing(Object.keys(fs).length ? fs : Object.fromEntries(Object.keys(v[0]).map((k) => [k, { kind: kindOf({}, k) }])), ts).pairs : null;
+      if (inner) v = v.map((item) => { const o = {}; for (const [ia, ib] of Object.entries(inner)) if (ib && item[ia] !== undefined) o[ib] = convertValue(item[ia], kindOf(fs, ia), kindOf(ts, ib)); return o; }).filter((o) => Object.keys(o).length);
+    }
+    if (tk === "enum") { const opts = (toFields[b] && toFields[b].options) || []; if (opts.length && !opts.includes(v)) v = opts.includes(String(v).toLowerCase()) ? String(v).toLowerCase() : undefined; }
+    if (v !== undefined && v !== "" && !(Array.isArray(v) && !v.length)) out[b] = v;
+  }
+  return out;
+}
+// Remove a block from site/blocks/index.ts (its import line and its row).
+function registryWithout(src, key, ident) {
+  let out = src.replace(new RegExp(`^import \\{ ${ident} \\} from "\\./[^"]+";\\n`, "m"), "");
+  out = out.replace(new RegExp(`^\\s*"?${key.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}"?\\s*:\\s*${ident},?\\n`, "m"), "");
+  return out;
+}
+
 /**
  * Edit a generated block's schema in place (Blocks → Needs Design → Edit): rename
  * props, remove props. Works on the source the emitter wrote: the prop lines inside
@@ -1457,4 +1536,4 @@ function losslessMapping(p, plan) {
   };
 }
 
-module.exports = { PAYLOAD_KIND, PAYLOAD_VERSION, MAPPING_VERSION, fetchPayload, validatePayload, inventory, inventoryMarkdown, definitionsForSkill, mappingSkeleton, validateMapping, classifyFields, convertForm, htmlToMarkdown, transform, reportMarkdown, slugify, planBlocks, losslessPlan, losslessMapping, registryWith, blockSource, fragmentsSource, editBlockSource, editInstanceProps, buildBriefs };
+module.exports = { PAYLOAD_KIND, PAYLOAD_VERSION, MAPPING_VERSION, fetchPayload, validatePayload, inventory, inventoryMarkdown, definitionsForSkill, mappingSkeleton, validateMapping, classifyFields, convertForm, htmlToMarkdown, transform, reportMarkdown, slugify, planBlocks, losslessPlan, losslessMapping, registryWith, blockSource, fragmentsSource, editBlockSource, editInstanceProps, buildBriefs, proposePairing, remapInstance, registryWithout, convertValue };

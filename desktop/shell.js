@@ -5599,7 +5599,8 @@ function renderSiteBlocks(data) {
       const design = siteEl("button", "panelbtn primary", wpDesignTurn === b.key ? S.blockDesignRunning : S.blockUpdateDesign); design.style.cssText = "margin:0;width:auto;";
       design.disabled = !appHasKey || !!wpDesignTurn; if (!appHasKey) design.title = COPY.errors.needKey;
       design.addEventListener("click", () => openBlockDesignModal(b));
-      const use = siteEl("button", "panelbtn", S.blockUseExisting); use.style.cssText = "margin:0;width:auto;"; use.disabled = true; use.title = S.blockUseExistingSoon;
+      const use = siteEl("button", "panelbtn", S.blockUseExisting); use.style.cssText = "margin:0;width:auto;";
+      use.addEventListener("click", () => openBlockUseModal(b, data.blocks.filter((x) => !x.needsDesign), () => { if (RAILS.site.classList.contains("active")) openModal("site"); }));
       acts.append(design, edit, use); el.appendChild(acts);
     }
     return el;
@@ -5668,6 +5669,74 @@ function openBlockDesignModal(b) {
 function finishWpDesignTurn() {
   wpDesignTurn = null;
   if (RAILS.site.classList.contains("active")) { siteRailState.tab = "blocks"; openModal("site"); }
+}
+
+// Use an existing design: pick one of the design's blocks, review where each field
+// lands (proposed from names and kinds), confirm, and every instance moves over.
+function openBlockUseModal(b, targets, onDone) {
+  const U = COPY.site.blockUse;
+  const ov = siteEl("div", "blockedit");
+  const card = siteEl("div", "blockedit-card");
+  const head = siteEl("div", "blockedit-head");
+  head.appendChild(siteEl("div", "blockedit-title", U.title(b.name)));
+  const acts = siteEl("div", "blockedit-acts");
+  const cancel = siteEl("button", "panelbtn", U.cancel); cancel.style.cssText = "margin:0;width:auto;";
+  const apply = siteEl("button", "panelbtn primary", U.apply); apply.style.cssText = "margin:0;width:auto;"; apply.disabled = true;
+  acts.append(cancel, apply); head.appendChild(acts);
+  const body = siteEl("div", "blockedit-fields"); body.style.cssText = "flex:1;overflow:auto;padding:16px 20px;";
+  body.appendChild(siteEl("div", "sess-desc", U.intro));
+  const kv = siteEl("div", "site-kv"); kv.appendChild(siteEl("div", "k", U.target));
+  const sel = document.createElement("select"); sel.className = "field";
+  const o0 = document.createElement("option"); o0.value = ""; o0.textContent = U.pick; sel.appendChild(o0);
+  targets.forEach((t) => { const o = document.createElement("option"); o.value = t.key; o.textContent = t.name; sel.appendChild(o); });
+  kv.appendChild(sel); body.appendChild(kv);
+  const host = siteEl("div"); body.appendChild(host);
+  const note = siteEl("div", "muted"); note.style.cssText = "font-size:12px;margin:6px 0 10px;"; body.appendChild(note);
+  const derived = (k) => k.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
+  let pairs = {}; let toFields = {};
+  const paintPairs = (p) => {
+    host.innerHTML = ""; pairs = { ...p.pairs }; toFields = p.toFields;
+    host.appendChild(siteEl("div", "k", U.pairing)).style.marginTop = "10px";
+    for (const a of Object.keys(p.fromFields)) {
+      const row = siteEl("div"); row.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:6px;";
+      row.appendChild(siteEl("span", "", (b.labels && b.labels[a]) || derived(a))).style.cssText = "width:40%;font-size:13px;";
+      row.appendChild(siteEl("span", "muted", "→"));
+      const s = document.createElement("select"); s.className = "field"; s.style.cssText = "margin:0;flex:1;";
+      const oNone = document.createElement("option"); oNone.value = ""; oNone.textContent = U.drop; s.appendChild(oNone);
+      for (const t of Object.keys(p.toFields)) { const o = document.createElement("option"); o.value = t; o.textContent = `${derived(t)} (${(p.toFields[t] && p.toFields[t].kind) || "string"})`; s.appendChild(o); }
+      s.value = p.pairs[a] || "";
+      s.addEventListener("change", () => { pairs[a] = s.value || null; const n = Object.values(pairs).filter((x) => !x).length; note.textContent = n ? U.unpaired(n) : ""; });
+      row.appendChild(s); host.appendChild(row);
+    }
+    const n = Object.values(pairs).filter((x) => !x).length; note.textContent = n ? U.unpaired(n) : ""; note.style.color = "";
+    apply.disabled = false;
+  };
+  sel.addEventListener("change", async () => {
+    apply.disabled = true; host.innerHTML = ""; note.textContent = "";
+    if (!sel.value) return;
+    const r = await window.desktop.wpPairing(b.key, sel.value);
+    if (!r || !r.ok) { note.textContent = (r && r.error) || "Couldn't propose a pairing."; note.style.color = "#e5484d"; return; }
+    paintPairs(r);
+  });
+  card.append(head, body); ov.appendChild(card);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey, true); };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  cancel.addEventListener("click", close);
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  apply.addEventListener("click", async () => {
+    const t = targets.find((x) => x.key === sel.value); if (!t) return;
+    const dropped = Object.values(pairs).filter((x) => !x).length;
+    const uses = (renderSitePage.pages || []).reduce((n, p) => n + (p.blocks || []).filter((x) => x.type === b.key).length, 0);
+    if (!(await askConfirm({ title: U.confirmTitle(b.name, t.name), message: U.confirm(uses, dropped), okLabel: U.confirmOk, danger: true }))) return;
+    apply.disabled = true;
+    const r = await window.desktop.wpUseExisting(b.key, t.key, pairs);
+    apply.disabled = false;
+    if (!r || !r.ok) { note.textContent = (r && r.error) || "Couldn't replace the block."; note.style.color = "#e5484d"; return; }
+    close(); if (onDone) onDone(r);
+  });
+  document.addEventListener("keydown", onKey, true);
+  document.body.appendChild(ov);
+  return { close };
 }
 
 // The fields of an imported block: rename, remove; applied to the block file and every

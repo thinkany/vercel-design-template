@@ -186,6 +186,8 @@ contextBridge.exposeInMainWorld("desktop", {
   wpBrief: (key) => ipcRenderer.invoke("wp:brief", { key }),
   wpForget: () => ipcRenderer.invoke("wp:forget"),
   wpEditBlock: (key, renames, removes) => ipcRenderer.invoke("wp:editBlock", { key, renames, removes }),
+  wpPairing: (key, target) => ipcRenderer.invoke("wp:pairing", { key, target }),
+  wpUseExisting: (key, target, pairs) => ipcRenderer.invoke("wp:useExisting", { key, target, pairs }),
   saveBlockNames: (names) => ipcRenderer.invoke("site:saveBlockNames", { names }),
   saveFieldLabels: (key, labels) => ipcRenderer.invoke("site:saveFieldLabels", { key, labels }),
   replaceHomeBlocks: (from) => ipcRenderer.invoke("site:replaceHomeBlocks", { from }),

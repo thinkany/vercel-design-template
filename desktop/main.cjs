@@ -2216,6 +2216,53 @@ ipcMain.handle("site:replaceHomeBlocks", (_e, { from } = {}) => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 
+// Use an existing design (Blocks → Needs Design): propose how an imported block's
+// fields land on one of the design's blocks, then rewrite every instance to that
+// block and remove the generated one. No model turn: names and kinds decide, the
+// designer confirms.
+ipcMain.handle("wp:pairing", (_e, { key, target } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const all = wpBlocks(currentProject);
+  const from = all.find((b) => b.key === key), to = all.find((b) => b.key === target);
+  if (!from || !to) return { ok: false, error: "Pick a block." };
+  const p = wpImport.proposePairing(from.fields || {}, to.fields || {});
+  const top = (f) => Object.keys(f).filter((k) => !k.includes("."));
+  return { ok: true, pairs: p.pairs, unpaired: p.unpaired, fromFields: Object.fromEntries(top(from.fields || {}).map((k) => [k, from.fields[k]])), toFields: Object.fromEntries(top(to.fields || {}).map((k) => [k, to.fields[k]])) };
+});
+ipcMain.handle("wp:useExisting", (_e, { key, target, pairs } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const dir = currentProject;
+  const reg = readBlockRegistry(dir);
+  const from = reg.find((b) => b.key === key);
+  if (!from || !from.needsDesign) return { ok: false, error: "Only a block that still needs design can be replaced." };
+  const all = wpBlocks(dir);
+  const f = all.find((b) => b.key === key), t = all.find((b) => b.key === target);
+  if (!f || !t) return { ok: false, error: "Pick a block." };
+  const clean = Object.fromEntries(Object.entries(pairs || {}).filter(([a, b]) => a in (f.fields || {}) && (b === null || b in (t.fields || {}))));
+  try {
+    let touched = 0, instances = 0;
+    const fix = (doc) => { let hit = false; (doc.blocks || []).forEach((b, i) => { if (b.type !== key) return; doc.blocks[i] = { type: target, props: wpImport.remapInstance(b.props || {}, clean, f.fields || {}, t.fields || {}, t.defaults || {}) }; hit = true; instances++; }); return hit; };
+    const pagesDir = path.join(siteContentDir(dir), "pages");
+    for (const fn of (() => { try { return fs.readdirSync(pagesDir); } catch { return []; } })()) { if (!fn.endsWith(".json")) continue; const p = path.join(pagesDir, fn); const doc = readJsonFile(p); if (doc && fix(doc)) { fs.writeFileSync(p, JSON.stringify(doc, null, 2) + "\n"); touched++; } }
+    for (const ty of readTypes(dir)) {
+      for (const e of readEntries(dir, ty.key)) { const p = entryFile(dir, ty.key, e.id); const doc = readJsonFile(p); if (doc && Array.isArray(doc.blocks) && fix(doc)) { fs.writeFileSync(p, JSON.stringify(doc, null, 2) + "\n"); touched++; } }
+      if (Array.isArray(ty.template) && fix({ blocks: ty.template })) { const types = readTypes(dir); const i = types.findIndex((x) => x.key === ty.key); if (i >= 0) { types[i].template = ty.template; writeTypes(dir, types); touched++; } }
+    }
+    // the generated block goes: its file, its registry row, its brief, its display name and labels
+    const idxPath = path.join(dir, "site", "blocks", "index.ts");
+    const ident = ((readTextSafe(idxPath).match(new RegExp(`import \\{ ([A-Za-z0-9_]+) \\} from "\\./${from.file.replace(/\.tsx$/, "")}"`)) || [])[1]) || "";
+    if (ident) fs.writeFileSync(idxPath, wpImport.registryWithout(readTextSafe(idxPath), key, ident));
+    try { fs.unlinkSync(path.join(dir, "site", "blocks", from.file)); } catch {}
+    try { fs.unlinkSync(wpFile(dir, path.join("briefs", `${key}.json`))); fs.unlinkSync(wpFile(dir, path.join("briefs", `${key}.md`))); } catch {}
+    const sp = path.join(siteContentDir(dir), "site.json"); const site = readJsonFile(sp);
+    if (site) { let ch = false; if (site.blockNames && site.blockNames[key]) { delete site.blockNames[key]; ch = true; } if (site.blockFieldLabels && site.blockFieldLabels[key]) { delete site.blockFieldLabels[key]; ch = true; } if (ch) fs.writeFileSync(sp, JSON.stringify(site, null, 2) + "\n"); }
+    try { fs.rmSync(path.join(dir, ".thinkany", "blocks.json"), { force: true }); } catch {}
+    appLog.write(`[wp] use existing: ${key} → ${target}, ${instances} instance(s) in ${touched} file(s)`);
+    return { ok: true, instances, touched };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
 // Block display names (the Blocks tab): recognition in the CMS only.
 ipcMain.handle("site:saveBlockNames", (_e, { names } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };

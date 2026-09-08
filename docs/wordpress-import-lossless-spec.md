@@ -27,7 +27,13 @@ renders, `needsDesign: false`, one instance per missing option value on the firs
 page); Update design in the Blocks tab opens a one-line direction prompt with the
 brief folded under it and runs the turn; the Blocks tab re-renders when the turn
 ends. The import modal replaced the inline panel (staged like Get Designing).
-Not yet run on tax.local. Use an existing design and P4 not built.
+P3 run on tax.local 2026-09-08 (Rob: the design pass works). **Use an existing
+design BUILT 2026-09-08**: deterministic pairing by name and kind (synonym groups:
+heading/title, body/copy, image/photo/icon, cta/button, items/cards…), shown for the
+designer to adjust, then every instance rewritten to the design's block (lists pair
+their item fields the same way, richtext into a plain string loses its marks) and the
+generated block removed with its brief and labels. Home → Advanced → overwrite from
+another page also landed. P4 not built.
 
 ## The idea in one paragraph
 
