@@ -95,7 +95,8 @@ t("skeleton has every slot", () => {
   assert.deepEqual(sk.blocks["acf/hero"]._wpFields.sort(), ["button", "extra_note", "heading", "hero_copy", "image", "subheading"]);
   assert.deepEqual(sk.blocks["acf/hero"]._layoutFields.sort(), ["deactivate_block", "hero_height", "hide_on_mobile", "padding", "section_id"]);
   assert.equal(sk.blocks["acf/hero"].skipWhen, "deactivate_block");
-  assert.equal(sk.nav, "primary");
+  assert.equal(sk.nav.main, "primary");
+  assert.deepEqual(sk.nav.footer, ["footer-one", "footer-two"]);
   assert.equal(sk.types.team.include, false);
   assert.equal(sk.availableBlocks.length, 6);
 });
@@ -158,7 +159,7 @@ const mapping = {
   tables: { block: "table", rows: "rows", header: "header", caption: "caption" },
   posts: { import: true, type: "post", categoriesAsTags: true },
   types: { team: { include: true, key: "team", label: "Team", singular: "Team member", path: "/team", fields: { role: "role", bio: { key: "bio" }, photo: "photo", accepting: "accepting" } } },
-  nav: "primary",
+  nav: { main: "primary", footer: ["footer-one", "footer-two"] },
   media: { download: true, folder: "wp" },
 };
 
@@ -276,6 +277,11 @@ t("mapping validates, and catches a bad id", () => {
     assert.equal(site.design, "v01");
     assert.deepEqual(site.nav.map((n) => [n.label, n.href, (n.links || []).map((l) => l.href)]), [["Home", "/", []], ["About Us", "/about", ["/about/team"]], ["Services", "/services", []], ["Blog", "/", []], ["Book", "https://booking.example/harbor", []]]);
     assert.equal(site.seo.siteName, "Harbor Dental");
+    assert.deepEqual(site.footerLinks, [
+      { label: "Footer One", href: "", links: [{ label: "About Us", href: "/about" }, { label: "Privacy", href: "/privacy" }] },
+      { label: "Footer Two", href: "", links: [{ label: "Book", href: "https://booking.example/harbor" }] },
+    ], "several footer menus become columns headed by the menu name");
+    assert.deepEqual(rep.nav, { main: "Primary", footer: ["Footer One", "Footer Two"] });
     const red = Object.fromEntries(site.redirects.map((r) => [r.from, r.to]));
     assert.equal(red["/legacy"], "/");
     assert.equal(red["/about-us"], "/about");

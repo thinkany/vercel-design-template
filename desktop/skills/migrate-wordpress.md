@@ -110,7 +110,7 @@ the transform doesn't read.** The transform reads exactly these:
   "posts": { "import": true, "type": "post", "categoriesAsTags": true },
   "types": { "team": { "include": true, "key": "team", "label": "Team", "singular": "Team member", "path": "/team",
              "fields": { "role": "role", "bio": { "key": "bio" }, "photo": "photo", "accepting": "accepting" } } },
-  "nav": "primary",
+  "nav": { "main": "primary", "footer": ["footer-one", "footer-two"] },   // null / [] keeps the design's own menu; several footer menus become columns
   "forms": { "import": true },   // every Gravity Forms / WPForms form becomes a form in the Forms tab
   "media": { "download": true, "folder": "wp" }
 }
@@ -179,8 +179,12 @@ Rules for a good proposal:
 - **Types.** Include a custom type when its entries are real content (team, services,
   locations). Keys are lowercase with dashes; paths start with `/`. Map each ACF
   field to a camelCase key; the kind comes from the ACF type unless you set one.
-- **Nav.** The menu in the primary/header location, by slug. External links and
-  page links both carry over.
+- **Nav.** Two parts, each optional: `main` is the menu in the primary/header
+  location, `footer` the footer menus (`_menus` in the skeleton lists them all with
+  their locations). Several footer menus become footer columns headed by each
+  menu's name, which is how WordPress footers are usually built. Set `main` to
+  null or `footer` to [] to keep the design's own; say so when the old links point
+  nowhere. External links and page links both carry over.
 - **Posts.** Import unless the site has none worth keeping; categories become tags.
 
 After writing the file, tell the designer, in section terms, what lands where, what

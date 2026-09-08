@@ -92,6 +92,59 @@
             "target": "_blank"
           }
         ]
+      },
+      {
+        "id": 4,
+        "name": "Footer One",
+        "slug": "footer-one",
+        "locations": [
+          "footer_1"
+        ],
+        "items": [
+          {
+            "id": 201,
+            "parent": 0,
+            "order": 1,
+            "title": "About Us",
+            "url": "https://harbordental.example/about-us/",
+            "type": "post_type",
+            "object": "page",
+            "objectId": 12,
+            "target": ""
+          },
+          {
+            "id": 202,
+            "parent": 0,
+            "order": 2,
+            "title": "Privacy",
+            "url": "https://harbordental.example/privacy/",
+            "type": "custom",
+            "object": "custom",
+            "objectId": 0,
+            "target": ""
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "name": "Footer Two",
+        "slug": "footer-two",
+        "locations": [
+          "footer_2"
+        ],
+        "items": [
+          {
+            "id": 301,
+            "parent": 0,
+            "order": 1,
+            "title": "Book",
+            "url": "https://booking.example/harbor",
+            "type": "custom",
+            "object": "custom",
+            "objectId": 0,
+            "target": "_blank"
+          }
+        ]
       }
     ],
     "options": {

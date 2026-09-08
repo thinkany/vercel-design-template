@@ -286,12 +286,14 @@ function mappingSkeleton(p, blocks = []) {
   const inv = inventory(p);
   const defs = p.definitions || {};
   const menus = (p.site && p.site.menus) || [];
-  const primary = menus.find((m) => (m.locations || []).some((l) => /primary|main|header/i.test(l))) || menus[0];
+  const isFooter = (m) => (m.locations || []).some((l) => /footer/i.test(l)) || /footer/i.test(m.name || "") || /footer/i.test(m.slug || "");
+  const primary = menus.find((m) => (m.locations || []).some((l) => /primary|main|header/i.test(l))) || menus.find((m) => !isFooter(m)) || null;
+  const footers = menus.filter((m) => isFooter(m) && m !== primary).map((m) => m.slug);
   const acfNames = Array.from(new Set([...(defs.blocks || []).map((b) => b.name), ...Object.keys(inv.blockTypes).filter((n) => n.startsWith("acf/"))]));
   const sampleFields = (name) => { const b = inv.acfBlocks.find((x) => x.name === name) || {}; return [...(b.fields || []), ...(b.layoutFields || [])]; };
   return {
     version: MAPPING_VERSION,
-    _about: "Targets are empty until confirmed. A page with include:false is skipped (its old address redirects to the nearest kept ancestor). blocks: old ACF block name → new block key + prop ← field. A field value that starts with = is a constant. skipWhen names an old field that, when set, means the block was switched off on the old site (the instance is skipped). _variants are the old block's options in use (a side, a layout type, a switch that reveals fields): map one to a prop with { from, map } when the new block has such an option; with carry: true (the default) every variant value is also kept on the imported instance under _wp, for the design pass.",
+    _about: "Targets are empty until confirmed. A page with include:false is skipped (its old address redirects to the nearest kept ancestor). blocks: old ACF block name → new block key + prop ← field. A field value that starts with = is a constant. nav.main and nav.footer name the menus to import (null / [] keeps the design's own). skipWhen names an old field that, when set, means the block was switched off on the old site (the instance is skipped). _variants are the old block's options in use (a side, a layout type, a switch that reveals fields): map one to a prop with { from, map } when the new block has such an option; with carry: true (the default) every variant value is also kept on the imported instance under _wp, for the design pass.",
     availableBlocks: blocks.map((b) => ({ key: b.key, name: b.name, fields: Object.keys(b.fields || {}) })),
     pages: inv.pages.sort((a, b) => (a.home ? -1 : b.home ? 1 : a.path.localeCompare(b.path))).map((x) => ({
       wp: x.id, title: x.title, wpPath: x.path, page: x.home ? "home" : slugify(x.path.split("/").filter(Boolean).pop() || x.title), parent: null, include: x.status === "publish" || x.status === "draft",
@@ -309,7 +311,9 @@ function mappingSkeleton(p, blocks = []) {
     tables: { block: "table", rows: "rows", header: "header", caption: "caption" },
     posts: { import: (inv.counts.posts || 0) > 0, type: "post", categoriesAsTags: true },
     types: Object.fromEntries(inv.customTypes.map((t) => [t.key, { include: false, key: slugify(t.key), label: t.label, path: `/${slugify(t.key)}`, fields: {} }])),
-    nav: primary ? primary.slug : null,
+    // nav: main replaces the header menu (null keeps the design's); footer lists the menus
+    // that become footer columns, one column per menu, headed by the menu's name ([] keeps the design's).
+    nav: { main: primary ? primary.slug : null, footer: footers, _menus: menus.map((m) => ({ slug: m.slug, name: m.name, locations: m.locations || [], items: (m.items || []).length })) },
     forms: { import: (p.forms || []).length > 0, _found: (p.forms || []).map((f) => ({ id: String(f.id), plugin: f.plugin, title: f.title, fields: (f.fields || []).length })) },
     media: { download: true, folder: "wp" },
   };
@@ -864,16 +868,21 @@ async function transform(projectDir, payload, mapping, { blocks = [], fetchMedia
 
   // ---- site.json: nav, site name, redirects
   const siteJson = readJson(path.join("content", "site.json")) || { design: "v00", nav: [], footerLinks: [] };
-  if (mapping.nav) {
-    const menu = (site.menus || []).find((m) => m.slug === mapping.nav || String(m.id) === String(mapping.nav));
-    if (menu) {
-      const hrefOf = (it) => { if (it.object === "page" && it.objectId) { const r = routeOfPage(it.objectId); if (r != null) return "/" + r; } return rewriteUrl(it.url); };
-      const items = [...(menu.items || [])].sort((a, b) => a.order - b.order);
-      const top = items.filter((it) => !it.parent);
-      siteJson.nav = top.map((it) => ({ label: plainText(it.title), href: hrefOf(it), links: items.filter((c) => c.parent === it.id).map((c) => ({ label: plainText(c.title), href: hrefOf(c) })) })).map((n) => (n.links.length ? n : { label: n.label, href: n.href }));
-      siteJson.manageNav = true;
-    }
+  // Navigation: `nav` is { main, footer } (a bare string is the main menu, the old shape).
+  const navCfg = typeof mapping.nav === "string" || mapping.nav === null ? { main: mapping.nav, footer: [] } : (mapping.nav || {});
+  const menuOf = (ref) => (site.menus || []).find((m) => m.slug === ref || String(m.id) === String(ref) || m.name === ref);
+  const hrefOf = (it) => { if (it.object === "page" && it.objectId) { const r = routeOfPage(it.objectId); if (r != null) return "/" + r; } return rewriteUrl(it.url); };
+  const menuTree = (menu) => { const items = [...(menu.items || [])].sort((a, b) => a.order - b.order); return items.filter((it) => !it.parent).map((it) => ({ label: plainText(it.title), href: hrefOf(it), links: items.filter((c) => c.parent === it.id).map((c) => ({ label: plainText(c.title), href: hrefOf(c) })) })); };
+  const mainMenu = navCfg.main ? menuOf(navCfg.main) : null;
+  if (mainMenu) { siteJson.nav = menuTree(mainMenu).map((n) => (n.links.length ? n : { label: n.label, href: n.href })); siteJson.manageNav = true; }
+  const footerMenus = (Array.isArray(navCfg.footer) ? navCfg.footer : navCfg.footer ? [navCfg.footer] : []).map(menuOf).filter(Boolean);
+  if (footerMenus.length) {
+    // One menu → a flat list of links. Several → one column per menu, headed by the menu's name.
+    siteJson.footerLinks = footerMenus.length === 1
+      ? menuTree(footerMenus[0]).flatMap((n) => [{ label: n.label, href: n.href }, ...n.links])
+      : footerMenus.map((m) => ({ label: plainText(m.name || m.slug), href: "", links: menuTree(m).flatMap((n) => [{ label: n.label, href: n.href }, ...n.links]) }));
   }
+  report.nav = { main: mainMenu ? mainMenu.name : null, footer: footerMenus.map((m) => m.name) };
   if (site.name && !(siteJson.seo && siteJson.seo.siteName)) siteJson.seo = { ...(siteJson.seo || {}), siteName: site.name };
   const have = new Map((siteJson.redirects || []).map((r) => [r.from.toLowerCase(), r]));
   let added = 0;
@@ -896,6 +905,7 @@ function reportMarkdown(rep) {
   const ub = Object.entries(rep.unmappedBlocks);
   if (ub.length) L.push("", "## Blocks with no destination (dropped)", "", ...ub.map(([n, k]) => `- ${n} ×${k}`));
   if (rep.skipped && rep.skipped.length) L.push("", "## Switched off on the old site (skipped)", "", ...rep.skipped.map((x) => `- ${x.where}: ${x.block}`));
+  if (rep.nav && (rep.nav.main || (rep.nav.footer || []).length)) L.push(`- Navigation: ${rep.nav.main ? `header menu from "${rep.nav.main}"` : "header menu kept"}${(rep.nav.footer || []).length ? `; footer from ${rep.nav.footer.map((n) => `"${n}"`).join(", ")}${rep.nav.footer.length > 1 ? " as columns" : ""}` : ""}.`);
   const vr = Object.entries(rep.variants || {}).map(([n, fs]) => [n, Object.entries(fs).filter(([, c]) => Object.keys(c).some((k) => k !== "(empty)"))]).filter(([, fs]) => fs.length);
   if (vr.length) L.push("", "## Options seen on the old blocks", "", "Kept on each imported instance under _wp, for the design pass.", "", ...vr.map(([n, fs]) => `- ${n}: ${fs.map(([f, c]) => `${f} (${Object.entries(c).map(([k, x]) => `${k} ×${x}`).join(", ")})`).join("; ")}`));
   const uf = Object.entries(rep.unmappedFields);
