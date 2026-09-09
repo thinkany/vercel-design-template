@@ -94,4 +94,17 @@ t("clean survives a bad reply", () => {
   assert.deepEqual(SEO.clean(null, null), { title: "", description: "", keyphrase: "" });
 });
 
+t("merge replaces the text fields and fills schema and image only when empty", () => {
+  const seo = SEO.merge({ title: "old", jsonld: "{}", image: "/keep.jpg", noindex: true }, { title: "new", description: "d", keyphrase: "k", jsonld: "[]", image: "/new.jpg" });
+  assert.deepEqual(seo, { title: "new", description: "d", keyphrase: "k", jsonld: "{}", image: "/keep.jpg", noindex: true });
+  assert.deepEqual(SEO.merge({}, { title: "t", description: "", jsonld: "[]", image: "/i.jpg" }), { title: "t", jsonld: "[]", image: "/i.jpg" });
+});
+
+t("hasSeo needs a title and a description", () => {
+  assert.equal(SEO.hasSeo({ title: "t", description: "d" }), true);
+  assert.equal(SEO.hasSeo({ title: "t" }), false);
+  assert.equal(SEO.hasSeo({ title: " ", description: "d" }), false);
+  assert.equal(SEO.hasSeo(undefined), false);
+});
+
 if (!process.exitCode) console.log(`✓ ${passed} passed`);

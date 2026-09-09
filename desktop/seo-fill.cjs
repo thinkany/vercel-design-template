@@ -186,4 +186,17 @@ function clean(raw, existingSeo) {
   return out;
 }
 
-module.exports = { contentText, firstImage, prompt, clean, SCHEMA, plainMarkdown, TITLE_MAX, DESC_MAX };
+// What a fill writes into an entry's seo: the text fields it returned; a custom
+// schema or a share image only into an empty field (a hand-written one stays).
+// The editor's siteSeoApply in shell.js is the same rule.
+function merge(seo, s) {
+  const out = seo && typeof seo === "object" ? seo : {};
+  for (const k of ["title", "description", "keyphrase"]) if (s && s[k]) out[k] = s[k];
+  if (s && s.jsonld && !out.jsonld) out.jsonld = s.jsonld;
+  if (s && s.image && !out.image) out.image = s.image;
+  return out;
+}
+// Filled = a title and a description; the bulk pass skips these unless asked to rewrite.
+function hasSeo(seo) { return !!(seo && typeof seo === "object" && String(seo.title || "").trim() && String(seo.description || "").trim()); }
+
+module.exports = { contentText, firstImage, prompt, clean, merge, hasSeo, SCHEMA, plainMarkdown, TITLE_MAX, DESC_MAX };

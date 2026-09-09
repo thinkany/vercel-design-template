@@ -3344,25 +3344,30 @@ function siteMini(label, onClick, { danger, title, disabled } = {}) {
 // chat turn) that writes the SEO fields from what's being edited, unsaved edits
 // included, then fills the fields for the designer to review and save. While it
 // runs the button becomes the message with animated dots. `payload` is read at
-// click time; `apply` writes the result into the draft and the inputs.
+// click time; `apply` writes the result into the draft and the inputs. The bulk
+// pass in Settings passes its own `run` and `done` instead, and moves the working
+// text along with `row.progress(text)`.
 const ICON_AI = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M7.2 1.6c.2-.6 1-.6 1.2 0l1.3 3.6 3.6 1.3c.6.2.6 1 0 1.2L9.7 9l-1.3 3.6c-.2.6-1 .6-1.2 0L5.9 9 2.3 7.7c-.6-.2-.6-1 0-1.2l3.6-1.3z"/><path d="M12.6 10.2c.1-.3.5-.3.6 0l.5 1.3 1.3.5c.3.1.3.5 0 .6l-1.3.5-.5 1.3c-.1.3-.5.3-.6 0l-.5-1.3-1.3-.5c-.3-.1-.3-.5 0-.6l1.3-.5z"/></svg>';
-function siteSeoFill({ payload, apply }) {
+function siteSeoFill({ payload, apply, run, done, label, title }) {
   const S = COPY.site;
   const row = siteEl("div", "site-seo-fill");
-  const btn = siteEl("button", "site-mini site-ai"); btn.type = "button"; btn.title = S.seoFillTitle;
+  const btn = siteEl("button", "site-mini site-ai"); btn.type = "button"; btn.title = title || S.seoFillTitle;
   const note = siteEl("div", "sess-desc"); note.style.margin = "4px 0 0";
-  const idle = () => { btn.classList.remove("working"); btn.innerHTML = ICON_AI + "<span></span>"; btn.lastChild.textContent = S.seoFill; btn.disabled = false; };
+  const working = siteEl("span");
+  const idle = () => { btn.classList.remove("working"); btn.innerHTML = ICON_AI + "<span></span>"; btn.lastChild.textContent = label || S.seoFill; btn.disabled = false; };
   idle();
   btn.addEventListener("click", async () => {
     btn.disabled = true; btn.classList.add("working");
-    btn.innerHTML = "<span></span><span class=\"ta-dots site-ai-dots\"><i></i><i></i><i></i></span>"; btn.firstChild.textContent = S.seoFillWorking;
+    btn.innerHTML = "<span class=\"ta-dots site-ai-dots\"><i></i><i></i><i></i></span>"; working.textContent = S.seoFillWorking; btn.prepend(working);
     note.textContent = ""; note.style.color = "";
-    let r; try { r = await window.desktop.seoFill(payload()); } catch (e) { r = { ok: false, error: e.message }; }
+    let r; try { r = run ? await run() : await window.desktop.seoFill(payload()); } catch (e) { r = { ok: false, error: e.message }; }
     idle();
-    if (r && r.ok) { apply(r.seo); siteFlash(note, S.seoFillDone); }
+    if (r && r.ok) { if (apply) apply(r.seo); if (done) done(r); else siteFlash(note, S.seoFillDone); }
     else { note.textContent = r && r.reason === "no-key" ? S.seoFillNoKey : ((r && r.error) || S.seoFillFail); note.style.color = "#e5484d"; }
   });
   row.append(btn, note);
+  row.note = note;
+  row.progress = (text) => { working.textContent = text; };
   return row;
 }
 // What the fill writes: the text fields it returned; a custom schema or a share image
@@ -6094,6 +6099,32 @@ async function renderSiteSettings(host, data, st) {
   sepWrap.appendChild(sepHint); wrap.appendChild(sepWrap);
   const si = siteImageControl(seo.image || "", (next) => { seo.image = next ? next.src : ""; saveSeo(); }, { label: S.siteImageLabel, noAlt: true });
   si.appendChild(siteEl("div", "sess-desc", S.siteImageHint)); wrap.appendChild(si);
+  // SEO for the whole site: one button, no review step (Rob). The result line
+  // outlives the drawer's re-render (the lists must show the new fields).
+  const fillBox = siteEl("div", "site-kv"); fillBox.appendChild(siteEl("div", "k", S.fillAllLabel));
+  fillBox.appendChild(siteEl("div", "sess-desc", S.fillAllHint));
+  const fillRewrite = toggle(S.fillAllRewrite, S.fillAllRewriteHint, false, () => {});
+  fillBox.append(fillRewrite.row, fillRewrite.hint);
+  const fillRow = siteSeoFill({
+    label: S.fillAllButton, title: S.fillAllHint,
+    run: async () => {
+      const off = window.desktop.onSeoProgress((p) => fillRow.progress(S.fillAllProgress(p.done, p.total)));
+      try { return await window.desktop.seoFillAll({ rewrite: fillRewrite.cb.checked }); } finally { off(); }
+    },
+    done: (r) => {
+      renderSiteSettings.lastFill = r;
+      if ((r.filled || r.failed.length) && RAILS.site.classList.contains("active")) openModal("site"); // the drawer reads the files again
+      else paintFillResult(r);
+    },
+  });
+  const paintFillResult = (r) => {
+    if (!r) return;
+    const n = fillRow.note; n.style.color = "";
+    n.textContent = !r.filled && !r.failed.length && r.skipped ? S.fillAllNothing : S.fillAllDone(r.filled, r.skipped, r.failed.length);
+    for (const f of r.failed) { const d = siteEl("div", "", `${f.title}: ${f.error}`); d.style.color = "#e5484d"; n.appendChild(d); }
+  };
+  if (renderSiteSettings.lastFill) { paintFillResult(renderSiteSettings.lastFill); renderSiteSettings.lastFill = null; }
+  fillBox.appendChild(fillRow); wrap.appendChild(fillBox);
   // Structured data: who publishes the site. Generated into every page's JSON-LD.
   seo.schema = seo.schema && typeof seo.schema === "object" ? seo.schema : { type: "Organization", sameAs: [] };
   const sch = siteFoldInline(S.schemaHeading);

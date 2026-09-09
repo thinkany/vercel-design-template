@@ -3829,9 +3829,7 @@ ipcMain.handle("narrate:line", async (_e, { phase, title, bits } = {}) => {
 // adds the site's context and asks the model for the fields in one structured
 // call. Not an agent turn: nothing reaches the chat or the disk. The editor fills
 // its fields; the designer reviews and saves. Pure half: desktop/seo-fill.cjs.
-ipcMain.handle("seo:fill", async (_e, payload = {}) => {
-  if (!currentProject) return { ok: false, error: "No project is open." };
-  if (!process.env.ANTHROPIC_API_KEY) return { ok: false, reason: "no-key" };
+async function seoFillOne(payload) {
   const SEO = require("./seo-fill.cjs");
   const site = siteJsonOf(currentProject);
   const settings = seoSettings(site.seo);
@@ -3866,6 +3864,66 @@ ipcMain.handle("seo:fill", async (_e, payload = {}) => {
     const m = e && e.status ? `${e.status}: ${(e.error && e.error.error && e.error.error.message) || e.message}` : (e && e.message) || String(e);
     return { ok: false, error: m };
   }
+}
+ipcMain.handle("seo:fill", async (_e, payload = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!process.env.ANTHROPIC_API_KEY) return { ok: false, reason: "no-key" };
+  return seoFillOne(payload);
+});
+// The whole site at once (Settings, Search engines): every page, post and entry
+// without a title and description gets them written from its content, straight to
+// its file, three at a time; the designer reviews in the editors. `rewrite` also
+// redoes the ones already filled. Progress goes to the renderer as seo:progress.
+let seoFillAllRunning = false;
+ipcMain.handle("seo:fillAll", async (_e, { rewrite } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!process.env.ANTHROPIC_API_KEY) return { ok: false, reason: "no-key" };
+  if (seoFillAllRunning) return { ok: false, error: "A fill is already running." };
+  seoFillAllRunning = true;
+  const dir = currentProject;
+  const SEO = require("./seo-fill.cjs");
+  try {
+    const targets = [];
+    const site = siteJsonOf(dir);
+    const blog = blogPathOf(site);
+    for (const p of readSiteContent(dir).pages) targets.push({
+      kind: "page", title: p.title, seo: p.seo || {},
+      payload: { kind: "page", title: p.title, route: p.id === "home" ? "/" : "/" + (p.route || p.slug || p.id), blocks: p.blocks, seo: p.seo || {} },
+      write: (seo) => { const f = pageFile(dir, p.id); const doc = readJsonFile(f); if (!doc) throw new Error("page file missing"); doc.seo = seo; fs.writeFileSync(f, JSON.stringify(doc, null, 2) + "\n"); },
+    });
+    for (const p of readPosts(dir)) targets.push({
+      kind: "post", title: p.title, seo: p.seo || {},
+      payload: { kind: "post", title: p.title, route: `/${blog}/${p.slug || p.id}`, description: p.description, body: p.body, tags: p.tags, date: p.date, image: p.image, seo: p.seo || {} },
+      write: (seo) => { const f = postFile(dir, p.id); const cur = parseFrontmatter(readTextSafe(f)); cur.data.seo = seo; fs.writeFileSync(f, serializeFrontmatter(cur.data, cur.unknown) + "\n" + cur.body.replace(/^\s*\n/, "")); },
+    });
+    for (const t of readTypes(dir)) for (const e of readEntries(dir, t.key)) targets.push({
+      kind: "entry", title: e.title, seo: e.seo || {},
+      payload: { kind: "entry", typeLabel: t.singular || t.label, title: e.title, route: `${t.path}/${e.slug || e.id}`, fields: (t.fields || []).map((f) => ({ label: f.label, kind: f.kind, value: e[f.key] })), blocks: Array.isArray(e.blocks) ? e.blocks : null, seo: e.seo || {} },
+      write: (seo) => { const f = entryFile(dir, t.key, e.id); const doc = readJsonFile(f); if (!doc) throw new Error("entry file missing"); doc.seo = seo; fs.writeFileSync(f, JSON.stringify(doc, null, 2) + "\n"); },
+    });
+    const todo = targets.filter((t) => rewrite || !SEO.hasSeo(t.seo));
+    const skipped = targets.length - todo.length;
+    const failed = []; let filled = 0, done = 0;
+    const progress = () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("seo:progress", { done, total: todo.length }); };
+    progress();
+    let next = 0;
+    const worker = async () => {
+      while (next < todo.length) {
+        const t = todo[next++];
+        const r = await seoFillOne(t.payload);
+        if (r.ok) {
+          try { t.write(SEO.merge({ ...t.seo }, r.seo)); filled++; }
+          catch (e) { failed.push({ title: t.title, error: e.message }); }
+        } else failed.push({ title: t.title, error: r.error || "no reply" });
+        done++; progress();
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    if (appLog.isEnabled()) appLog.write("info", "seo", `fill all: ${filled} filled, ${skipped} skipped, ${failed.length} failed${rewrite ? " (rewrite)" : ""}`);
+    return { ok: true, total: targets.length, filled, skipped, failed };
+  } catch (e) { return { ok: false, error: e.message }; }
+  finally { seoFillAllRunning = false; }
 });
 ipcMain.handle("model:get", () => ({ model: currentModel }));
 ipcMain.handle("model:set", (_event, { model }) => {

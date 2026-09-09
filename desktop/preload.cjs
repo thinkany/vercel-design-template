@@ -94,6 +94,8 @@ contextBridge.exposeInMainWorld("desktop", {
   setNarrate: (enabled) => ipcRenderer.invoke("narrate:set", { enabled }),
   narrateLine: (payload) => ipcRenderer.invoke("narrate:line", payload),
   seoFill: (payload) => ipcRenderer.invoke("seo:fill", payload),
+  seoFillAll: (opts) => ipcRenderer.invoke("seo:fillAll", opts || {}),
+  onSeoProgress: (cb) => { const l = (_e, p) => cb(p); ipcRenderer.on("seo:progress", l); return () => ipcRenderer.removeListener("seo:progress", l); },
   // Synchronous dev flag (main injects --ta-dev only when unpackaged). Gates the unshipped
   // narration pacing harness in the renderer.
   dev: process.argv.includes("--ta-dev"),
