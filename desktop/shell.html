@@ -903,6 +903,14 @@
       .site-trash svg { width: 13px; height: 13px; }
       .site-trash:hover { border-color: #c0261e; background: #fff5f4; }
       .site-mini.danger { color: #c0261e; border-color: #e7b7b3; }
+      /* The SEO fill button: a sparkle + "SEO"; while it works, the button turns into
+         the message with the chat's thinking dots as the ellipsis. */
+      .site-seo-fill { display: flex; flex-direction: column; align-items: flex-start; margin: 0 0 10px; }
+      .site-ai { display: inline-flex; align-items: center; gap: 5px; height: 24px; }
+      .site-ai svg { width: 12px; height: 12px; flex: none; }
+      .site-ai.working, .site-ai.working:disabled { opacity: 1; border-color: transparent; background: transparent; color: #666; padding-left: 0; cursor: default; }
+      .site-ai-dots { height: auto; gap: 3px; margin-left: 1px; }
+      .site-ai-dots i { width: 3px; height: 3px; background: #666; }
       .site-props { margin: 4px 0 8px 8px; padding-left: 8px; border-left: 2px solid #ececf1; }
       .site-kv { margin-bottom: 8px; }
       .site-kv > .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: #666; margin-bottom: 4px; font-weight: 600; }

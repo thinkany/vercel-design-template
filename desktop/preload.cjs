@@ -93,6 +93,7 @@ contextBridge.exposeInMainWorld("desktop", {
   getNarrate: () => ipcRenderer.invoke("narrate:get"),
   setNarrate: (enabled) => ipcRenderer.invoke("narrate:set", { enabled }),
   narrateLine: (payload) => ipcRenderer.invoke("narrate:line", payload),
+  seoFill: (payload) => ipcRenderer.invoke("seo:fill", payload),
   // Synchronous dev flag (main injects --ta-dev only when unpackaged). Gates the unshipped
   // narration pacing harness in the renderer.
   dev: process.argv.includes("--ta-dev"),

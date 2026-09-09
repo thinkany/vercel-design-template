@@ -3340,6 +3340,38 @@ function siteMini(label, onClick, { danger, title, disabled } = {}) {
   b.addEventListener("click", onClick);
   return b;
 }
+// The "SEO" button at the top of an editor's SEO section: one call (seo:fill, not a
+// chat turn) that writes the SEO fields from what's being edited, unsaved edits
+// included, then fills the fields for the designer to review and save. While it
+// runs the button becomes the message with animated dots. `payload` is read at
+// click time; `apply` writes the result into the draft and the inputs.
+const ICON_AI = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M7.2 1.6c.2-.6 1-.6 1.2 0l1.3 3.6 3.6 1.3c.6.2.6 1 0 1.2L9.7 9l-1.3 3.6c-.2.6-1 .6-1.2 0L5.9 9 2.3 7.7c-.6-.2-.6-1 0-1.2l3.6-1.3z"/><path d="M12.6 10.2c.1-.3.5-.3.6 0l.5 1.3 1.3.5c.3.1.3.5 0 .6l-1.3.5-.5 1.3c-.1.3-.5.3-.6 0l-.5-1.3-1.3-.5c-.3-.1-.3-.5 0-.6l1.3-.5z"/></svg>';
+function siteSeoFill({ payload, apply }) {
+  const S = COPY.site;
+  const row = siteEl("div", "site-seo-fill");
+  const btn = siteEl("button", "site-mini site-ai"); btn.type = "button"; btn.title = S.seoFillTitle;
+  const note = siteEl("div", "sess-desc"); note.style.margin = "4px 0 0";
+  const idle = () => { btn.classList.remove("working"); btn.innerHTML = ICON_AI + "<span></span>"; btn.lastChild.textContent = S.seoFill; btn.disabled = false; };
+  idle();
+  btn.addEventListener("click", async () => {
+    btn.disabled = true; btn.classList.add("working");
+    btn.innerHTML = "<span></span><span class=\"ta-dots site-ai-dots\"><i></i><i></i><i></i></span>"; btn.firstChild.textContent = S.seoFillWorking;
+    note.textContent = ""; note.style.color = "";
+    let r; try { r = await window.desktop.seoFill(payload()); } catch (e) { r = { ok: false, error: e.message }; }
+    idle();
+    if (r && r.ok) { apply(r.seo); siteFlash(note, S.seoFillDone); }
+    else { note.textContent = r && r.reason === "no-key" ? S.seoFillNoKey : ((r && r.error) || S.seoFillFail); note.style.color = "#e5484d"; }
+  });
+  row.append(btn, note);
+  return row;
+}
+// What the fill writes: the text fields it returned; a custom schema or a share image
+// only into an empty field (a hand-written one stays).
+function siteSeoApply(seo, s) {
+  for (const k of ["title", "description", "keyphrase"]) if (s[k]) seo[k] = s[k];
+  if (s.jsonld && !seo.jsonld) seo.jsonld = s.jsonld;
+  if (s.image && !seo.image) seo.image = s.image;
+}
 // A sub-heading with a body, used inside a section (not folded, not remembered).
 function siteFoldInline(title) { const sec = siteEl("div", "site-sub"); sec.appendChild(siteEl("div", "k site-sub-title", title)); const body = siteEl("div"); sec.appendChild(body); return { sec, body }; }
 
@@ -3784,9 +3816,15 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
 
   // SEO: its own section, the LAST one (appended after Blocks, below).
   const sf = siteFold(COPY.site.seoHeading, "page:seo"); sf.sec.dataset.tour = "cms-seo";
+  sf.body.appendChild(siteSeoFill({
+    payload: () => ({ kind: "page", title: draft.title, route: page.id === "home" ? "/" : "/" + (page.route || draft.slug || page.id), blocks: draft.blocks, seo: draft.seo }),
+    apply: (s) => { siteSeoApply(draft.seo, s); st.input.value = draft.seo.title || ""; sd.input.value = draft.seo.description || ""; kp.input.value = draft.seo.keyphrase || ""; jta.value = draft.seo.jsonld || ""; paintImg(); markDirty(); },
+  }));
   const st = siteField(COPY.site.seoTitle, draft.seo.title, { hint: COPY.site.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; markDirty(); }); sf.body.appendChild(st.wrap);
   const sd = siteField(COPY.site.seoDescription, draft.seo.description, { textarea: true, hint: COPY.site.seoDescriptionHint }); sd.input.addEventListener("input", () => { draft.seo.description = sd.input.value; markDirty(); }); sf.body.appendChild(sd.wrap);
-  sf.body.appendChild(siteImageControl(draft.seo.image, (next) => { draft.seo.image = next ? next.src : ""; markDirty(); }, { label: COPY.site.seoImage }));
+  const imgHost = siteEl("div"); sf.body.appendChild(imgHost);
+  const paintImg = () => { imgHost.innerHTML = ""; imgHost.appendChild(siteImageControl(draft.seo.image, (next) => { draft.seo.image = next ? next.src : ""; markDirty(); }, { label: COPY.site.seoImage })); };
+  paintImg();
   const kp = siteField(COPY.site.seoKeyphrase, draft.seo.keyphrase, { hint: COPY.site.seoKeyphraseHint }); kp.input.addEventListener("input", () => { draft.seo.keyphrase = kp.input.value; markDirty(); }); sf.body.appendChild(kp.wrap);
   const jl = siteEl("div", "site-kv"); jl.appendChild(siteEl("div", "k", COPY.site.seoJsonLd));
   const jta = document.createElement("textarea"); jta.className = "field site-code"; jta.spellcheck = false; jta.value = draft.seo.jsonld || ""; jta.placeholder = COPY.site.seoJsonLdPlaceholder;
@@ -4013,9 +4051,15 @@ function renderSitePost(post, refresh) {
   const rich = siteRichEditor(draft.body, () => { draft.body = rich.getMarkdown(); dirty(); });
   cf.body.appendChild(rich.wrap); cf.body.appendChild(siteEl("div", "sess-desc", S.postBodyHint));
   const sf = siteFold(S.seoHeading, "post:seo"); sf.sec.dataset.tour = "cms-post-seo"; card.appendChild(sf.sec);
+  sf.body.appendChild(siteSeoFill({
+    payload: () => ({ kind: "post", title: draft.title, route: `/${siteBlogPath}/${draft.slug || post.id}`, description: draft.description, body: draft.body, tags: draft.tags, date: draft.date, image: draft.image, seo: draft.seo }),
+    apply: (s) => { siteSeoApply(draft.seo, s); st.input.value = draft.seo.title || ""; sd.input.value = draft.seo.description || ""; kp.input.value = draft.seo.keyphrase || ""; jta.value = draft.seo.jsonld || ""; paintImg(); dirty(); },
+  }));
   const st = siteField(S.seoTitle, draft.seo.title, { hint: S.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; dirty(); }); sf.body.appendChild(st.wrap);
   const sd = siteField(S.seoDescription, draft.seo.description, { textarea: true, hint: S.postSeoDescriptionHint }); sd.input.addEventListener("input", () => { draft.seo.description = sd.input.value; dirty(); }); sf.body.appendChild(sd.wrap);
-  sf.body.appendChild(siteImageControl(draft.seo.image, (next) => { draft.seo.image = next ? next.src : ""; dirty(); }, { label: S.seoImage }));
+  const imgHost = siteEl("div"); sf.body.appendChild(imgHost);
+  const paintImg = () => { imgHost.innerHTML = ""; imgHost.appendChild(siteImageControl(draft.seo.image, (next) => { draft.seo.image = next ? next.src : ""; dirty(); }, { label: S.seoImage })); };
+  paintImg();
   const kp = siteField(S.seoKeyphrase, draft.seo.keyphrase, { hint: S.seoKeyphraseHint }); kp.input.addEventListener("input", () => { draft.seo.keyphrase = kp.input.value; dirty(); }); sf.body.appendChild(kp.wrap);
   const jl = siteEl("div", "site-kv"); jl.appendChild(siteEl("div", "k", S.seoJsonLd));
   const jta = document.createElement("textarea"); jta.className = "field site-code"; jta.spellcheck = false; jta.value = draft.seo.jsonld || ""; jta.placeholder = S.seoJsonLdPlaceholder;
@@ -4147,9 +4191,15 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   // SEO: the full set pages and posts carry, last.
   const seo = JSON.parse(JSON.stringify(entry.seo || {}));
   const sf = siteFold(S.seoHeading, foldKey + ":seo"); card.appendChild(sf.sec);
+  sf.body.appendChild(siteSeoFill({
+    payload: () => ({ kind: "entry", typeLabel: type.singular || type.label, title: t.input.value, route: `${type.path}/${sl.input.value || entry.id}`, fields: type.fields.map((f, i) => ({ label: f.label, kind: f.kind, value: controls[i][1]() })), blocks: ownCb.checked ? ownBlocks : null, seo }),
+    apply: (s) => { siteSeoApply(seo, s); st.input.value = seo.title || ""; sd.input.value = seo.description || ""; kp.input.value = seo.keyphrase || ""; jta.value = seo.jsonld || ""; paintImg(); dirty(); },
+  }));
   const st = siteField(S.seoTitle, seo.title, { hint: S.seoTitleHint }); st.input.addEventListener("input", () => { seo.title = st.input.value; dirty(); }); sf.body.appendChild(st.wrap);
   const sd = siteField(S.seoDescription, seo.description, { textarea: true, hint: S.seoDescriptionHint }); sd.input.addEventListener("input", () => { seo.description = sd.input.value; dirty(); }); sf.body.appendChild(sd.wrap);
-  sf.body.appendChild(siteImageControl(seo.image, (next) => { seo.image = next ? next.src : ""; dirty(); }, { label: S.seoImage }));
+  const imgHost = siteEl("div"); sf.body.appendChild(imgHost);
+  const paintImg = () => { imgHost.innerHTML = ""; imgHost.appendChild(siteImageControl(seo.image, (next) => { seo.image = next ? next.src : ""; dirty(); }, { label: S.seoImage })); };
+  paintImg();
   const kp = siteField(S.seoKeyphrase, seo.keyphrase, { hint: S.seoKeyphraseHint }); kp.input.addEventListener("input", () => { seo.keyphrase = kp.input.value; dirty(); }); sf.body.appendChild(kp.wrap);
   const jl = siteEl("div", "site-kv"); jl.appendChild(siteEl("div", "k", S.seoJsonLd));
   const jta = document.createElement("textarea"); jta.className = "field site-code"; jta.spellcheck = false; jta.value = seo.jsonld || ""; jta.placeholder = S.seoJsonLdPlaceholder;

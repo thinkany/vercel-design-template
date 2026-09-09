@@ -3824,6 +3824,49 @@ ipcMain.handle("narrate:line", async (_e, { phase, title, bits } = {}) => {
     return line ? { ok: true, line } : { ok: false };
   } catch { return { ok: false }; }
 });
+// ---- SEO fill: the "SEO" button in the page, post and entry editors ------------
+// The renderer sends what the designer is editing (unsaved edits included); main
+// adds the site's context and asks the model for the fields in one structured
+// call. Not an agent turn: nothing reaches the chat or the disk. The editor fills
+// its fields; the designer reviews and saves. Pure half: desktop/seo-fill.cjs.
+ipcMain.handle("seo:fill", async (_e, payload = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!process.env.ANTHROPIC_API_KEY) return { ok: false, reason: "no-key" };
+  const SEO = require("./seo-fill.cjs");
+  const site = siteJsonOf(currentProject);
+  const settings = seoSettings(site.seo);
+  const env = readProjectEnv(currentProject);
+  const ctx = {
+    name: settings.siteName || env.VITE_CLIENT_NAME || path.basename(currentProject),
+    url: site.url || "",
+    separator: settings.separator,
+    publisher: settings.schema,
+  };
+  const { system, user } = SEO.prompt(payload, ctx);
+  try {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk"); // precedent: narrate:line
+    const client = new Anthropic({ timeout: 90_000, maxRetries: 1 });
+    const msg = await client.beta.messages.create({
+      model: "claude-opus-5",
+      max_tokens: 2048,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default", // a policy decline re-runs on a fallback model inside the same call
+      system,
+      messages: [{ role: "user", content: user }],
+      output_config: { effort: "low", format: { type: "json_schema", schema: SEO.SCHEMA } },
+    });
+    if (msg.stop_reason === "refusal") return { ok: false, error: "Claude declined to write metadata for this content." };
+    const text = (msg.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+    let raw; try { raw = JSON.parse(text); } catch { return { ok: false, error: "The reply wasn't the JSON expected. Try again." }; }
+    const seo = SEO.clean(raw, payload.seo);
+    if (!(payload.seo && payload.seo.image)) { const img = SEO.firstImage(payload); if (img) seo.image = img; }
+    if (appLog.isEnabled()) appLog.write("info", "seo", `fill ${payload.kind} "${payload.title || ""}" via ${msg.model}: ${msg.usage ? `${msg.usage.input_tokens} in, ${msg.usage.output_tokens} out` : "no usage"}`);
+    return { ok: true, seo };
+  } catch (e) {
+    const m = e && e.status ? `${e.status}: ${(e.error && e.error.error && e.error.error.message) || e.message}` : (e && e.message) || String(e);
+    return { ok: false, error: m };
+  }
+});
 ipcMain.handle("model:get", () => ({ model: currentModel }));
 ipcMain.handle("model:set", (_event, { model }) => {
   currentModel = model || null;
