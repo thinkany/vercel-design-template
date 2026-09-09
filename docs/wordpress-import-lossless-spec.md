@@ -311,6 +311,17 @@ mode, `inventory` (the brief for a new design, unchanged). `map` is retired.
   automatically when the draft that replaces it is published, from the record the
   import keeps.
 
+## Next step (scheduled 2026-09-08): the import's know-how behind derive
+
+The classification (field purposes), the block generator (props, enums, fragments,
+the emitted block file) and the existing-design pairing ship in
+`desktop/wp-import.cjs` inside the asar today: the hardened-client layer. The next
+step moves them behind derive the way the skills and the direction sampler went:
+the app posts the payload's **definitions and field usage, never content**, and
+gets the block plan and the pairing back, gated on the Design license. The
+transform (content, media, redirects) stays local. A dev-only local fallback keeps
+the dev loop, as for skills. Scheduled after the feature-branch DMG is tested.
+
 ## What is not in scope
 
 - Core WordPress blocks with no home (embeds, galleries, files) stay in the report,
