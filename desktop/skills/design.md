@@ -369,7 +369,8 @@ file only when you're about to **change** it:
    make a scroll container and freeze the effect); an inline `style={{ overflow: "hidden" }}`
    ancestor is not caught, use clip there. Never hand-roll `animation-timeline: view()` on
    the image yourself, that is exactly the trap. Reveals (fade/slide in on view) stay
-   `motion` `whileInView`.
+   `motion` `whileInView`. The full motion contract, which effects carry to the published
+   site and which don't, is §4e.
 
 ## 4a. Honor the Design direction (when the prompt carries one)
 
@@ -548,6 +549,42 @@ The shadcn/Radix `ui/*` components are already keyboard- and ARIA-accessible, so
 is on, composing from them (rather than hand-rolling) starts you compliant. In AA mode these
 rules are in force and the post-turn audit checks them. **Off (the default): none of this
 applies — the palette is written exactly as chosen and the design is authored freely.**
+
+## 4e. Motion: the library plus CSS, and only what survives to the published site
+
+Motion is part of the design, so use it when the brief, the direction or the designer
+asks for it (reveals, parallax, an ambient drift, a marquee), and keep it out of the
+way otherwise. Two tools are installed and each has a job; the deciding question is
+always **does this carry to the site?** After promotion every section is static HTML
+(no React runtime on page blocks), so an effect that only exists as JavaScript state is
+lost on the published site unless it has the CSS translation below.
+
+| Effect | In the design, use | On the site it becomes |
+|---|---|---|
+| Reveal on scroll (fade / slide / stagger in) | `motion` `whileInView` (`initial`/`animate`, `viewport={{ once: true }}`), or the `<Reveal>` pattern | `<Reveal delay>` (a `data-reveal` div, CSS + one observer). Carries. |
+| Parallax (a photo drifting slower than the page) | `<Parallax>` (rule 8) | the same component, CSS only. Carries. |
+| Scroll-linked progress (a bar filling, a mask opening, a scrub) | CSS scroll-driven animation: `animation-timeline: view()` / `scroll()` in the variation's `globals.css`, wrapped in `@supports`, on an `overflow-clip` (never `hidden`) ancestor chain | the same CSS. Carries. |
+| Ambient loops (drift, bob, rotate, marquee, pulse) | a CSS `@keyframes` + class in `globals.css`; not a `motion` `repeat: Infinity` | the keyframe moves to `site/blocks/blocks.css`. Carries. |
+| Hover / focus / press micro-interactions | Tailwind `transition-*`, `hover:`, `group-hover:`, `focus-visible:`; `motion` `whileHover` only for physics a transition can't do | CSS. Carries (a `whileHover` is rewritten as a transition, so keep it simple). |
+| Layout / presence animation (a card that grows, an item that leaves) | `motion` `layout` / `AnimatePresence` | does not carry. Fine in the design phase; the block ships static, and promote tells the designer. |
+| Stateful interaction (accordion, tabs, carousel, menu) | shadcn/Radix `ui/*` (`accordion`, `tabs`, `carousel`) | CSS-only where one exists (`<details>/<summary>` expander, `:has()` toggles, CSS scroll-snap for a carousel), else the block is static and promote says so. The Header is the one block that hydrates. |
+
+Rules that go with the table:
+
+- **Everything respects reduced motion.** Add `motion-reduce:` variants or a
+  `prefers-reduced-motion` guard to your CSS, and `useReducedMotion()` to any `motion`
+  you drive. `motion.css` and `<Reveal>` already do this for you.
+- **Never** `background-attachment: fixed`, a `window` scroll listener, `useScroll` against
+  `window`, or a hand-rolled `animation-timeline: view()` on an image inside a section: the
+  device frames scroll inside their own screen and an `overflow-hidden` section is the
+  timeline's scroller, so those sit still (rule 8 and `/diagnose` cover it).
+- **Keep motion out of the section marker.** A `motion.div` can carry `data-block`, but the
+  effect's `initial={{ opacity: 0 }}` must not leave the section invisible in the Figma
+  capture; use `whileInView` with `viewport={{ once: true }}` and let `<Reveal>`-style
+  wrappers sit *inside* the marked element, as rule 3 says.
+- **Name the trade-off, once, when it applies.** If the designer asks for something in the
+  "does not carry" rows, do it for the design and say in one line that the published site
+  will show that piece static until hydrated blocks arrive.
 
 ## 5. Verify, the designer's eyes, not a screenshot
 

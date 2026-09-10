@@ -195,9 +195,11 @@ Before hand-rolling UI, use what's installed:
   `motion`, **carousels** `embla-carousel-react`, **forms** `react-hook-form`, **toasts**
   `sonner`, **command palette** `cmdk`, **dates** `date-fns` + `react-day-picker`, **theme**
   `next-themes`.
-- **Parallax** via [Parallax.tsx](src/app/components/Parallax.tsx) (CSS scroll-driven, works in the
-  device frames, stills for capture and reduced motion; never `background-attachment: fixed` or a
-  window scroll listener, the frames scroll inside their own screen).
+- **Motion:** `motion` for reveals and interaction in the design, CSS for anything that must
+  survive promotion to the static site (parallax via [Parallax.tsx](src/app/components/Parallax.tsx),
+  scroll-driven animations, keyframe loops). The effect-by-effect table is `/design` §4e; never
+  `background-attachment: fixed` or a window scroll listener (the device frames scroll inside
+  their own screen).
 - Full list in [package.json](package.json); check it before adding anything new.
 
 ## Conventions

@@ -213,6 +213,9 @@ almost every design and each has one translation:
 |---|---|
 | `motion` / `<Reveal>` from `motion/react` (whileInView, initial/animate) | `<Reveal delay={0.15}>` from `./lib/Reveal` (a `data-reveal` div; the site animates it with CSS + one observer, no runtime) |
 | `<Parallax>` from `@/app/components/Parallax` | `<Parallax>` from `./lib/Parallax`, same props and markup (the CSS in `src/styles/motion.css` ships with the site, no runtime); if `lib/Parallax.tsx` is missing, copy it from the design's component verbatim |
+| CSS scroll-driven animation in the variation's `globals.css` (`animation-timeline: view()`/`scroll()`, a scrub, a fill) | the same CSS, moved to `site/blocks/blocks.css` with its `@supports` + reduced-motion guards; the ancestor chain must stay `overflow-clip`, never `hidden` |
+| `motion` `whileHover` / `whileTap` | Tailwind `transition-*` + `hover:` / `active:` classes on the same element |
+| `motion` `layout` / `AnimatePresence` / `useAnimate` (state-driven) | nothing carries: ship the block static and say so in the summary (§6) |
 | Infinite `motion` loops (a rotating motif, a bobbing cue) | a CSS keyframe in `site/blocks/blocks.css` + a class (`ta-drift`, `ta-bob`); respect `prefers-reduced-motion` there |
 | `useFrameHeight` / `frameH` on the hero | `min-h-[100dvh]` |
 | `onNavigate("home")`, `scrollTo(id)`, `scrollToSection(id)` | plain `<a href="/">`, `<a href="#id">` (the site has `scroll-behavior: smooth`) |
