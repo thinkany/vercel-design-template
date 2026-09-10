@@ -96,6 +96,11 @@
     animation: none;
   }
 }
+/* src/app/parallax-fallback.ts drives the layer from scroll events where the browser has
+   no scroll-driven animations (Firefox); it marks the root so nothing competes. */
+.ta-parallax-js .ta-parallax-layer {
+  animation: none;
+}
 [data-capture-ready] .ta-parallax-layer {
   animation: none;
 }

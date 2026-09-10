@@ -105,6 +105,9 @@ const faviconType = /\.svg$/i.test(favicon) ? "image/svg+xml" : /\.png$/i.test(f
       {import.meta.env.DEV && draft && <div class="fixed bottom-4 left-4 z-[60] rounded-full bg-ta-ink px-3 py-1 font-ta-sans text-[11px] tracking-[0.12em] uppercase text-ta-surface shadow-md" title="A draft: previewed here, left out of the published site">Draft</div>}
     </div>
     <script>
+      // Parallax in browsers without CSS scroll-driven animations (Firefox): the same
+      // module the design surface loads; a no-op where the CSS runs.
+      import "@/app/parallax-fallback";
       // Scroll reveal: pairs with .js [data-reveal] in site.css. Once, at 30%
       // visibility, matching the design surface's motion whileInView settings.
       const els = document.querySelectorAll<HTMLElement>("[data-reveal]");
