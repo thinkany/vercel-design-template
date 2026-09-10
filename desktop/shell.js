@@ -1463,12 +1463,36 @@ function tabElFor(kind) {
 // place (asked of the page, re-asked while the step shows so a rail or window change
 // keeps it aligned). The tip anchors and rings on the proxy as on any target.
 let tourProxy = null, tourProxyTimer = null;
+// The Home DESIGN tab is where the page-anchored tips live (the Style guide, where an
+// opened project lands, has no View toggle and no image badge). `homeTab` is only set
+// by a build reveal, so find the tab by kind, open one if the designer closed it, and
+// make it active. Resolves once its page can answer.
+async function tourGoHome() {
+  let home = tabs.find((t) => t && t.navKind === "home") || (homeTab && tabs.includes(homeTab) ? homeTab : null);
+  if (!home) {
+    if (!design || !design.active || !design.variationId) return false;
+    home = openTab(quickUrl("home", design.variationId), navLabel("home", design.variationId));
+    if (home) home.navKind = "home";
+    if (!home) return false;
+  }
+  if (activeTab !== home) setActiveTab(home);
+  // Give the tab a beat to be shown (and a fresh one to load) before the page is asked.
+  for (let i = 0; i < 20; i++) {
+    await new Promise((r) => setTimeout(r, 150));
+    try { if (home.wv && !home.wv.isLoading()) break; } catch { break; }
+  }
+  return true;
+}
 async function tourProxyFor(selector) {
   const tab = activeTab; const wv = tab && tab.wv; if (!wv) return null;
   let r = null;
-  try {
-    r = await wv.executeJavaScript(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; })()`);
-  } catch { r = null; }
+  // The page may still be settling (a tab just shown or opened): ask a few times.
+  for (let attempt = 0; attempt < 6 && !(r && r.w); attempt++) {
+    if (attempt) await new Promise((res) => setTimeout(res, 300));
+    try {
+      r = await wv.executeJavaScript(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; })()`);
+    } catch { r = null; }
+  }
   if (!r || !r.w) return null;
   if (!tourProxy) { tourProxy = document.createElement("div"); tourProxy.className = "tour-proxy"; document.body.appendChild(tourProxy); }
   const place = () => { const w = wv.getBoundingClientRect(); const z = (() => { try { return wv.getZoomFactor() || 1; } catch { return 1; } })();
@@ -1494,12 +1518,12 @@ function tourProxyClear() {
 const DESIGN_TOUR_STEPS = [
   { copy: "tabs", onEnter: () => { closeModal(); hidePreviewHelp(); }, target: () => tabElFor("home") || tabElFor("styleguide"), placement: "bottom" },
   // Activates the Home tab and points at the page's own View buttons (desktop / tablet / phone).
-  { copy: "views", onEnter: async () => { closeModal(); if (homeTab && tabs.includes(homeTab) && activeTab !== homeTab) { setActiveTab(homeTab); await new Promise((r) => setTimeout(r, 350)); } tourProxyClear(); await tourProxyFor("[data-view-toggle]"); }, target: () => tourProxy, placement: "bottom", onExit: tourProxyClear },
+  { copy: "views", onEnter: async () => { closeModal(); tourProxyClear(); if (await tourGoHome()) await tourProxyFor("[data-view-toggle]"); }, target: () => tourProxy, placement: "bottom", onExit: tourProxyClear },
   { copy: "chat", onEnter: () => setChatCollapsed(false), target: () => el("input"), placement: "top" },
   { copy: "feedback", target: () => (feedbackBtn && !feedbackBtn.hidden ? feedbackBtn : null), placement: "bottom" },
   // The image-licence badge lives in the page (lower left). A project without flagged
   // images has no badge, so the page is asked to show an expanded example for the tip.
-  { copy: "credits", onEnter: async () => { closeModal(); if (homeTab && tabs.includes(homeTab) && activeTab !== homeTab) { setActiveTab(homeTab); await new Promise((r) => setTimeout(r, 350)); } tourProxyClear(); await tourPageDemo("credits", true); await new Promise((r) => setTimeout(r, 450)); await tourProxyFor("[data-image-credits]"); }, target: () => tourProxy, placement: "top", onExit: () => { tourProxyClear(); tourPageDemo("credits", false); } },
+  { copy: "credits", onEnter: async () => { closeModal(); tourProxyClear(); if (await tourGoHome()) { await tourPageDemo("credits", true); await new Promise((r) => setTimeout(r, 450)); await tourProxyFor("[data-image-credits]"); } }, target: () => tourProxy, placement: "top", onExit: () => { tourProxyClear(); tourPageDemo("credits", false); } },
   { copy: "reroll", target: () => { const b = el("reroll-btn"); return b && !b.hidden ? b : null; }, placement: "bottom" },
   { copy: "artdirector", onEnter: () => { closeModal(); tourRevealRail(railDirector); }, target: () => railDirector, placement: "right", onExit: () => tourRestoreRail(railDirector) },
   { copy: "a11y", onEnter: () => { closeModal(); tourRevealRail(railA11y); }, target: () => railA11y, placement: "right", onExit: () => tourRestoreRail(railA11y) },
