@@ -364,10 +364,12 @@ file only when you're about to **change** it:
    motion, and promotes to the site as-is. **Never** `background-attachment: fixed`,
    a `window` scroll listener, or `useScroll` against `window`: the device frames
    scroll inside their own screen, so none of those move there, and any `transform`
-   ancestor kills a fixed background everywhere. Don't put `overflow-hidden` between the
-   `<Parallax>` and its section (hidden makes a scroll container and freezes the effect;
-   the wrapper already clips). Reveals (fade/slide in on view) stay `motion`
-   `whileInView`.
+   ancestor kills a fixed background everywhere. A Tailwind `overflow-hidden` on the section
+   (or any ancestor) is fine: motion.css turns it into `overflow-clip` for you (hidden would
+   make a scroll container and freeze the effect); an inline `style={{ overflow: "hidden" }}`
+   ancestor is not caught, use clip there. Never hand-roll `animation-timeline: view()` on
+   the image yourself, that is exactly the trap. Reveals (fade/slide in on view) stay
+   `motion` `whileInView`.
 
 ## 4a. Honor the Design direction (when the prompt carries one)
 

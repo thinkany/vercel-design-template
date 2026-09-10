@@ -28,11 +28,28 @@
    any browser without scroll-driven animations (the @supports gate), where the
    photo simply sits centred in its mask. */
 
+/* The wrapper's default position lives in the components layer so a Tailwind utility on
+   the element (`absolute inset-0` behind a section's copy) still wins; an unlayered rule
+   here would beat every utility and the wrapper would collapse to a zero-height box.
+   `overflow: clip` stays unlayered on purpose: an `overflow-hidden` on the wrapper would
+   make it a scroll container and freeze the timeline, so it must not be overridable. */
+@layer components {
+  [data-parallax] {
+    position: relative;
+  }
+}
 [data-parallax] {
-  position: relative;
   overflow: clip;
   --ta-parallax-travel: 12%;
   view-timeline: --ta-parallax block;
+}
+/* A hero section is very often `overflow-hidden` (to crop a bleed, a halftone, a marquee).
+   That makes the section a scroll container, the timeline's nearest scroller, and the
+   effect freezes. Any Tailwind `overflow-hidden` ancestor of a parallax becomes `clip`
+   instead: identical clipping, but not a scroll container. (Unlayered, so it wins over
+   the utility. An inline `style="overflow:hidden"` ancestor is not caught; use clip.) */
+.overflow-hidden:has([data-parallax]) {
+  overflow: clip;
 }
 [data-parallax="soft"] {
   --ta-parallax-travel: 6%;
