@@ -1682,10 +1682,6 @@ window.COPY = {
         title: "How publishing works",
         body: "A design has to be built before it can be published. Once one is, connect your Vercel account here and publish: the first publish creates the private link and a preview password to share with your client, and its sign-in screen carries your company name and logo. Later publishes update the same link, and you can move it to a subdomain of a domain you own.",
       },
-      cms: {
-        title: "CMS",
-        body: "Once a design is approved, the site is built from it: each section becomes an editable block, and the copy and images move into pages, posts, media and forms you manage here, along with navigation and site settings. Part of the Design license.",
-      },
       projectsIntro: {
         title: "Switch Projects",
         body: "Every design lives in its own project folder, separate from the app. This is where you start a new one or jump between recent ones. Let’s open it.",

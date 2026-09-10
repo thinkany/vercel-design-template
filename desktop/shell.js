@@ -1314,7 +1314,7 @@ const TOUR_STEPS = [
   // tips (DESIGN_TOUR, after the first build) introduce them, not the studio tour.
   { copy: "publish", onEnter: () => closeModal(), target: () => railPublish, placement: "right", advanceOnClick: true },
   { copy: "publishDrawer", onEnter: () => ensureModal("publish"), target: inDrawer("publish"), placement: "right" },
-  { copy: "cms", onEnter: () => { closeModal(); tourRevealRail(railSite); }, target: () => railSite, placement: "right", onExit: () => tourRestoreRail(railSite) },
+  // Build the site (the CMS icon) belongs to a finished design: the design-editing tips cover it.
   // Creating a project. On a fresh install the tour runs on the Choose-a-project screen
   // and points at its buttons; on a replay with a project open the same steps point at
   // Switch Projects and its Create new / Switch buttons instead.
@@ -1483,15 +1483,23 @@ async function tourGoHome() {
   }
   return true;
 }
-async function tourProxyFor(selector) {
+// The page-side query: the element's box, or (parts: true) the union of its visible
+// children's boxes, for a full-width bar whose controls sit at one end, or a badge
+// whose panel opens above it: the tip should frame what the eye is on, not the bar.
+function tourProxyQuery(selector, parts) {
+  return `(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return null;
+    const boxes = ${parts ? "[...e.children].map((c) => c.getBoundingClientRect()).filter((b) => b.width && b.height)" : "[]"};
+    if (!boxes.length) boxes.push(e.getBoundingClientRect());
+    const l = Math.min(...boxes.map((b) => b.left)), t = Math.min(...boxes.map((b) => b.top)), rr = Math.max(...boxes.map((b) => b.right)), bb = Math.max(...boxes.map((b) => b.bottom));
+    return { x: l, y: t, w: rr - l, h: bb - t }; })()`;
+}
+async function tourProxyFor(selector, { parts = false } = {}) {
   const tab = activeTab; const wv = tab && tab.wv; if (!wv) return null;
   let r = null;
   // The page may still be settling (a tab just shown or opened): ask a few times.
   for (let attempt = 0; attempt < 6 && !(r && r.w); attempt++) {
     if (attempt) await new Promise((res) => setTimeout(res, 300));
-    try {
-      r = await wv.executeJavaScript(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; })()`);
-    } catch { r = null; }
+    try { r = await wv.executeJavaScript(tourProxyQuery(selector, parts)); } catch { r = null; }
   }
   if (!r || !r.w) return null;
   if (!tourProxy) { tourProxy = document.createElement("div"); tourProxy.className = "tour-proxy"; document.body.appendChild(tourProxy); }
@@ -1501,7 +1509,7 @@ async function tourProxyFor(selector) {
   clearInterval(tourProxyTimer);
   tourProxyTimer = setInterval(async () => {
     if (!tourProxy || !wv.isConnected) return;
-    try { const n = await wv.executeJavaScript(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; })()`); if (n && n.w) { r = n; place(); positionTour(); } } catch {}
+    try { const n = await wv.executeJavaScript(tourProxyQuery(selector, parts)); if (n && n.w) { r = n; place(); positionTour(); } } catch {}
   }, 400);
   return tourProxy;
 }
@@ -1518,12 +1526,12 @@ function tourProxyClear() {
 const DESIGN_TOUR_STEPS = [
   { copy: "tabs", onEnter: () => { closeModal(); hidePreviewHelp(); }, target: () => tabElFor("home") || tabElFor("styleguide"), placement: "bottom" },
   // Activates the Home tab and points at the page's own View buttons (desktop / tablet / phone).
-  { copy: "views", onEnter: async () => { closeModal(); tourProxyClear(); if (await tourGoHome()) await tourProxyFor("[data-view-toggle]"); }, target: () => tourProxy, placement: "bottom", onExit: tourProxyClear },
+  { copy: "views", onEnter: async () => { closeModal(); tourProxyClear(); if (await tourGoHome()) await tourProxyFor("[data-view-toggle]", { parts: true }); }, target: () => tourProxy, placement: "bottom", onExit: tourProxyClear },
   { copy: "chat", onEnter: () => setChatCollapsed(false), target: () => el("input"), placement: "top" },
   { copy: "feedback", target: () => (feedbackBtn && !feedbackBtn.hidden ? feedbackBtn : null), placement: "bottom" },
   // The image-licence badge lives in the page (lower left). A project without flagged
   // images has no badge, so the page is asked to show an expanded example for the tip.
-  { copy: "credits", onEnter: async () => { closeModal(); tourProxyClear(); if (await tourGoHome()) { await tourPageDemo("credits", true); await new Promise((r) => setTimeout(r, 450)); await tourProxyFor("[data-image-credits]"); } }, target: () => tourProxy, placement: "top", onExit: () => { tourProxyClear(); tourPageDemo("credits", false); } },
+  { copy: "credits", onEnter: async () => { closeModal(); tourProxyClear(); if (await tourGoHome()) { await tourPageDemo("credits", true); await new Promise((r) => setTimeout(r, 450)); await tourProxyFor("[data-image-credits]", { parts: true }); } }, target: () => tourProxy, placement: "right", onExit: () => { tourProxyClear(); tourPageDemo("credits", false); } },
   { copy: "reroll", target: () => { const b = el("reroll-btn"); return b && !b.hidden ? b : null; }, placement: "bottom" },
   { copy: "artdirector", onEnter: () => { closeModal(); tourRevealRail(railDirector); }, target: () => railDirector, placement: "right", onExit: () => tourRestoreRail(railDirector) },
   { copy: "a11y", onEnter: () => { closeModal(); tourRevealRail(railA11y); }, target: () => railA11y, placement: "right", onExit: () => tourRestoreRail(railA11y) },
