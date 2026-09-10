@@ -1801,17 +1801,16 @@ window.COPY = {
     figmaLabel: "Figma Export",
     figmaDesc: "Unlocks exporting your designs to Figma.",
     unsplashLabel: "Unsplash (optional)",
-    unsplashDescHtml: "Your own Unsplash access key lets a build search the library for photos that fit the brief: free to use, credited to the photographer. Without it, images are found the plain way.<br><br>" +
-      "<b>To get a key:</b><br>1. Create an Unsplash account and confirm it from the email Unsplash sends.<br>2. Open <a href=\"https://unsplash.com/oauth/applications\" target=\"_blank\" rel=\"noopener\">unsplash.com/oauth/applications</a>, choose <i>New Application</i> and agree to the terms.<br>" +
+    unsplashDesc: "Your own Unsplash access key lets a build search the library for photos that fit the brief: free to use, credited to the photographer. Without it, images are found the plain way.",
+    unsplashStepsHtml: "<b>To get a key:</b><br>1. Create an Unsplash account and confirm it from the email Unsplash sends.<br>2. Open <a href=\"https://unsplash.com/oauth/applications\" target=\"_blank\" rel=\"noopener\">unsplash.com/oauth/applications</a>, choose <i>New Application</i> and agree to the terms.<br>" +
       "3. Give it a name and a description (thinkany design, for example).<br>4. Copy its <b>Access Key</b> and paste it below.<br><br>" +
       "A new app allows 50 requests an hour; a build uses about two per photo, and the studio paces its calls and stops short of the limit.",
     imageUsageLabel: "This hour",
     imageUsage: (u) => u && u.limit ? `${u.requests} of ${u.limit} requests${typeof u.remaining === "number" ? `, ${u.remaining} left` : ""}, resets in ${u.resetsInMin} min` : "No requests yet",
     pexelsLabel: "Pexels (optional)",
-    pexelsDescHtml: "A second photo library for builds, free to use with a link back to the photographer. With Unsplash also connected, a build uses whichever still has room this hour.<br><br>" +
-      "<b>To get a key:</b><br>1. Create a Pexels account at <a href=\"https://www.pexels.com/api/\" target=\"_blank\" rel=\"noopener\">pexels.com/api</a> and confirm it from the email Pexels sends.<br>" +
-      "2. Open <a href=\"https://www.pexels.com/api/new/\" target=\"_blank\" rel=\"noopener\">pexels.com/api/new</a> and describe what you’re building (thinkany design, for example).<br>" +
-      "3. Copy the <b>API key</b> it shows (also at <a href=\"https://www.pexels.com/api/key/\" target=\"_blank\" rel=\"noopener\">pexels.com/api/key</a>) and paste it below.<br><br>" +
+    pexelsDesc: "A second photo library for builds, free to use with a link back to the photographer. With Unsplash also connected, a build uses whichever still has room this hour.",
+    pexelsStepsHtml: "<b>To get a key:</b><br>1. Create a Pexels account and confirm it from the email Pexels sends.<br>" +
+      "2. Visit <a href=\"https://www.pexels.com/api/key/\" target=\"_blank\" rel=\"noopener\">pexels.com/api/key</a> and copy your <b>API key</b>.<br>3. Paste it below.<br><br>" +
       "Pexels allows 200 requests an hour; a build uses about one per photo, and the studio paces its calls and stops short of the limit.",
     status: "License",
     keyLabel: "Key",

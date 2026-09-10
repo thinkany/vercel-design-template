@@ -2699,8 +2699,8 @@ async function renderLicenses(body) {
   // library for matching photos (free, attributed) instead of guessing image URLs.
   await licenseSection(tourSection(body, "unsplash-key"), {
     label: COPY.licenses.unsplashLabel,
-    desc: COPY.licenses.unsplashDescHtml,
-    descHtml: true,
+    desc: COPY.licenses.unsplashDesc,
+    stepsHtml: COPY.licenses.unsplashStepsHtml,
     getStatus: () => window.desktop.getUnsplashStatus(),
     save: (k) => window.desktop.saveUnsplashKey(k),
     clear: () => window.desktop.clearUnsplashKey(),
@@ -2716,8 +2716,8 @@ async function renderLicenses(body) {
   // whichever still has budget this hour.
   await licenseSection(tourSection(body, "pexels-key"), {
     label: COPY.licenses.pexelsLabel,
-    desc: COPY.licenses.pexelsDescHtml,
-    descHtml: true,
+    desc: COPY.licenses.pexelsDesc,
+    stepsHtml: COPY.licenses.pexelsStepsHtml,
     getStatus: () => window.desktop.getPexelsStatus(),
     save: (k) => window.desktop.savePexelsKey(k),
     clear: () => window.desktop.clearPexelsKey(),
@@ -2789,15 +2789,23 @@ async function licenseSection(body, opts) {
   head.textContent = opts.label;
   body.appendChild(head);
 
+  const lic = await opts.getStatus();
   if (opts.desc) {
     const d = document.createElement("div");
     d.className = "muted";
     d.style.cssText = "font-size:12px;margin:2px 0 10px;";
-    if (opts.descHtml) d.innerHTML = opts.desc; else d.textContent = opts.desc; // descHtml: trusted COPY with links + steps
+    d.textContent = opts.desc;
     body.appendChild(d);
   }
+  // How to get the key: shown only until one is connected (trusted COPY html with links).
+  if (opts.stepsHtml && !lic.hasLicense) {
+    const st = document.createElement("div");
+    st.className = "muted";
+    st.style.cssText = "font-size:12px;margin:-4px 0 10px;";
+    st.innerHTML = opts.stepsHtml;
+    body.appendChild(st);
+  }
 
-  const lic = await opts.getStatus();
   body.appendChild(connStatusRow(COPY.licenses.status, lic.hasLicense, lic.hasLicense ? COPY.common.active : COPY.common.notSet, COPY.licenses.remove,
     async () => { await opts.clear(); if (opts.onChange) opts.onChange(); refreshRailActivation(); openModal("licenses"); }));
 
