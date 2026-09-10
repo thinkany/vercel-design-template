@@ -1003,19 +1003,31 @@ function stopVite() {
 // moment a promotion lands mid-session. Stopped with Vite.
 let siteProc = null;
 let siteUrl = null;
+// The project the running site server serves. Vite is restarted on every project
+// switch (startViteFor stops the old one), but the site server is only started when
+// the project is site-ready, so this is what tells a switch that the server still up
+// belongs to the PREVIOUS project (and must go), not to the one just opened.
+let siteProjectDir = null;
 function astroCli() { return path.join(modulesRoot(), "astro", "astro.js"); }
 function stopSite() {
   if (siteProc) { killTree(siteProc); siteProc = null; }
+  clearPidFile("site.pid"); // we killed it ourselves → no orphan to reap next boot
   siteUrl = null;
+  siteProjectDir = null;
 }
 function startSiteFor(projectDir) {
   stopSite();
+  siteProjectDir = projectDir;
   return new Promise((resolve, reject) => {
     siteProc = spawn(process.execPath, [astroCli(), "dev", "--root", "site"], {
       cwd: projectDir,
       env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", FORCE_COLOR: "0" },
       detached: process.platform !== "win32",
     });
+    // A force-quit leaves this group alive and holding :4321; the next boot reaps it
+    // (else the next project's site lands on :4322 while :4321 keeps serving the old one
+    // to anyone who types the port into a browser).
+    recordPid("site.pid", siteProc.pid);
     let settled = false;
     const onLine = (text) => {
       // "┃ Local    http://localhost:4321/" (Astro picks the next port when 4321 is busy)
@@ -1027,9 +1039,12 @@ function startSiteFor(projectDir) {
         resolve(siteUrl);
       }
     };
-    siteProc.stdout.on("data", (b) => { const t = b.toString(); process.stdout.write(`[site] ${t}`); onLine(t); });
-    siteProc.stderr.on("data", (b) => { const t = b.toString(); process.stderr.write(`[site] ${t}`); onLine(t); });
-    siteProc.on("exit", (code) => { if (!settled) reject(new Error(`Astro exited before it was ready (code ${code})`)); siteProc = null; });
+    const proc = siteProc;
+    proc.stdout.on("data", (b) => { const t = b.toString(); process.stdout.write(`[site] ${t}`); onLine(t); });
+    proc.stderr.on("data", (b) => { const t = b.toString(); process.stderr.write(`[site] ${t}`); onLine(t); });
+    // Only forget THIS process: a project switch kills the old server and may start the
+    // new one before the old exit lands, and that exit must not orphan the new server.
+    proc.on("exit", (code) => { if (!settled) reject(new Error(`Astro exited before it was ready (code ${code})`)); if (siteProc === proc) siteProc = null; });
     setTimeout(() => { if (!settled) reject(new Error("Timed out waiting for the site server (60s)")); }, 60000);
   });
 }
@@ -1037,6 +1052,10 @@ function startSiteFor(projectDir) {
 // already up. Safe to call often (project open, after every agent turn).
 function maybeStartSite(projectDir) {
   if (!projectDir || projectDir !== currentProject) return;
+  // A server left over from another project would keep serving THAT site on the same
+  // port (the Site tab and its external link both follow siteUrl), so it goes first,
+  // whether or not this project gets one of its own.
+  if (siteProc && siteProjectDir !== projectDir) stopSite();
   if (!siteReady(projectDir).ready) return;
   // Site builder off (Settings switch): no preview server; the Site tab shows a note.
   if (!loadCmsSettings(projectDir).enabled) { if (siteProc) stopSite(); sendSiteOff(); return; }
@@ -1085,13 +1104,19 @@ function buildSite(projectDir) {
 // cache, so the NEXT launch's fresh Vite contends with it and can stall before it ever
 // prints its ready URL. We record the spawned group's pid to disk; on boot we reap that
 // stale group (if it's still alive and still looks like our Vite) before starting anew.
-function vitePidFilePath() { return path.join(app.getPath("userData"), "vite.pid"); }
-function recordVitePid(pid) { try { fs.writeFileSync(vitePidFilePath(), String(pid)); } catch { /* best-effort */ } }
-function clearVitePidFile() { try { fs.unlinkSync(vitePidFilePath()); } catch { /* already gone */ } }
-function reapStaleVite() {
+// One pid file per dev server we spawn (vite.pid, site.pid), same reaping for both.
+function pidFilePath(name) { return path.join(app.getPath("userData"), name); }
+function recordPid(name, pid) { try { fs.writeFileSync(pidFilePath(name), String(pid)); } catch { /* best-effort */ } }
+function clearPidFile(name) { try { fs.unlinkSync(pidFilePath(name)); } catch { /* already gone */ } }
+function vitePidFilePath() { return pidFilePath("vite.pid"); }
+function recordVitePid(pid) { recordPid("vite.pid", pid); }
+function clearVitePidFile() { clearPidFile("vite.pid"); }
+function reapStaleVite() { reapStale("vite.pid", "Vite"); }
+function reapStaleSite() { reapStale("site.pid", "site server"); }
+function reapStale(name, label) {
   let pid;
-  try { pid = parseInt(fs.readFileSync(vitePidFilePath(), "utf8").trim(), 10); } catch { return; }
-  clearVitePidFile();
+  try { pid = parseInt(fs.readFileSync(pidFilePath(name), "utf8").trim(), 10); } catch { return; }
+  clearPidFile(name);
   if (!pid || Number.isNaN(pid)) return;
   if (process.platform === "win32") {
     try { spawn("taskkill", ["/pid", String(pid), "/T", "/F"]); } catch { /* best-effort */ }
@@ -1101,8 +1126,8 @@ function reapStaleVite() {
   // Guard against a recycled pid: only signal if it's actually a node/vite process.
   let cmd = "";
   try { cmd = execFileSync("ps", ["-o", "command=", "-p", String(pid)]).toString(); } catch { return; }
-  if (!/vite|node|electron/i.test(cmd)) return;
-  console.log(`[main] reaping stale Vite (pid ${pid}) orphaned by a previous session`);
+  if (!/vite|astro|node|electron/i.test(cmd)) return;
+  console.log(`[main] reaping stale ${label} (pid ${pid}) orphaned by a previous session`);
   try { process.kill(-pid, "SIGTERM"); } catch { try { process.kill(pid, "SIGTERM"); } catch { /* gone */ } }
   setTimeout(() => { try { process.kill(-pid, "SIGKILL"); } catch { /* gone */ } }, 1500);
 }
@@ -3143,7 +3168,7 @@ ipcMain.handle("site:start", async () => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   const r = siteReady(currentProject);
   if (!r.ready) return { ok: false, error: r.reason };
-  if (siteProc && siteUrl) return { ok: true, url: siteUrl };
+  if (siteProc && siteUrl && siteProjectDir === currentProject) return { ok: true, url: siteUrl };
   try { return { ok: true, url: await startSiteFor(currentProject) }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
@@ -4934,6 +4959,7 @@ app.whenReady().then(async () => {
   currentModel = loadUiState().model || null;
   createWindow(); // show the UI first — nothing below may block it becoming responsive
   reapStaleVite(); // kill a Vite orphaned by a previous force-quit before starting fresh
+  reapStaleSite(); // same for the site server (it would otherwise keep :4321 for the old project)
   if (currentProject) {
     // Refresh the framework files from this app build first (best-effort), THEN start
     // Vite — so a project reopened under a newer .dmg boots with the new files. The
