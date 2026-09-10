@@ -9056,15 +9056,6 @@ function renderRefsIntro(onDone) {
   continueBtn.textContent = R.continue;
   group.append(card, continueBtn);
 
-  const railOpened = () => new Promise((resolve) => {
-    const rail = el("intake-brief");
-    let done = false;
-    const finish = () => { if (done) return; done = true; rail.removeEventListener("transitionend", onEnd); resolve(); };
-    const onEnd = (e) => { if (e.target === rail && e.propertyName === "flex-basis") finish(); };
-    rail.addEventListener("transitionend", onEnd);
-    setTimeout(finish, 800); // the transition is .62s; never wait on a missed event
-  });
-
   async function handoff() {
     if (group.classList.contains("answered")) return;
     group.classList.add("answered");
@@ -9073,26 +9064,33 @@ function renderRefsIntro(onDone) {
     const from = inline ? inline.getBoundingClientRect() : null;
     refsIntroDone = true; refsIntroActive = false; refsIntroHost = null; refsRevealed = true;
     composeRail(); // the rail slides open with its own panel, kept invisible until the copy arrives
-    const railPanel = el("intake-brief").querySelector(".iref-panel");
+    const rail = el("intake-brief");
+    const railPanel = rail.querySelector(".iref-panel");
+    const leave = anim(group, [{ opacity: 1, transform: "translateY(0px)" }, { opacity: 0, transform: "translateY(-18px)" }], { duration: 360 });
     if (inline && from && railPanel) {
       railPanel.style.visibility = "hidden";
+      // One motion, not a wait then a hop: read the panel's settled spot with the rail
+      // snapped open (transition off, no frame painted), snap it back, restore the
+      // transition, and open it for real. The copy then travels for the rail's own
+      // .62s with the rail's easing, so the two move as one.
+      rail.style.transition = "none"; void rail.offsetWidth;
+      const to = railPanel.getBoundingClientRect();
+      intakeph.classList.remove("hasbrief"); void rail.offsetWidth;
+      rail.style.transition = ""; void rail.offsetWidth;
+      intakeph.classList.add("hasbrief");
       const ghost = inline.cloneNode(true);
       ghost.classList.add("iref-ghost");
       Object.assign(ghost.style, { left: from.left + "px", top: from.top + "px", width: from.width + "px" });
       document.body.appendChild(ghost);
       inline.style.visibility = "hidden";
-      await railOpened();
-      const to = railPanel.getBoundingClientRect();
       const move = anim(ghost, [
         { transform: "translate(0px, 0px) scale(1)" },
         { transform: `translate(${to.left - from.left}px, ${to.top - from.top}px) scale(${to.width / from.width})` },
-      ], { duration: 560 });
+      ], { duration: 620, easing: "cubic-bezier(.16,1,.3,1)" });
       if (move && move.finished) { try { await move.finished; } catch {} }
       ghost.remove();
       railPanel.style.visibility = "";
-    }
-    const leave = anim(group, [{ opacity: 1, transform: "translateY(0px)" }, { opacity: 0, transform: "translateY(-18px)" }], { duration: 360 });
-    if (leave && leave.finished) { try { await leave.finished; } catch {} }
+    } else if (leave && leave.finished) { try { await leave.finished; } catch {} }
     group.remove();
     progressSave();
     onDone();
