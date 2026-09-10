@@ -982,6 +982,7 @@ function showStage(stage) {
   if (sidebar) sidebar.inert = gated;
   toggleGate(usagegate, stage === "usage");
   toggleGate(keygate, stage === "key");
+  if (stage !== "project") createproject.classList.remove("nudge");
   toggleGate(projectgate, stage === "project");
   // Chat content is ready from the project stage on (empty & waiting); the key stage and
   // read-only (no-key) workspace hide it, and there the whole pane is collapsed anyway.
@@ -1697,7 +1698,11 @@ function endTour() {
   try { localStorage.setItem(tourCurrent.doneKey, "1"); } catch {}
   tourEl.classList.remove("show");
   setTimeout(() => { if (!tourRunning()) tourEl.hidden = true; }, 240);
+  // A brand-new install: the walkthrough ends on the Choose-a-project screen, so the
+  // next step gets a gentle pulse (the rail icons' ring), no tip. Gone on click or stage change.
+  if (tourCurrent === MAIN_TOUR && onGate()) createproject.classList.add("nudge");
 }
+createproject.addEventListener("click", () => createproject.classList.remove("nudge"));
 
 tourEl.querySelector(".tour-next").addEventListener("click", () => tourNext());
 tourEl.querySelector(".tour-back").addEventListener("click", () => tourBack());
