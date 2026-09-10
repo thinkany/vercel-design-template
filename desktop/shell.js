@@ -1027,6 +1027,8 @@ async function refreshRailActivation() {
     railFigma.classList.toggle("activated", !!(l && l.hasLicense));
     railFigma.hidden = !(l && l.hasLicense); // no Figma key → no icon (the walkthrough reveals it for its steps)
     if (railFigma.hidden && isModalOpen("figma")) closeModal();
+    railSite.hidden = !(dl && dl.hasLicense); // no Design key → no CMS icon (the site builder is part of that license)
+    if (railSite.hidden && isModalOpen("site")) closeModal();
     railPublish.classList.toggle("activated", !!(vc && vc.connected));
     // All three credentials present → the app is unlocked: open the padlock.
     const unlocked = !!(k && k.hasKey) && !!(l && l.hasLicense) && !!(dl && dl.hasLicense);
@@ -1304,7 +1306,7 @@ const TOUR_STEPS = [
   { copy: "artdirector", onEnter: () => { closeModal(); tourRevealRail(railDirector); }, target: () => railDirector, placement: "right", onExit: () => tourRestoreRail(railDirector) },
   { copy: "publish", onEnter: () => closeModal(), target: () => railPublish, placement: "right", advanceOnClick: true },
   { copy: "publishDrawer", onEnter: () => ensureModal("publish"), target: inDrawer("publish"), placement: "right" },
-  { copy: "cms", onEnter: () => closeModal(), target: () => railSite, placement: "right" },
+  { copy: "cms", onEnter: () => { closeModal(); tourRevealRail(railSite); }, target: () => railSite, placement: "right", onExit: () => tourRestoreRail(railSite) },
   // Creating a project. On a fresh install the tour runs on the Choose-a-project screen
   // and points at its buttons; on a replay with a project open the same steps point at
   // Switch Projects and its Create new / Switch buttons instead.

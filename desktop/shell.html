@@ -86,7 +86,7 @@
       #rail-help        { order: 11; --i: 10; }
       /* Art Director confer lives on the rail, exposed only once a built design is being
          previewed (updateArtDirectorRailBtn). Hidden = not reviewable yet. */
-      #rail-artdirector[hidden], #rail-a11y[hidden], #rail-figma[hidden] { display: none; }
+      #rail-artdirector[hidden], #rail-a11y[hidden], #rail-figma[hidden], #rail-site[hidden] { display: none; }
       /* Staggered rail-icon entrance/exit — a little directional drift for "gravity".
          Transition-based (not @keyframes) so each icon settles at its OWN resting
          opacity (muted 0.75, or full for an activated icon) with no overshoot.
@@ -2058,7 +2058,7 @@
         <button class="railbtn" id="rail-projects" data-copy-aria="rail.projects" data-copy-tip="rail.projects">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 4 20 8 16 12"/><line x1="4" y1="8" x2="20" y2="8"/><polyline points="8 12 4 16 8 20"/><line x1="4" y1="16" x2="20" y2="16"/></svg>
         </button>
-        <button class="railbtn" id="rail-site" data-copy-aria="rail.site" data-copy-tip="rail.site">
+        <button class="railbtn" id="rail-site" hidden data-copy-aria="rail.site" data-copy-tip="rail.site">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M9 9v11"/></svg>
         </button>
         <button class="railbtn" id="rail-publish" data-copy-aria="rail.publish" data-copy-tip="rail.publish">
