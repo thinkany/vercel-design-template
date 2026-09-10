@@ -57,6 +57,7 @@ export function ViewToggle({ view, onChange, views = ["desktop", "tablet", "mobi
   const canRotate = view !== "desktop" && !!onRotate;
   return (
     <div
+      data-view-toggle // the app's design-editing tips anchor on this bar from outside the page
       style={{
         background: "#fff",
         borderBottom: "1px solid rgba(0,0,0,0.08)",

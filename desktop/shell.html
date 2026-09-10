@@ -1001,6 +1001,10 @@
          rail icon the ring is white on the dark rail; the icon's own hover tip stays
          quiet while the tour is speaking for it. */
       .tour-target { position: relative; z-index: 5001; }
+      /* A stand-in for an element inside the preview webview (shell.js tourProxyFor): inert,
+         laid over the preview at the element's place, ringed like any target. */
+      .tour-proxy { position: fixed; pointer-events: none; z-index: 5001; border-radius: 8px; }
+      .tour-proxy.tour-target { position: fixed; animation: tour-ring-dark 1.6s ease-out infinite; }
       .railbtn.tour-target { opacity: 1; background: #2a2a31; animation: tour-ring 1.6s ease-out infinite; }
       .railbtn.tour-target::after { display: none; }
       @keyframes tour-ring {

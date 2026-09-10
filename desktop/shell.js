@@ -1458,9 +1458,37 @@ function tabElFor(kind) {
   const i = tabs.findIndex((t) => t && t.navKind === kind);
   return i >= 0 ? tabbar.children[i] || null : null;
 }
+// An element INSIDE the preview page (the View toggle) can't be a tour target: the page is a
+// webview. A proxy stands in: a fixed, inert box laid over the preview at the element's
+// place (asked of the page, re-asked while the step shows so a rail or window change
+// keeps it aligned). The tip anchors and rings on the proxy as on any target.
+let tourProxy = null, tourProxyTimer = null;
+async function tourProxyFor(selector) {
+  const tab = activeTab; const wv = tab && tab.wv; if (!wv) return null;
+  let r = null;
+  try {
+    r = await wv.executeJavaScript(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; })()`);
+  } catch { r = null; }
+  if (!r || !r.w) return null;
+  if (!tourProxy) { tourProxy = document.createElement("div"); tourProxy.className = "tour-proxy"; document.body.appendChild(tourProxy); }
+  const place = () => { const w = wv.getBoundingClientRect(); const z = (() => { try { return wv.getZoomFactor() || 1; } catch { return 1; } })();
+    Object.assign(tourProxy.style, { left: (w.left + r.x * z) + "px", top: (w.top + r.y * z) + "px", width: (r.w * z) + "px", height: (r.h * z) + "px" }); };
+  place();
+  clearInterval(tourProxyTimer);
+  tourProxyTimer = setInterval(async () => {
+    if (!tourProxy || !wv.isConnected) return;
+    try { const n = await wv.executeJavaScript(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; })()`); if (n && n.w) { r = n; place(); positionTour(); } } catch {}
+  }, 400);
+  return tourProxy;
+}
+function tourProxyClear() {
+  clearInterval(tourProxyTimer); tourProxyTimer = null;
+  if (tourProxy) { tourProxy.remove(); tourProxy = null; }
+}
 const DESIGN_TOUR_STEPS = [
   { copy: "tabs", onEnter: () => { closeModal(); hidePreviewHelp(); }, target: () => tabElFor("home") || tabElFor("styleguide"), placement: "bottom" },
-  { copy: "views", target: () => tabbar, placement: "bottom" },
+  // Activates the Home tab and points at the page's own View buttons (desktop / tablet / phone).
+  { copy: "views", onEnter: async () => { closeModal(); if (homeTab && tabs.includes(homeTab) && activeTab !== homeTab) { setActiveTab(homeTab); await new Promise((r) => setTimeout(r, 350)); } tourProxyClear(); await tourProxyFor("[data-view-toggle]"); }, target: () => tourProxy, placement: "bottom", onExit: tourProxyClear },
   { copy: "chat", onEnter: () => setChatCollapsed(false), target: () => el("input"), placement: "top" },
   { copy: "feedback", target: () => (feedbackBtn && !feedbackBtn.hidden ? feedbackBtn : null), placement: "bottom" },
   { copy: "reroll", target: () => { const b = el("reroll-btn"); return b && !b.hidden ? b : null; }, placement: "bottom" },
@@ -1708,6 +1736,7 @@ function positionTour() {
 
 // Drop the current step's hooks on its target (ring, click listener, observer).
 function tourDetach() {
+  tourProxyClear(); // a proxy over the preview never outlives its step
   if (tourTarget) {
     tourTarget.classList.remove("tour-target");
     if (tourClickHandler) tourTarget.removeEventListener("click", tourClickHandler);
