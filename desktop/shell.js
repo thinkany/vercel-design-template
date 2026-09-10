@@ -1299,7 +1299,7 @@ const TOUR_STEPS = [
   { copy: "claudeKey", onEnter: () => ensureModal("licenses"), target: inDrawer("claude-key"), placement: "right" },
   { copy: "figmaLicense", onEnter: () => ensureModal("licenses"), target: inDrawer("figma-license"), placement: "right" },
   { copy: "designLicense", onEnter: () => ensureModal("licenses"), target: inDrawer("design-license"), placement: "right" },
-  { copy: "unsplashKey", onEnter: () => ensureModal("licenses"), target: inDrawer("unsplash-key"), placement: "right" },
+  { copy: "unsplashKey", onEnter: () => ensureModal("licenses"), target: inDrawer("image-sources"), placement: "right" },
   { copy: "closeDrawer", onEnter: () => ensureModal("licenses"), target: () => modalClose, placement: "right" },
   { copy: "figma", onEnter: () => { tourRevealRail(railFigma); return ensureModal("figma"); }, target: inDrawer("figma-export"), placement: "right" },
   { copy: "figmaHelp", onEnter: () => ensureModal("figma"), target: inDrawer("figma-help"), placement: "right", advanceOnClick: true, onExit: () => tourRestoreRail(railFigma) },
@@ -2695,9 +2695,26 @@ async function renderLicenses(body) {
 
   licensesDivider(body);
 
+  // "External Image Sources": the optional photo-library keys, folded together (Rob
+  // 2026-09-10). Closed by default, the choice remembered app-wide; the walkthrough's
+  // step targets the fold itself, which the tour engine opens for its tip.
+  const IMG_FOLD_KEY = "ta-fold-image-sources";
+  let imgOpen = false; try { imgOpen = localStorage.getItem(IMG_FOLD_KEY) === "1"; } catch {}
+  const imgSec = siteEl("div", "site-acc" + (imgOpen ? " open" : ""));
+  imgSec.dataset.tour = "image-sources";
+  const imgHead = siteEl("button", "site-acc-head"); imgHead.type = "button"; imgHead.setAttribute("aria-expanded", String(imgOpen));
+  imgHead.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", COPY.licenses.imageSourcesTitle));
+  const imgBody = siteEl("div", "site-acc-body"); imgBody.hidden = !imgOpen;
+  imgHead.addEventListener("click", () => {
+    const now = imgBody.hidden; siteReveal(imgBody, now); imgSec.classList.toggle("open", now); imgHead.setAttribute("aria-expanded", String(now));
+    try { localStorage.setItem(IMG_FOLD_KEY, now ? "1" : "0"); } catch {}
+  });
+  imgSec.append(imgHead, imgBody); body.appendChild(imgSec);
+  const imgIntro = document.createElement("div"); imgIntro.className = "muted"; imgIntro.style.cssText = "font-size:12px;margin:0 0 12px;"; imgIntro.textContent = COPY.licenses.imageSourcesDesc; imgBody.appendChild(imgIntro);
+
   // Optional: the designer's own Unsplash access key, so a build can search the
   // library for matching photos (free, attributed) instead of guessing image URLs.
-  await licenseSection(tourSection(body, "unsplash-key"), {
+  await licenseSection(tourSection(imgBody, "unsplash-key"), {
     label: COPY.licenses.unsplashLabel,
     desc: COPY.licenses.unsplashDesc,
     stepsHtml: COPY.licenses.unsplashStepsHtml,
@@ -2712,9 +2729,11 @@ async function renderLicenses(body) {
     },
   });
 
+  licensesDivider(imgBody);
+
   // Optional: Pexels, the second image library. With both connected a build uses
   // whichever still has budget this hour.
-  await licenseSection(tourSection(body, "pexels-key"), {
+  await licenseSection(tourSection(imgBody, "pexels-key"), {
     label: COPY.licenses.pexelsLabel,
     desc: COPY.licenses.pexelsDesc,
     stepsHtml: COPY.licenses.pexelsStepsHtml,
