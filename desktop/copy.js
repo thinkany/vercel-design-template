@@ -1283,6 +1283,53 @@ window.COPY = {
     skip: "Skip the tour",
     closeAria: "Close the tour",
     // About drawer: the replay row
+    // ── The design-editing tips (once, when the first design finishes; replayable from Help) ──
+    design: {
+      listBtn: "Design editing",
+      hideListBtn: "Hide design editing steps",
+      steps: {
+        tabs: {
+          title: "Your design, in two tabs",
+          body: "Home is the finished design. Style guide is what it was built from: the palette, the type scale and the components, so you can see every choice in one place. The + opens another tab on any page.",
+        },
+        views: {
+          title: "Desktop, tablet, phone",
+          body: "The toggle at the top of the preview switches device frames. It is one design reflowing, not three copies, so a change you make shows in every frame.",
+        },
+        chat: {
+          title: "Edit by asking",
+          body: "Describe what you want in plain words: a warmer palette, a taller hero, a different photo, a section moved up. Each request edits this design in place, and small asks come back quickly.",
+        },
+        feedback: {
+          title: "Point and comment",
+          body: "Switch this on, then hover an element in the preview and click it to leave a note. Claude receives the exact element you pointed at, so the fix lands where you meant.",
+        },
+        reroll: {
+          title: "Try another direction",
+          body: "A fresh design from the same brief, steered to a different direction, as a new variation beside this one. The original stays as it is; keep whichever you prefer.",
+        },
+        artdirector: {
+          title: "Art Director",
+          body: "A second pair of eyes on the finished page: hierarchy, rhythm, type and color, with specific suggestions you can apply in one click or hold for later. It dims while a review runs.",
+        },
+        a11y: {
+          title: "Accessibility review",
+          body: "Checks the finished page against WCAG AA and lists what it finds, grouped by rule, each with a Fix. Switch AA mode on in the Claude settings to have it run after every build.",
+        },
+        figma: {
+          title: "Send it to Figma",
+          body: "When the design is where you want it, export it: the style guide as variables, every section as a component, and the pages composed from them.",
+        },
+        cms: {
+          title: "Build the site",
+          body: "Approve the design and build it into a site: every section becomes a block, the copy and images move into content you edit in the CMS, and the site publishes from here.",
+        },
+        help: {
+          title: "These tips, whenever you like",
+          body: "Replay them from the help drawer, under Design editing, alongside the studio tour and the CMS walkthrough.",
+        },
+      },
+    },
     // ── The CMS walkthrough (the site builder's Pages tab, then the home page's sections) ──
     cms: {
       info: "Walk through the CMS",

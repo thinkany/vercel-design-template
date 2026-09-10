@@ -753,6 +753,7 @@ function finishBuildReveal() {
   leanEditPending = true;
   updateRerollBtn(); // initial build done → the reroll button may now appear
   maybeAutoA11yReview(); // auto-run the accessibility review if that setting is on
+  maybeStartDesignTour(); // the very first finished design: the editing tips, once
 }
 
 // Quiet build (Get Designing) finished: nothing showed during the build, so now reveal the
@@ -772,6 +773,7 @@ async function finishQuietBuild() {
   leanEditPending = true;      // next turn is an edit → fresh, lean session
   updateRerollBtn();
   maybeAutoA11yReview();       // auto-run the accessibility review if that setting is on
+  maybeStartDesignTour();      // the very first finished design: the editing tips, once
 }
 
 // A large fresh design can PAINT a beat before Vite finishes compiling it, so the
@@ -1284,6 +1286,7 @@ railLicenses.addEventListener("click", () => toggleModal("licenses"));
 // advanceOnClick: clicking the target itself moves the tour along }.
 const TOUR_DONE_KEY = "ta-tour-done";
 const CMS_TOUR_DONE_KEY = "ta-tour-cms-done"; // set the first time the CMS walkthrough runs, app-wide
+const DESIGN_TOUR_DONE_KEY = "ta-tour-design-done"; // set the first time a design build finishes, app-wide
 // A step may also carry onEnter: an async hook run before the target is looked up
 // (e.g. open the drawer the target lives in), onExit: run when the step is left, and
 // when: () => bool, checked once at start; false drops the step from this run (the
@@ -1446,6 +1449,39 @@ const CMS_TOUR_STEPS = [
   ]),
 ];
 const CMS_TOUR = { steps: CMS_TOUR_STEPS, copy: () => COPY.tour.cms.steps, doneKey: CMS_TOUR_DONE_KEY };
+
+// ---- The design-editing tips (Rob 2026-09-10) ---------------------------------------
+// Shown once, app-wide, the first time a design build finishes: what the two tabs are,
+// how to edit (chat, point & comment, another direction), and the tools that open up on
+// a finished design (Art Director, Accessibility, Figma, Build the site). Replayable from
+// the help drawer's "Design editing" list on any project with a completed build.
+// The tab bar's button for a tab (the tabs render in order; no ids on them).
+function tabElFor(kind) {
+  const i = tabs.findIndex((t) => t && t.navKind === kind);
+  return i >= 0 ? tabbar.children[i] || null : null;
+}
+const DESIGN_TOUR_STEPS = [
+  { copy: "tabs", onEnter: () => { closeModal(); hidePreviewHelp(); }, target: () => tabElFor("home") || tabElFor("styleguide"), placement: "bottom" },
+  { copy: "views", target: () => tabbar, placement: "bottom" },
+  { copy: "chat", onEnter: () => setChatCollapsed(false), target: () => el("input"), placement: "top" },
+  { copy: "feedback", target: () => (feedbackBtn && !feedbackBtn.hidden ? feedbackBtn : null), placement: "bottom" },
+  { copy: "reroll", target: () => { const b = el("reroll-btn"); return b && !b.hidden ? b : null; }, placement: "bottom" },
+  { copy: "artdirector", onEnter: () => { closeModal(); tourRevealRail(railDirector); }, target: () => railDirector, placement: "right", onExit: () => tourRestoreRail(railDirector) },
+  { copy: "a11y", onEnter: () => { closeModal(); tourRevealRail(railA11y); }, target: () => railA11y, placement: "right", onExit: () => tourRestoreRail(railA11y) },
+  { copy: "figma", onEnter: () => { closeModal(); tourRevealRail(railFigma); }, target: () => railFigma, placement: "right", onExit: () => tourRestoreRail(railFigma) },
+  { copy: "cms", onEnter: () => { closeModal(); tourRevealRail(railSite); }, target: () => railSite, placement: "right", onExit: () => tourRestoreRail(railSite) },
+  { copy: "help", onEnter: () => closeModal(), target: () => railHelp, placement: "right", advanceOnClick: true },
+];
+const DESIGN_TOUR = { steps: DESIGN_TOUR_STEPS, copy: () => COPY.tour.design.steps, doneKey: DESIGN_TOUR_DONE_KEY };
+// The very first finished build, app-wide: run the tips once. Marked seen as it starts.
+function maybeStartDesignTour() {
+  if (tourRunning()) return;
+  let seen = false; try { seen = localStorage.getItem(DESIGN_TOUR_DONE_KEY) === "1"; } catch {}
+  if (seen) return;
+  try { localStorage.setItem(DESIGN_TOUR_DONE_KEY, "1"); } catch {}
+  // After the reveal has settled (tabs open, chat opened, the blank-recovery help shown).
+  setTimeout(() => { if (!tourRunning() && currentStage === "workspace" && !browser.hidden) startTour(0, DESIGN_TOUR); }, 1400);
+}
 // Is the open project's CMS active: a built, licensed site with the CMS switched on?
 async function cmsIsActive() {
   try {
@@ -1862,6 +1898,31 @@ async function renderHelp(body) {
   btns.className = "tour-replay-btns";
   btns.append(rb, sb);
   replay.append(rk, rd, btns, list);
+  // "Design editing": the tips that ran after the first build, as a flat list to jump into.
+  // Only on a project with a completed design (the tips point at what a build opens up).
+  if (design && design.active && design.previewReady) {
+    const db = document.createElement("button");
+    db.type = "button";
+    db.className = "cbtn ghost";
+    db.textContent = COPY.tour.design.listBtn;
+    btns.appendChild(db);
+    const dlist = document.createElement("ol");
+    dlist.className = "tour-steps";
+    dlist.hidden = true;
+    tourStepsFor(DESIGN_TOUR).forEach((step, i) => {
+      const li = document.createElement("li");
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tour-step-btn";
+      b.innerHTML = `<span class="n">${i + 1}</span><span class="t"></span>`;
+      b.querySelector(".t").textContent = tourStepCopy(step, DESIGN_TOUR).title || "";
+      b.addEventListener("click", () => { closeModal(); setTimeout(() => startTour(i, DESIGN_TOUR), 260); });
+      li.appendChild(b);
+      dlist.appendChild(li);
+    });
+    db.addEventListener("click", () => { const open = dlist.hidden; siteReveal(dlist, open); db.textContent = open ? COPY.tour.design.hideListBtn : COPY.tour.design.listBtn; });
+    replay.appendChild(dlist);
+  }
   // "CMS": the site builder's walkthrough, grouped by tab. Only once the project's CMS is
   // active (a built site with the CMS switched on). A tab's name starts its steps from the
   // first; a step under an expanded tab starts there.
