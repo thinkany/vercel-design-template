@@ -9274,7 +9274,10 @@ async function renderDirectionPanel(host, opts = {}) {
       b.className = "idir-stop";
       b.textContent = stop;
       b.addEventListener("click", () => {
-        pinnedLens = null; // steering by axes releases a direct pick
+        // Steering keeps the Direction: the lens stays pinned (the one picked, else the one
+        // showing) and only its tendencies move. Putting a stop back restores the same
+        // Direction with the same settings (Rob 2026-09-09).
+        if (!pinnedLens && current) pinnedLens = current.lens;
         if (!Object.keys(pinned).length && current) for (const n of axisNames) pinned[n] = current.axes[n];
         pinned[name] = stop;
         resample();
@@ -9292,7 +9295,7 @@ async function renderDirectionPanel(host, opts = {}) {
   reroll.type = "button";
   reroll.className = "idir-reroll";
   reroll.textContent = COPY.intake.direction.reroll;
-  reroll.addEventListener("click", () => resample()); // keeps a pinned lens or axes, fresh seed
+  reroll.addEventListener("click", () => resample()); // keeps the pinned lens and axes, fresh seed (the details vary)
   panel.appendChild(reroll);
 
   function paint() {
@@ -9328,8 +9331,8 @@ async function renderDirectionPanel(host, opts = {}) {
     reroll.disabled = true;
     panel.classList.add("busy");
     const o = {};
-    if (pinnedLens) o.lens = pinnedLens;
-    else if (Object.keys(pinned).length) o.axes = pinned;
+    if (pinnedLens) o.lens = pinnedLens;          // the Direction stays
+    if (Object.keys(pinned).length) o.axes = pinned; // its tendencies as steered (with a lens: motifs follow them)
     try {
       const r = await sample(o);
       if (r && r.direction) current = r.direction;

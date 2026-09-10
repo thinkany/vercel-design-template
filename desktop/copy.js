@@ -2048,7 +2048,7 @@ window.COPY = {
         <li><b>Era</b>: the period feel, timeless through avant-garde.</li>
         <li><b>Motion</b>: how animated, static through kinetic.</li>
       </ul>
-      <p>Nudging a slider steers the design toward that feel and picks the closest matching style.</p>
+      <p>Nudging a slider steers the style you have toward that feel. The style stays; its details follow the sliders. Put a slider back and you have the same direction as before. To change the style itself, pick one from the menu at the top.</p>
 
       <h4>Reroll</h4>
       <p>Reroll draws a fresh take. If you have picked a style or set the sliders, it keeps that direction and just varies the details; left untouched, it draws a whole new direction.</p>
