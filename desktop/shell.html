@@ -744,6 +744,14 @@
       }
       .gate.show .gate-inner { opacity: 1; transform: translateY(0); }
       .gate-inner h2 { font-size: 17px; margin: 0 0 8px; }
+      /* The usage gate: two start-style cards side by side, so it takes a wider inner. */
+      .gate-inner.gate-wide { max-width: 560px; text-align: center; }
+      .gate-cards { margin-top: 18px; }
+      .gate-cards .istart-card { flex: 1 1 0; }
+      /* The Publish drawer's Profile section: the usage choice as two pills. */
+      .usage-pick { display: flex; gap: 8px; margin: 6px 0 4px; }
+      .usage-pick .site-mini { padding: 6px 10px; font-size: 12px; }
+      .usage-pick .site-mini.on { border-color: #111; background: #111; color: #fff; }
       .gate-inner p { font-size: 13px; line-height: 1.5; color: #555; margin: 0 0 14px; }
       .field {
         width: 100%;
@@ -2197,6 +2205,25 @@
              and reconnect present them centered here while the chat is collapsed.
              Connecting eases the chat pane open; the gate fades out. Text is keyed
              via data-copy and populated from window.COPY by applyStaticCopy. -->
+        <div id="usagegate" class="gate" hidden>
+          <div class="gate-inner gate-wide">
+            <h2 data-copy="usageGate.heading"></h2>
+            <p data-copy="usageGate.intro"></p>
+            <div class="istart-row gate-cards">
+              <button id="usage-personal" type="button" class="istart-card istart-center">
+                <span class="istart-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg></span>
+                <div class="istart-label" data-copy="usageGate.personalLabel"></div>
+                <div class="istart-desc" data-copy="usageGate.personalDesc"></div>
+              </button>
+              <button id="usage-company" type="button" class="istart-card istart-center">
+                <span class="istart-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3.2"/><circle cx="16.5" cy="9.5" r="2.6"/><path d="M2.5 20c0-3.4 2.5-6 5.5-6s5.5 2.6 5.5 6"/><path d="M14.5 19.5c.2-2.6 1.6-4.6 3.8-4.6 1.9 0 3.2 1.6 3.2 4.1"/></svg></span>
+                <div class="istart-label" data-copy="usageGate.companyLabel"></div>
+                <div class="istart-desc" data-copy="usageGate.companyDesc"></div>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div id="keygate" class="gate" hidden>
           <div class="gate-inner">
             <h2 id="keygate-title" data-copy="keygate.heading"></h2>

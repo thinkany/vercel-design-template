@@ -95,6 +95,8 @@ contextBridge.exposeInMainWorld("desktop", {
   saveLog: () => ipcRenderer.invoke("log:save"),
   readLog: () => ipcRenderer.invoke("log:read"),
   revealLogs: () => ipcRenderer.invoke("log:reveal"),
+  getUsage: () => ipcRenderer.invoke("usage:get"),
+  setUsage: (usage) => ipcRenderer.invoke("usage:set", { usage }),
   getNarrate: () => ipcRenderer.invoke("narrate:get"),
   setNarrate: (enabled) => ipcRenderer.invoke("narrate:set", { enabled }),
   narrateLine: (payload) => ipcRenderer.invoke("narrate:line", payload),

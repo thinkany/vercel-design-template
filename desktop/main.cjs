@@ -3835,6 +3835,11 @@ ipcMain.handle("log:read", () => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle("log:reveal", () => { const d = appLog.logsDir(); if (d) { fs.mkdirSync(d, { recursive: true }); shell.openPath(d); } return { ok: true }; });
+// How the app is used (Rob 2026-09-09): "personal" (just for me) hides the Company Profile
+// rail icon, drawer and the Publish drawer's company messaging; "company" keeps them. Asked
+// once on first launch (before the key), changeable under Profile in the Publish drawer.
+ipcMain.handle("usage:get", () => { const u = loadUiState().usage; return { usage: u === "personal" || u === "company" ? u : null }; });
+ipcMain.handle("usage:set", (_e, { usage } = {}) => { if (usage !== "personal" && usage !== "company") return { ok: false }; setUiState({ usage }); return { ok: true, usage }; });
 ipcMain.handle("narrate:get", () => ({ enabled: narrateEnabled() }));
 ipcMain.handle("narrate:set", (_e, { enabled } = {}) => { setUiState({ buildNarrate: !!enabled }); return { ok: true, enabled: !!enabled }; });
 ipcMain.handle("narrate:line", async (_e, { phase, title, bits } = {}) => {

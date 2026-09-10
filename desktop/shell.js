@@ -49,6 +49,7 @@ el("modal-preview").addEventListener("click", async () => {
 
 // Gates
 const keygate = el("keygate");
+const usagegate = el("usagegate"); // first screen on a new install: how the app is used
 const keyinput = el("keyinput");
 const keysave = el("keysave");
 const keyerror = el("keyerror");
@@ -971,23 +972,25 @@ function showStage(stage) {
   const noKeyWorkspace = stage === "workspace" && !appHasKey;
   // The no-key reminder banner rides the preview browser whenever we're read-only.
   if (nokeyBanner) nokeyBanner.hidden = !noKeyWorkspace;
-  app.classList.toggle("onboarding-key", stage === "key"); // rail muting during the key screen
+  const gated = stage === "key" || stage === "usage"; // the two first-run screens
+  app.classList.toggle("onboarding-key", gated); // rail muting during the first-run screens
   app.classList.toggle("no-key", noKeyWorkspace); // CSS hook to disable agent-driven affordances
   // Collapse the chat column (preview goes full-width) at the key screen and in read-only mode.
-  setChatCollapsed(stage === "key" || noKeyWorkspace);
+  setChatCollapsed(gated || noKeyWorkspace);
   // The rail is inert until the key is connected (no focus/keyboard either).
   const sidebar = el("sidebar");
-  if (sidebar) sidebar.inert = stage === "key";
+  if (sidebar) sidebar.inert = gated;
+  toggleGate(usagegate, stage === "usage");
   toggleGate(keygate, stage === "key");
   toggleGate(projectgate, stage === "project");
   // Chat content is ready from the project stage on (empty & waiting); the key stage and
   // read-only (no-key) workspace hide it, and there the whole pane is collapsed anyway.
-  chatmain.hidden = stage === "key" || noKeyWorkspace;
+  chatmain.hidden = gated || noKeyWorkspace;
   // Workspace label left BLANK on purpose — the #status slot is reserved for a
   // future app-level message/alert (update, license, activity). The connect /
   // no-project states keep their labels since those screens rely on them.
   status.textContent =
-    stage === "key" ? COPY.status.notConnected : stage === "project" ? COPY.status.noProject : "";
+    gated ? COPY.status.notConnected : stage === "project" ? COPY.status.noProject : "";
   // Enable pane transitions only after the first stage paints, so the initial
   // collapsed/open state doesn't animate on launch.
   if (app.classList.contains("preload")) {
@@ -1033,8 +1036,31 @@ async function refreshRailActivation() {
 const CLOSED_LOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>';
 const OPEN_LOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 7.9-1.2"/></svg>';
 
+// How the app is used ("personal" | "company"), asked once before the key (existing installs
+// see it once at their next launch). Personal hides the Company Profile rail icon + drawer and
+// the Publish drawer's company messaging, until a profile is created or uploaded.
+let appUsage = null;
+async function applyUsage() {
+  let has = false;
+  try { const d = await window.desktop.getDefaultCompany(); has = !!(d && d.has); } catch {}
+  const show = appUsage === "company" || has;
+  railCompany.hidden = !show;
+  if (!show && railCompany.classList.contains("active")) closeModal(); // the drawer can’t outlive its icon
+}
+for (const [id, usage] of [["usage-personal", "personal"], ["usage-company", "company"]]) {
+  el(id).addEventListener("click", async () => {
+    usagegate.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+    try { await window.desktop.setUsage(usage); } catch {}
+    appUsage = usage;
+    usagegate.querySelectorAll("button").forEach((b) => { b.disabled = false; });
+    boot();
+  });
+}
 async function boot() {
   refreshRailActivation(); // color the Claude/Figma icons per key + license state
+  try { appUsage = (await window.desktop.getUsage()).usage; } catch { appUsage = null; }
+  if (!appUsage) { noProjectPlaceholder(); showStage("usage"); return; }
+  applyUsage();
   const { hasKey } = await window.desktop.getKeyStatus();
   appHasKey = hasKey;
   const proj = await window.desktop.getProjectStatus();
@@ -1264,7 +1290,7 @@ const TOUR_STEPS = [
   { copy: "figmaHelp", onEnter: () => ensureModal("figma"), target: inDrawer("figma-help"), placement: "right", advanceOnClick: true },
   // onExit closes the help panel the tour opened (whether it ends here or is skipped).
   { copy: "helpPanels", onEnter: () => ensureHelpOverlay(COPY.figma.exportHelpHtml), target: () => document.querySelector(".iref-help-card"), placement: "right", onExit: () => closeHelpOverlay() },
-  { copy: "company", onEnter: () => closeModal(), target: () => railCompany, placement: "right", advanceOnClick: true },
+  { copy: "company", onEnter: () => closeModal(), target: () => (railCompany.hidden ? null : railCompany), placement: "right", advanceOnClick: true },
   { copy: "companyDrawer", onEnter: () => ensureModal("company"), target: inDrawer("company"), placement: "right" },
   { copy: "voice", onEnter: () => closeModal(), target: () => railVoice, placement: "right", advanceOnClick: true },
   { copy: "voiceProject", onEnter: () => ensureModal("voice"), target: inDrawer("voice-project"), placement: "right" },
@@ -2043,9 +2069,16 @@ async function switchToExisting() {
 let companyAutoCreate = false;
 
 async function renderCompany(body) {
+  body = tourSection(body, "company"); // the walkthrough tour anchors to the whole drawer
+  await renderCompanyInto(body, () => openModal("company"));
+}
+// The company information: status row, Create/Update form, save-this-project, export.
+// Rendered in the Company drawer and inside the Publish drawer's Profile section;
+// `refresh` re-renders whichever host after a save or clear (and the rail icon follows).
+async function renderCompanyInto(body, refresh) {
   const def = await window.desktop.getDefaultCompany(); // { has, companyName, headingFont, bodyFont, logoName }
   const proj = await window.desktop.getProjectStatus();
-  body = tourSection(body, "company"); // the walkthrough tour anchors to the whole drawer
+  const done = () => { applyUsage(); refresh(); };
 
   // Header (Licenses-style): title + Active/Not-set badge + an unplug delete when active.
   body.appendChild(connStatusRow(
@@ -2053,7 +2086,7 @@ async function renderCompany(body) {
     def.has,
     def.has ? (def.companyName ? COPY.company.activeWith(def.companyName) : COPY.common.active) : COPY.common.notSet,
     def.has ? COPY.company.clearDefault : null,
-    def.has ? async () => { await window.desktop.clearDefaultCompany(); openModal("company"); } : null,
+    def.has ? async () => { await window.desktop.clearDefaultCompany(); done(); } : null,
   ));
   const defNote = document.createElement("div");
   defNote.className = "muted";
@@ -2092,7 +2125,7 @@ async function renderCompany(body) {
       saveProjBtn.textContent = COPY.common.saving;
       pmsg.textContent = "";
       const res = await window.desktop.saveDefaultCompany();
-      if (res.ok) openModal("company");
+      if (res.ok) done();
       else {
         pmsg.textContent = res.error || COPY.common.couldNotSave;
         pmsg.style.color = "#e5484d";
@@ -2152,7 +2185,7 @@ async function renderCompany(body) {
         bodyFontFile: files.bodyFont || null,
         logo: vals.logo || null,
       });
-      if (res && res.ok) openModal("company"); // refresh → Active + collapsed
+      if (res && res.ok) done(); // refresh → Active + collapsed
       else {
         saveMsg.textContent = (res && res.error) || COPY.common.couldNotSave;
         saveMsg.style.color = "#e5484d";
@@ -2903,7 +2936,7 @@ async function renderPublish(body) {
   // name + logo to the client; if it isn't set, offer to add it before publishing
   // (still optional). Shown whether or not Vercel is connected.
   const proj = await window.desktop.getProjectStatus();
-  if (proj.hasProject && !((proj.company || "").trim())) {
+  if (appUsage === "company" && proj.hasProject && !((proj.company || "").trim())) {
     const wrap = document.createElement("div");
     wrap.style.cssText = "margin: 6px 0 18px;";
     const rule = document.createElement("div");
@@ -2928,6 +2961,34 @@ async function renderPublish(body) {
     btns.append(upload, setup);
     wrap.append(rule, title, desc, btns);
     body.appendChild(wrap);
+  }
+
+  // ── Profile (collapsed): how the app is used + the company information ──
+  {
+    const P = COPY.publish.profile;
+    const fold = siteFold(P.title, "publish:profile", { defaultOpen: false });
+    fold.sec.style.margin = "0 0 16px";
+    const lbl = document.createElement("div"); lbl.className = "sess-label"; lbl.textContent = P.usageLabel;
+    const pick = document.createElement("div"); pick.className = "usage-pick";
+    const note = document.createElement("div"); note.className = "sess-desc"; note.style.margin = "0 0 14px";
+    const paintPick = () => {
+      pick.innerHTML = "";
+      for (const [u, text] of [["personal", P.personal], ["company", P.company]]) {
+        const b = siteMini(text, async () => {
+          if (appUsage === u) return;
+          try { await window.desktop.setUsage(u); } catch {}
+          appUsage = u; await applyUsage(); openModal("publish");
+        });
+        b.classList.toggle("on", appUsage === u);
+        pick.appendChild(b);
+      }
+      note.textContent = appUsage === "company" ? P.companyNote : P.personalNote;
+    };
+    paintPick();
+    const info = document.createElement("div");
+    fold.body.append(lbl, pick, note, info);
+    body.appendChild(fold.sec);
+    renderCompanyInto(info, () => openModal("publish")).catch(() => {});
   }
 
   if (!st.connected) {

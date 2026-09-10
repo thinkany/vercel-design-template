@@ -1231,6 +1231,16 @@ window.COPY = {
     couldNotSave: "Could not save the key.",
   },
 
+  // ── Usage gate — the first screen on a new install, before the key ──────────
+  usageGate: {
+    heading: "How do you plan on using thinkany design?",
+    intro: "You can change this later under Profile in the Publish drawer.",
+    personalLabel: "Just for me",
+    personalDesc: "Design and publish on your own. No company profile to keep.",
+    companyLabel: "For my company",
+    companyDesc: "Your studio's name and logo greet clients on shared previews.",
+  },
+
   // ── Project gate — first-run pick-a-project screen ──────────────────────────
   projectGate: {
     heading: "Choose a project",
@@ -1761,6 +1771,15 @@ window.COPY = {
     connectedWith: (user) => `Connected · ${user}`,
     connected: "Connected",
     notConnected: "Not connected",
+    // The collapsed Profile section: how the app is used + the company information.
+    profile: {
+      title: "Profile",
+      usageLabel: "Using thinkany design",
+      personal: "Just for me",
+      company: "For my company",
+      personalNote: "The Company Profile stays out of the way. Creating or uploading one below brings it back.",
+      companyNote: "The company profile signs shared previews and pre-fills new projects.",
+    },
     companyNudge: {
       title: "Your Company Information",
       desc: "The private link you share opens on a sign-in screen branded with YOUR company name and logo, that’s what your client sees first. It isn’t set for this project yet. Add it so the preview looks like yours (you can still publish without it).",
