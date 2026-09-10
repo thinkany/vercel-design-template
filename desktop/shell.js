@@ -1310,10 +1310,8 @@ const TOUR_STEPS = [
   { copy: "voiceProject", onEnter: () => ensureModal("voice"), target: inDrawer("voice-project"), placement: "right" },
   { copy: "voiceGlobal", onEnter: () => ensureModal("voice"), target: inDrawer("voice-global"), placement: "right" },
   { copy: "voiceSave", onEnter: () => ensureModal("voice"), target: inDrawer("voice-save"), placement: "right" },
-  { copy: "a11y", onEnter: () => { closeModal(); tourRevealRail(railA11y); }, target: () => railA11y, placement: "right", onExit: () => tourRestoreRail(railA11y) },
-  // The Art Director icon only shows once a built design is previewed; reveal it for
-  // its tip on a fresh install and hide it again afterwards.
-  { copy: "artdirector", onEnter: () => { closeModal(); tourRevealRail(railDirector); }, target: () => railDirector, placement: "right", onExit: () => tourRestoreRail(railDirector) },
+  // The Accessibility and Art Director icons belong to a finished design; the design-editing
+  // tips (DESIGN_TOUR, after the first build) introduce them, not the studio tour.
   { copy: "publish", onEnter: () => closeModal(), target: () => railPublish, placement: "right", advanceOnClick: true },
   { copy: "publishDrawer", onEnter: () => ensureModal("publish"), target: inDrawer("publish"), placement: "right" },
   { copy: "cms", onEnter: () => { closeModal(); tourRevealRail(railSite); }, target: () => railSite, placement: "right", onExit: () => tourRestoreRail(railSite) },

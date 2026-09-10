@@ -1669,14 +1669,6 @@ window.COPY = {
         title: "Save",
         body: "Saves both the project and the global settings together. Changes take effect from your next message to the assistant.",
       },
-      a11y: {
-        title: "Accessibility Review",
-        body: "This option becomes available on projects with a finished design. It checks the design against WCAG AA: contrast, structure, labels and keyboard use. Findings arrive grouped by rule, and each one can be fixed by the assistant, held for later, or dismissed. Turn on AA mode in Claude Settings to make it part of every build.",
-      },
-      artdirector: {
-        title: "Art Director",
-        body: "This option becomes available on projects with a finished design. It’s a second pair of eyes on the finished pages, reviewing hierarchy, rhythm, type and color, then suggesting specific changes you can apply in one click or hold for later.",
-      },
       publish: {
         title: "Publish",
         body: "Send a finished design to a private, password-protected link you can share with a client. Let’s open it and look at how publishing works.",
