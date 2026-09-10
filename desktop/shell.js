@@ -8142,7 +8142,7 @@ function resetIntake() {
   intakeActive = false;
   startChoicesShown = false;
   refsRevealed = false;
-  voiceStepDone = false;
+  voiceStepDone = false; directionStepDone = false;
   heroStepDone = false;
   menuStepDone = false;
   ctaStepDone = false;
@@ -8184,6 +8184,7 @@ let refsAnalyzing = false; // main's vision pass is running (T2)
 let railBriefRows = 0;   // prior brief-row count, so the Brief card eases in once
 let refsRevealed = false; // the rail (Design References) stays hidden until the first question is answered
 let voiceStepDone = false; // the Tone/rules step is injected by the renderer as the final question
+let directionStepDone = false; // the Design direction card follows it, the last step before the review
 
 function renderBriefSummary(brief) {
   lastBrief = brief;
@@ -9056,28 +9057,16 @@ function showBriefComplete() {
   if (!heroStepDone && heroStepApplicable()) { renderHeroStep(); return; }
   // Contact/CTA type comes after the hero, but only if Contact or CTA is a section.
   if (!ctaStepDone && ctaStepApplicable()) { renderCtaStep(); return; }
-  if (!voiceStepDone) { renderVoiceStep(); return; } // the Tone/rules step is the last question
+  if (!voiceStepDone) { renderVoiceStep(); return; } // the Tone/rules step
+  if (!directionStepDone) { renderDirectionStep(); return; } // the Design direction card is the last step
+  // The review: the "solid start" question and its actions, appended UNDER the answered
+  // cards, which stay on screen and editable all the way to the end (Rob 2026-09-09).
   intakePhase = "review";
   currentIntakeId = null;
   updateBackButton();
   clearIntakePending();
-  const head = intakeph.querySelector(".intake-head");
-  const leaving = [head, ...Array.from(intakeStack.children)].filter(Boolean);
-  const anims = leaving
-    .map((elm) => anim(elm, [
-      { opacity: 1, transform: "translateY(0px)" },
-      { opacity: 0, transform: "translateY(-22px)" },
-    ], { duration: 460 }))
-    .filter(Boolean);
-  const after = () => {
-    if (intakePhase !== "review") return; // a new question arrived mid-animation
-    intakeStack.innerHTML = "";
-    if (head) head.classList.add("intake-hidden");
-    intakeph.classList.add("reviewing"); // center the actions level with the brief rail
-    renderReviewActions();
-  };
-  if (anims.length) Promise.allSettled(anims.map((a) => a.finished)).then(after);
-  else after();
+  const old = intakeStack.querySelector(".intake-review"); if (old) old.remove();
+  renderReviewActions();
 }
 
 // Restore the head (a new question arrived after review sent us back to gathering).
@@ -9171,7 +9160,7 @@ async function renderDirectionPanel(host, opts = {}) {
   if (!axisNames.length) return; // sampler unavailable / unlicensed → no panel
 
   const panel = document.createElement("div");
-  panel.className = "idir";
+  panel.className = "idir" + (opts.inCard ? " idir-in-card" : "");
 
   const head = document.createElement("div");
   head.className = "idir-head";
@@ -9352,11 +9341,6 @@ function renderReviewActions() {
   const wrap = document.createElement("div");
   wrap.className = "intake-review";
 
-  // The design-direction knob panel fills in asynchronously at the top of the review.
-  const dirHost = document.createElement("div");
-  dirHost.className = "idir-host";
-  renderDirectionPanel(dirHost);
-
   const q = document.createElement("div");
   q.className = "intake-review-q";
   q.textContent = COPY.intake.reviewQuestion;
@@ -9400,9 +9384,55 @@ function renderReviewActions() {
     ta.focus();
   });
 
-  wrap.append(dirHost, q, primary, secondary, more);
+  wrap.append(q, primary, secondary, more);
   intakeStack.appendChild(wrap);
   fadeSlideIn(wrap, { dy: 20, duration: 620, delay: 80 });
+  const scroller = intakeph.classList.contains("flow") ? intakeph.querySelector(".intake-inner") : intakeph;
+  if (scroller) { const top = intakeCenterTarget(scroller, wrap); try { scroller.scrollTo({ top, behavior: "smooth" }); } catch { scroller.scrollTop = top; } }
+}
+
+// The Design direction step: the knob panel as a card in the stack, after the Tone
+// step. Continue saves what the panel shows (the panel already stores each draw on the
+// brief; Continue is the designer's confirmation), "I'll let you choose" leaves it to the
+// build. Editable afterwards like every other card. Without the sampler (unlicensed or
+// offline) the step is skipped.
+async function renderDirectionStep() {
+  if (intakeStack.querySelector(".direction-step")) return; // already showing
+  const meta = await getDirectionMeta();
+  if (!Object.keys(meta.axes || {}).length) { directionStepDone = true; showBriefComplete(); return; }
+  if (intakePhase !== "gathering" || directionStepDone) return;
+  currentIntakeId = null;
+  const card = { id: "direction", field: "direction", type: "direction", label: COPY.intake.q.direction, skippable: true, agentDecidesLabel: COPY.intake.letYouChoose };
+  const group = document.createElement("div");
+  group.className = "intake-group direction-step";
+  const continueBtn = document.createElement("button");
+  continueBtn.className = "intake-continue";
+  continueBtn.textContent = COPY.intake.continue;
+  const refreshReady = () => { continueBtn.disabled = !ctl.isReady(); };
+  const requestSubmit = () => { if (!group.classList.contains("answered") && ctl.isReady()) submit(); };
+  const ctl = renderIntakeCard(card, refreshReady, requestSubmit);
+  group.append(ctl.el, continueBtn);
+  refreshReady();
+  const persist = async (_meta, a) => { try { await window.desktop.setBriefDirection(a.direction || null); } catch {} };
+  async function submit() {
+    if (group.classList.contains("answered")) return;
+    group.classList.add("answered");
+    const val = ctl.getValue();
+    ctl.collapse();
+    const done = doneNote();
+    continueBtn.replaceWith(done);
+    autoDismissTool(done, 900);
+    directionStepDone = true;
+    makeCardsEditable(group, [ctl], persist);
+    await persist(null, { direction: val });
+    setTimeout(showBriefComplete, 520); // let "Got it" flash, then the review
+  }
+  continueBtn.addEventListener("click", submit);
+  intakeStack.appendChild(group);
+  const scroller = intakeph.classList.contains("flow") ? intakeph.querySelector(".intake-inner") : intakeph;
+  const centerTo = scroller ? intakeCenterTarget(scroller, group) : 0;
+  fadeSlideIn(group, { dy: 44, duration: 720, delay: 60 });
+  if (scroller) { try { scroller.scrollTo({ top: centerTo, behavior: "smooth" }); } catch { scroller.scrollTop = centerTo; } }
 }
 
 // ---- Post-build reroll: fork a built design with a new direction ------------
@@ -11202,6 +11232,7 @@ function renderIntakeCard(card, onChange, requestSubmit) {
     : card.type === "cta-type" ? buildCtaType(card, body, changed)
     : card.type === "logo" ? buildLogoUpload(card, body, changed)
     : card.type === "voice" ? buildVoiceRules(card, body, changed)
+    : card.type === "direction" ? buildDirection(card, body, changed)
     : buildOpenText(card, body, changed); // defensive fallback
 
   // Skippable cards get a "let you decide" affordance that records null.
@@ -11256,6 +11287,27 @@ function renderIntakeCard(card, onChange, requestSubmit) {
       body.style.display = "";
       if (skipBtn) skipBtn.style.display = "";
       if (answerEl) answerEl.style.display = "none";
+    },
+  };
+}
+
+// direction → the knob panel (renderDirectionPanel) inside the card. Its value is the
+// Direction the panel shows; the panel stores each draw on the brief as it goes, so the
+// card's Continue is the confirmation and a skip clears it.
+function buildDirection(card, body, onChange) {
+  let current = (lastBrief && lastBrief.direction) || null;
+  renderDirectionPanel(body, { inCard: true, initialDirection: current, onChange: (d) => { current = d || null; onChange(); } });
+  const axisLabel = (name) => (COPY.intake.direction.axisLabels || {})[name] || name;
+  return {
+    getValue: () => current,
+    hasValue: () => !!(current && current.lens),
+    setDisabled: (d) => body.querySelectorAll("button").forEach((e) => { e.disabled = d; }),
+    display: () => {
+      if (!current) return "";
+      const lens = ((_directionMeta && _directionMeta.lenses) || []).find((l) => l.id === current.lens);
+      const name = current.lensLabel || (lens ? lens.label : current.lens);
+      const axes = Object.entries(current.axes || {}).map(([k, v]) => `${axisLabel(k)} ${v}`);
+      return [name, ...axes].join(" · ");
     },
   };
 }
@@ -12334,7 +12386,7 @@ async function pickDeliverable(type) {
 
   startChoicesShown = false;
   refsRevealed = false; // rail stays hidden until the first question is answered
-  voiceStepDone = false; // the renderer-injected Tone/rules step hasn't run yet
+  voiceStepDone = false; directionStepDone = false; // the renderer-injected Tone/rules step hasn't run yet
   heroStepDone = false; // the hero-layout step (after sections, if Hero chosen)
   menuStepDone = false; // the header/nav step (before hero, website projects)
   ctaStepDone = false; // the contact/CTA type step (after hero, if Contact/CTA chosen)

@@ -3532,6 +3532,16 @@ ipcMain.handle("intake:sampleDirection", async (event, { axes, lens } = {}) => {
   return { direction };
 });
 
+// The Design direction card (a step in the intake like the others): Continue saves what
+// the panel shows; "I'll let you choose" clears it so the build handoff samples one.
+ipcMain.handle("intake:setDirection", (event, { direction } = {}) => {
+  if (!intakeBrief) intakeBrief = createEmptyBrief("web-pages");
+  if (direction && typeof direction === "object" && direction.lens) intakeBrief.direction = direction;
+  else { intakeBrief.direction = null; intakeBrief.directionBlock = null; }
+  if (!event.sender.isDestroyed()) event.sender.send("agent:brief", intakeBrief);
+  return { ok: true };
+});
+
 // ---- Post-build reroll (fork an existing design with a new direction) --------
 // The next free variation id, scanning existing folders (max + 1, so gaps/removals
 // never collide). Base v00 has no folder, so folders are v01, v02, …

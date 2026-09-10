@@ -2088,6 +2088,7 @@ window.COPY = {
       logo: "Logo (optional)",
       logoPlaceholder: "Drop or choose a logo image (PNG, SVG, JPG)",
       reference: (kind) => `Is there a ${kind} you love? Share it and what draws you to it.`,
+      direction: "Which design direction should we take?",
       heroLayout: "How should the hero (the first thing visitors see) be laid out?",
       heroLayoutHelp: "Pick a starting structure, or let me choose.",
       menuLayout: "How should the site header and navigation be laid out?",

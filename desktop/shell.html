@@ -1949,6 +1949,10 @@
       /* P2: design-direction knob panel */
       .idir-host { width: 100%; }
       .idir { position: relative; width: 100%; border: 1px solid #e4e4ea; border-radius: 12px; padding: 16px 18px; background: #fbfbfd; box-sizing: border-box; transition: opacity .12s; }
+      /* As a card in the intake stack (the Design direction step) the panel keeps its
+         controls but not its own frame or title: the card supplies both. */
+      .idir.idir-in-card { border: 0; border-radius: 0; padding: 0; background: transparent; }
+      .idir.idir-in-card .idir-head { display: none; }
       .idir.busy { opacity: .55; }
       .idir-head { font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #74747a; margin-bottom: 6px; }
       .idir-lens { font-family: var(--admin-font-heading, Georgia, serif); font-size: 19px; font-weight: 700; color: #111; line-height: 1.2; }
