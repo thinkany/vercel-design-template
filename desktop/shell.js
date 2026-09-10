@@ -1503,8 +1503,8 @@ const tourEl = (() => {
   t.setAttribute("role", "dialog");
   t.setAttribute("aria-live", "polite");
   t.innerHTML = `
-    <span class="tour-progress"><i></i></span>
     <div class="tour-head">
+      <span class="tour-progress"><i></i></span>
       <button type="button" class="tour-x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div class="tour-title"></div>
