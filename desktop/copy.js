@@ -1304,6 +1304,10 @@ window.COPY = {
           title: "Point and comment",
           body: "Switch this on, then hover an element in the preview and click it to leave a note. Claude receives the exact element you pointed at, so the fix lands where you meant.",
         },
+        credits: {
+          title: "Images that need a license",
+          body: "When a design uses photos that are not free to reuse, this badge appears in the preview. Click it to list them and outline each one on the page. Before the site goes live, license them or ask for a replacement: a different photo, a free one, or your own upload.",
+        },
         reroll: {
           title: "Try another direction",
           body: "A fresh design from the same brief, steered to a different direction, as a new variation beside this one. The original stays as it is; keep whichever you prefer.",

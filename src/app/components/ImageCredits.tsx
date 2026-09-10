@@ -25,10 +25,30 @@ const HL_OFFSET = "-2px";
  *   branch, never in `capture` mode.
  * - Renders nothing when there's no manifest, or nothing in it is flagged.
  */
+// The app's design-editing tips can ask for an EXPANDED EXAMPLE of this alert on a project
+// with nothing flagged (window event "ta:tour-demo", detail { what: "credits", on }), so the
+// tip has something to point at. Sample entries only; nothing is highlighted on the page.
+const DEMO_CREDITS: Credit[] = [
+  { file: "hero-mountain-dusk.avif", source: "Unsplash", url: "https://unsplash.com", free: false },
+  { file: "workshop-bay.avif", source: "Pexels", url: "https://www.pexels.com", free: false },
+];
+
 export function ImageCredits() {
   const [flagged, setFlagged] = useState<Credit[]>([]);
   const [active, setActive] = useState(false);
+  const [demo, setDemo] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onDemo = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      if (d.what !== "credits") return;
+      setDemo(!!d.on);
+      setActive(!!d.on); // the example shows expanded; leaving the tip folds it away again
+    };
+    window.addEventListener("ta:tour-demo", onDemo);
+    return () => window.removeEventListener("ta:tour-demo", onDemo);
+  }, []);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -50,7 +70,7 @@ export function ImageCredits() {
   // While active, outline every flagged image in the design; restore on toggle-off
   // or unmount. Outlines ride on the elements, so they scroll with the page.
   useEffect(() => {
-    if (!active) return;
+    if (!active || !flagged.length) return;
     const els = findImageElements(flagged.map((c) => c.file));
     applyHighlights(els);
     return () => clearHighlights(els);
@@ -69,11 +89,12 @@ export function ImageCredits() {
     }
   }, [active]);
 
-  if (!import.meta.env.DEV || !flagged.length) return null;
+  if (!import.meta.env.DEV || (!flagged.length && !demo)) return null;
 
-  const n = flagged.length;
+  const shown = flagged.length ? flagged : DEMO_CREDITS;
+  const n = shown.length;
   return (
-    <div style={{ position: "fixed", left: 16, bottom: 16, zIndex: 60, fontFamily: "system-ui, sans-serif" }}>
+    <div data-image-credits style={{ position: "fixed", left: 16, bottom: 16, zIndex: 60, fontFamily: "system-ui, sans-serif" }}>
       {active && (
         <div
           ref={panelRef}
@@ -95,7 +116,7 @@ export function ImageCredits() {
             {copy.imageCredits.count(n)}
           </div>
           <ul style={{ margin: "0 0 8px", padding: 0, listStyle: "none", maxHeight: 168, overflowY: "auto" }}>
-            {flagged.map((c) => {
+            {shown.map((c) => {
               const href = sourceLink(c);
               return (
                 <li key={c.file} style={{ padding: "3px 0", color: "#d7d7dd" }}>

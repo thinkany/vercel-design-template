@@ -1481,6 +1481,12 @@ async function tourProxyFor(selector) {
   }, 400);
   return tourProxy;
 }
+// Ask the page to stand a feature up for a tip (an expanded example of the image-licence
+// badge when the project has nothing flagged). The page listens for "ta:tour-demo".
+async function tourPageDemo(what, on) {
+  const wv = activeTab && activeTab.wv; if (!wv) return;
+  try { await wv.executeJavaScript(`window.dispatchEvent(new CustomEvent("ta:tour-demo", { detail: { what: ${JSON.stringify(what)}, on: ${on ? "true" : "false"} } }))`); } catch {}
+}
 function tourProxyClear() {
   clearInterval(tourProxyTimer); tourProxyTimer = null;
   if (tourProxy) { tourProxy.remove(); tourProxy = null; }
@@ -1491,6 +1497,9 @@ const DESIGN_TOUR_STEPS = [
   { copy: "views", onEnter: async () => { closeModal(); if (homeTab && tabs.includes(homeTab) && activeTab !== homeTab) { setActiveTab(homeTab); await new Promise((r) => setTimeout(r, 350)); } tourProxyClear(); await tourProxyFor("[data-view-toggle]"); }, target: () => tourProxy, placement: "bottom", onExit: tourProxyClear },
   { copy: "chat", onEnter: () => setChatCollapsed(false), target: () => el("input"), placement: "top" },
   { copy: "feedback", target: () => (feedbackBtn && !feedbackBtn.hidden ? feedbackBtn : null), placement: "bottom" },
+  // The image-licence badge lives in the page (lower left). A project without flagged
+  // images has no badge, so the page is asked to show an expanded example for the tip.
+  { copy: "credits", onEnter: async () => { closeModal(); if (homeTab && tabs.includes(homeTab) && activeTab !== homeTab) { setActiveTab(homeTab); await new Promise((r) => setTimeout(r, 350)); } tourProxyClear(); await tourPageDemo("credits", true); await new Promise((r) => setTimeout(r, 450)); await tourProxyFor("[data-image-credits]"); }, target: () => tourProxy, placement: "top", onExit: () => { tourProxyClear(); tourPageDemo("credits", false); } },
   { copy: "reroll", target: () => { const b = el("reroll-btn"); return b && !b.hidden ? b : null; }, placement: "bottom" },
   { copy: "artdirector", onEnter: () => { closeModal(); tourRevealRail(railDirector); }, target: () => railDirector, placement: "right", onExit: () => tourRestoreRail(railDirector) },
   { copy: "a11y", onEnter: () => { closeModal(); tourRevealRail(railA11y); }, target: () => railA11y, placement: "right", onExit: () => tourRestoreRail(railA11y) },
