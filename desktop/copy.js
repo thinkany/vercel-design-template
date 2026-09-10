@@ -2096,6 +2096,13 @@ window.COPY = {
       ctaType: "How should the contact / call-to-action section work?",
       ctaTypeHelp: "A contact form, or a button-led call to action. Or let me choose.",
     },
+    // The Design References introduction: the rail's panel shown as a card right after
+    // the first question, so it isn't overlooked; Continue hands it over to the rail.
+    refsIntro: {
+      label: "Anything we should look at?",
+      help: "Sites, screenshots, brand files, anything with the feel you're after. Add them now or any time: this panel moves to the right and stays with you through every question.",
+      continue: "Continue",
+    },
     // The start fork. Shown only when Figma is licensed (Start from Figma + Get Designing);
     // unlicensed users skip it and go straight to Get Designing. (clientSetup* kept for now:
     // the "Client Setup" card is retired pending reconsideration, see onboarding-figma-reframe-spec.)
