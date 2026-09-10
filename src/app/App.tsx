@@ -50,6 +50,10 @@ const variationTokenLoaders = import.meta.glob("../variations/*/styles/tokens.cs
 // --ta-font-* families the variation's tokens name never arrive here and the preview
 // falls back to a system face while the published site shows the brand type.
 const variationFontLoaders = import.meta.glob("../variations/*/styles/fonts.css");
+// ...and its globals: block-level CSS a design adds (keyframes, textures, scroll-driven
+// rules) lives in the variation's globals.css, and the site loads that copy. Same rule:
+// what the site loads, the design surface loads, or the two disagree.
+const variationGlobalLoaders = import.meta.glob("../variations/*/styles/globals.css");
 
 export default function App() {
   const [page, setPage] = useState(getInitialPage);
@@ -91,14 +95,20 @@ export default function App() {
     }
   }, [variationId, page]);
 
-  // Load the active variation's webfonts + design tokens (overrides the base tokens).
+  // Load the active variation's webfonts, design tokens and globals (each overrides the
+  // base copy), in the same order index.css loads the base ones.
   useEffect(() => {
     if (variationId === "v00") return;
     const own = (p: string) => p.includes(`/variations/${variationId}/`);
-    const fontsKey = Object.keys(variationFontLoaders).find(own);
-    if (fontsKey) variationFontLoaders[fontsKey]();
-    const key = Object.keys(variationTokenLoaders).find(own);
-    if (key) variationTokenLoaders[key]();
+    const load = async (loaders: Record<string, () => Promise<unknown>>) => {
+      const key = Object.keys(loaders).find(own);
+      if (key) await loaders[key]();
+    };
+    (async () => {
+      await load(variationFontLoaders);
+      await load(variationTokenLoaders);
+      await load(variationGlobalLoaders);
+    })();
   }, [variationId]);
 
   // Resolve chrome/mode components for the active variation (falls back to base).

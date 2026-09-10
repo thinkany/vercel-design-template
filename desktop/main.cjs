@@ -495,6 +495,16 @@ function gateEnvFor(dir) {
 // A project is site-ready once a design has been PROMOTED (/promote-blocks): the
 // site target exists, content/site.json pins a real variation, and there's a home
 // page to render. Before that the Site publish stays off with a plain reason.
+// What the agent is told about where the design renders (agent.mjs buildStateAppend):
+// promoted or not, which design, and the block files it can edit.
+function projectStateForAgent(dir) {
+  try {
+    const r = siteReady(dir);
+    if (!r.ready) return { promoted: false };
+    const blocks = fs.readdirSync(path.join(dir, "site", "blocks")).filter((f) => /^[A-Z].*\.tsx$/.test(f)).map((f) => `site/blocks/${f}`);
+    return { promoted: true, design: r.design, blocks };
+  } catch { return { promoted: false }; }
+}
 function siteReady(dir) {
   try {
     if (!fs.existsSync(path.join(dir, "site", "astro.config.mjs"))) return { ready: false, reason: "no-site" };
@@ -1465,7 +1475,7 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode, mo
   // The agent can pull a licensed playbook mid-turn (a plain-English "design a gallery
   // section" → the design-block skill) instead of only through a typed /command.
   const loadSkill = (name) => { const s = skillsClient && skillsClient.skills()[name]; return s ? s.body : null; };
-  const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, askIntake, onSuggest, model: turnModel || currentModel, copyVoice: effectiveVoice(currentProject), onQuery: (q) => { activeQuery = q; }, reviewMode, loadSkill });
+  const result = await runPrompt({ prompt, sessionId, cwd: currentProject, onEvent, askQuestion, askIntake, onSuggest, model: turnModel || currentModel, copyVoice: effectiveVoice(currentProject), onQuery: (q) => { activeQuery = q; }, reviewMode, loadSkill, projectState: projectStateForAgent(currentProject) });
   // A review turn is an isolated, fresh session (its own Art Director persona); it must
   // not become the tracked chat session, or the next chat turn would resume the critique.
   if (!reviewMode && result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it
@@ -4917,7 +4927,7 @@ async function renderLensExamples(opts) {
       scaffoldProject, detectDesign, directionMeta, sampleDirection, buildDesignPrompt,
       expandPrompt: (pr) => { const x = skillsClient && skillsClient.expandPrompt(pr); return x ? x.prompt : null; },
       startViteFor: async (dir) => { currentProject = dir; return startViteFor(dir); },
-      runPrompt: (args) => runPrompt({ ...args, onSuggest: () => {}, model: currentModel, copyVoice: effectiveVoice(args.cwd) }),
+      runPrompt: (args) => runPrompt({ ...args, onSuggest: () => {}, model: currentModel, copyVoice: effectiveVoice(args.cwd), projectState: projectStateForAgent(args.cwd) }),
       captureOp: runCaptureOp, log,
     }, opts);
   } catch (e) { err = e; }

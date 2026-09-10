@@ -121,6 +121,17 @@ upgrades can refresh the framework without ever touching the designer's work.
   the base, or you change every variation that falls back to v00. The starter
   `Home.tsx` imports `siteConfig`; if your design stops using it, **drop the import
   too** or it dangles.
+- **Promoted project (`content/site.json` pins a design other than `v00`)? The preview
+  renders the SITE, not the variation.** After `/promote-blocks` the design surface
+  (Home tab, device frames, capture) renders `content/pages/*.json` through
+  `site/blocks/*.tsx`, the same files the Site tab and the published site use.
+  `src/variations/{id}/components/*.tsx` **no longer renders anywhere**: an edit there
+  changes nothing on screen, however correct it looks. A change to an existing section
+  (its layout, an image treatment, motion, a class) goes in **`site/blocks/<Block>.tsx`**;
+  its copy and images in **`content/pages/<page>.json`** (or the content type's entries);
+  block-owned CSS (keyframes, textures, scroll-driven rules) in **`site/blocks/blocks.css`**,
+  which the design surface loads too. A new section is `/design-block`. Only a deliberate
+  redesign meant to be re-promoted touches the variation, and say so when you do.
 - **On base (`v00`), or no variation exists yet?** The designer needs their working
   variation first. Normally `/setup-styleguide` creates it (`v01`) during onboarding;
   if they skipped that, point them at the dashboard's **"Start designing"** button
@@ -563,8 +574,8 @@ lost on the published site unless it has the CSS translation below.
 |---|---|---|
 | Reveal on scroll (fade / slide / stagger in) | `motion` `whileInView` (`initial`/`animate`, `viewport={{ once: true }}`), or the `<Reveal>` pattern | `<Reveal delay>` (a `data-reveal` div, CSS + one observer). Carries. |
 | Parallax (a photo drifting slower than the page) | `<Parallax>` (rule 8) | the same component, CSS only. Carries. |
-| Scroll-linked progress (a bar filling, a mask opening, a scrub) | CSS scroll-driven animation: `animation-timeline: view()` / `scroll()` in the variation's `globals.css`, wrapped in `@supports`, on an `overflow-clip` (never `hidden`) ancestor chain | the same CSS. Carries. |
-| Ambient loops (drift, bob, rotate, marquee, pulse) | a CSS `@keyframes` + class in `globals.css`; not a `motion` `repeat: Infinity` | the keyframe moves to `site/blocks/blocks.css`. Carries. |
+| Scroll-linked progress (a bar filling, a mask opening, a scrub) | CSS scroll-driven animation: `animation-timeline: view()` / `scroll()` in the variation's `styles/globals.css` (promoted: `site/blocks/blocks.css`), wrapped in `@supports`, on an `overflow-clip` (never `hidden`) ancestor chain | the same CSS. Carries. |
+| Ambient loops (drift, bob, rotate, marquee, pulse) | a CSS `@keyframes` + class in the variation's `styles/globals.css` (promoted: `site/blocks/blocks.css`); not a `motion` `repeat: Infinity` | the keyframe moves to `site/blocks/blocks.css`. Carries. |
 | Hover / focus / press micro-interactions | Tailwind `transition-*`, `hover:`, `group-hover:`, `focus-visible:`; `motion` `whileHover` only for physics a transition can't do | CSS. Carries (a `whileHover` is rewritten as a transition, so keep it simple). |
 | Layout / presence animation (a card that grows, an item that leaves) | `motion` `layout` / `AnimatePresence` | does not carry. Fine in the design phase; the block ships static, and promote tells the designer. |
 | Stateful interaction (accordion, tabs, carousel, menu) | shadcn/Radix `ui/*` (`accordion`, `tabs`, `carousel`) | CSS-only where one exists (`<details>/<summary>` expander, `:has()` toggles, CSS scroll-snap for a carousel), else the block is static and promote says so. The Header is the one block that hydrates. |

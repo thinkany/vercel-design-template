@@ -149,6 +149,24 @@ const ART_DIRECTOR_PERSONA =
   "asset only when the client alone can supply it (their own product photo, logo). You still never edit or " +
   "source anything yourself: these just let the designer trigger a scoped action.\n";
 
+// Where the design renders, so an edit lands in a file that is on screen. Once a project
+// is promoted the design surface renders the site's blocks + content (the site bridge),
+// and the variation's components render nowhere; an agent that edits those reports a
+// change the designer can never see. Empty before promotion (the playbooks cover it).
+function buildStateAppend(state) {
+  if (!state || !state.promoted) return "";
+  const blocks = (state.blocks || []).length ? ` The blocks are: ${state.blocks.join(", ")}.` : "";
+  return (
+    "\n\n# Project state: promoted, the preview renders the site\n" +
+    `This project's design (${state.design}) has been promoted into site blocks. The Home tab, the ` +
+    "device frames, the capture and the Site tab all render content/pages/*.json through " +
+    "site/blocks/*.tsx. The files under src/variations/*/components/ no longer render anywhere; " +
+    "editing them changes nothing on screen. A change to an existing section goes in its block " +
+    "file under site/blocks/, its copy and images in content/, block CSS in site/blocks/blocks.css; " +
+    "a new section is /design-block." + blocks + "\n"
+  );
+}
+
 // Turn the resolved copy voice into a system-prompt addendum. Empty when nothing
 // is set — so a project with no voice keeps the exact default system prompt.
 // Scoped to user-facing DESIGN copy so it shapes what lands in pages, not code.
@@ -281,7 +299,7 @@ function buildSkillsServer(sdk, loadSkill) {
   return sdk.createSdkMcpServer({ name: "skills", version: "1.0.0", tools: [loadTool] });
 }
 
-export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, askIntake, onSuggest, model, copyVoice, onQuery, reviewMode, loadSkill }) {
+export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, askIntake, onSuggest, model, copyVoice, onQuery, reviewMode, loadSkill, projectState }) {
   let resolvedSession = sessionId;
 
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -312,7 +330,7 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
     // System-prompt append: the Art Director persona for a review turn, otherwise the
     // always-on chat (builder) persona + (when set) the project's design copy voice. A
     // review turn writes prose, not design copy, so it carries no copy voice.
-    const systemAppend = (reviewMode ? ART_DIRECTOR_PERSONA : (CHAT_PERSONA + buildVoiceAppend(copyVoice))) + GUARD_APPEND;
+    const systemAppend = (reviewMode ? ART_DIRECTOR_PERSONA : (CHAT_PERSONA + buildVoiceAppend(copyVoice))) + GUARD_APPEND + buildStateAppend(projectState);
     // Review mode is READ-ONLY: no Write/Edit/Bash and none of the MCP tools, so the Art
     // Director can look at the design (Read/Grep/Glob) but physically cannot change it.
     const REVIEW_TOOLS = ["Read", "Grep", "Glob", "WebFetch", "WebSearch"];
