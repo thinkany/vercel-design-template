@@ -1025,6 +1025,8 @@ async function refreshRailActivation() {
     if (appUsage) applyUsage(); // the Company Profile icon follows the usage flag (a saved profile flips it)
     railClaude.classList.toggle("activated", !!(k && k.hasKey));
     railFigma.classList.toggle("activated", !!(l && l.hasLicense));
+    railFigma.hidden = !(l && l.hasLicense); // no Figma key → no icon (the walkthrough reveals it for its steps)
+    if (railFigma.hidden && isModalOpen("figma")) closeModal();
     railPublish.classList.toggle("activated", !!(vc && vc.connected));
     // All three credentials present → the app is unlocked: open the padlock.
     const unlocked = !!(k && k.hasKey) && !!(l && l.hasLicense) && !!(dl && dl.hasLicense);
@@ -1286,8 +1288,8 @@ const TOUR_STEPS = [
   { copy: "figmaLicense", onEnter: () => ensureModal("licenses"), target: inDrawer("figma-license"), placement: "right" },
   { copy: "designLicense", onEnter: () => ensureModal("licenses"), target: inDrawer("design-license"), placement: "right" },
   { copy: "closeDrawer", onEnter: () => ensureModal("licenses"), target: () => modalClose, placement: "right" },
-  { copy: "figma", onEnter: () => ensureModal("figma"), target: inDrawer("figma-export"), placement: "right" },
-  { copy: "figmaHelp", onEnter: () => ensureModal("figma"), target: inDrawer("figma-help"), placement: "right", advanceOnClick: true },
+  { copy: "figma", onEnter: () => { tourRevealRail(railFigma); return ensureModal("figma"); }, target: inDrawer("figma-export"), placement: "right" },
+  { copy: "figmaHelp", onEnter: () => ensureModal("figma"), target: inDrawer("figma-help"), placement: "right", advanceOnClick: true, onExit: () => tourRestoreRail(railFigma) },
   // onExit closes the help panel the tour opened (whether it ends here or is skipped).
   { copy: "helpPanels", onEnter: () => ensureHelpOverlay(COPY.figma.exportHelpHtml), target: () => document.querySelector(".iref-help-card"), placement: "right", onExit: () => closeHelpOverlay() },
   { copy: "company", onEnter: () => closeModal(), target: () => (railCompany.hidden ? null : railCompany), placement: "right", advanceOnClick: true },
@@ -2224,6 +2226,7 @@ async function renderCompanyInto(body, refresh) {
 async function renderFigma(body) {
   const lic = await window.desktop.getLicenseStatus();
   railFigma.classList.toggle("activated", !!lic.hasLicense); // color the icon on save/clear
+  railFigma.hidden = !lic.hasLicense;
   body = tourSection(body, "figma-export"); // the walkthrough tour anchors to the whole drawer
 
   body.appendChild(connStatusRow(COPY.figma.licenseLabel, lic.hasLicense, lic.hasLicense ? COPY.common.active : COPY.common.notSet, null, null));
