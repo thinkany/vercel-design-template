@@ -1299,6 +1299,7 @@ const TOUR_STEPS = [
   { copy: "claudeKey", onEnter: () => ensureModal("licenses"), target: inDrawer("claude-key"), placement: "right" },
   { copy: "figmaLicense", onEnter: () => ensureModal("licenses"), target: inDrawer("figma-license"), placement: "right" },
   { copy: "designLicense", onEnter: () => ensureModal("licenses"), target: inDrawer("design-license"), placement: "right" },
+  { copy: "unsplashKey", onEnter: () => ensureModal("licenses"), target: inDrawer("unsplash-key"), placement: "right" },
   { copy: "closeDrawer", onEnter: () => ensureModal("licenses"), target: () => modalClose, placement: "right" },
   { copy: "figma", onEnter: () => { tourRevealRail(railFigma); return ensureModal("figma"); }, target: inDrawer("figma-export"), placement: "right" },
   { copy: "figmaHelp", onEnter: () => ensureModal("figma"), target: inDrawer("figma-help"), placement: "right", advanceOnClick: true, onExit: () => tourRestoreRail(railFigma) },
@@ -2690,6 +2691,18 @@ async function renderLicenses(body) {
     // The design license gates the Art Director rail (+ lens picker). On change,
     // drop the cached meta and re-evaluate so the rail appears/disappears at once.
     onChange: () => { _directionMeta = null; _directionMetaMissAt = 0; updateRerollBtn(); },
+  });
+
+  licensesDivider(body);
+
+  // Optional: the designer's own Unsplash access key, so a build can search the
+  // library for matching photos (free, attributed) instead of guessing image URLs.
+  await licenseSection(tourSection(body, "unsplash-key"), {
+    label: COPY.licenses.unsplashLabel,
+    desc: COPY.licenses.unsplashDesc,
+    getStatus: () => window.desktop.getUnsplashStatus(),
+    save: (k) => window.desktop.saveUnsplashKey(k),
+    clear: () => window.desktop.clearUnsplashKey(),
   });
 }
 

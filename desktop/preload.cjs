@@ -113,6 +113,9 @@ contextBridge.exposeInMainWorld("desktop", {
   getDesignLicenseStatus: () => ipcRenderer.invoke("license:designStatus"),
   saveDesignLicense: (key) => ipcRenderer.invoke("license:designSave", { key }),
   clearDesignLicense: () => ipcRenderer.invoke("license:designClear"),
+  getUnsplashStatus: () => ipcRenderer.invoke("unsplash:status"),
+  saveUnsplashKey: (key) => ipcRenderer.invoke("unsplash:save", { key }),
+  clearUnsplashKey: () => ipcRenderer.invoke("unsplash:clear"),
 
   // ---- Publish (direct-to-Vercel) ----
   getVercelStatus: () => ipcRenderer.invoke("vercel:status"),

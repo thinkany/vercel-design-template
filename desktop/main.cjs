@@ -244,6 +244,33 @@ function storeDesignLicense(key) {
   fs.writeFileSync(designLicenseFilePath(), data);
 }
 function removeStoredDesignLicense() { try { fs.unlinkSync(designLicenseFilePath()); } catch { /* already gone */ } }
+// The Unsplash access key: optional, the designer's own (api.unsplash.com, free), stored
+// like the licences and injected as UNSPLASH_ACCESS_KEY so the design build's image
+// sourcing (scripts/find-images.mjs) can search the library instead of guessing URLs.
+function unsplashKeyFilePath() { return path.join(app.getPath("userData"), "unsplash-key.enc"); }
+function loadStoredUnsplashKey() {
+  try {
+    const p = unsplashKeyFilePath();
+    if (!fs.existsSync(p)) return null;
+    const buf = fs.readFileSync(p);
+    return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(buf) : buf.toString("utf8");
+  } catch { return null; }
+}
+function storeUnsplashKey(key) {
+  const data = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(key) : Buffer.from(key, "utf8");
+  fs.writeFileSync(unsplashKeyFilePath(), data);
+}
+function removeStoredUnsplashKey() { try { fs.unlinkSync(unsplashKeyFilePath()); } catch { /* already gone */ } }
+// Validate with the cheapest authenticated call (one search result).
+async function validateUnsplashKey(key) {
+  try {
+    const res = await fetch("https://api.unsplash.com/search/photos?query=studio&per_page=1", { headers: { Authorization: `Client-ID ${key}`, "Accept-Version": "v1" } });
+    if (res.ok) return { ok: true };
+    if (res.status === 401) return { ok: false, error: "Unsplash rejected that access key." };
+    if (res.status === 403) return { ok: false, error: "That key's hourly limit is used up; try again shortly." };
+    return { ok: false, error: `Unexpected response from Unsplash (${res.status}).` };
+  } catch (e) { return { ok: false, error: `Couldn't reach Unsplash: ${e.message}` }; }
+}
 // /api/direction lives beside /api/derive on the same host.
 function directionEndpoint() {
   if (process.env.DIRECTION_ENDPOINT) return process.env.DIRECTION_ENDPOINT;
@@ -4198,6 +4225,25 @@ ipcMain.handle("license:designClear", () => {
   if (skillsClient) skillsClient.clear(); // no license, no playbooks
   return { ok: true };
 });
+// The optional Unsplash key (image sourcing).
+ipcMain.handle("unsplash:status", () => {
+  const key = (process.env.UNSPLASH_ACCESS_KEY || "").trim();
+  return { hasLicense: !!key, hint: key ? key.slice(-4) : null };
+});
+ipcMain.handle("unsplash:save", async (_event, { key }) => {
+  const k = (key || "").trim();
+  if (!k) return { ok: false, error: "Paste your Unsplash access key first." };
+  const v = await validateUnsplashKey(k);
+  if (!v.ok) return v;
+  try { storeUnsplashKey(k); } catch (e) { return { ok: false, error: `Could not save the key: ${e.message}` }; }
+  process.env.UNSPLASH_ACCESS_KEY = k;
+  return { ok: true };
+});
+ipcMain.handle("unsplash:clear", () => {
+  removeStoredUnsplashKey();
+  delete process.env.UNSPLASH_ACCESS_KEY;
+  return { ok: true };
+});
 
 // ---- Publish IPC (direct-to-Vercel) -----------------------------------------
 ipcMain.handle("vercel:status", () => {
@@ -5023,6 +5069,8 @@ app.whenReady().then(async () => {
   if (storedLicense) process.env.DERIVE_LICENSE_KEY = storedLicense;
   const storedDesignLicense = loadStoredDesignLicense(); // in-app design license wins over .env.local
   if (storedDesignLicense) process.env.DESIGN_LICENSE_KEY = storedDesignLicense;
+  const storedUnsplashKey = loadStoredUnsplashKey(); // optional: image sourcing for the design build
+  if (storedUnsplashKey) process.env.UNSPLASH_ACCESS_KEY = storedUnsplashKey;
   // Licensed skills: the last cache is usable at once (offline grace); a refresh
   // runs in the background whenever a Design license is present. SKILLS_LOCAL=1
   // (dev) reads desktop/skills/*.md instead, live.

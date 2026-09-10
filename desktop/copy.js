@@ -1630,6 +1630,10 @@ window.COPY = {
         title: "Design, Research, Art Director & Site builder",
         body: "This license unlocks the studio’s own intelligence: design directions, competitor research, the Art Director review, and the site builder with pages, posts, media and publishing. Licenses are validated with thinkany and kept in your keychain too.",
       },
+      unsplashKey: {
+        title: "Unsplash, optional",
+        body: "Add your own Unsplash access key and a build searches the library for photos that match the brief, downloads them, and records the photographer credit. It’s free from unsplash.com/developers. Skip it and images are found the plain way.",
+      },
       closeDrawer: {
         title: "Closing a drawer",
         body: "This X closes any drawer. A click anywhere outside the drawer, or the Escape key, closes it too. The rail stays live while a drawer is open, so you can switch straight to another.",
@@ -1796,6 +1800,8 @@ window.COPY = {
     designDesc: "Unlocks design directions, competitor research, the Art Director review, and the site builder (pages, posts, media, publishing).",
     figmaLabel: "Figma Export",
     figmaDesc: "Unlocks exporting your designs to Figma.",
+    unsplashLabel: "Unsplash (optional)",
+    unsplashDesc: "Your own Unsplash access key lets a build search the library for photos that fit the brief: free to use, credited to the photographer. Free at unsplash.com/developers (create an app, copy its Access Key). Without it, images are sourced the plain way.",
     status: "License",
     keyLabel: "Key",
     remove: "Remove license",

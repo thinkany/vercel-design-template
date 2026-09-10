@@ -72,7 +72,7 @@ request of a session, check before diving in:
 - **Is it up + what mode am I in? One batched call** does the server ping AND reads
   the design-mode flags together, so §2b/§4b/§4d never spawn their own `echo`:
   ```bash
-  echo "http=$(curl -s -o /dev/null -w '%{http_code}' "${TA_PREVIEW_URL:-http://localhost:5173}") IMAGES=${TA_DESIGN_IMAGES:-off} RESEARCH=${TA_DESIGN_RESEARCH:-off} BROAD=${TA_DESIGN_RESEARCH_BROAD:-off} A11Y=${TA_DESIGN_A11Y:-off}"
+  echo "http=$(curl -s -o /dev/null -w '%{http_code}' "${TA_PREVIEW_URL:-http://localhost:5173}") IMAGES=${TA_DESIGN_IMAGES:-off} UNSPLASH=${UNSPLASH_ACCESS_KEY:+on} RESEARCH=${TA_DESIGN_RESEARCH:-off} BROAD=${TA_DESIGN_RESEARCH_BROAD:-off} A11Y=${TA_DESIGN_A11Y:-off}"
   ```
   `http=200` means the preview is live (anything else, it isn't; `$TA_PREVIEW_URL`
   is the app's real port, falling back to `:5173`). Note the flags for §2b (research),
@@ -427,7 +427,28 @@ Note in the wrap-up they're placeholders **by preference**, not failures. Any ot
 value = the sourcing flow below.
 
 **Never open a headless browser or screenshot to find images** (gated, inconsistent).
-Source over plain HTTP:
+
+**`UNSPLASH=on` in the session-start call → search the library first.** The designer
+connected their Unsplash key, so every photo spot is sourced with the script, not by
+guessing URLs:
+
+```bash
+node scripts/find-images.mjs search "lifted off-road truck mountain dusk" --orientation landscape --per 8
+node scripts/find-images.mjs get <id> --out public/images/hero.avif
+```
+
+`search` returns candidates with a description, alt text, dominant colour (`color`),
+size, orientation and photographer. Pick by what the brief and the section need: the
+subject in the alt/description, the orientation of the spot, a colour that sits with the
+palette (`--color` narrows: teal, orange, black_and_white, …). One search per spot, at
+most a second with a reworded query; then `get` the chosen id: it writes the AVIF into
+`public/images/` **and records the credit** (photographer, links) in `credits.json` for
+you, so steps 1 and 5 below are already done for that image. Every Unsplash photo is
+free to use, so the licence badge never flags them. A `search` with no fit, or an error,
+falls through to the plain path below for that one spot; a missing key (exit 3) means
+the whole build uses the plain path. Don't paste `UNSPLASH_ACCESS_KEY` anywhere.
+
+Without a key, source over plain HTTP:
 
 1. **Download into `public/`.** A same-origin file resolves in both the preview and
    the Figma export; external CDN URLs render in preview but the export *skips* any
