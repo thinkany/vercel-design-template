@@ -11184,6 +11184,11 @@ function renderIntakeCard(card, onChange, requestSubmit) {
 
   let skipped = false;
   const skippable = card.skippable === true;
+  // The reference card's skip ("Skip, I don't have one") makes no sense once a site is
+  // typed in, so it leaves the card as the field fills and returns if it's cleared (Rob
+  // 2026-09-09). Every change passes through here so that can follow the inputs.
+  let syncSkip = () => {};
+  const changed = () => { onChange(); syncSkip(); };
   const built =
     card.type === "open-text" ? buildOpenText(card, body, onChange, requestSubmit)
     : card.type === "single-choice" ? buildChoice(card, body, false, onChange)
@@ -11197,7 +11202,7 @@ function renderIntakeCard(card, onChange, requestSubmit) {
     : card.type === "cta-type" ? buildCtaType(card, body, onChange)
     : card.type === "logo" ? buildLogoUpload(card, body, onChange)
     : card.type === "voice" ? buildVoiceRules(card, body, onChange)
-    : buildOpenText(card, body, onChange); // defensive fallback
+    : buildOpenText(card, body, changed); // defensive fallback
 
   // Skippable cards get a "let you decide" affordance that records null.
   let skipBtn = null;
@@ -11218,6 +11223,7 @@ function renderIntakeCard(card, onChange, requestSubmit) {
       if (skipped && requestSubmit) requestSubmit();
     });
     elc.appendChild(skipBtn);
+    if (card.type === "reference") { syncSkip = () => { skipBtn.hidden = !skipped && built.hasValue(); }; syncSkip(); }
   }
 
   // Post-submit: show a read-only summary of the answer BUT keep the live inputs in
