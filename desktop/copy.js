@@ -1652,6 +1652,10 @@ window.COPY = {
         title: "What happens next",
         body: "When a new project opens, you pick how to begin. Get Designing asks a few questions about the site and starts designing from your answers. With a Figma Export license you also get Start from Figma, which imports a Figma frame to seed the brand and, if it’s a page, designs from it. Without the license, Get Designing starts right away.",
       },
+      help: {
+        title: "Help, whenever you need it",
+        body: "Everything you have just seen lives behind this icon: replay this walkthrough, read how each part of the studio works, and find the version and your licenses. Come back to it any time.",
+      },
       newProjectIntro: {
         title: "Your first project",
         body: "Everything you design lives in a project folder, separate from the app, so the studio itself stays a clean, unbranded template. Here’s how a new one begins.",

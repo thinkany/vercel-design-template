@@ -1317,6 +1317,8 @@ const TOUR_STEPS = [
   // In the drawer the tips sit below the buttons so neither button is covered.
   { copy: "newProject", onEnter: () => onGate() || ensureModal("projects"), target: () => onGate() ? createproject : inDrawer("project-create")(), placement: () => onGate() ? "right" : "bottom" },
   { copy: "openProject", onEnter: () => onGate() || ensureModal("projects"), target: () => onGate() ? openproject : inDrawer("project-switch")(), placement: () => onGate() ? "right" : "bottom" },
+  // Last: the "i" in the rail, where this walkthrough and the rest of the help live for later.
+  { copy: "help", onEnter: () => closeModal(), target: () => railHelp, placement: "right", advanceOnClick: true },
   { copy: () => onGate() ? "afterCreate" : "afterCreateOpen", onEnter: () => onGate() || ensureModal("projects"), target: () => onGate() ? gateCard() : inDrawer("project-create")(), placement: () => onGate() ? "right" : "bottom" },
 ];
 const onGate = () => currentStage === "project";
@@ -1501,8 +1503,8 @@ const tourEl = (() => {
   t.setAttribute("role", "dialog");
   t.setAttribute("aria-live", "polite");
   t.innerHTML = `
+    <span class="tour-progress"><i></i></span>
     <div class="tour-head">
-      <span class="tour-step"></span>
       <button type="button" class="tour-x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div class="tour-title"></div>
@@ -1594,7 +1596,7 @@ async function tourShow(i) {
   }
   const c = tourStepCopy(step);
   const last = i === tourActive.length - 1;
-  tourEl.querySelector(".tour-step").textContent = COPY.tour.stepOf(i + 1, tourActive.length);
+  tourEl.querySelector(".tour-progress i").style.width = ((i + 1) / tourActive.length * 100).toFixed(1) + "%"; // progress across the top
   tourEl.querySelector(".tour-title").textContent = c.title || "";
   tourEl.querySelector(".tour-body").textContent = c.body || "";
   // A step's copy may name its own button (e.g. "Open" when Next opens a drawer).
