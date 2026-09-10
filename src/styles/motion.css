@@ -23,10 +23,10 @@
    adds around it. The layer is oversized by 2×travel top and bottom so the drift
    never reveals an edge (travel is capped at 25% for that to hold).
 
-   Stills: `prefers-reduced-motion` (the layer sits centred), the Figma capture
-   (`data-capture-ready` on the capture root) so the export is deterministic, and
-   any browser without scroll-driven animations (the @supports gate), where the
-   photo simply sits centred in its mask. */
+   Stills: `prefers-reduced-motion` (the layer sits centred) and the Figma capture
+   (`data-capture-ready` on the capture root) so the export is deterministic. A browser
+   without scroll-driven animations (Firefox) skips the @supports block and
+   src/app/parallax-fallback.ts drives the layer from scroll events instead. */
 
 /* The wrapper's default position lives in the components layer so a Tailwind utility on
    the element (`absolute inset-0` behind a section's copy) still wins; an unlayered rule

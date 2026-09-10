@@ -5,8 +5,9 @@ import type { CSSProperties, ReactNode } from "react";
  * Parallax: a masked layer (a photo, usually) that drifts slower than the page as it
  * scrolls through the viewport. Pure CSS (src/styles/motion.css, a scroll-driven
  * animation on a view timeline), so it runs inside the phone/tablet frames, on the
- * desktop page and on the published site, stays still in the Figma capture and for
- * reduced motion, and needs no JavaScript.
+ * desktop page and on the published site, and stays still in the Figma capture and for
+ * reduced motion. Where the browser lacks the CSS (Firefox), src/app/parallax-fallback.ts
+ * drives the same layer from scroll events; everywhere else no JavaScript is involved.
  *
  * The wrapper is the mask: give it the box (`absolute inset-0` behind a section's
  * copy, or an in-flow `aspect-[4/3] rounded-lg` figure). The child fills it

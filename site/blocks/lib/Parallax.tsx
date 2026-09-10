@@ -3,8 +3,8 @@
 // src/app/components/Parallax.tsx: a masked wrapper + a `.ta-parallax-layer` child,
 // animated by src/styles/motion.css (a CSS scroll-driven animation the site
 // imports through site.css), so blocks stay static HTML with no React runtime.
-// Stills for prefers-reduced-motion and in browsers without scroll-driven
-// animations, where the photo simply sits centred in its mask.
+// Stills for prefers-reduced-motion; where the browser lacks the CSS (Firefox) the
+// layout's parallax-fallback script drives the layer from scroll events.
 import type { CSSProperties, ReactNode } from "react";
 
 export type ParallaxStrength = "soft" | "medium" | "strong";
