@@ -1234,11 +1234,11 @@ window.COPY = {
   // ── Usage gate — the first screen on a new install, before the key ──────────
   usageGate: {
     heading: "How do you plan on using thinkany design?",
-    intro: "You can change this later.",
+    intro: "No pressure, you can always change this later!",
     personalLabel: "Just for me",
     personalDesc: "Design and publish on your own. No company profile to keep.",
     companyLabel: "For my company",
-    companyDesc: "Your studio's name and logo greet clients on shared previews.",
+    companyDesc: "Your studio's name & logo will greet clients on designs you create for them.",
   },
 
   // ── Project gate — first-run pick-a-project screen ──────────────────────────
@@ -1624,11 +1624,11 @@ window.COPY = {
       },
       a11y: {
         title: "Accessibility Review",
-        body: "Checks a built design against WCAG AA: contrast, structure, labels and keyboard use. Findings arrive grouped by rule, and each one can be fixed by the assistant, held for later, or dismissed. Turn on AA mode in Claude Settings to make it part of every build.",
+        body: "This option becomes available on projects with a finished design. It checks the design against WCAG AA: contrast, structure, labels and keyboard use. Findings arrive grouped by rule, and each one can be fixed by the assistant, held for later, or dismissed. Turn on AA mode in Claude Settings to make it part of every build.",
       },
       artdirector: {
         title: "Art Director",
-        body: "You won’t see this icon yet: it joins the rail only after a design has been built and is being previewed. When it does, it’s a second pair of eyes on the finished pages, reviewing hierarchy, rhythm, type and color, then suggesting specific changes you can apply in one click or hold for later.",
+        body: "This option becomes available on projects with a finished design. It’s a second pair of eyes on the finished pages, reviewing hierarchy, rhythm, type and color, then suggesting specific changes you can apply in one click or hold for later.",
       },
       publish: {
         title: "Publish",
