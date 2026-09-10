@@ -53,6 +53,9 @@
       .railbtn svg { width: 20px; height: 20px; display: block; }
       .railbtn:hover { background: #2a2a31; opacity: 1; }
       .railbtn.active { background: #2a2a31; opacity: 1; }
+      /* Present but not usable right now (its agent is busy, e.g. the Art Director mid-review):
+         dimmed, no hover, no clicks. shell.js setRailBusy toggles it. */
+      .railbtn.busy, .railbtn.busy:hover { opacity: 0.28; background: transparent; cursor: default; pointer-events: none; }
       /* Rail is inert until the Claude key is connected (stage "key"): muted +
          non-interactive (sidebar.inert also blocks focus/keyboard). Un-mutes via
          the .railbtn opacity transition the moment the key is accepted. */

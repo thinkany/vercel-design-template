@@ -1271,8 +1271,8 @@ railCompany.addEventListener("click", () => toggleModal("company"));
 railFigma.addEventListener("click", () => toggleModal("figma"));
 railVoice.addEventListener("click", () => toggleModal("voice"));
 railClaude.addEventListener("click", () => toggleModal("claude"));
-railDirector.addEventListener("click", () => toggleModal("director"));
-if (railA11y) railA11y.addEventListener("click", () => toggleModal("a11y"));
+railDirector.addEventListener("click", () => { if (!railDirector.classList.contains("busy")) toggleModal("director"); });
+if (railA11y) railA11y.addEventListener("click", () => { if (!railA11y.classList.contains("busy")) toggleModal("a11y"); });
 railLicenses.addEventListener("click", () => toggleModal("licenses"));
 
 // ---- Walkthrough tour ---------------------------------------------------------
@@ -1497,6 +1497,13 @@ function setRailVisible(btn, show, instant = false) {
     btn._railAnim = a;
     a.finished.then(() => { if (btn._railAnim === a) { btn.hidden = true; a.cancel(); btn._railAnim = null; btn._railHiding = false; btn.style.overflow = ""; } }).catch(() => {});
   }
+}
+// A gated icon that is present but not usable right now (its agent is busy): dimmed and
+// inert, its drawer left as it is. Distinct from hidden, which closes the slot.
+function setRailBusy(btn, busy) {
+  if (!btn) return;
+  btn.classList.toggle("busy", !!busy);
+  if (busy) btn.setAttribute("aria-disabled", "true"); else btn.removeAttribute("aria-disabled");
 }
 function tourRevealRail(btn) { if (btn && btn.hidden) { btn.hidden = false; tourRevealed = btn; } }
 function tourRestoreRail(btn) { if (tourRevealed === btn) { btn.hidden = true; tourRevealed = null; } }
@@ -10383,10 +10390,13 @@ async function updateArtDirectorRailBtn(url) {
   const meta = await getDirectionMeta();
   const licensed = !!(meta.axes && Object.keys(meta.axes).length);
   const v = currentPreviewVariation(url);
-  const ready = !homeBuilding && !agentBusy && !intakeActive;
-  const avail = !!(licensed && ready && v && v !== "v00");
-  setRailVisible(railDirector, avail, !railAnimated);
-  if (!avail) { railDirector.classList.remove("has-code", "has-passive"); if (isModalOpen("director")) closeModal(); return; }
+  // Visible = licensed and a built design on screen. Busy (a review, a build, an intake)
+  // only DIMS it (Rob 2026-09-10): the icon must not vanish while the Art Director works.
+  const visible = !!(licensed && v && v !== "v00");
+  const busy = homeBuilding || agentBusy || intakeActive;
+  setRailVisible(railDirector, visible, !railAnimated);
+  setRailBusy(railDirector, visible && busy);
+  if (!visible) { railDirector.classList.remove("has-code", "has-passive"); if (isModalOpen("director")) closeModal(); return; }
   updateDirectorIndicator(v); // reflect the previewed design's queue state
 }
 
@@ -10654,10 +10664,12 @@ async function updateA11yRailBtn(url) {
   if (!railA11y) return;
   railA11y.classList.remove("has-code", "has-passive");
   const v = currentPreviewVariation(url);
-  const ready = !homeBuilding && !agentBusy && !intakeActive;
-  const avail = !!(ready && v && v !== "v00");
-  setRailVisible(railA11y, avail, !railAnimated);
-  if (!avail) { if (isModalOpen("a11y")) closeModal(); return; }
+  // Same split as the Art Director: a built design shows it; a running turn only dims it.
+  const visible = !!(v && v !== "v00");
+  const busy = homeBuilding || agentBusy || intakeActive;
+  setRailVisible(railA11y, visible, !railAnimated);
+  setRailBusy(railA11y, visible && busy);
+  if (!visible) { if (isModalOpen("a11y")) closeModal(); return; }
   let store = { active: [] };
   try { store = await window.desktop.loadA11y(v); } catch {}
   if ((store.active || []).some((f) => a11yImpactRank(f.impact) <= 1)) railA11y.classList.add("has-code");
