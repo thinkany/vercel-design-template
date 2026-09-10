@@ -452,6 +452,7 @@ const LOGO_EXT_BY_MIME = {
   "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/avif": ".avif", "image/svg+xml": ".svg",
 };
 function saveDesignLogo(raw) {
+  if (raw && raw.keep && raw.src) return { src: raw.src, filename: raw.filename || path.basename(raw.src) }; // a resumed intake: the logo already saved
   if (!currentProject || !raw || !raw.b64) return null;
   try {
     const ext = LOGO_EXT_BY_MIME[raw.mime] || path.extname(raw.filename || "").toLowerCase() || ".png";
@@ -3363,6 +3364,38 @@ ipcMain.handle("intake:begin", (_event, { deliverableType, projectType } = {}) =
   return { ok: true };
 });
 
+// ---- Intake auto-save (Rob 2026-09-09) ---------------------------------------
+// The renderer records every answered card group; each answer or edit writes the
+// record plus the running Brief to the project (.thinkany/intake.json), so closing
+// the app or stepping Back loses nothing. The deliverable screen offers to pick it
+// up; the build handoff and Start over clear it.
+function intakeProgressFile(dir) { return path.join(dir, ".thinkany", "intake.json"); }
+ipcMain.handle("intake:saveProgress", (_event, { progress } = {}) => {
+  if (!currentProject || !progress || typeof progress !== "object") return { ok: false };
+  try {
+    fs.mkdirSync(path.join(currentProject, ".thinkany"), { recursive: true });
+    fs.writeFileSync(intakeProgressFile(currentProject), JSON.stringify({ version: 1, savedAt: new Date().toISOString(), ...progress, brief: intakeBrief }, null, 2) + "\n");
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle("intake:getProgress", () => {
+  if (!currentProject) return { progress: null };
+  const p = readJsonFile(intakeProgressFile(currentProject));
+  return { progress: p && p.version === 1 && Array.isArray(p.groups) && p.groups.length ? p : null };
+});
+ipcMain.handle("intake:clearProgress", () => {
+  if (currentProject) { try { fs.unlinkSync(intakeProgressFile(currentProject)); } catch { /* none */ } }
+  return { ok: true };
+});
+// Pick up: the saved Brief becomes the running one (on the empty brief's shape, so a
+// field added since still exists), and the pane's rail is refreshed from it.
+ipcMain.handle("intake:restore", (event, { brief, deliverableType, projectType } = {}) => {
+  intakeBrief = { ...createEmptyBrief(deliverableType || "web-pages"), ...(brief && typeof brief === "object" ? brief : {}) };
+  if (projectType) intakeBrief.projectType = projectType;
+  if (!event.sender.isDestroyed()) event.sender.send("agent:brief", intakeBrief);
+  return { ok: true, brief: intakeBrief };
+});
+
 // Free-form "add more context" from the review step → append to the Brief's notes
 // and push the updated Brief so the pane's brief rail refreshes (not just the chat).
 ipcMain.handle("intake:addNote", (event, { text } = {}) => {
@@ -3565,6 +3598,16 @@ ipcMain.handle("intake:sampleDirection", async (event, { axes, lens } = {}) => {
   intakeBrief.directionBlock = block;
   if (!event.sender.isDestroyed()) event.sender.send("agent:brief", intakeBrief);
   return { direction };
+});
+
+// The Design direction card (a step in the intake like the others): Continue saves what
+// the panel shows; "I'll let you choose" clears it so the build handoff samples one.
+ipcMain.handle("intake:setDirection", (event, { direction } = {}) => {
+  if (!intakeBrief) intakeBrief = createEmptyBrief("web-pages");
+  if (direction && typeof direction === "object" && direction.lens) intakeBrief.direction = direction;
+  else { intakeBrief.direction = null; intakeBrief.directionBlock = null; }
+  if (!event.sender.isDestroyed()) event.sender.send("agent:brief", intakeBrief);
+  return { ok: true };
 });
 
 // ---- Post-build reroll (fork an existing design with a new direction) --------
@@ -3827,6 +3870,11 @@ ipcMain.handle("log:read", () => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle("log:reveal", () => { const d = appLog.logsDir(); if (d) { fs.mkdirSync(d, { recursive: true }); shell.openPath(d); } return { ok: true }; });
+// How the app is used (Rob 2026-09-09): "personal" (just for me) hides the Company Profile
+// rail icon, drawer and the Publish drawer's company messaging; "company" keeps them. Asked
+// once on first launch (before the key), changeable under Profile in the Publish drawer.
+ipcMain.handle("usage:get", () => { const u = loadUiState().usage; return { usage: u === "personal" || u === "company" ? u : null }; });
+ipcMain.handle("usage:set", (_e, { usage } = {}) => { if (usage !== "personal" && usage !== "company") return { ok: false }; setUiState({ usage }); return { ok: true, usage }; });
 ipcMain.handle("narrate:get", () => ({ enabled: narrateEnabled() }));
 ipcMain.handle("narrate:set", (_e, { enabled } = {}) => { setUiState({ buildNarrate: !!enabled }); return { ok: true, enabled: !!enabled }; });
 ipcMain.handle("narrate:line", async (_e, { phase, title, bits } = {}) => {
@@ -4505,6 +4553,7 @@ ipcMain.handle("company:apply", async (_event, form) => {
     const { buildCompanyProfile, runUnpack } = await companyProfileEngine();
     const profile = buildCompanyProfile(form || {});
     const res = await runUnpack({ project: currentProject, profile });
+    setUiState({ usage: "company" }); // an uploaded profile turns the Company Profile on
     return { ok: true, applied: res.applied, manualSteps: res.manualSteps, summary: res.summary };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -4581,6 +4630,7 @@ ipcMain.handle("company:saveDefaultFields", async (_e, form) => {
       } catch {}
     }
     fs.writeFileSync(defaultCompanyProfilePath(), JSON.stringify(profile, null, 2));
+    setUiState({ usage: "company" }); // a created profile turns the Company Profile on
     return { ok: true, companyName: profile.companyName };
   } catch (e) {
     return { ok: false, error: `Could not save the profile: ${e.message}` };
@@ -4597,6 +4647,7 @@ ipcMain.handle("company:saveDefault", async () => {
       try { fs.unlinkSync(defaultCompanyProfilePath()); } catch {}
       return { ok: false, error: "This project has no company name set yet — set up the company first, then save it as your default." };
     }
+    setUiState({ usage: "company" }); // a saved profile turns the Company Profile on
     return { ok: true, companyName: name };
   } catch (e) {
     return { ok: false, error: `Could not save the profile: ${e.message}` };
@@ -4893,6 +4944,9 @@ function buildAppMenu() {
     ...(app.isPackaged ? [] : [{ label: "Developer", submenu: [
       { label: "Render lens examples: one direction (dry run)", click: () => renderLensExamples({ dryRun: true }) },
       { label: "Render lens examples: all general directions", click: () => renderLensExamples({}) },
+      // Re-render a single direction by id (the ids come from picks.json, so no license call at
+      // menu-build time). A movement id renders nothing: the batch only does general directions.
+      { label: "Render lens examples: this direction only", submenu: lensPickIds().map((id) => ({ label: id, click: () => renderLensExamples({ only: id }) })) },
     ] }]),
   ]));
 }
@@ -4901,10 +4955,13 @@ function buildAppMenu() {
 // the current project so Vite serves it for the capture; the previous project is reopened
 // at the end. Costs one design build per direction on the designer's key.
 let lensExamplesRunning = false;
+function lensPickIds() {
+  try { return Object.keys(JSON.parse(fs.readFileSync(path.join(appRoot, "desktop", "build", "lens-gallery", "picks.json"), "utf8"))); } catch { return []; }
+}
 async function renderLensExamples(opts) {
   if (lensExamplesRunning) return;
   if (!process.env.ANTHROPIC_API_KEY) { dialog.showMessageBox(mainWindow, { message: "Connect a Claude API key first (Keys & Licenses)." }); return; }
-  const n = opts.dryRun ? "one direction" : "every general direction";
+  const n = opts.only ? `the ${opts.only} direction` : opts.dryRun ? "one direction" : "every general direction";
   const ask = await dialog.showMessageBox(mainWindow, {
     type: "question", buttons: ["Render", "Cancel"], defaultId: 0, cancelId: 1,
     message: `Render lens examples for ${n}?`,
@@ -4927,7 +4984,9 @@ async function renderLensExamples(opts) {
       scaffoldProject, detectDesign, directionMeta, sampleDirection, buildDesignPrompt,
       expandPrompt: (pr) => { const x = skillsClient && skillsClient.expandPrompt(pr); return x ? x.prompt : null; },
       startViteFor: async (dir) => { currentProject = dir; return startViteFor(dir); },
-      runPrompt: (args) => runPrompt({ ...args, onSuggest: () => {}, model: currentModel, copyVoice: effectiveVoice(args.cwd), projectState: projectStateForAgent(args.cwd) }),
+      // loadSkill is what serves the licensed /design playbook (the "skills" MCP server); without it
+      // the build stops after branding with "design runs from the app with a Design license".
+      runPrompt: (args) => runPrompt({ ...args, onSuggest: () => {}, model: currentModel, copyVoice: effectiveVoice(args.cwd), loadSkill: (name) => { const s = skillsClient && skillsClient.skills()[name]; return s ? s.body : null; } , projectState: projectStateForAgent(args.cwd) }),
       captureOp: runCaptureOp, log,
     }, opts);
   } catch (e) { err = e; }

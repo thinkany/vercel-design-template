@@ -1,7 +1,13 @@
 {
   "corporate-confident": [
     {
-      "title": "File:HK \u4e2d\u74b0 \u91d1\u9418 Central \u82b1\u5712\u90533\u865f Three Garden Road office building lobby n sign December 2018 IX2 05.jpg"
+      "local": "examples/corporate-confident.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Corporate Confident: the Fieldnote Studio home page, built by thinkany design"
+    },
+    {
+      "title": "File:HK 中環 金鐘 Central 花園道3號 Three Garden Road office building lobby n sign December 2018 IX2 05.jpg"
     },
     {
       "title": "File:Elevator Lobby, Guardian Building, Griswold Street, Detroit, MI.jpg"
@@ -12,16 +18,28 @@
   ],
   "swiss": [
     {
-      "title": "File:Josef M\u00fcller-Brockmann 1957.jpg"
+      "local": "examples/swiss.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Swiss / International: the Fieldnote Studio home page, built by thinkany design"
     },
     {
-      "title": "File:Josef M\u00fcller-Brockmann der Film.jpg"
+      "title": "File:Josef Müller-Brockmann 1957.jpg"
+    },
+    {
+      "title": "File:Josef Müller-Brockmann der Film.jpg"
     },
     {
       "title": "File:Posters by Armin Hofmann at Cleveland Institute of Art.jpg"
     }
   ],
   "editorial": [
+    {
+      "local": "examples/editorial.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Editorial / Magazine: the Fieldnote Studio home page, built by thinkany design"
+    },
     {
       "title": "File:Anastas Mikoyan-TIME-1953.jpg"
     },
@@ -38,6 +56,12 @@
   ],
   "boutique-minimal": [
     {
+      "local": "examples/boutique-minimal.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Boutique Minimal: the Fieldnote Studio home page, built by thinkany design"
+    },
+    {
       "title": "File:Spa bath and chairs in Amantaka luxury Resort & Hotel in Luang Prabang Laos.jpg"
     },
     {
@@ -48,6 +72,12 @@
     }
   ],
   "warm-humanist": [
+    {
+      "local": "examples/warm-humanist.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Warm Humanist: the Fieldnote Studio home page, built by thinkany design"
+    },
     {
       "title": "File:Secondhand furniture store with hand lettered sign on window, Springfield, Ohio Summer 1938 crop.jpg"
     },
@@ -60,16 +90,28 @@
   ],
   "gallery-curatorial": [
     {
+      "local": "examples/gallery-curatorial.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Gallery / Curatorial: the Fieldnote Studio home page, built by thinkany design"
+    },
+    {
       "title": "File:Kunsthalle Hamburg, staircase.jpg"
     },
     {
       "title": "File:Gallery of Polish Painting and European Decorative Arts, National Museum in Kielce, czerwiec 2025, SOULinPIX 092.jpg"
     },
     {
-      "title": "File:Kunsthalle Ko\u0161ice interior.jpg"
+      "title": "File:Kunsthalle Košice interior.jpg"
     }
   ],
   "type-forward": [
+    {
+      "local": "examples/type-forward.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Type-forward: the Fieldnote Studio home page, built by thinkany design"
+    },
     {
       "title": "File:Hamilton Antique Type Specimen (34534070873).jpg"
     },
@@ -81,6 +123,12 @@
     }
   ],
   "neo-retro": [
+    {
+      "local": "examples/neo-retro.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Neo-retro: the Fieldnote Studio home page, built by thinkany design"
+    },
     {
       "title": "File:Shirt, short-sleeve (AM 1979.59-3).jpg"
     },
@@ -94,6 +142,12 @@
   ],
   "monospace-terminal": [
     {
+      "local": "examples/monospace-terminal.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Monospace / Terminal: the Fieldnote Studio home page, built by thinkany design"
+    },
+    {
       "title": "File:IBM keypunch deck for Cobol student program at New York University 1979.jpg"
     },
     {
@@ -104,6 +158,12 @@
     }
   ],
   "brutalist": [
+    {
+      "local": "examples/brutalist.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Brutalist: the Fieldnote Studio home page, built by thinkany design"
+    },
     {
       "title": "File:Cape Town architecture, Part II - 20240912 135259.jpg"
     },
@@ -116,6 +176,12 @@
   ],
   "organic-handbuilt": [
     {
+      "local": "examples/organic-handbuilt.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Organic / Hand-built: the Fieldnote Studio home page, built by thinkany design"
+    },
+    {
       "title": "File:Greyhound (1912) print in high resolution by Moriz Jung. Original from the MET Museum. Digitally enhanced by rawpixel.jpg"
     },
     {
@@ -126,6 +192,12 @@
     }
   ],
   "playful-toybox": [
+    {
+      "local": "examples/playful-toybox.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Playful / Toybox: the Fieldnote Studio home page, built by thinkany design"
+    },
     {
       "title": "File:Murray Playground td (2019-06-10) 060.jpg"
     },
@@ -138,6 +210,12 @@
   ],
   "maximalist": [
     {
+      "local": "examples/maximalist.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Maximalist: the Fieldnote Studio home page, built by thinkany design"
+    },
+    {
       "title": "File:Interior of the George Severeanu Museum in Bucharest (37).jpg"
     },
     {
@@ -148,6 +226,12 @@
     }
   ],
   "techno-futurist": [
+    {
+      "local": "examples/techno-futurist.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Techno-futurist: the Fieldnote Studio home page, built by thinkany design"
+    },
     {
       "title": "File:Macro photograph of the RP2350 microcontroller on a Raspberry Pi Pico 2 board.jpg"
     },
@@ -160,10 +244,16 @@
   ],
   "glass-soft": [
     {
+      "local": "examples/glass-soft.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Glass / Soft UI: the Fieldnote Studio home page, built by thinkany design"
+    },
+    {
       "title": "File:Absence of desire.jpg"
     },
     {
-      "title": "File:GER \u2014 BY \u2014 M\u00fcnchen \u2014 Probengeb\u00e4ude der Bayerischen Staatsoper \u2014 Marstallplatz 5 \u2014 S\u00fcdfassade (Jahr 2007).jpg"
+      "title": "File:GER — BY — München — Probengebäude der Bayerischen Staatsoper — Marstallplatz 5 — Südfassade (Jahr 2007).jpg"
     },
     {
       "title": "File:DichroicMirrors.JPG"
@@ -171,16 +261,28 @@
   ],
   "eco-natural": [
     {
+      "local": "examples/eco-natural.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Eco / Natural: the Fieldnote Studio home page, built by thinkany design"
+    },
+    {
       "title": "File:\"It's a Dan River fabric,\" Dan River Cotton Mills, Danville, Virginia (8598920350).jpg"
     },
     {
       "title": "File:The Botanical register (Plate 07) BHL8294.jpg"
     },
     {
-      "title": "File:Botanical illustration by Una Weatherby (n\u00e9e Foster).jpg"
+      "title": "File:Botanical illustration by Una Weatherby (née Foster).jpg"
     }
   ],
   "data-utility": [
+    {
+      "local": "examples/data-utility.png",
+      "credit": "thinkany design",
+      "license": "own work",
+      "alt": "Data / Utilitarian: the Fieldnote Studio home page, built by thinkany design"
+    },
     {
       "title": "File:Harry Beck's tube map at Finchley central tube station - geograph.org.uk - 6206154.jpg"
     },
@@ -254,7 +356,7 @@
       "title": "File:Piet mondrian, composizione n. IV-composizione n. 6, 1914, 01.jpg"
     },
     {
-      "title": "File:Rietveld Schr\u00f6der House - Foto 3.jpg"
+      "title": "File:Rietveld Schröder House - Foto 3.jpg"
     }
   ],
   "art-nouveau": [
@@ -262,10 +364,10 @@
       "title": "File:(Albi) Salon des Cents 1894 - Henri-Gabriel Ibels lithographie.jpg"
     },
     {
-      "title": "File:F. Champenois imprimeur-\u00e9diteur.jpg"
+      "title": "File:F. Champenois imprimeur-éditeur.jpg"
     },
     {
-      "title": "File:Metro station entrance (\u00e9dicule Guimard) Porte Dauphine Paris 16e 001.jpg"
+      "title": "File:Metro station entrance (édicule Guimard) Porte Dauphine Paris 16e 001.jpg"
     }
   ],
   "psychedelic": [
@@ -282,7 +384,7 @@
   ],
   "y2k-futurist": [
     {
-      "title": "File:Museo de Inform\u00e1tica Hist\u00f3rica (MIH) \u2013 UNIZAR \u2013 Apple iMac G3.jpg"
+      "title": "File:Museo de Informática Histórica (MIH) – UNIZAR – Apple iMac G3.jpg"
     },
     {
       "title": "File:Imac G3 Blue Dalmatian 3q back.jpg"
@@ -304,7 +406,7 @@
       "title": "File:Shino chawan MBA Lyon E554-146.jpg"
     },
     {
-      "title": "File:\u91d1\u7d99\u304e\uff08\u6b20\u3051\u76f4\u3057\uff09.jpg"
+      "title": "File:金継ぎ（欠け直し）.jpg"
     },
     {
       "title": "File:Okochi Denjiro garden tea house (7123923261).jpg"
@@ -315,7 +417,7 @@
       "title": "File:Gyor6.jpg"
     },
     {
-      "title": "File:20. Ji\u0159\u00ed Kol\u00e1\u0159, Portr\u00e9t - Bridget Riley (1967), prol\u00e1\u017e.jpg"
+      "title": "File:20. Jiří Kolář, Portrét - Bridget Riley (1967), proláž.jpg"
     },
     {
       "title": "File:Bridget-riley-bolt-of-colour-1-chinati-foundatin-marfa-texas.jpg"

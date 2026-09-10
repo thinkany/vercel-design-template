@@ -1231,6 +1231,16 @@ window.COPY = {
     couldNotSave: "Could not save the key.",
   },
 
+  // ── Usage gate — the first screen on a new install, before the key ──────────
+  usageGate: {
+    heading: "How do you plan on using thinkany design?",
+    intro: "No pressure, you can always change this later!",
+    personalLabel: "Just for me",
+    personalDesc: "Design and publish on your own. No company profile to keep.",
+    companyLabel: "For my company",
+    companyDesc: "Your studio's name & logo will greet clients on designs you create for them.",
+  },
+
   // ── Project gate — first-run pick-a-project screen ──────────────────────────
   projectGate: {
     heading: "Choose a project",
@@ -1614,11 +1624,11 @@ window.COPY = {
       },
       a11y: {
         title: "Accessibility Review",
-        body: "Checks a built design against WCAG AA: contrast, structure, labels and keyboard use. Findings arrive grouped by rule, and each one can be fixed by the assistant, held for later, or dismissed. Turn on AA mode in Claude Settings to make it part of every build.",
+        body: "This option becomes available on projects with a finished design. It checks the design against WCAG AA: contrast, structure, labels and keyboard use. Findings arrive grouped by rule, and each one can be fixed by the assistant, held for later, or dismissed. Turn on AA mode in Claude Settings to make it part of every build.",
       },
       artdirector: {
         title: "Art Director",
-        body: "You won’t see this icon yet: it joins the rail only after a design has been built and is being previewed. When it does, it’s a second pair of eyes on the finished pages, reviewing hierarchy, rhythm, type and color, then suggesting specific changes you can apply in one click or hold for later.",
+        body: "This option becomes available on projects with a finished design. It’s a second pair of eyes on the finished pages, reviewing hierarchy, rhythm, type and color, then suggesting specific changes you can apply in one click or hold for later.",
       },
       publish: {
         title: "Publish",
@@ -1641,6 +1651,10 @@ window.COPY = {
       afterCreateOpen: {
         title: "What happens next",
         body: "When a new project opens, you pick how to begin. Get Designing asks a few questions about the site and starts designing from your answers. With a Figma Export license you also get Start from Figma, which imports a Figma frame to seed the brand and, if it’s a page, designs from it. Without the license, Get Designing starts right away.",
+      },
+      help: {
+        title: "Help, whenever you need it",
+        body: "Everything you have just seen lives behind this icon: replay this walkthrough, read how each part of the studio works, and find the version and your licenses. Come back to it any time.",
       },
       newProjectIntro: {
         title: "Your first project",
@@ -1761,6 +1775,15 @@ window.COPY = {
     connectedWith: (user) => `Connected · ${user}`,
     connected: "Connected",
     notConnected: "Not connected",
+    // The collapsed Profile section: how the app is used + the company information.
+    profile: {
+      title: "Profile",
+      usageLabel: "Using thinkany design",
+      personal: "Just for me",
+      company: "For my company",
+      personalNote: "The Company Profile stays out of the way. Creating or uploading one below brings it back.",
+      companyNote: "The company profile signs shared previews and pre-fills new projects.",
+    },
     companyNudge: {
       title: "Your Company Information",
       desc: "The private link you share opens on a sign-in screen branded with YOUR company name and logo, that’s what your client sees first. It isn’t set for this project yet. Add it so the preview looks like yours (you can still publish without it).",
@@ -1983,7 +2006,7 @@ window.COPY = {
     saveEdit: "Save",
     letYouChoose: "I’ll let you choose",
     undoSkip: "Undo skip",
-    reviewQuestion: "That’s a solid start. Ready we ready to design, or want would you like to add more context first?",
+    reviewQuestion: "That’s a solid start. Are we ready to design, or would you like to add more context first?",
     startDesigning: "Looks good, start designing",
     addMoreContext: "Wait, let me add more context",
     moreContextPlaceholder: "Anything else that matters: company or site name, the client, the audience, must-haves…",
@@ -2048,7 +2071,7 @@ window.COPY = {
         <li><b>Era</b>: the period feel, timeless through avant-garde.</li>
         <li><b>Motion</b>: how animated, static through kinetic.</li>
       </ul>
-      <p>Nudging a slider steers the design toward that feel and picks the closest matching style.</p>
+      <p>Nudging a slider steers the style you have toward that feel. The style stays; its details follow the sliders. Put a slider back and you have the same direction as before. To change the style itself, pick one from the menu at the top.</p>
 
       <h4>Reroll</h4>
       <p>Reroll draws a fresh take. If you have picked a style or set the sliders, it keeps that direction and just varies the details; left untouched, it draws a whole new direction.</p>
@@ -2088,12 +2111,20 @@ window.COPY = {
       logo: "Logo (optional)",
       logoPlaceholder: "Drop or choose a logo image (PNG, SVG, JPG)",
       reference: (kind) => `Is there a ${kind} you love? Share it and what draws you to it.`,
+      direction: "Which design direction should we take?",
       heroLayout: "How should the hero (the first thing visitors see) be laid out?",
       heroLayoutHelp: "Pick a starting structure, or let me choose.",
       menuLayout: "How should the site header and navigation be laid out?",
       menuLayoutHelp: "Pick a header style, or let me choose.",
       ctaType: "How should the contact / call-to-action section work?",
       ctaTypeHelp: "A contact form, or a button-led call to action. Or let me choose.",
+    },
+    // The Design References introduction: the rail's panel shown as a card right after
+    // the first question, so it isn't overlooked; Continue hands it over to the rail.
+    refsIntro: {
+      label: "Anything we should look at?",
+      help: "Sites, screenshots, brand files, anything with the feel you're after. Add them now or any time: this panel moves to the right and stays with you through every question.",
+      continue: "Continue",
     },
     // The start fork. Shown only when Figma is licensed (Start from Figma + Get Designing);
     // unlicensed users skip it and go straight to Get Designing. (clientSetup* kept for now:
@@ -2153,6 +2184,14 @@ window.COPY = {
       websiteDesc: "A marketing site or landing pages.",
       appLabel: "App",
       appDesc: "Product UI, dashboards, in-app screens.",
+    },
+    // A saved intake for this project (auto-saved after every answer): offered on the
+    // deliverable screen, which Back lands on too.
+    resume: {
+      title: "Pick up where you left off?",
+      detail: (n, when) => `${n === 1 ? "1 question" : `${n} questions`} answered, saved ${when}. Your answers stay editable.`,
+      resume: "Pick up where I left off",
+      startOver: "Start over",
     },
     // The head shown once questions begin.
     gathering: {

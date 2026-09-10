@@ -49,6 +49,7 @@ el("modal-preview").addEventListener("click", async () => {
 
 // Gates
 const keygate = el("keygate");
+const usagegate = el("usagegate"); // first screen on a new install: how the app is used
 const keyinput = el("keyinput");
 const keysave = el("keysave");
 const keyerror = el("keyerror");
@@ -971,23 +972,26 @@ function showStage(stage) {
   const noKeyWorkspace = stage === "workspace" && !appHasKey;
   // The no-key reminder banner rides the preview browser whenever we're read-only.
   if (nokeyBanner) nokeyBanner.hidden = !noKeyWorkspace;
-  app.classList.toggle("onboarding-key", stage === "key"); // rail muting during the key screen
+  const gated = stage === "key" || stage === "usage"; // the two first-run screens
+  app.classList.toggle("onboarding-key", gated); // rail muting during the first-run screens
   app.classList.toggle("no-key", noKeyWorkspace); // CSS hook to disable agent-driven affordances
   // Collapse the chat column (preview goes full-width) at the key screen and in read-only mode.
-  setChatCollapsed(stage === "key" || noKeyWorkspace);
+  setChatCollapsed(gated || noKeyWorkspace);
   // The rail is inert until the key is connected (no focus/keyboard either).
   const sidebar = el("sidebar");
-  if (sidebar) sidebar.inert = stage === "key";
+  if (sidebar) sidebar.inert = gated;
+  toggleGate(usagegate, stage === "usage");
   toggleGate(keygate, stage === "key");
+  if (stage !== "project") createproject.classList.remove("nudge");
   toggleGate(projectgate, stage === "project");
   // Chat content is ready from the project stage on (empty & waiting); the key stage and
   // read-only (no-key) workspace hide it, and there the whole pane is collapsed anyway.
-  chatmain.hidden = stage === "key" || noKeyWorkspace;
+  chatmain.hidden = gated || noKeyWorkspace;
   // Workspace label left BLANK on purpose — the #status slot is reserved for a
   // future app-level message/alert (update, license, activity). The connect /
   // no-project states keep their labels since those screens rely on them.
   status.textContent =
-    stage === "key" ? COPY.status.notConnected : stage === "project" ? COPY.status.noProject : "";
+    gated ? COPY.status.notConnected : stage === "project" ? COPY.status.noProject : "";
   // Enable pane transitions only after the first stage paints, so the initial
   // collapsed/open state doesn't animate on launch.
   if (app.classList.contains("preload")) {
@@ -1011,6 +1015,7 @@ function noProjectPlaceholder() {
 // The Claude + Figma rail icons show their brand colors only once their key /
 // license is active; otherwise they stay monochrome white like the rest of the
 // rail. Toggled via the .activated class.
+let railAnimated = false; // false until the rail's first paint (no fade on launch)
 async function refreshRailActivation() {
   try {
     const [k, l, dl, vc] = await Promise.all([
@@ -1019,8 +1024,15 @@ async function refreshRailActivation() {
       window.desktop.getDesignLicenseStatus(),
       window.desktop.getVercelStatus(),
     ]);
+    if (appUsage) applyUsage(); // the Company Profile icon follows the usage flag (a saved profile flips it)
     railClaude.classList.toggle("activated", !!(k && k.hasKey));
     railFigma.classList.toggle("activated", !!(l && l.hasLicense));
+    const instant = !railAnimated; railAnimated = true; // the first paint snaps; later changes fade
+    const figmaOn = !!(l && l.hasLicense), siteOn = !!(dl && dl.hasLicense);
+    setRailVisible(railFigma, figmaOn, instant); // no Figma key → no icon (the walkthrough reveals it for its steps)
+    if (!figmaOn && isModalOpen("figma")) closeModal();
+    setRailVisible(railSite, siteOn, instant); // no Design key → no CMS icon (the site builder is part of that license)
+    if (!siteOn && isModalOpen("site")) closeModal();
     railPublish.classList.toggle("activated", !!(vc && vc.connected));
     // All three credentials present → the app is unlocked: open the padlock.
     const unlocked = !!(k && k.hasKey) && !!(l && l.hasLicense) && !!(dl && dl.hasLicense);
@@ -1033,8 +1045,30 @@ async function refreshRailActivation() {
 const CLOSED_LOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>';
 const OPEN_LOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 7.9-1.2"/></svg>';
 
+// How the app is used ("personal" | "company"), asked once before the key (existing installs
+// see it once at their next launch). Personal hides the Company Profile rail icon + drawer and
+// the Publish drawer's company messaging, until a profile is created or uploaded.
+let appUsage = null;
+async function applyUsage() {
+  try { appUsage = (await window.desktop.getUsage()).usage; } catch {} // main flips it to company when a profile is saved
+  const show = appUsage === "company";
+  setRailVisible(railCompany, show, !railAnimated);
+  if (!show && railCompany.classList.contains("active")) closeModal(); // the drawer can’t outlive its icon
+}
+for (const [id, usage] of [["usage-personal", "personal"], ["usage-company", "company"]]) {
+  el(id).addEventListener("click", async () => {
+    usagegate.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+    try { await window.desktop.setUsage(usage); } catch {}
+    appUsage = usage;
+    usagegate.querySelectorAll("button").forEach((b) => { b.disabled = false; });
+    boot();
+  });
+}
 async function boot() {
   refreshRailActivation(); // color the Claude/Figma icons per key + license state
+  try { appUsage = (await window.desktop.getUsage()).usage; } catch { appUsage = null; }
+  if (!appUsage) { noProjectPlaceholder(); showStage("usage"); return; }
+  applyUsage();
   const { hasKey } = await window.desktop.getKeyStatus();
   appHasKey = hasKey;
   const proj = await window.desktop.getProjectStatus();
@@ -1260,23 +1294,23 @@ const TOUR_STEPS = [
   { copy: "figmaLicense", onEnter: () => ensureModal("licenses"), target: inDrawer("figma-license"), placement: "right" },
   { copy: "designLicense", onEnter: () => ensureModal("licenses"), target: inDrawer("design-license"), placement: "right" },
   { copy: "closeDrawer", onEnter: () => ensureModal("licenses"), target: () => modalClose, placement: "right" },
-  { copy: "figma", onEnter: () => ensureModal("figma"), target: inDrawer("figma-export"), placement: "right" },
-  { copy: "figmaHelp", onEnter: () => ensureModal("figma"), target: inDrawer("figma-help"), placement: "right", advanceOnClick: true },
+  { copy: "figma", onEnter: () => { tourRevealRail(railFigma); return ensureModal("figma"); }, target: inDrawer("figma-export"), placement: "right" },
+  { copy: "figmaHelp", onEnter: () => ensureModal("figma"), target: inDrawer("figma-help"), placement: "right", advanceOnClick: true, onExit: () => tourRestoreRail(railFigma) },
   // onExit closes the help panel the tour opened (whether it ends here or is skipped).
   { copy: "helpPanels", onEnter: () => ensureHelpOverlay(COPY.figma.exportHelpHtml), target: () => document.querySelector(".iref-help-card"), placement: "right", onExit: () => closeHelpOverlay() },
-  { copy: "company", onEnter: () => closeModal(), target: () => railCompany, placement: "right", advanceOnClick: true },
+  { copy: "company", onEnter: () => closeModal(), target: () => (railCompany.hidden ? null : railCompany), placement: "right", advanceOnClick: true },
   { copy: "companyDrawer", onEnter: () => ensureModal("company"), target: inDrawer("company"), placement: "right" },
   { copy: "voice", onEnter: () => closeModal(), target: () => railVoice, placement: "right", advanceOnClick: true },
   { copy: "voiceProject", onEnter: () => ensureModal("voice"), target: inDrawer("voice-project"), placement: "right" },
   { copy: "voiceGlobal", onEnter: () => ensureModal("voice"), target: inDrawer("voice-global"), placement: "right" },
   { copy: "voiceSave", onEnter: () => ensureModal("voice"), target: inDrawer("voice-save"), placement: "right" },
-  { copy: "a11y", onEnter: () => closeModal(), target: () => railA11y, placement: "right" },
+  { copy: "a11y", onEnter: () => { closeModal(); tourRevealRail(railA11y); }, target: () => railA11y, placement: "right", onExit: () => tourRestoreRail(railA11y) },
   // The Art Director icon only shows once a built design is previewed; reveal it for
   // its tip on a fresh install and hide it again afterwards.
   { copy: "artdirector", onEnter: () => { closeModal(); tourRevealRail(railDirector); }, target: () => railDirector, placement: "right", onExit: () => tourRestoreRail(railDirector) },
   { copy: "publish", onEnter: () => closeModal(), target: () => railPublish, placement: "right", advanceOnClick: true },
   { copy: "publishDrawer", onEnter: () => ensureModal("publish"), target: inDrawer("publish"), placement: "right" },
-  { copy: "cms", onEnter: () => closeModal(), target: () => railSite, placement: "right" },
+  { copy: "cms", onEnter: () => { closeModal(); tourRevealRail(railSite); }, target: () => railSite, placement: "right", onExit: () => tourRestoreRail(railSite) },
   // Creating a project. On a fresh install the tour runs on the Choose-a-project screen
   // and points at its buttons; on a replay with a project open the same steps point at
   // Switch Projects and its Create new / Switch buttons instead.
@@ -1285,6 +1319,8 @@ const TOUR_STEPS = [
   { copy: "newProject", onEnter: () => onGate() || ensureModal("projects"), target: () => onGate() ? createproject : inDrawer("project-create")(), placement: () => onGate() ? "right" : "bottom" },
   { copy: "openProject", onEnter: () => onGate() || ensureModal("projects"), target: () => onGate() ? openproject : inDrawer("project-switch")(), placement: () => onGate() ? "right" : "bottom" },
   { copy: () => onGate() ? "afterCreate" : "afterCreateOpen", onEnter: () => onGate() || ensureModal("projects"), target: () => onGate() ? gateCard() : inDrawer("project-create")(), placement: () => onGate() ? "right" : "bottom" },
+  // Last: the "i" in the rail, where this walkthrough and the rest of the help live for later.
+  { copy: "help", onEnter: () => closeModal(), target: () => railHelp, placement: "right", advanceOnClick: true },
 ];
 const onGate = () => currentStage === "project";
 const gateCard = () => projectgate.querySelector(".gate-inner");
@@ -1427,6 +1463,38 @@ function maybeStartCmsTour() {
 }
 el("modal-info").addEventListener("click", () => startTour(0, CMS_TOUR));
 let tourRevealed = null; // the rail button the tour un-hid, if any
+// Show or hide a gated rail icon softly (Rob 2026-09-09): hiding fades it out, then its
+// slot closes (height and the rail's 6px gap) so the icons below move up; showing is the
+// reverse. `instant` for the first paint. The tour's reveal/restore stay instant.
+const RAIL_GAP = 6;
+function setRailVisible(btn, show, instant = false) {
+  if (!btn) return;
+  if (btn._railAnim) { try { btn._railAnim.cancel(); } catch {} btn._railAnim = null; }
+  if (show === !btn.hidden && !btn._railHiding) return; // already there
+  btn._railHiding = false;
+  if (instant || typeof btn.animate !== "function") { btn.hidden = !show; return; }
+  const h = btn.offsetHeight || 36;
+  btn.style.overflow = "hidden";
+  if (show) {
+    btn.hidden = false;
+    const a = btn.animate([
+      { opacity: 0, height: "0px", marginBottom: -RAIL_GAP + "px", offset: 0 },
+      { opacity: 0, height: h + "px", marginBottom: "0px", offset: 0.5 },
+      { opacity: 1, height: h + "px", marginBottom: "0px", offset: 1 },
+    ], { duration: 520, easing: "cubic-bezier(.16,1,.3,1)", fill: "both" });
+    btn._railAnim = a;
+    a.finished.then(() => { if (btn._railAnim === a) { a.cancel(); btn._railAnim = null; btn.style.overflow = ""; } }).catch(() => {});
+  } else {
+    btn._railHiding = true;
+    const a = btn.animate([
+      { opacity: 1, height: h + "px", marginBottom: "0px", offset: 0 },
+      { opacity: 0, height: h + "px", marginBottom: "0px", offset: 0.5 },
+      { opacity: 0, height: "0px", marginBottom: -RAIL_GAP + "px", offset: 1 },
+    ], { duration: 640, easing: "cubic-bezier(.4,0,.2,1)", fill: "both" });
+    btn._railAnim = a;
+    a.finished.then(() => { if (btn._railAnim === a) { btn.hidden = true; a.cancel(); btn._railAnim = null; btn._railHiding = false; btn.style.overflow = ""; } }).catch(() => {});
+  }
+}
 function tourRevealRail(btn) { if (btn && btn.hidden) { btn.hidden = false; tourRevealed = btn; } }
 function tourRestoreRail(btn) { if (tourRevealed === btn) { btn.hidden = true; tourRevealed = null; } }
 const tourEl = (() => {
@@ -1437,7 +1505,7 @@ const tourEl = (() => {
   t.setAttribute("aria-live", "polite");
   t.innerHTML = `
     <div class="tour-head">
-      <span class="tour-step"></span>
+      <span class="tour-progress"><i></i></span>
       <button type="button" class="tour-x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div class="tour-title"></div>
@@ -1529,7 +1597,16 @@ async function tourShow(i) {
   }
   const c = tourStepCopy(step);
   const last = i === tourActive.length - 1;
-  tourEl.querySelector(".tour-step").textContent = COPY.tour.stepOf(i + 1, tourActive.length);
+  // Progress across the top. The CMS walkthrough's steps carry their tab, so the bar
+  // measures within the current tab's tips and starts over at each tab (less daunting
+  // than one long fill); the studio tour measures the whole run.
+  {
+    const set = step.tab ? tourActive.filter((st) => st.tab === step.tab) : tourActive;
+    const pos = step.tab ? set.indexOf(step) + 1 : i + 1;
+    const bar = tourEl.querySelector(".tour-progress i");
+    if (pos === 1) { bar.style.transition = "none"; bar.style.width = "0%"; void bar.offsetWidth; bar.style.transition = ""; } // a fresh set starts empty, no rewind
+    bar.style.width = (pos / set.length * 100).toFixed(1) + "%";
+  }
   tourEl.querySelector(".tour-title").textContent = c.title || "";
   tourEl.querySelector(".tour-body").textContent = c.body || "";
   // A step's copy may name its own button (e.g. "Open" when Next opens a drawer).
@@ -1621,7 +1698,11 @@ function endTour() {
   try { localStorage.setItem(tourCurrent.doneKey, "1"); } catch {}
   tourEl.classList.remove("show");
   setTimeout(() => { if (!tourRunning()) tourEl.hidden = true; }, 240);
+  // A brand-new install: the walkthrough ends on the Choose-a-project screen, so the
+  // next step gets a gentle pulse (the rail icons' ring), no tip. Gone on click or stage change.
+  if (tourCurrent === MAIN_TOUR && onGate()) createproject.classList.add("nudge");
 }
+createproject.addEventListener("click", () => createproject.classList.remove("nudge"));
 
 tourEl.querySelector(".tour-next").addEventListener("click", () => tourNext());
 tourEl.querySelector(".tour-back").addEventListener("click", () => tourBack());
@@ -2043,9 +2124,17 @@ async function switchToExisting() {
 let companyAutoCreate = false;
 
 async function renderCompany(body) {
+  body = tourSection(body, "company"); // the walkthrough tour anchors to the whole drawer
+  await renderCompanyInto(body, () => openModal("company"));
+}
+// The company information: status row, Create/Update form, save-this-project, export.
+// Rendered in the Company drawer and inside the Publish drawer's Profile section;
+// `refresh` re-renders whichever host after a save or clear (and the rail icon follows).
+async function renderCompanyInto(body, refresh) {
   const def = await window.desktop.getDefaultCompany(); // { has, companyName, headingFont, bodyFont, logoName }
   const proj = await window.desktop.getProjectStatus();
-  body = tourSection(body, "company"); // the walkthrough tour anchors to the whole drawer
+  const done = () => { applyUsage(); refresh(); };                 // after a clear
+  const saved = async () => { try { await window.desktop.setUsage("company"); } catch {} done(); }; // a saved profile turns the Company Profile on
 
   // Header (Licenses-style): title + Active/Not-set badge + an unplug delete when active.
   body.appendChild(connStatusRow(
@@ -2053,7 +2142,7 @@ async function renderCompany(body) {
     def.has,
     def.has ? (def.companyName ? COPY.company.activeWith(def.companyName) : COPY.common.active) : COPY.common.notSet,
     def.has ? COPY.company.clearDefault : null,
-    def.has ? async () => { await window.desktop.clearDefaultCompany(); openModal("company"); } : null,
+    def.has ? async () => { await window.desktop.clearDefaultCompany(); done(); } : null,
   ));
   const defNote = document.createElement("div");
   defNote.className = "muted";
@@ -2092,7 +2181,7 @@ async function renderCompany(body) {
       saveProjBtn.textContent = COPY.common.saving;
       pmsg.textContent = "";
       const res = await window.desktop.saveDefaultCompany();
-      if (res.ok) openModal("company");
+      if (res.ok) saved();
       else {
         pmsg.textContent = res.error || COPY.common.couldNotSave;
         pmsg.style.color = "#e5484d";
@@ -2152,7 +2241,7 @@ async function renderCompany(body) {
         bodyFontFile: files.bodyFont || null,
         logo: vals.logo || null,
       });
-      if (res && res.ok) openModal("company"); // refresh → Active + collapsed
+      if (res && res.ok) saved(); // refresh → Active + collapsed
       else {
         saveMsg.textContent = (res && res.error) || COPY.common.couldNotSave;
         saveMsg.style.color = "#e5484d";
@@ -2190,6 +2279,7 @@ async function renderCompany(body) {
 async function renderFigma(body) {
   const lic = await window.desktop.getLicenseStatus();
   railFigma.classList.toggle("activated", !!lic.hasLicense); // color the icon on save/clear
+  setRailVisible(railFigma, !!lic.hasLicense);
   body = tourSection(body, "figma-export"); // the walkthrough tour anchors to the whole drawer
 
   body.appendChild(connStatusRow(COPY.figma.licenseLabel, lic.hasLicense, lic.hasLicense ? COPY.common.active : COPY.common.notSet, null, null));
@@ -2903,7 +2993,7 @@ async function renderPublish(body) {
   // name + logo to the client; if it isn't set, offer to add it before publishing
   // (still optional). Shown whether or not Vercel is connected.
   const proj = await window.desktop.getProjectStatus();
-  if (proj.hasProject && !((proj.company || "").trim())) {
+  if (appUsage === "company" && proj.hasProject && !((proj.company || "").trim())) {
     const wrap = document.createElement("div");
     wrap.style.cssText = "margin: 6px 0 18px;";
     const rule = document.createElement("div");
@@ -2928,6 +3018,34 @@ async function renderPublish(body) {
     btns.append(upload, setup);
     wrap.append(rule, title, desc, btns);
     body.appendChild(wrap);
+  }
+
+  // ── Profile (collapsed): how the app is used + the company information ──
+  {
+    const P = COPY.publish.profile;
+    const fold = siteFold(P.title, "publish:profile", { defaultOpen: false });
+    fold.sec.style.margin = "0 0 16px";
+    const lbl = document.createElement("div"); lbl.className = "sess-label"; lbl.textContent = P.usageLabel;
+    const pick = document.createElement("div"); pick.className = "usage-pick";
+    const note = document.createElement("div"); note.className = "sess-desc"; note.style.margin = "0 0 14px";
+    const paintPick = () => {
+      pick.innerHTML = "";
+      for (const [u, text] of [["personal", P.personal], ["company", P.company]]) {
+        const b = siteMini(text, async () => {
+          if (appUsage === u) return;
+          try { await window.desktop.setUsage(u); } catch {}
+          appUsage = u; await applyUsage(); openModal("publish");
+        });
+        b.classList.toggle("on", appUsage === u);
+        pick.appendChild(b);
+      }
+      note.textContent = appUsage === "company" ? P.companyNote : P.personalNote;
+    };
+    paintPick();
+    const info = document.createElement("div");
+    fold.body.append(lbl, pick, note, info);
+    body.appendChild(fold.sec);
+    renderCompanyInto(info, () => openModal("publish")).catch(() => {});
   }
 
   if (!st.connected) {
@@ -7721,6 +7839,7 @@ window.desktop.onAgentEvent((evt) => {
       agentBusy = false;
       updateThinking(); // turn done → clear the dots
       clearIntakePending();
+      if (appUsage) applyUsage(); // /import-company may have turned the Company Profile on
       // Figma ingest just finished → read figma.json + show the findings/next-step in the pane.
       if (awaitingFigmaIngest) { awaitingFigmaIngest = false; showFigmaFindings(); }
       // Turn ended mid-intake → the brief is complete: show the review actions.
@@ -8141,8 +8260,8 @@ function setIntakeHead(title, lead) {
 function resetIntake() {
   intakeActive = false;
   startChoicesShown = false;
-  refsRevealed = false;
-  voiceStepDone = false;
+  refsRevealed = false; refsIntroActive = false; refsIntroDone = false; refsIntroHost = null;
+  voiceStepDone = false; directionStepDone = false;
   heroStepDone = false;
   menuStepDone = false;
   ctaStepDone = false;
@@ -8183,11 +8302,105 @@ let refsBusy = false;     // brief local state while a drop is uploading
 let refsAnalyzing = false; // main's vision pass is running (T2)
 let railBriefRows = 0;   // prior brief-row count, so the Brief card eases in once
 let refsRevealed = false; // the rail (Design References) stays hidden until the first question is answered
+// The Design References introduction (Rob 2026-09-09): right after the first question the
+// rail's panel shows as a card in the questions column, so it isn't overlooked. While it
+// shows the rail stays closed; Continue hands the panel over to the rail (a floating copy
+// travels across once the rail has slid open) and the next questions follow.
+let refsIntroActive = false; // the card is on screen: the rail stays closed, the card repaints with the rail
+let refsIntroDone = false;   // shown (or resumed past) this run
+let refsIntroHost = null;    // the card's panel host, repainted by composeRail
+function revealRail() { if (refsRevealed || !refsIntroDone) return; refsRevealed = true; composeRail(); }
 let voiceStepDone = false; // the Tone/rules step is injected by the renderer as the final question
+let directionStepDone = false; // the Design direction card follows it, the last step before the review
 
 function renderBriefSummary(brief) {
   lastBrief = brief;
   composeRail();
+}
+
+// ---- Intake auto-save (Rob 2026-09-09) ---------------------------------------
+// Every answered card group is recorded here and written to the project (with the
+// Brief) after each answer or edit, so closing the app or stepping Back loses nothing.
+// The deliverable screen offers to pick it up (resumeIntake re-renders the groups
+// collapsed and editable, then continues the flow). Cleared when the build starts or
+// on Start over.
+let intakeProgress = null; // { deliverable, groups: [{ kind, cards, answers }], modelTurnDone }
+function progressBegin(type) { intakeProgress = { deliverable: type, groups: [], modelTurnDone: false }; }
+function progressSave() {
+  if (!intakeProgress) return;
+  const p = { ...intakeProgress, flags: { menuStepDone, heroStepDone, ctaStepDone, voiceStepDone, directionStepDone, refsIntroDone } };
+  try { window.desktop.saveIntakeProgress(p); } catch {}
+}
+// A logo answer carries the upload's base64; the record keeps a marker (the brief holds the saved path).
+const progressAnswers = (cards, answers) => {
+  const out = { ...(answers || {}) };
+  for (const c of cards) if (c && c.type === "logo" && out[c.id] && out[c.id].b64) out[c.id] = { keep: true, filename: out[c.id].filename };
+  return out;
+};
+const progressCard = (c) => (c && c.value && c.value.b64 ? { ...c, value: undefined } : c);
+// Record an answered group; returns the record so an edit can update its answers.
+function progressRecord(kind, cards, answers) {
+  if (!intakeProgress) return null;
+  const rec = { kind, cards: (cards || []).map(progressCard), answers: progressAnswers(cards || [], answers) };
+  intakeProgress.groups.push(rec); progressSave(); return rec;
+}
+// The persist an edited group uses: update its record, save, then the real persist.
+function progressPersist(rec, base) {
+  return async (meta, answers) => { if (rec) { rec.answers = progressAnswers(rec.cards, answers); progressSave(); } return base(meta, answers); };
+}
+// Re-render a saved group: its cards seeded with the saved answers (or skipped),
+// collapsed, answered, editable, and recorded again for this session.
+const STEP_CLASS = { heroLayout: "hero-step", menuLayout: "menu-step", ctaType: "cta-step", tone: "voice-step", direction: "direction-step" };
+function renderRestoredGroup(g, brief) {
+  const answers = g.answers || {};
+  const cards = (g.cards || []).map((c) => {
+    const card = { ...c };
+    const v = answers[c.id];
+    if (c.type === "logo") { const l = brief && brief.logo; if (l && l.src) card.value = { src: l.src, filename: l.filename }; }
+    else if (c.type === "direction") card.value = (brief && brief.direction) || null;
+    else if (v != null) card.value = v;
+    if (card.value == null && c.skippable) card.skipped = true;
+    return card;
+  });
+  const group = document.createElement("div");
+  const first = cards[0];
+  group.className = "intake-group answered" + (first && STEP_CLASS[first.id] ? " " + STEP_CLASS[first.id] : "");
+  const controls = cards.map((card) => { const r = renderIntakeCard(card, () => {}, null); group.appendChild(r.el); r.collapse(); return { card, ...r }; });
+  const rec = progressRecord(g.kind, cards, answers);
+  const base = g.kind === "voice" ? ((_m, a) => window.desktop.setBriefTone(a.tone || null))
+    : g.kind === "direction" ? ((_m, a) => window.desktop.setBriefDirection(a.direction || null))
+    : persistIntakeEdit;
+  makeCardsEditable(group, controls, progressPersist(rec, base));
+  intakeStack.appendChild(group);
+}
+// Pick up a saved intake: restore the Brief, re-render the answered groups, continue.
+async function resumeIntake(p) {
+  try { await turnGate; } catch { /* prior turn already reported */ }
+  const type = p.deliverable === "app" ? "app" : "website";
+  deliverableType = type;
+  const f = p.flags || {};
+  startChoicesShown = false; refsRevealed = true; refsIntroActive = false; refsIntroDone = true; refsIntroHost = null; // the rail is open on a resume
+  menuStepDone = !!f.menuStepDone; heroStepDone = !!f.heroStepDone; ctaStepDone = !!f.ctaStepDone;
+  voiceStepDone = !!f.voiceStepDone; directionStepDone = !!f.directionStepDone;
+  intakeProgress = { deliverable: type, groups: [], modelTurnDone: !!p.modelTurnDone };
+  intakeph.classList.add("flow"); intakeph.classList.remove("start");
+  enterIntakeMode(); exitReview();
+  setIntakeHead(COPY.intake.gathering.headTitle, COPY.intake.gathering.headSubtitle);
+  el("intake-brief").innerHTML = ""; intakeStack.innerHTML = "";
+  intakePhase = "gathering"; takingInIdx = 0; currentIntakeId = null; updateBackButton();
+  let brief = p.brief || null;
+  try { const r = await window.desktop.restoreIntake(brief, "web-pages", type); if (r && r.brief) brief = r.brief; } catch {}
+  lastBrief = brief;
+  try { await loadVoice(); } catch {}
+  loadReferences();
+  for (const g of p.groups || []) renderRestoredGroup(g, brief);
+  composeRail();
+  // Continue where it stopped: the fixed questions still unanswered come first (every
+  // run asks them all), then the one model turn, then the remaining steps or the review.
+  const answeredBatches = (p.groups || []).filter((g) => g.kind === "client").length;
+  if (answeredBatches < CLIENT_SCRIPT_BATCHES) startClientIntake(type, answeredBatches);
+  else if (!intakeProgress.modelTurnDone) beginModelIntakeTurn(type); // it closed during the one model turn
+  else showBriefComplete();                                            // the next step, or the review
 }
 
 function applyRefPayload(p) {
@@ -8268,6 +8481,7 @@ function composeRail() {
   box.innerHTML = "";
   // Design References only appear once the first question has been answered.
   if (flow && refsRevealed) box.appendChild(buildReferencesPanel());
+  if (refsIntroActive && refsIntroHost && refsIntroHost.isConnected) { refsIntroHost.innerHTML = ""; refsIntroHost.appendChild(buildReferencesPanel()); } // the intro card follows uploads too
   let briefCard = null;
   if (rows.length) {
     briefCard = document.createElement("div");
@@ -8290,7 +8504,7 @@ function composeRail() {
     }
     box.appendChild(briefCard);
   }
-  showRail((flow && refsRevealed) || rows.length > 0);
+  showRail(!refsIntroActive && ((flow && refsRevealed) || rows.length > 0)); // closed while the intro card shows
 
   // Ease the Brief card in the first time it appears (not a harsh pop), and softly
   // scroll it into view as it grows, mirroring the questions column's motion.
@@ -8594,12 +8808,12 @@ function renderIntakeGroup(id, cards) {
     autoDismissTool(done, 900); // flash "✓ Got it", then fade + collapse it away
     if (currentIntakeId === id) currentIntakeId = null; // answered, not cancellable now
     // First answer is in → fade the Design References rail in (it stayed hidden until now).
-    if (!refsRevealed) { refsRevealed = true; composeRail(); }
+    revealRail();
     // Conversational feedback while the agent takes it in — cycled so the line after
     // the second answer differs from the first (works whether or not more follow).
     showIntakePending(TAKING_IN_MESSAGES[takingInIdx % TAKING_IN_MESSAGES.length]);
     takingInIdx++;
-    makeCardsEditable(group, controls, persistIntakeEdit);
+    makeCardsEditable(group, controls, progressPersist(progressRecord("agent", cards, answers), persistIntakeEdit));
     await window.desktop.answerIntake(id, answers);
   }
   continueBtn.addEventListener("click", submit);
@@ -8758,7 +8972,7 @@ function renderVoiceStep() {
     autoDismissTool(done, 900);
     voiceStepDone = true;
     // Editable: re-picking a tone re-persists it (rules persist live in buildVoiceRules).
-    makeCardsEditable(group, [ctl], (_meta, a) => window.desktop.setBriefTone(a.tone || null));
+    makeCardsEditable(group, [ctl], progressPersist(progressRecord("voice", [card], { [card.id]: val }), (_meta, a) => window.desktop.setBriefTone(a.tone || null)));
     setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then the review
   }
   continueBtn.addEventListener("click", submit);
@@ -8812,7 +9026,7 @@ function renderHeroStep() {
     autoDismissTool(done, 900);
     heroStepDone = true;
     if (val && lastBrief) { lastBrief.heroLayout = val; composeRail(); } // immediate: brief rail
-    makeCardsEditable(group, [ctl], persistIntakeEdit);
+    makeCardsEditable(group, [ctl], progressPersist(progressRecord("step", [card], { [card.id]: val }), persistIntakeEdit));
     try { await window.desktop.applyIntakeAnswers([{ id: card.id, field: card.field, type: card.type }], { [card.id]: val }); } catch {}
     setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then continue the flow
   }
@@ -8866,7 +9080,7 @@ function renderMenuStep() {
     autoDismissTool(done, 900);
     menuStepDone = true;
     if (val && lastBrief) { lastBrief.menuLayout = val; composeRail(); } // immediate: brief rail
-    makeCardsEditable(group, [ctl], persistIntakeEdit);
+    makeCardsEditable(group, [ctl], progressPersist(progressRecord("step", [card], { [card.id]: val }), persistIntakeEdit));
     try { await window.desktop.applyIntakeAnswers([{ id: card.id, field: card.field, type: card.type }], { [card.id]: val }); } catch {}
     setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then continue the flow
   }
@@ -8920,7 +9134,7 @@ function renderCtaStep() {
     autoDismissTool(done, 900);
     ctaStepDone = true;
     if (val && lastBrief) { lastBrief.ctaType = val; composeRail(); } // immediate: brief rail
-    makeCardsEditable(group, [ctl], persistIntakeEdit);
+    makeCardsEditable(group, [ctl], progressPersist(progressRecord("step", [card], { [card.id]: val }), persistIntakeEdit));
     try { await window.desktop.applyIntakeAnswers([{ id: card.id, field: card.field, type: card.type }], { [card.id]: val }); } catch {}
     setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then continue the flow
   }
@@ -8944,6 +9158,75 @@ const CLIENT_STEP_DELAY = 620; // a short "taking it in" beat between client que
 
 // Render ONE batch of client cards (usually one card; the name pair is two) with a
 // Continue button, persist the answers to the Brief, then call onDone().
+// The Design References introduction card (see refsIntroActive). Continue: the rail
+// opens with its own panel invisible, a copy of the card's panel floats across into
+// that spot, the rail's panel takes over, the card leaves, and the flow continues.
+function renderRefsIntro(onDone) {
+  const R = COPY.intake.refsIntro;
+  refsIntroActive = true;
+  const group = document.createElement("div");
+  group.className = "intake-group refs-intro";
+  const card = document.createElement("div");
+  card.className = "icard icard-refs";
+  const label = document.createElement("div"); label.className = "icard-label"; label.textContent = R.label;
+  const help = document.createElement("div"); help.className = "icard-help"; help.textContent = R.help;
+  const host = document.createElement("div"); host.className = "icard-body";
+  host.appendChild(buildReferencesPanel());
+  refsIntroHost = host;
+  card.append(label, help, host);
+  const continueBtn = document.createElement("button");
+  continueBtn.className = "intake-continue";
+  continueBtn.textContent = R.continue;
+  group.append(card, continueBtn);
+
+  async function handoff() {
+    if (group.classList.contains("answered")) return;
+    group.classList.add("answered");
+    continueBtn.disabled = true;
+    const inline = host.querySelector(".iref-panel");
+    const from = inline ? inline.getBoundingClientRect() : null;
+    refsIntroDone = true; refsIntroActive = false; refsIntroHost = null; refsRevealed = true;
+    composeRail(); // the rail slides open with its own panel, kept invisible until the copy arrives
+    const rail = el("intake-brief");
+    const railPanel = rail.querySelector(".iref-panel");
+    const leave = anim(group, [{ opacity: 1, transform: "translateY(0px)" }, { opacity: 0, transform: "translateY(-18px)" }], { duration: 360 });
+    if (inline && from && railPanel) {
+      railPanel.style.visibility = "hidden";
+      // One motion, not a wait then a hop: read the panel's settled spot with the rail
+      // snapped open (transition off, no frame painted), snap it back, restore the
+      // transition, and open it for real. The copy then travels for the rail's own
+      // .62s with the rail's easing, so the two move as one.
+      rail.style.transition = "none"; void rail.offsetWidth;
+      const to = railPanel.getBoundingClientRect();
+      intakeph.classList.remove("hasbrief"); void rail.offsetWidth;
+      rail.style.transition = ""; void rail.offsetWidth;
+      intakeph.classList.add("hasbrief");
+      const ghost = inline.cloneNode(true);
+      ghost.classList.add("iref-ghost");
+      Object.assign(ghost.style, { left: from.left + "px", top: from.top + "px", width: from.width + "px" });
+      document.body.appendChild(ghost);
+      inline.style.visibility = "hidden";
+      const move = anim(ghost, [
+        { transform: "translate(0px, 0px) scale(1)" },
+        { transform: `translate(${to.left - from.left}px, ${to.top - from.top}px) scale(${to.width / from.width})` },
+      ], { duration: 620, easing: "cubic-bezier(.16,1,.3,1)" });
+      if (move && move.finished) { try { await move.finished; } catch {} }
+      ghost.remove();
+      railPanel.style.visibility = "";
+    } else if (leave && leave.finished) { try { await leave.finished; } catch {} }
+    group.remove();
+    progressSave();
+    onDone();
+  }
+  continueBtn.addEventListener("click", handoff);
+
+  intakeStack.appendChild(group);
+  const scroller = intakeph.classList.contains("flow") ? intakeph.querySelector(".intake-inner") : intakeph;
+  const centerTo = scroller ? intakeCenterTarget(scroller, group) : 0;
+  fadeSlideIn(group, { dy: 44, duration: 720, delay: 60 });
+  if (scroller) { try { scroller.scrollTo({ top: centerTo, behavior: "smooth" }); } catch { scroller.scrollTop = centerTo; } }
+}
+
 function renderClientBatch(cards, onDone) {
   enterIntakeMode();
   clearIntakePending();
@@ -8984,10 +9267,10 @@ function renderClientBatch(cards, onDone) {
     const done = doneNote();
     continueBtn.replaceWith(done);
     autoDismissTool(done, 900);
-    if (!refsRevealed) { refsRevealed = true; composeRail(); } // first answer reveals the rail
+    revealRail(); // the first answer reveals the rail (after the references introduction)
     showIntakePending(TAKING_IN_MESSAGES[takingInIdx % TAKING_IN_MESSAGES.length]);
     takingInIdx++;
-    makeCardsEditable(group, controls, persistIntakeEdit);
+    makeCardsEditable(group, controls, progressPersist(progressRecord("client", cards, answers), persistIntakeEdit));
     try { await window.desktop.applyIntakeAnswers(meta, answers); } catch {}
     onDone();
   }
@@ -9010,7 +9293,8 @@ let clientIntakeGen = 0;
 
 // Build the fixed question script for this deliverable and walk it, one batch at a
 // time, then hand off to the model turn (sections + color + font, tailored to type).
-async function startClientIntake(type) {
+// `from`: the batch to start at (a resumed intake continues after the batches it saved).
+async function startClientIntake(type, from = 0) {
   const gen = ++clientIntakeGen;
   const kind = type === "app" ? "app" : "web site";
   // If a Figma frame was imported, its gleaned brand name + project name pre-fill the fields
@@ -9027,11 +9311,13 @@ async function startClientIntake(type) {
     ],
     [{ id: "reference", field: "references", type: "reference", maxLength: 200, label: COPY.intake.q.reference(kind), skippable: true, agentDecidesLabel: COPY.intake.skipReference }],
   ];
-  runClientScript(script, 0, type, gen);
+  runClientScript(script, Math.min(Math.max(0, from | 0), script.length), type, gen);
 }
+const CLIENT_SCRIPT_BATCHES = 3; // what / name+logo / reference (startClientIntake's script)
 
 function runClientScript(script, i, type, gen) {
   if (intakePhase !== "gathering" || gen !== clientIntakeGen) return; // backed out / superseded
+  if (i === 1 && !refsIntroDone) { renderRefsIntro(() => runClientScript(script, i, type, gen)); return; } // after the first answer
   if (i >= script.length) { beginModelIntakeTurn(type); return; }
   renderClientBatch(script[i], () => {
     setTimeout(() => runClientScript(script, i + 1, type, gen), CLIENT_STEP_DELAY);
@@ -9050,34 +9336,23 @@ function beginModelIntakeTurn(type) {
 
 function showBriefComplete() {
   if (intakePhase !== "gathering") return; // only from the gathering state
+  if (intakeProgress && !intakeProgress.modelTurnDone) { intakeProgress.modelTurnDone = true; progressSave(); } // past the one model turn
   // Header / navigation layout comes first (website projects only), just before the hero.
   if (!menuStepDone && menuStepApplicable()) { renderMenuStep(); return; }
   // Hero layout comes right after sections, but only if Hero is one of them.
   if (!heroStepDone && heroStepApplicable()) { renderHeroStep(); return; }
   // Contact/CTA type comes after the hero, but only if Contact or CTA is a section.
   if (!ctaStepDone && ctaStepApplicable()) { renderCtaStep(); return; }
-  if (!voiceStepDone) { renderVoiceStep(); return; } // the Tone/rules step is the last question
+  if (!voiceStepDone) { renderVoiceStep(); return; } // the Tone/rules step
+  if (!directionStepDone) { renderDirectionStep(); return; } // the Design direction card is the last step
+  // The review: the "solid start" question and its actions, appended UNDER the answered
+  // cards, which stay on screen and editable all the way to the end (Rob 2026-09-09).
   intakePhase = "review";
   currentIntakeId = null;
   updateBackButton();
   clearIntakePending();
-  const head = intakeph.querySelector(".intake-head");
-  const leaving = [head, ...Array.from(intakeStack.children)].filter(Boolean);
-  const anims = leaving
-    .map((elm) => anim(elm, [
-      { opacity: 1, transform: "translateY(0px)" },
-      { opacity: 0, transform: "translateY(-22px)" },
-    ], { duration: 460 }))
-    .filter(Boolean);
-  const after = () => {
-    if (intakePhase !== "review") return; // a new question arrived mid-animation
-    intakeStack.innerHTML = "";
-    if (head) head.classList.add("intake-hidden");
-    intakeph.classList.add("reviewing"); // center the actions level with the brief rail
-    renderReviewActions();
-  };
-  if (anims.length) Promise.allSettled(anims.map((a) => a.finished)).then(after);
-  else after();
+  const old = intakeStack.querySelector(".intake-review"); if (old) old.remove();
+  renderReviewActions();
 }
 
 // Restore the head (a new question arrived after review sent us back to gathering).
@@ -9171,7 +9446,7 @@ async function renderDirectionPanel(host, opts = {}) {
   if (!axisNames.length) return; // sampler unavailable / unlicensed → no panel
 
   const panel = document.createElement("div");
-  panel.className = "idir";
+  panel.className = "idir" + (opts.inCard ? " idir-in-card" : "");
 
   const head = document.createElement("div");
   head.className = "idir-head";
@@ -9274,7 +9549,10 @@ async function renderDirectionPanel(host, opts = {}) {
       b.className = "idir-stop";
       b.textContent = stop;
       b.addEventListener("click", () => {
-        pinnedLens = null; // steering by axes releases a direct pick
+        // Steering keeps the Direction: the lens stays pinned (the one picked, else the one
+        // showing) and only its tendencies move. Putting a stop back restores the same
+        // Direction with the same settings (Rob 2026-09-09).
+        if (!pinnedLens && current) pinnedLens = current.lens;
         if (!Object.keys(pinned).length && current) for (const n of axisNames) pinned[n] = current.axes[n];
         pinned[name] = stop;
         resample();
@@ -9292,7 +9570,7 @@ async function renderDirectionPanel(host, opts = {}) {
   reroll.type = "button";
   reroll.className = "idir-reroll";
   reroll.textContent = COPY.intake.direction.reroll;
-  reroll.addEventListener("click", () => resample()); // keeps a pinned lens or axes, fresh seed
+  reroll.addEventListener("click", () => resample()); // keeps the pinned lens and axes, fresh seed (the details vary)
   panel.appendChild(reroll);
 
   function paint() {
@@ -9307,6 +9585,8 @@ async function renderDirectionPanel(host, opts = {}) {
       const tile = document.createElement("button"); tile.type = "button"; tile.className = "idir-tile"; tile.title = im.alt || "";
       const img = document.createElement("img"); img.src = im.thumb || im.src; img.alt = im.alt || ""; img.loading = "lazy";
       tile.appendChild(img);
+      const plus = document.createElement("span"); plus.className = "idir-plus"; plus.setAttribute("aria-hidden", "true"); plus.textContent = "+"; // "this opens": the lightbox affordance
+      tile.appendChild(plus);
       if (im.credit) {
         const cr = document.createElement("div"); cr.className = "idir-credit";
         cr.textContent = COPY.intake.direction.imageCredit(im.credit, im.license);
@@ -9328,8 +9608,8 @@ async function renderDirectionPanel(host, opts = {}) {
     reroll.disabled = true;
     panel.classList.add("busy");
     const o = {};
-    if (pinnedLens) o.lens = pinnedLens;
-    else if (Object.keys(pinned).length) o.axes = pinned;
+    if (pinnedLens) o.lens = pinnedLens;          // the Direction stays
+    if (Object.keys(pinned).length) o.axes = pinned; // its tendencies as steered (with a lens: motifs follow them)
     try {
       const r = await sample(o);
       if (r && r.direction) current = r.direction;
@@ -9342,17 +9622,12 @@ async function renderDirectionPanel(host, opts = {}) {
 
   host.appendChild(panel);
   if (current) { onChange(current); paint(); } // show the provided direction; reroll/steer/pick redraws
-  else { await resample(); }                    // no initial → auto-draw (the intake case)
+  else if (opts.autoDraw !== false) { await resample(); } // no initial → auto-draw (the intake case)
 }
 
 function renderReviewActions() {
   const wrap = document.createElement("div");
   wrap.className = "intake-review";
-
-  // The design-direction knob panel fills in asynchronously at the top of the review.
-  const dirHost = document.createElement("div");
-  dirHost.className = "idir-host";
-  renderDirectionPanel(dirHost);
 
   const q = document.createElement("div");
   q.className = "intake-review-q";
@@ -9397,9 +9672,62 @@ function renderReviewActions() {
     ta.focus();
   });
 
-  wrap.append(dirHost, q, primary, secondary, more);
+  wrap.append(q, primary, secondary, more);
   intakeStack.appendChild(wrap);
   fadeSlideIn(wrap, { dy: 20, duration: 620, delay: 80 });
+  const scroller = intakeph.classList.contains("flow") ? intakeph.querySelector(".intake-inner") : intakeph;
+  if (scroller) { const top = intakeCenterTarget(scroller, wrap); try { scroller.scrollTo({ top, behavior: "smooth" }); } catch { scroller.scrollTop = top; } }
+}
+
+// The Design direction step: the knob panel as a card in the stack, after the Tone
+// step. Continue saves what the panel shows (the panel already stores each draw on the
+// brief; Continue is the designer's confirmation), "I'll let you choose" leaves it to the
+// build. Editable afterwards like every other card. Without the sampler (unlicensed or
+// offline) the step is skipped.
+async function renderDirectionStep() {
+  if (intakeStack.querySelector(".direction-step")) return; // already showing
+  const meta = await getDirectionMeta();
+  if (!Object.keys(meta.axes || {}).length) { directionStepDone = true; showBriefComplete(); return; }
+  if (intakePhase !== "gathering" || directionStepDone) return;
+  currentIntakeId = null;
+  const card = { id: "direction", field: "direction", type: "direction", label: COPY.intake.q.direction, skippable: true, agentDecidesLabel: COPY.intake.letYouChoose };
+  const group = document.createElement("div");
+  group.className = "intake-group direction-step";
+  const continueBtn = document.createElement("button");
+  continueBtn.className = "intake-continue";
+  continueBtn.textContent = COPY.intake.continue;
+  const refreshReady = () => { continueBtn.disabled = !ctl.isReady(); };
+  const requestSubmit = () => { if (!group.classList.contains("answered") && ctl.isReady()) submit(); };
+  const ctl = renderIntakeCard(card, refreshReady, requestSubmit);
+  group.append(ctl.el, continueBtn);
+  refreshReady();
+  const persist = async (_meta, a) => { try { await window.desktop.setBriefDirection(a.direction || null); } catch {} };
+  async function submit() {
+    if (group.classList.contains("answered")) return;
+    group.classList.add("answered");
+    const val = ctl.getValue();
+    ctl.collapse();
+    const done = doneNote();
+    continueBtn.replaceWith(done);
+    autoDismissTool(done, 900);
+    directionStepDone = true;
+    makeCardsEditable(group, [ctl], progressPersist(progressRecord("direction", [card], { [card.id]: val }), persist));
+    await persist(null, { direction: val });
+    setTimeout(showBriefComplete, 520); // let "Got it" flash, then the review
+  }
+  continueBtn.addEventListener("click", submit);
+  intakeStack.appendChild(group);
+  // Taller than the other cards: bring its TOP to the top of the column rather than
+  // centering it, and again once the panel has loaded (the column only grows then).
+  const scroller = intakeph.classList.contains("flow") ? intakeph.querySelector(".intake-inner") : intakeph;
+  const toTop = () => {
+    if (!scroller || !group.isConnected) return;
+    const top = (group.getBoundingClientRect().top - scroller.getBoundingClientRect().top) + scroller.scrollTop - 24;
+    const t = Math.max(0, Math.min(top, scroller.scrollHeight - scroller.clientHeight));
+    try { scroller.scrollTo({ top: t, behavior: "smooth" }); } catch { scroller.scrollTop = t; }
+  };
+  fadeSlideIn(group, { dy: 44, duration: 720, delay: 60 });
+  toTop(); setTimeout(toTop, 450); setTimeout(toTop, 1000);
 }
 
 // ---- Post-build reroll: fork a built design with a new direction ------------
@@ -9494,7 +9822,7 @@ async function doReroll(sourceId, direction) {
 // The preview-toolbar reroll button shows only when licensed AND viewing a specific design.
 async function updateRerollBtn(url) {
   updateArtDirectorRailBtn(url); // same readiness signal drives the rail Art Director icon
-  updateA11yRailBtn(); // refresh the Accessibility rail dot for the previewed design
+  updateA11yRailBtn(url); // the same readiness signal drives the Accessibility icon
   const btn = el("reroll-btn");
   if (!btn) return;
   const meta = await getDirectionMeta();
@@ -10044,7 +10372,7 @@ async function updateArtDirectorRailBtn(url) {
   const v = currentPreviewVariation(url);
   const ready = !homeBuilding && !agentBusy && !intakeActive;
   const avail = !!(licensed && ready && v && v !== "v00");
-  railDirector.hidden = !avail;
+  setRailVisible(railDirector, avail, !railAnimated);
   if (!avail) { railDirector.classList.remove("has-code", "has-passive"); if (isModalOpen("director")) closeModal(); return; }
   updateDirectorIndicator(v); // reflect the previewed design's queue state
 }
@@ -10307,12 +10635,16 @@ function fixA11y(f) {
   runAgent(prompt, COPY.a11y.fixingEcho(f.title), {});
 }
 
-// Rail icon: always available; when clicked, the drawer adapts to AA-mode on/off. No license gate.
-async function updateA11yRailBtn() {
+// Rail icon: like the Art Director's, exposed only while a built design is previewed and
+// idle (hidden otherwise, its drawer closed); no license gate. The drawer adapts to AA-mode.
+async function updateA11yRailBtn(url) {
   if (!railA11y) return;
   railA11y.classList.remove("has-code", "has-passive");
-  const v = currentPreviewVariation();
-  if (!v || v === "v00") return;
+  const v = currentPreviewVariation(url);
+  const ready = !homeBuilding && !agentBusy && !intakeActive;
+  const avail = !!(ready && v && v !== "v00");
+  setRailVisible(railA11y, avail, !railAnimated);
+  if (!avail) { if (isModalOpen("a11y")) closeModal(); return; }
   let store = { active: [] };
   try { store = await window.desktop.loadA11y(v); } catch {}
   if ((store.active || []).some((f) => a11yImpactRank(f.impact) <= 1)) railA11y.classList.add("has-code");
@@ -10659,6 +10991,7 @@ function renderAdBarActions(el, rec) {
 // Animate the whole pane clean (brief rail included), then hand off to the build
 // with a persistent "preparing" status + rotating messages until the design shows.
 function startDesigning() {
+  intakeProgress = null; try { window.desktop.clearIntakeProgress(); } catch {} // the build takes the brief from here
   intakePhase = "designing";
   quietBuildActive = true;    // hold a quiet pane + closed chat until the build fully finishes
   setChatCollapsed(true);     // keep the chat closed through the build (no narration) — opens on reveal
@@ -10993,6 +11326,7 @@ function buildHeroLayout(card, body, onChange) {
     grid.appendChild(tile);
   });
   body.appendChild(grid);
+  if (card.value != null) { selected = card.value; tiles.forEach((t) => t.classList.toggle("selected", t.dataset.id === selected)); } // pre-fill (a resumed intake)
   return {
     getValue: () => selected,
     hasValue: () => selected != null,
@@ -11088,6 +11422,7 @@ function buildMenuLayout(card, body, onChange) {
     });
     body.appendChild(grid);
   });
+  if (card.value != null) { selected = card.value; tiles.forEach((t) => t.classList.toggle("selected", t.dataset.id === selected)); } // pre-fill (a resumed intake)
   return {
     getValue: () => selected,
     hasValue: () => selected != null,
@@ -11149,6 +11484,7 @@ function buildCtaType(card, body, onChange) {
     grid.appendChild(tile);
   });
   body.appendChild(grid);
+  if (card.value != null) { selected = card.value; tiles.forEach((t) => t.classList.toggle("selected", t.dataset.id === selected)); } // pre-fill (a resumed intake)
   return {
     getValue: () => selected,
     hasValue: () => selected != null,
@@ -11181,20 +11517,26 @@ function renderIntakeCard(card, onChange, requestSubmit) {
 
   let skipped = false;
   const skippable = card.skippable === true;
+  // The reference card's skip ("Skip, I don't have one") makes no sense once a site is
+  // typed in, so it leaves the card as the field fills and returns if it's cleared (Rob
+  // 2026-09-09). Every change passes through here so that can follow the inputs.
+  let syncSkip = () => {};
+  const changed = () => { onChange(); syncSkip(); };
   const built =
-    card.type === "open-text" ? buildOpenText(card, body, onChange, requestSubmit)
-    : card.type === "single-choice" ? buildChoice(card, body, false, onChange)
-    : card.type === "multi-choice" ? buildChoice(card, body, true, onChange)
-    : card.type === "chips" ? buildChips(card, body, onChange)
-    : card.type === "reference" ? buildReference(card, body, onChange)
-    : card.type === "color-swatch" ? buildColorSwatch(card, body, onChange)
-    : card.type === "font-pick" ? buildFontPick(card, body, onChange)
-    : card.type === "hero-layout" ? buildHeroLayout(card, body, onChange)
-    : card.type === "menu-layout" ? buildMenuLayout(card, body, onChange)
-    : card.type === "cta-type" ? buildCtaType(card, body, onChange)
-    : card.type === "logo" ? buildLogoUpload(card, body, onChange)
-    : card.type === "voice" ? buildVoiceRules(card, body, onChange)
-    : buildOpenText(card, body, onChange); // defensive fallback
+    card.type === "open-text" ? buildOpenText(card, body, changed, requestSubmit)
+    : card.type === "single-choice" ? buildChoice(card, body, false, changed)
+    : card.type === "multi-choice" ? buildChoice(card, body, true, changed)
+    : card.type === "chips" ? buildChips(card, body, changed)
+    : card.type === "reference" ? buildReference(card, body, changed)
+    : card.type === "color-swatch" ? buildColorSwatch(card, body, changed)
+    : card.type === "font-pick" ? buildFontPick(card, body, changed)
+    : card.type === "hero-layout" ? buildHeroLayout(card, body, changed)
+    : card.type === "menu-layout" ? buildMenuLayout(card, body, changed)
+    : card.type === "cta-type" ? buildCtaType(card, body, changed)
+    : card.type === "logo" ? buildLogoUpload(card, body, changed)
+    : card.type === "voice" ? buildVoiceRules(card, body, changed)
+    : card.type === "direction" ? buildDirection(card, body, changed)
+    : buildOpenText(card, body, changed); // defensive fallback
 
   // Skippable cards get a "let you decide" affordance that records null.
   let skipBtn = null;
@@ -11215,6 +11557,11 @@ function renderIntakeCard(card, onChange, requestSubmit) {
       if (skipped && requestSubmit) requestSubmit();
     });
     elc.appendChild(skipBtn);
+    if (card.type === "reference") { syncSkip = () => { skipBtn.hidden = !skipped && built.hasValue(); }; syncSkip(); }
+    if (card.skipped === true) { // restored from a saved intake as "let you choose"
+      skipped = true; elc.classList.add("skipped"); built.setDisabled(true);
+      skipBtn.textContent = COPY.intake.undoSkip; skipBtn.classList.add("undo");
+    }
   }
 
   // Post-submit: show a read-only summary of the answer BUT keep the live inputs in
@@ -11247,6 +11594,28 @@ function renderIntakeCard(card, onChange, requestSubmit) {
       body.style.display = "";
       if (skipBtn) skipBtn.style.display = "";
       if (answerEl) answerEl.style.display = "none";
+    },
+  };
+}
+
+// direction → the knob panel (renderDirectionPanel) inside the card. Its value is the
+// Direction the panel shows; the panel stores each draw on the brief as it goes, so the
+// card's Continue is the confirmation and a skip clears it.
+function buildDirection(card, body, onChange) {
+  let current = card.value || (lastBrief && lastBrief.direction) || null;
+  // A card restored as "let you choose" draws nothing on its own (a draw would land on the brief).
+  renderDirectionPanel(body, { inCard: true, initialDirection: current, autoDraw: card.skipped !== true, onChange: (d) => { current = d || null; onChange(); } });
+  const axisLabel = (name) => (COPY.intake.direction.axisLabels || {})[name] || name;
+  return {
+    getValue: () => current,
+    hasValue: () => !!(current && current.lens),
+    setDisabled: (d) => body.querySelectorAll("button").forEach((e) => { e.disabled = d; }),
+    display: () => {
+      if (!current) return "";
+      const lens = ((_directionMeta && _directionMeta.lenses) || []).find((l) => l.id === current.lens);
+      const name = current.lensLabel || (lens ? lens.label : current.lens);
+      const axes = Object.entries(current.axes || {}).map(([k, v]) => `${axisLabel(k)} ${v}`);
+      return [name, ...axes].join(" · ");
     },
   };
 }
@@ -11325,6 +11694,11 @@ function buildChoice(card, body, multi, onChange) {
     rows.push(row);
     body.appendChild(row);
   });
+  // Pre-fill (a resumed intake): the saved choice(s).
+  if (card.value != null) {
+    const init = (Array.isArray(card.value) ? card.value : [card.value]).slice(0, multi ? undefined : 1);
+    rows.forEach((row, i) => { const opt = (card.options || [])[i]; if (init.includes(opt)) { selected.add(opt); row.classList.add("selected"); row.querySelector(".iopt-check").innerHTML = CHECK_SVG; } });
+  }
   return {
     getValue: () => {
       if (!selected.size) return null;
@@ -11357,6 +11731,7 @@ function buildChips(card, body, onChange) {
     chips.push(chip);
     wrap.appendChild(chip);
   });
+  if (Array.isArray(card.value)) chips.forEach((chip, i) => { const opt = (card.options || [])[i]; if (card.value.includes(opt)) { selected.add(opt); chip.classList.add("selected"); } }); // pre-fill (a resumed intake)
   body.appendChild(wrap);
   return {
     getValue: () => (selected.size ? [...selected] : null),
@@ -11430,7 +11805,10 @@ function buildReference(card, body, onChange) {
       .map((e) => ({ url: e.url.value.trim(), reason: e.why.value.trim() || null }))
       .filter((e) => e.url);
 
-  addEntry(); // one to start
+  // Pre-fill (a resumed intake): the saved sites; else one empty entry to start.
+  if (Array.isArray(card.value) && card.value.length) {
+    for (const v of card.value.slice(0, MAX)) { addEntry(); const e = entries[entries.length - 1]; e.url.value = v.url || ""; e.why.value = v.reason || ""; }
+  } else addEntry();
   addBtn.addEventListener("click", () => { addEntry(); onChange(); });
   body.appendChild(addBtn);
 
@@ -11508,6 +11886,13 @@ function buildColorSwatch(card, body, onChange) {
   customEl.appendChild(picker);
   wrap.appendChild(customEl);
 
+  // Pre-fill (a resumed intake): a listed swatch, else the custom picker.
+  if (card.value && /^#[0-9a-f]{3,8}$/i.test(card.value)) {
+    selected = card.value;
+    const i = options.findIndex((h) => h.toLowerCase() === card.value.toLowerCase());
+    if (i >= 0) swatches[i].classList.add("selected");
+    else { picker.value = card.value; customEl.classList.add("selected", "has-color"); customEl.style.background = card.value; }
+  }
   body.appendChild(wrap);
   return {
     getValue: () => selected,
@@ -11661,6 +12046,8 @@ function buildLogoUpload(card, body, onChange) {
   input.style.display = "none";
   zone.append(preview, hint, input);
   body.appendChild(zone);
+  // A resumed intake: the logo is already saved to the project; keep it unless a new file arrives.
+  if (card.value && card.value.src) { value = { keep: true, src: card.value.src, filename: card.value.filename || String(card.value.src).split("/").pop() }; hint.textContent = value.filename; }
 
   function read(file) {
     if (!file || disabled || !/^image\//.test(file.type || "")) return;
@@ -12305,6 +12692,24 @@ function renderDeliverableChoice() {
   }
   intakeStack.appendChild(row);
   updateBackButton();
+  // A saved intake for this project (auto-saved after every answer) → offer to pick it up.
+  window.desktop.getIntakeProgress().then((r) => {
+    const p = r && r.progress;
+    if (!p || intakePhase !== "deliverable" || !row.isConnected) return;
+    const R = COPY.intake.resume;
+    const box = document.createElement("div"); box.className = "iresume";
+    const t = document.createElement("div"); t.className = "iresume-title"; t.textContent = R.title;
+    let when = ""; try { when = new Date(p.savedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }); } catch { when = String(p.savedAt || ""); }
+    const d = document.createElement("div"); d.className = "iresume-detail"; d.textContent = R.detail(p.groups.length, when);
+    const acts = document.createElement("div"); acts.className = "iresume-actions";
+    const go = document.createElement("button"); go.type = "button"; go.className = "intake-continue"; go.textContent = R.resume;
+    go.addEventListener("click", () => { go.disabled = true; resumeIntake(p); });
+    const over = document.createElement("button"); over.type = "button"; over.className = "ireview-secondary"; over.textContent = R.startOver;
+    over.addEventListener("click", () => { try { window.desktop.clearIntakeProgress(); } catch {} box.remove(); });
+    acts.append(go, over); box.append(t, d, acts);
+    intakeStack.insertBefore(box, row);
+    fadeSlideIn(box, { dy: 20, duration: 520, delay: 140 });
+  }).catch(() => {});
 
   // Entrance: head rises, cards stagger in from the sides.
   fadeSlideIn(intakeph.querySelector(".intake-head"), { dy: 40, duration: 700, delay: 40 });
@@ -12324,11 +12729,12 @@ async function pickDeliverable(type) {
   const first = head.getBoundingClientRect();
 
   startChoicesShown = false;
-  refsRevealed = false; // rail stays hidden until the first question is answered
-  voiceStepDone = false; // the renderer-injected Tone/rules step hasn't run yet
+  refsRevealed = false; refsIntroActive = false; refsIntroDone = false; refsIntroHost = null; // rail stays hidden until the references introduction hands over
+  voiceStepDone = false; directionStepDone = false; // the renderer-injected Tone/rules step hasn't run yet
   heroStepDone = false; // the hero-layout step (after sections, if Hero chosen)
   menuStepDone = false; // the header/nav step (before hero, website projects)
   ctaStepDone = false; // the contact/CTA type step (after hero, if Contact/CTA chosen)
+  progressBegin(type); // a fresh auto-save record for this run
   intakeph.classList.add("flow"); // two-column mode: questions left, references rail right
   intakeph.classList.remove("start", "hasbrief");
   enterIntakeMode();

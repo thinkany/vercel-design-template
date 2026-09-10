@@ -49,6 +49,7 @@
         display: flex; align-items: center; justify-content: center; position: relative;
         transition: background .25s linear, opacity .25s linear, transform .25s ease;
       }
+      .railbtn[hidden] { display: none; } /* the attribute must win over display:flex (the Company Profile icon in personal use) */
       .railbtn svg { width: 20px; height: 20px; display: block; }
       .railbtn:hover { background: #2a2a31; opacity: 1; }
       .railbtn.active { background: #2a2a31; opacity: 1; }
@@ -85,7 +86,7 @@
       #rail-help        { order: 11; --i: 10; }
       /* Art Director confer lives on the rail, exposed only once a built design is being
          previewed (updateArtDirectorRailBtn). Hidden = not reviewable yet. */
-      #rail-artdirector[hidden] { display: none; }
+      #rail-artdirector[hidden], #rail-a11y[hidden], #rail-figma[hidden], #rail-site[hidden] { display: none; }
       /* Staggered rail-icon entrance/exit — a little directional drift for "gravity".
          Transition-based (not @keyframes) so each icon settles at its OWN resting
          opacity (muted 0.75, or full for an activated icon) with no overshoot.
@@ -218,6 +219,9 @@
       .idir-tile .idir-credit { position: absolute; left: 0; right: 0; bottom: 0; padding: 4px 7px; font-size: 10px; line-height: 1.3; text-align: left; color: #fff; background: rgba(0,0,0,.6); opacity: 0; transition: opacity .12s; }
       .idir-tile:hover .idir-credit, .idir-tile:focus-visible .idir-credit { opacity: 1; }
       .idir-tile .idir-credit a { color: #fff; text-decoration: underline; }
+      /* The "+" in the corner says the tile opens (the lightbox). Above the hover credit. */
+      .idir-tile .idir-plus { position: absolute; right: 6px; bottom: 6px; z-index: 1; width: 22px; height: 22px; border-radius: 50%; background: #fff; color: #111; font: 600 17px/22px ui-sans-serif, system-ui, sans-serif; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,.25); pointer-events: none; }
+      .idir-tile:hover .idir-plus { background: #111; color: #fff; }
       .idir-about { display: inline-block; margin: 8px 0 2px; padding: 0; border: 0; background: none; font: inherit; font-size: 12px; color: #505056; text-decoration: underline; cursor: pointer; }
       #lensbox { position: fixed; inset: 0; z-index: 7500; /* above the reroll overlay (6000) and its help (7000): the picker opens it from both places */ display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.5); }
       #lensbox[hidden] { display: none; }
@@ -741,6 +745,14 @@
       }
       .gate.show .gate-inner { opacity: 1; transform: translateY(0); }
       .gate-inner h2 { font-size: 17px; margin: 0 0 8px; }
+      /* The usage gate: two start-style cards side by side, so it takes a wider inner. */
+      .gate-inner.gate-wide { max-width: 560px; text-align: center; }
+      .gate-cards { margin-top: 18px; }
+      .gate-cards .istart-card { flex: 1 1 0; }
+      /* The Publish drawer's Profile section: the usage choice as two pills. */
+      .usage-pick { display: flex; gap: 8px; margin: 6px 0 4px; }
+      .usage-pick .site-mini { padding: 6px 10px; font-size: 12px; }
+      .usage-pick .site-mini.on { border-color: #111; background: #111; color: #fff; }
       .gate-inner p { font-size: 13px; line-height: 1.5; color: #555; margin: 0 0 14px; }
       .field {
         width: 100%;
@@ -950,7 +962,12 @@
       #tour.place-left::before   { right: -5px; top: calc(var(--arrow-y, 50%) - 6px); }
       #tour.place-bottom::before { top: -5px; left: calc(var(--arrow-x, 50%) - 6px); }
       #tour.place-top::before    { bottom: -5px; left: calc(var(--arrow-x, 50%) - 6px); }
-      .tour-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+      .tour-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: -4px 0 6px; }
+      /* Progress (replaces the "n of m" counter): a grey track inside the tip's padding,
+         level with the close icon and stopping short of it, filled by a white line. */
+      .tour-progress { flex: 1 1 auto; height: 3px; border-radius: 2px; background: rgba(255,255,255,.18); overflow: hidden; }
+      .tour-progress i { display: block; height: 100%; width: 0; border-radius: 2px; background: #fff; transition: width .32s ease; }
+      .tour-head .tour-x { margin-top: 0; } /* centred on the bar, not lifted */
       .tour-step { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #9a9aa3; }
       .tour-x {
         width: 22px; height: 22px; margin: -4px -6px 0 0; padding: 0; border: none; border-radius: 6px;
@@ -1004,6 +1021,8 @@
       [data-tour]:not(button).tour-target { background: #f4f4f8; box-shadow: 0 0 0 12px #f4f4f8; border-radius: 6px; transition: background .2s, box-shadow .2s; }
       /* A tagged button keeps its own look and gets the dark pulse ring instead. */
       button[data-tour].tour-target { animation: tour-ring-dark 1.6s ease-out infinite; }
+      /* After the first-run walkthrough: Create new project pulses as the next step (no tip). */
+      #createproject.nudge { animation: tour-ring-dark 1.6s ease-out infinite; }
       /* About drawer: the replay row */
       .tour-replay .d { font-size: 12.5px; color: #666; line-height: 1.5; margin: -4px 0 10px; }
       .tour-replay-btns { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -1565,9 +1584,9 @@
       .iref-info {
         position: absolute; top: 11px; right: 12px; width: 22px; height: 22px; padding: 0;
         display: flex; align-items: center; justify-content: center;
-        border: none; background: none; color: #111; cursor: pointer; transition: color .12s;
+        border: none; background: none; color: #111; opacity: .38; cursor: pointer; transition: color .12s, opacity .12s;
       }
-      .iref-info:hover { color: #6b6be0; }
+      .iref-info:hover { color: #6b6be0; opacity: 1; }
       .iref-info svg { width: 20px; height: 20px; display: block; }
       .iref-help {
         position: fixed; inset: 0; z-index: 7000; display: flex; align-items: center; justify-content: center;
@@ -1604,24 +1623,28 @@
       .iref-help-panel { display: none; }
       .iref-help-panel.active { display: block; }
 
-      /* ---- Two-column flow: questions (left 60%) + references/brief rail (right 40%) ----
+      /* ---- Two-column flow: questions (left) + references/brief rail (right) ----
          The design intake runs in .flow (a flex row); `order` puts the questions
          left and the rail right. The rail starts collapsed (width 0) and, once it's
-         revealed (after the first answer), .hasbrief animates it open to 40% while
-         the questions column makes room. The rail is pinned to the top and fixed;
-         only the questions column scrolls. */
-      #intakeph.flow { display: flex; overflow: hidden; }
+         revealed (after the first answer), .hasbrief animates it open while the
+         questions column makes room. The PAIR is centered as a group
+         (justify-content) with a fixed gutter between the columns, so on a wide
+         pane both hug the centerline instead of drifting to their own sides
+         (Rob 2026-09-09). The rail is pinned to the top and fixed; only the
+         questions column scrolls. */
+      #intakeph.flow { display: flex; justify-content: center; overflow: hidden; }
       #intakeph.flow .intake-inner {
         order: 1;   /* questions on the LEFT */
-        flex: 1 1 auto; min-width: 0; max-width: 640px; margin: 0 auto;
-        height: 100%; overflow-y: auto; padding: 52px 40px 64px;
+        flex: 1 1 640px; min-width: 0; max-width: 640px; margin: 0;
+        height: 100%; overflow-y: auto; padding: 52px 40px 64px; /* the right padding is the gutter */
       }
       #intakeph.flow .intake-head { text-align: center; }
       /* The references / brief rail (right): collapsed to zero width + nudged down +
-         transparent, then .hasbrief eases it open to 40% and fades in. The lone
-         questions column is centered (margin: 0 auto) in the full pane until the
-         rail claims its space, then drifts LEFT. margin-right insets the rail from
-         the pane edge, but ONLY when it's open (so the single column stays centered).
+         transparent, then .hasbrief eases it open to a set width (440px, the questions column is 640px)
+         and fades in. The lone questions column sits centered in the pane until the
+         rail claims its space, then the pair re-centers and the questions drift
+         LEFT. margin-right mirrors the questions column's left padding, ONLY when
+         the rail is open (so the single column stays centered).
          A transparent flex COLUMN of its own cards, pinned to the top. */
       #intakeph.flow #intake-brief {
         order: 2;   /* references / brief on the RIGHT */
@@ -1637,7 +1660,7 @@
                     margin-right .62s cubic-bezier(.16,1,.3,1);
       }
       #intakeph.flow.hasbrief #intake-brief {
-        flex: 0 0 40%; margin-left: 32px; margin-right: clamp(40px, 6%, 96px);
+        flex: 0 1 440px; margin-left: 0; margin-right: 40px; /* a set width, like the questions column; shrinks only when the pane is too narrow */
         opacity: 1; transform: translateY(0);
         overflow-y: auto;
       }
@@ -1778,6 +1801,7 @@
       .intake-group.editing .intake-edit { display: none; }
 
       .icard {
+        position: relative; /* a card-corner control (the direction card's help buoy) anchors here */
         border: 1px solid #e3e3e9; border-radius: 12px; padding: 16px 16px 15px;
         background: #fff; box-shadow: 0 1px 2px rgba(20,20,30,.03);
       }
@@ -1940,11 +1964,30 @@
          the (vertically-centered) brief rail, not at the top of the pane. */
       #intakeph.reviewing .intake-inner { display: flex; flex-direction: column; justify-content: center; }
       .intake-review { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+      /* The Design References introduction card: the rail's panel inside a card (the card
+         supplies the frame, and the help buoy anchors to the card's corner), and the
+         floating copy that travels from the card to the rail on Continue. */
+      .icard-refs .iref-panel { position: static; border: 0; padding: 0; background: transparent; box-shadow: none; }
+      .iref-ghost { position: fixed; z-index: 60; margin: 0; pointer-events: none; transform-origin: top left; box-shadow: 0 10px 34px rgba(20,20,30,.18); }
+      /* The pick-up offer on the deliverable screen (a saved intake for this project). */
+      .iresume { width: 100%; max-width: 520px; margin: 0 auto 26px; padding: 16px 18px; border: 1px solid #e3e3e9; border-radius: 12px; background: #fff; text-align: left; box-shadow: 0 1px 2px rgba(20,20,30,.03); }
+      .iresume-title { font-size: 15px; font-weight: 600; color: #1a1a1a; }
+      .iresume-detail { font-size: 12.5px; color: #666; line-height: 1.5; margin: 4px 0 12px; }
+      .iresume-actions { display: flex; align-items: center; gap: 12px; }
+      .iresume-actions .intake-continue { margin: 0; width: auto; }
       .intake-review-q { font-size: 16px; font-weight: 600; color: #1a1a1a; line-height: 1.45; margin-bottom: 2px; text-wrap: balance; }
 
       /* P2: design-direction knob panel */
       .idir-host { width: 100%; }
       .idir { position: relative; width: 100%; border: 1px solid #e4e4ea; border-radius: 12px; padding: 16px 18px; background: #fbfbfd; box-sizing: border-box; transition: opacity .12s; }
+      /* As a card in the intake stack (the Design direction step) the panel keeps its
+         controls but not its own frame or title: the card supplies both. */
+      .idir.idir-in-card { position: static; border: 0; border-radius: 0; padding: 0; background: transparent; }
+      .idir.idir-in-card .idir-head { display: none; }
+      /* Its help buoy sits where the Design References card keeps its own: the card's top-right corner. */
+      .idir.idir-in-card .idir-info { top: 11px; right: 12px; color: #111; opacity: .38; transition: color .12s, opacity .12s; }
+      .idir.idir-in-card .idir-info:hover { color: #6b6be0; opacity: 1; }
+      .idir.idir-in-card .idir-info svg { width: 20px; height: 20px; }
       .idir.busy { opacity: .55; }
       .idir-head { font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #74747a; margin-bottom: 6px; }
       .idir-lens { font-family: var(--admin-font-heading, Georgia, serif); font-size: 19px; font-weight: 700; color: #111; line-height: 1.2; }
@@ -2022,7 +2065,7 @@
         <button class="railbtn" id="rail-projects" data-copy-aria="rail.projects" data-copy-tip="rail.projects">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 4 20 8 16 12"/><line x1="4" y1="8" x2="20" y2="8"/><polyline points="8 12 4 16 8 20"/><line x1="4" y1="16" x2="20" y2="16"/></svg>
         </button>
-        <button class="railbtn" id="rail-site" data-copy-aria="rail.site" data-copy-tip="rail.site">
+        <button class="railbtn" id="rail-site" hidden data-copy-aria="rail.site" data-copy-tip="rail.site">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M9 9v11"/></svg>
         </button>
         <button class="railbtn" id="rail-publish" data-copy-aria="rail.publish" data-copy-tip="rail.publish">
@@ -2031,7 +2074,7 @@
         <button class="railbtn" id="rail-artdirector" hidden data-copy-aria="rail.artdirector" data-copy-tip="rail.artdirector">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
         </button>
-        <button class="railbtn" id="rail-a11y" data-copy-aria="rail.a11y" data-copy-tip="rail.a11y">
+        <button class="railbtn" id="rail-a11y" hidden data-copy-aria="rail.a11y" data-copy-tip="rail.a11y">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="6.6" r="1.3"/><path d="M5.5 9.3c2 .9 4.2 1.3 6.5 1.3s4.5-.4 6.5-1.3"/><path d="M12 10.6v4.4"/><path d="m8.8 20 3.2-5 3.2 5"/></svg>
         </button>
         <button class="railbtn" id="rail-voice" data-copy-aria="rail.voice" data-copy-tip="rail.voice">
@@ -2043,7 +2086,7 @@
         <button class="railbtn" id="rail-claude" data-copy-aria="rail.claude" data-copy-tip="rail.claude">
           <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z" fill="#D97757" fill-rule="nonzero"></path></svg>
         </button>
-        <button class="railbtn" id="rail-figma" data-copy-aria="rail.figma" data-copy-tip="rail.figma">
+        <button class="railbtn" id="rail-figma" hidden data-copy-aria="rail.figma" data-copy-tip="rail.figma">
           <svg viewBox="0 0 38 57" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" fill="#1abcfe"/><path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z" fill="#0acf83"/><path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z" fill="#ff7262"/><path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z" fill="#f24e1e"/><path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z" fill="#a259ff"/></svg>
         </button>
         <button class="railbtn" id="rail-licenses" data-copy-aria="rail.licenses" data-copy-tip="rail.licenses">
@@ -2170,6 +2213,25 @@
              and reconnect present them centered here while the chat is collapsed.
              Connecting eases the chat pane open; the gate fades out. Text is keyed
              via data-copy and populated from window.COPY by applyStaticCopy. -->
+        <div id="usagegate" class="gate" hidden>
+          <div class="gate-inner gate-wide">
+            <h2 data-copy="usageGate.heading"></h2>
+            <p data-copy="usageGate.intro"></p>
+            <div class="istart-row gate-cards">
+              <button id="usage-personal" type="button" class="istart-card istart-center">
+                <span class="istart-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg></span>
+                <div class="istart-label" data-copy="usageGate.personalLabel"></div>
+                <div class="istart-desc" data-copy="usageGate.personalDesc"></div>
+              </button>
+              <button id="usage-company" type="button" class="istart-card istart-center">
+                <span class="istart-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3.2"/><circle cx="16.5" cy="9.5" r="2.6"/><path d="M2.5 20c0-3.4 2.5-6 5.5-6s5.5 2.6 5.5 6"/><path d="M14.5 19.5c.2-2.6 1.6-4.6 3.8-4.6 1.9 0 3.2 1.6 3.2 4.1"/></svg></span>
+                <div class="istart-label" data-copy="usageGate.companyLabel"></div>
+                <div class="istart-desc" data-copy="usageGate.companyDesc"></div>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div id="keygate" class="gate" hidden>
           <div class="gate-inner">
             <h2 id="keygate-title" data-copy="keygate.heading"></h2>
