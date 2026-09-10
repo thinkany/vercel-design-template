@@ -9511,10 +9511,17 @@ async function renderDirectionStep() {
   }
   continueBtn.addEventListener("click", submit);
   intakeStack.appendChild(group);
+  // Taller than the other cards: bring its TOP to the top of the column rather than
+  // centering it, and again once the panel has loaded (the column only grows then).
   const scroller = intakeph.classList.contains("flow") ? intakeph.querySelector(".intake-inner") : intakeph;
-  const centerTo = scroller ? intakeCenterTarget(scroller, group) : 0;
+  const toTop = () => {
+    if (!scroller || !group.isConnected) return;
+    const top = (group.getBoundingClientRect().top - scroller.getBoundingClientRect().top) + scroller.scrollTop - 24;
+    const t = Math.max(0, Math.min(top, scroller.scrollHeight - scroller.clientHeight));
+    try { scroller.scrollTo({ top: t, behavior: "smooth" }); } catch { scroller.scrollTop = t; }
+  };
   fadeSlideIn(group, { dy: 44, duration: 720, delay: 60 });
-  if (scroller) { try { scroller.scrollTo({ top: centerTo, behavior: "smooth" }); } catch { scroller.scrollTop = centerTo; } }
+  toTop(); setTimeout(toTop, 450); setTimeout(toTop, 1000);
 }
 
 // ---- Post-build reroll: fork a built design with a new direction ------------
