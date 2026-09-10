@@ -2722,9 +2722,12 @@ async function renderLicenses(body) {
     },
   });
 
-  // Licenses — the feature unlocks, in order: Figma, then Design.
+  // Licenses — the feature unlocks, in order: Figma, then Design. Each folds like the
+  // keys: open until connected, closed once it is, the choice remembered.
   licensesGroupHead(body, COPY.licenses.licensesGroup);
-  await licenseSection(tourSection(body, "figma-license"), {
+  const figmaStatus = await window.desktop.getLicenseStatus().catch(() => null);
+  await licenseSection(licensesFold(body, { title: COPY.licenses.figmaLabel, tourId: "figma-license", storeKey: "ta-fold-figma-license", openDefault: !(figmaStatus && figmaStatus.hasLicense) }), {
+    noLabel: true,
     label: COPY.licenses.figmaLabel,
     desc: COPY.licenses.figmaDesc,
     getStatus: () => window.desktop.getLicenseStatus(),
@@ -2732,9 +2735,9 @@ async function renderLicenses(body) {
     clear: () => window.desktop.clearLicense(),
   });
 
-  licensesDivider(body);
-
-  await licenseSection(tourSection(body, "design-license"), {
+  const designStatus = await window.desktop.getDesignLicenseStatus().catch(() => null);
+  await licenseSection(licensesFold(body, { title: COPY.licenses.designLabel, tourId: "design-license", storeKey: "ta-fold-design-license", openDefault: !(designStatus && designStatus.hasLicense) }), {
+    noLabel: true,
     label: COPY.licenses.designLabel,
     desc: COPY.licenses.designDesc,
     getStatus: () => window.desktop.getDesignLicenseStatus(),
