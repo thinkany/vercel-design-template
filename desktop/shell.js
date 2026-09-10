@@ -1022,6 +1022,7 @@ async function refreshRailActivation() {
       window.desktop.getDesignLicenseStatus(),
       window.desktop.getVercelStatus(),
     ]);
+    if (appUsage) applyUsage(); // the Company Profile icon follows the usage flag (a saved profile flips it)
     railClaude.classList.toggle("activated", !!(k && k.hasKey));
     railFigma.classList.toggle("activated", !!(l && l.hasLicense));
     railPublish.classList.toggle("activated", !!(vc && vc.connected));
@@ -7782,6 +7783,7 @@ window.desktop.onAgentEvent((evt) => {
       agentBusy = false;
       updateThinking(); // turn done → clear the dots
       clearIntakePending();
+      if (appUsage) applyUsage(); // /import-company may have turned the Company Profile on
       // Figma ingest just finished → read figma.json + show the findings/next-step in the pane.
       if (awaitingFigmaIngest) { awaitingFigmaIngest = false; showFigmaFindings(); }
       // Turn ended mid-intake → the brief is complete: show the review actions.
