@@ -4909,6 +4909,9 @@ function buildAppMenu() {
     ...(app.isPackaged ? [] : [{ label: "Developer", submenu: [
       { label: "Render lens examples: one direction (dry run)", click: () => renderLensExamples({ dryRun: true }) },
       { label: "Render lens examples: all general directions", click: () => renderLensExamples({}) },
+      // Re-render a single direction by id (the ids come from picks.json, so no license call at
+      // menu-build time). A movement id renders nothing: the batch only does general directions.
+      { label: "Render lens examples: this direction only", submenu: lensPickIds().map((id) => ({ label: id, click: () => renderLensExamples({ only: id }) })) },
     ] }]),
   ]));
 }
@@ -4917,10 +4920,13 @@ function buildAppMenu() {
 // the current project so Vite serves it for the capture; the previous project is reopened
 // at the end. Costs one design build per direction on the designer's key.
 let lensExamplesRunning = false;
+function lensPickIds() {
+  try { return Object.keys(JSON.parse(fs.readFileSync(path.join(appRoot, "desktop", "build", "lens-gallery", "picks.json"), "utf8"))); } catch { return []; }
+}
 async function renderLensExamples(opts) {
   if (lensExamplesRunning) return;
   if (!process.env.ANTHROPIC_API_KEY) { dialog.showMessageBox(mainWindow, { message: "Connect a Claude API key first (Keys & Licenses)." }); return; }
-  const n = opts.dryRun ? "one direction" : "every general direction";
+  const n = opts.only ? `the ${opts.only} direction` : opts.dryRun ? "one direction" : "every general direction";
   const ask = await dialog.showMessageBox(mainWindow, {
     type: "question", buttons: ["Render", "Cancel"], defaultId: 0, cancelId: 1,
     message: `Render lens examples for ${n}?`,
@@ -4943,7 +4949,9 @@ async function renderLensExamples(opts) {
       scaffoldProject, detectDesign, directionMeta, sampleDirection, buildDesignPrompt,
       expandPrompt: (pr) => { const x = skillsClient && skillsClient.expandPrompt(pr); return x ? x.prompt : null; },
       startViteFor: async (dir) => { currentProject = dir; return startViteFor(dir); },
-      runPrompt: (args) => runPrompt({ ...args, onSuggest: () => {}, model: currentModel, copyVoice: effectiveVoice(args.cwd) }),
+      // loadSkill is what serves the licensed /design playbook (the "skills" MCP server); without it
+      // the build stops after branding with "design runs from the app with a Design license".
+      runPrompt: (args) => runPrompt({ ...args, onSuggest: () => {}, model: currentModel, copyVoice: effectiveVoice(args.cwd), loadSkill: (name) => { const s = skillsClient && skillsClient.skills()[name]; return s ? s.body : null; } }),
       captureOp: runCaptureOp, log,
     }, opts);
   } catch (e) { err = e; }

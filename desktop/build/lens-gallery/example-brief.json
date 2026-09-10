@@ -1,15 +1,28 @@
 {
-  "//": "The one fictional client every self-rendered lens example is built from, so the images teach the direction rather than a brand. Tune freely; keep it neutral enough to be styled every way from Corporate Confident to Brutalist.",
+  "//": "The one fictional client every self-rendered lens example is built from, so the images teach the direction rather than a brand. Tune freely; keep it neutral enough to be styled every way from Corporate Confident to Brutalist. Only the header and the first two sections are built: the gallery tile is the above-the-fold capture, so anything lower is cost without a picture.",
   "what": "A marketing website for Fieldnote, a small independent architecture and interiors studio of six people in Portland, Oregon. They design homes, small hospitality spaces and workplace interiors, and they want the site to bring in the right kind of client: people who value considered, durable work over trends.",
   "projectType": "Marketing website",
   "clientName": "Fieldnote Studio",
   "projectName": "Fieldnote website",
-  "sections": ["Hero", "Selected work", "Services", "Studio and people", "Process", "Testimonials", "Contact"],
-  "audience": ["homeowners planning a significant renovation or new build", "owners of cafés, restaurants and small hotels", "founders fitting out a first office"],
+  "sections": [
+    "Hero",
+    "Selected work"
+  ],
+  "audience": [
+    "homeowners planning a significant renovation or new build",
+    "owners of cafés, restaurants and small hotels",
+    "founders fitting out a first office"
+  ],
   "tone": "considered, warm, quietly confident",
-  "deviceTargets": ["desktop", "mobile"],
+  "deviceTargets": [
+    "desktop",
+    "mobile"
+  ],
   "heroLayout": "centered",
   "menuLayout": "simple-left-right",
   "ctaType": "cta-form",
-  "notes": ["Real photography of built work: interiors, materials, light. No stock people."]
+  "notes": [
+    "Real photography of built work: interiors, materials, light. No people in any photograph, and no stock lifestyle imagery.",
+    "Build only the Hero and Selected work sections, nothing below them. Still give the header the full site navigation (Work, Services, Studio, Process, Contact) as plain links so it reads like a complete site."
+  ]
 }
