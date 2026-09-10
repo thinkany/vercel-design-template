@@ -3657,7 +3657,18 @@ function loadArtDirectorStore(dir) {
 }
 ipcMain.handle("artdirector:loadRecs", (_event, { id } = {}) => {
   if (!currentProject || !id) return { active: [], dismissed: [], completed: [] };
-  const rec = loadArtDirectorStore(currentProject)[id];
+  const store = loadArtDirectorStore(currentProject);
+  let rec = store[id];
+  // Reviews made BEFORE the site was built are keyed by the variation alone ("v01"); once
+  // promoted, the drawer reads per page ("v01:home"). The design that was reviewed IS the
+  // home page, so its record moves under the home key the first time it's asked for,
+  // instead of vanishing from the drawer.
+  const m = !rec && /^([^:]+):home$/.exec(id);
+  if (m && store[m[1]]) {
+    rec = store[id] = store[m[1]];
+    delete store[m[1]];
+    try { fs.writeFileSync(artDirectorStorePath(currentProject), JSON.stringify(store, null, 2)); } catch { /* read-only tree: served from memory this time */ }
+  }
   return { active: (rec && rec.active) || [], dismissed: (rec && rec.dismissed) || [], completed: (rec && rec.completed) || [] };
 });
 ipcMain.handle("artdirector:saveRecs", (_event, { id, active, dismissed, completed } = {}) => {
