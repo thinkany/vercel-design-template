@@ -4518,6 +4518,7 @@ ipcMain.handle("company:apply", async (_event, form) => {
     const { buildCompanyProfile, runUnpack } = await companyProfileEngine();
     const profile = buildCompanyProfile(form || {});
     const res = await runUnpack({ project: currentProject, profile });
+    setUiState({ usage: "company" }); // an uploaded profile turns the Company Profile on
     return { ok: true, applied: res.applied, manualSteps: res.manualSteps, summary: res.summary };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -4594,6 +4595,7 @@ ipcMain.handle("company:saveDefaultFields", async (_e, form) => {
       } catch {}
     }
     fs.writeFileSync(defaultCompanyProfilePath(), JSON.stringify(profile, null, 2));
+    setUiState({ usage: "company" }); // a created profile turns the Company Profile on
     return { ok: true, companyName: profile.companyName };
   } catch (e) {
     return { ok: false, error: `Could not save the profile: ${e.message}` };
@@ -4610,6 +4612,7 @@ ipcMain.handle("company:saveDefault", async () => {
       try { fs.unlinkSync(defaultCompanyProfilePath()); } catch {}
       return { ok: false, error: "This project has no company name set yet — set up the company first, then save it as your default." };
     }
+    setUiState({ usage: "company" }); // a saved profile turns the Company Profile on
     return { ok: true, companyName: name };
   } catch (e) {
     return { ok: false, error: `Could not save the profile: ${e.message}` };

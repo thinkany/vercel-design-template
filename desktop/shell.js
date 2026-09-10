@@ -1041,9 +1041,8 @@ const OPEN_LOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 // the Publish drawer's company messaging, until a profile is created or uploaded.
 let appUsage = null;
 async function applyUsage() {
-  let has = false;
-  try { const d = await window.desktop.getDefaultCompany(); has = !!(d && d.has); } catch {}
-  const show = appUsage === "company" || has;
+  try { appUsage = (await window.desktop.getUsage()).usage; } catch {} // main flips it to company when a profile is saved
+  const show = appUsage === "company";
   railCompany.hidden = !show;
   if (!show && railCompany.classList.contains("active")) closeModal(); // the drawer can’t outlive its icon
 }
@@ -2078,7 +2077,8 @@ async function renderCompany(body) {
 async function renderCompanyInto(body, refresh) {
   const def = await window.desktop.getDefaultCompany(); // { has, companyName, headingFont, bodyFont, logoName }
   const proj = await window.desktop.getProjectStatus();
-  const done = () => { applyUsage(); refresh(); };
+  const done = () => { applyUsage(); refresh(); };                 // after a clear
+  const saved = async () => { try { await window.desktop.setUsage("company"); } catch {} done(); }; // a saved profile turns the Company Profile on
 
   // Header (Licenses-style): title + Active/Not-set badge + an unplug delete when active.
   body.appendChild(connStatusRow(
@@ -2125,7 +2125,7 @@ async function renderCompanyInto(body, refresh) {
       saveProjBtn.textContent = COPY.common.saving;
       pmsg.textContent = "";
       const res = await window.desktop.saveDefaultCompany();
-      if (res.ok) done();
+      if (res.ok) saved();
       else {
         pmsg.textContent = res.error || COPY.common.couldNotSave;
         pmsg.style.color = "#e5484d";
@@ -2185,7 +2185,7 @@ async function renderCompanyInto(body, refresh) {
         bodyFontFile: files.bodyFont || null,
         logo: vals.logo || null,
       });
-      if (res && res.ok) done(); // refresh → Active + collapsed
+      if (res && res.ok) saved(); // refresh → Active + collapsed
       else {
         saveMsg.textContent = (res && res.error) || COPY.common.couldNotSave;
         saveMsg.style.color = "#e5484d";
