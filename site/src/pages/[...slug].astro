@@ -42,6 +42,6 @@ const rendered = page.data.blocks.map((b, i) => {
   return r;
 });
 ---
-<Base title={page.data.title} seo={page.data.seo} ld={ld} ldBlocks={rendered.flatMap((r) => r.schema || [])}>
+<Base title={page.data.title} draft={page.data.draft} seo={page.data.seo} ld={ld} ldBlocks={rendered.flatMap((r) => r.schema || [])}>
   {rendered.map(({ component: Block, props }) => <Block {...props} />)}
 </Base>

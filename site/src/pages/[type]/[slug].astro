@@ -24,7 +24,7 @@ export async function getStaticPaths() {
       out.push({ params: { type: t.path.replace(/^\//, ""), slug: e.data.slug ?? e.id }, props: { type: t, entry: e } });
     }
   }
-  const posts = await getCollection("posts", ({ data }) => !data.draft);
+  const posts = await getCollection("posts", ({ data }) => import.meta.env.DEV || !data.draft);
   for (const post of posts) out.push({ params: { type: blogPath, slug: post.data.slug || post.id }, props: { post } });
   return out;
 }
@@ -54,7 +54,7 @@ if (!post) {
 }
 ---
 {post && postView ? (
-  <Base title={post.data.title} seo={postView.seo} ld={{ kind: "post", datePublished: post.data.date.toISOString(), dateModified: (post.data.updated || post.data.date).toISOString(), tags: post.data.tags }}>
+  <Base title={post.data.title} draft={post.data.draft} seo={postView.seo} ld={{ kind: "post", datePublished: post.data.date.toISOString(), dateModified: (post.data.updated || post.data.date).toISOString(), tags: post.data.tags }}>
     <article class="max-w-[720px] mx-auto px-6 py-20">
       <div class="font-ta-sans text-[11px] tracking-[0.14em] uppercase text-ta-muted mb-3">{fmt(post.data.date)}{postView.updated && <span> · Updated {postView.updated}</span>}</div>
       <h1 class="font-ta-display text-[clamp(32px,5vw,52px)] text-ta-ink leading-[1.05] tracking-[-0.02em] mb-8">{post.data.title}</h1>
@@ -65,7 +65,7 @@ if (!post) {
     </article>
   </Base>
 ) : (
-  <Base title={data.title} seo={data.seo} ldBlocks={rendered.flatMap((r) => r.schema || [])}>
+  <Base title={data.title} draft={data.draft} seo={data.seo} ldBlocks={rendered.flatMap((r) => r.schema || [])}>
     {rendered.map(({ component: Block, props }) => <Block {...props} />)}
   </Base>
 )}

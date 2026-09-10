@@ -21,8 +21,10 @@ interface Props {
   title: string;
   description?: string;
   seo?: Partial<Seo>;
+  /** A draft previews locally (the Site tab) with a Draft pill; it never builds, so the pill never reaches a published site. */
+  draft?: boolean;
 }
-const { title, description, seo, ld, ldBlocks } = Astro.props as { title: string; description?: string; seo?: Record<string, unknown>; ld?: LdPage; ldBlocks?: Record<string, unknown>[] };
+const { title, description, seo, ld, ldBlocks, draft } = Astro.props as { title: string; description?: string; seo?: Record<string, unknown>; draft?: boolean; ld?: LdPage; ldBlocks?: Record<string, unknown>[] };
 const siteName = site.seo.siteName || siteConfig.clientName;
 const meta = resolveSeo(seo, { title, description, siteName, separator: site.seo.separator });
 const canonical = meta.canonical || new URL(Astro.url.pathname, Astro.site).href;
@@ -100,6 +102,7 @@ const faviconType = /\.svg$/i.test(favicon) ? "image/svg+xml" : /\.png$/i.test(f
         <slot />
       </main>
       {Footer && (chrome.footer?.hydrate ? <Footer client:load {...chromeProps} /> : <Footer {...chromeProps} />)}
+      {import.meta.env.DEV && draft && <div class="fixed bottom-4 left-4 z-[60] rounded-full bg-ta-ink px-3 py-1 font-ta-sans text-[11px] tracking-[0.12em] uppercase text-ta-surface shadow-md" title="A draft: previewed here, left out of the published site">Draft</div>}
     </div>
     <script>
       // Scroll reveal: pairs with .js [data-reveal] in site.css. Once, at 30%

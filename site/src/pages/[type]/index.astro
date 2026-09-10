@@ -25,7 +25,7 @@ export async function getStaticPaths() {
 
 const { type, blog } = Astro.props;
 const fmt = (d: Date) => d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
-const posts = blog ? (await getCollection("posts", ({ data }) => !data.draft)).sort((a, b) => b.data.date.getTime() - a.data.date.getTime()) : [];
+const posts = blog ? (await getCollection("posts", ({ data }) => import.meta.env.DEV || !data.draft)).sort((a, b) => b.data.date.getTime() - a.data.date.getTime()) : [];
 const entries = (blog ? [] : await getCollection(type.key as never, (({ data }: { data: { draft?: boolean } }) => import.meta.env.DEV || !data.draft) as never)) as { id: string; data: Record<string, unknown> & { title: string; slug?: string; seo?: { description?: string; noindex?: boolean } } }[];
 entries.sort((a, b) => a.data.title.localeCompare(b.data.title));
 const imageField = blog ? undefined : type.fields.find((f) => f.kind === "image");
@@ -40,7 +40,7 @@ const href = (e: (typeof entries)[number]) => `${type.path}/${e.data.slug ?? e.i
         {posts.map((p) => (
           <li>
             <a href={`/${blogPath}/${p.data.slug || p.id}`} class="no-underline">
-              <div class="font-ta-sans text-[11px] tracking-[0.14em] uppercase text-ta-muted mb-2">{fmt(p.data.date)}</div>
+              <div class="font-ta-sans text-[11px] tracking-[0.14em] uppercase text-ta-muted mb-2">{fmt(p.data.date)}{import.meta.env.DEV && p.data.draft && <span class="ml-3 rounded-full bg-ta-ink px-2 py-[2px] text-[10px] text-ta-surface">Draft</span>}</div>
               <h2 class="font-ta-display text-[26px] text-ta-ink leading-[1.15] mb-2">{p.data.title}</h2>
               {p.data.description && <p class="font-ta-serif text-[16px] text-ta-body leading-[1.6] m-0">{p.data.description}</p>}
             </a>
@@ -62,7 +62,7 @@ const href = (e: (typeof entries)[number]) => `${type.path}/${e.data.slug ?? e.i
             <li>
               <a href={href(e)} class="no-underline block">
                 {img?.src && <img src={img.src} alt={img.alt || ""} class="w-full aspect-[4/3] object-cover rounded-[3px] mb-4" />}
-                <h2 class="font-ta-display text-[22px] text-ta-ink leading-[1.15] mb-2">{e.data.title}</h2>
+                <h2 class="font-ta-display text-[22px] text-ta-ink leading-[1.15] mb-2">{e.data.title}{import.meta.env.DEV && (e.data as { draft?: boolean }).draft && <span class="ml-3 align-middle rounded-full bg-ta-ink px-2 py-[2px] font-ta-sans text-[10px] tracking-[0.12em] uppercase text-ta-surface">Draft</span>}</h2>
                 {summary && <p class="font-ta-sans text-[15px] text-ta-body leading-[1.6] m-0">{summary}</p>}
               </a>
             </li>

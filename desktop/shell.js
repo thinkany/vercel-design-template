@@ -4072,7 +4072,7 @@ function renderSitePost(post, refresh) {
   const nx = siteEl("label", "toggle-row"); const nxCb = document.createElement("input"); nxCb.type = "checkbox"; nxCb.checked = !!draft.seo.noindex;
   nxCb.addEventListener("change", () => { draft.seo.noindex = nxCb.checked; dirty(); }); nx.append(nxCb, siteEl("span", "", S.seoNoindex)); sf.body.appendChild(nx);
 
-  // Status + actions. A draft is never built; Publish flips it live on save.
+  // Status + actions. A draft previews in the Site tab but is never built; Publish flips it live on save.
   const actions = siteEl("div", "site-actions"); actions.dataset.tour = "cms-post-actions";
   const status = siteEl("span", "site-status" + (draft.draft ? " draft" : ""), draft.draft ? S.statusDraft : S.statusPublished);
   const doSave = async (btn, asDraft) => {
