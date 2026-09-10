@@ -17,6 +17,8 @@
 
 @import "@/styles/theme.css";
 @import "@design/globals.css";
+/* Scroll effects (parallax): CORE, shared with the design surface. */
+@import "@/styles/motion.css";
 
 /* Block-owned CSS (keyframes, textures) lives with the blocks. */
 @import "../../blocks/blocks.css";

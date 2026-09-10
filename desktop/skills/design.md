@@ -352,6 +352,23 @@ file only when you're about to **change** it:
    references, so one of them drifts as the viewport changes. Below `@lg` the pair
    stacks in one column with the section's own `px-8`.
 
+8. **Parallax comes from `<Parallax>`, never from CSS tricks.** When the designer asks
+   for parallax (a photo drifting slower than the page), wrap the image in `<Parallax>`
+   from `@/app/components/Parallax` inside a `relative` section, with the scrim and copy
+   as siblings after it:
+   `<Parallax className="absolute inset-0" strength="medium"><img src="…" alt="" /></Parallax>`
+   then `<div className="relative z-10 …">…copy…</div>` (`strength` is `soft` / `medium`
+   / `strong`; an in-flow figure works too: `className="aspect-[4/3]"`). It is a CSS
+   scroll-driven animation (`src/styles/motion.css`), so it moves in the phone/tablet
+   frames and on the desktop page, holds still in the Figma capture and for reduced
+   motion, and promotes to the site as-is. **Never** `background-attachment: fixed`,
+   a `window` scroll listener, or `useScroll` against `window`: the device frames
+   scroll inside their own screen, so none of those move there, and any `transform`
+   ancestor kills a fixed background everywhere. Don't put `overflow-hidden` between the
+   `<Parallax>` and its section (hidden makes a scroll container and freezes the effect;
+   the wrapper already clips). Reveals (fade/slide in on view) stay `motion`
+   `whileInView`.
+
 ## 4a. Honor the Design direction (when the prompt carries one)
 
 Get-Designing builds inject a **`## Design direction`** block into the prompt: a sampled

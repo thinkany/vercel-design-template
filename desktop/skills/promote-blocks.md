@@ -34,7 +34,7 @@ In ONE turn read:
 - `content/site.json` (note its `design` value). **If it doesn't exist** (a project
   scaffolded before the site target), create it in §4 with `design`, `url:
   "https://example.com"`, `nav`, `footerLinks: []`; likewise create
-  `site/blocks/index.ts`, `chrome.ts`, `lib/Reveal.tsx`, `lib/schema.ts` from the
+  `site/blocks/index.ts`, `chrome.ts`, `lib/Reveal.tsx`, `lib/Parallax.tsx`, `lib/schema.ts` from the
   shapes in §2 when missing. `site/src/**` must already be present (the app's
   refresh-on-open delivers it); if it isn't, stop and say the project needs the
   template refresh first.
@@ -212,6 +212,7 @@ almost every design and each has one translation:
 | In the design | In the block |
 |---|---|
 | `motion` / `<Reveal>` from `motion/react` (whileInView, initial/animate) | `<Reveal delay={0.15}>` from `./lib/Reveal` (a `data-reveal` div; the site animates it with CSS + one observer, no runtime) |
+| `<Parallax>` from `@/app/components/Parallax` | `<Parallax>` from `./lib/Parallax`, same props and markup (the CSS in `src/styles/motion.css` ships with the site, no runtime); if `lib/Parallax.tsx` is missing, copy it from the design's component verbatim |
 | Infinite `motion` loops (a rotating motif, a bobbing cue) | a CSS keyframe in `site/blocks/blocks.css` + a class (`ta-drift`, `ta-bob`); respect `prefers-reduced-motion` there |
 | `useFrameHeight` / `frameH` on the hero | `min-h-[100dvh]` |
 | `onNavigate("home")`, `scrollTo(id)`, `scrollToSection(id)` | plain `<a href="/">`, `<a href="#id">` (the site has `scroll-behavior: smooth`) |

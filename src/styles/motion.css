@@ -1,0 +1,84 @@
+/* ©2026 thinkany llc. All rights reserved. */
+/* Scroll effects (CORE: the app refreshes this file; a variation never copies it).
+   Imported by src/styles/index.css (the design surface) and by the site's site.css,
+   so one rule set drives the preview, the Figma capture and the published site.
+
+   PARALLAX: <Parallax> (src/app/components/Parallax.tsx in the design,
+   site/blocks/lib/Parallax.tsx in a block) renders
+
+     <div data-parallax="soft|medium|strong"> <div class="ta-parallax-layer"> …photo… </div> </div>
+
+   and this file animates the layer with a CSS scroll-driven animation on a VIEW
+   timeline: as the wrapper travels up through the viewport the layer drifts from
+   -travel to +travel, so it moves slower than the page. Why not the usual tricks:
+   `background-attachment: fixed` is disabled inside any scroll container (the
+   phone/tablet frames scroll inside their own screen) and under any transformed
+   ancestor; a `window` scroll listener never fires inside those frames. A view
+   timeline reads the NEAREST scroll container, so it works in the frames, on the
+   desktop page and on the published site alike, with no JavaScript.
+
+   The wrapper clips with `overflow: clip`, NOT `hidden`: `overflow: hidden` makes
+   the wrapper itself a scroll container, which would become the timeline's
+   scroller and freeze the effect. Keep that in mind for any wrapper a designer
+   adds around it. The layer is oversized by 2×travel top and bottom so the drift
+   never reveals an edge (travel is capped at 25% for that to hold).
+
+   Stills: `prefers-reduced-motion` (the layer sits centred), the Figma capture
+   (`data-capture-ready` on the capture root) so the export is deterministic, and
+   any browser without scroll-driven animations (the @supports gate), where the
+   photo simply sits centred in its mask. */
+
+[data-parallax] {
+  position: relative;
+  overflow: clip;
+  --ta-parallax-travel: 12%;
+  view-timeline: --ta-parallax block;
+}
+[data-parallax="soft"] {
+  --ta-parallax-travel: 6%;
+}
+[data-parallax="strong"] {
+  --ta-parallax-travel: 20%;
+}
+
+.ta-parallax-layer {
+  position: absolute;
+  inset: calc(-2 * var(--ta-parallax-travel)) 0;
+}
+.ta-parallax-layer > img,
+.ta-parallax-layer > video,
+.ta-parallax-layer > picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@supports (animation-timeline: view()) {
+  .ta-parallax-layer {
+    will-change: transform;
+    animation-name: ta-parallax;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-duration: auto;
+    animation-timeline: --ta-parallax;
+  }
+}
+
+@keyframes ta-parallax {
+  from {
+    transform: translateY(calc(-1 * var(--ta-parallax-travel)));
+  }
+  to {
+    transform: translateY(var(--ta-parallax-travel));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ta-parallax-layer {
+    animation: none;
+  }
+}
+[data-capture-ready] .ta-parallax-layer {
+  animation: none;
+}
