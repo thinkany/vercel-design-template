@@ -440,13 +440,17 @@ node scripts/find-images.mjs get <id> --out public/images/hero.avif
 `search` returns candidates with a description, alt text, dominant colour (`color`),
 size, orientation and photographer. Pick by what the brief and the section need: the
 subject in the alt/description, the orientation of the spot, a colour that sits with the
-palette (`--color` narrows: teal, orange, black_and_white, …). One search per spot, at
-most a second with a reworded query; then `get` the chosen id: it writes the AVIF into
-`public/images/` **and records the credit** (photographer, links) in `credits.json` for
-you, so steps 1 and 5 below are already done for that image. Every Unsplash photo is
-free to use, so the licence badge never flags them. A `search` with no fit, or an error,
-falls through to the plain path below for that one spot; a missing key (exit 3) means
-the whole build uses the plain path. Don't paste `UNSPLASH_ACCESS_KEY` anywhere.
+palette (`--color` narrows: teal, orange, black_and_white, …). **The library allows a
+new app 50 requests an hour and cuts off bursts**, so: one search per spot (`--per 10`
+gives enough to choose from), at most a second with a reworded query, never a loop; a
+`get` costs one request. The script paces its calls and refuses (exit 4, with a message)
+when the hour's allowance is nearly spent: then use the plain path for the remaining
+spots, don't retry. `get` writes the AVIF into `public/images/` **and records the
+credit** (photographer, links) in `credits.json` for you, so steps 1 and 5 below are
+already done for that image. Every Unsplash photo is free to use, so the licence badge
+never flags them. A `search` with no fit, or an error, falls through to the plain path
+below for that one spot; a missing key (exit 3) means the whole build uses the plain
+path. Don't paste `UNSPLASH_ACCESS_KEY` anywhere.
 
 Without a key, source over plain HTTP:
 

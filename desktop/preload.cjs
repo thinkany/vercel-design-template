@@ -116,6 +116,7 @@ contextBridge.exposeInMainWorld("desktop", {
   getUnsplashStatus: () => ipcRenderer.invoke("unsplash:status"),
   saveUnsplashKey: (key) => ipcRenderer.invoke("unsplash:save", { key }),
   clearUnsplashKey: () => ipcRenderer.invoke("unsplash:clear"),
+  getUnsplashUsage: () => ipcRenderer.invoke("unsplash:usage"),
 
   // ---- Publish (direct-to-Vercel) ----
   getVercelStatus: () => ipcRenderer.invoke("vercel:status"),

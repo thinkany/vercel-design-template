@@ -2699,10 +2699,17 @@ async function renderLicenses(body) {
   // library for matching photos (free, attributed) instead of guessing image URLs.
   await licenseSection(tourSection(body, "unsplash-key"), {
     label: COPY.licenses.unsplashLabel,
-    desc: COPY.licenses.unsplashDesc,
+    desc: COPY.licenses.unsplashDescHtml,
+    descHtml: true,
     getStatus: () => window.desktop.getUnsplashStatus(),
     save: (k) => window.desktop.saveUnsplashKey(k),
     clear: () => window.desktop.clearUnsplashKey(),
+    // Connected: the hour's usage from the library's own rate headers (the script logs
+    // every call), so the designer can see how much of the hourly allowance a build used.
+    extraRows: async (host) => {
+      const u = await window.desktop.getUnsplashUsage();
+      host.appendChild(setRow(COPY.licenses.unsplashUsageLabel, COPY.licenses.unsplashUsage(u)));
+    },
   });
 }
 
@@ -2771,7 +2778,7 @@ async function licenseSection(body, opts) {
     const d = document.createElement("div");
     d.className = "muted";
     d.style.cssText = "font-size:12px;margin:2px 0 10px;";
-    d.textContent = opts.desc;
+    if (opts.descHtml) d.innerHTML = opts.desc; else d.textContent = opts.desc; // descHtml: trusted COPY with links + steps
     body.appendChild(d);
   }
 
@@ -2781,6 +2788,7 @@ async function licenseSection(body, opts) {
 
   if (lic.hasLicense) {
     body.appendChild(setRow(COPY.licenses.keyLabel, `…${lic.hint || "????"}`));
+    if (opts.extraRows) { try { await opts.extraRows(body); } catch {} }
     return;
   }
 

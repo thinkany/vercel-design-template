@@ -21,6 +21,49 @@ import fs from "node:fs";
 import path from "node:path";
 
 const ROOT = process.cwd();
+
+// ---- Pace + budget. Unsplash turns access off for bursts, and a demo app has 50
+// requests an hour. Every API call goes through `api()`: at least MIN_GAP_MS apart,
+// refused once the hour's remaining count (from the X-Ratelimit headers) is down to
+// RESERVE, and logged to the usage file the app shows in Keys & Licenses
+// (UNSPLASH_USAGE_FILE, set by the app; falls back to .thinkany/unsplash.json here).
+// Search results are cached in the same file so `get` needs one call, not two.
+const MIN_GAP_MS = 1100;
+const RESERVE = 3;
+const USAGE_FILE = process.env.UNSPLASH_USAGE_FILE || path.join(ROOT, ".thinkany", "unsplash.json");
+function readUsage() { try { return JSON.parse(fs.readFileSync(USAGE_FILE, "utf8")) || {}; } catch { return {}; } }
+function writeUsage(u) { try { fs.mkdirSync(path.dirname(USAGE_FILE), { recursive: true }); fs.writeFileSync(USAGE_FILE, JSON.stringify(u, null, 2)); } catch {} }
+const hourStart = (t = Date.now()) => t - (t % 3600000);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+export class BudgetError extends Error {}
+async function api(url, headers) {
+  const u = readUsage();
+  const sameHour = u.hourStart === hourStart();
+  if (sameHour && typeof u.remaining === "number" && u.remaining <= RESERVE) {
+    const mins = Math.max(1, Math.ceil((u.hourStart + 3600000 - Date.now()) / 60000));
+    throw new BudgetError(`Unsplash budget for this hour is used up (${u.limit - u.remaining} of ${u.limit}); it resets in about ${mins} min. Use the plain sourcing path for the rest of this build.`);
+  }
+  const wait = (u.lastAt || 0) + MIN_GAP_MS - Date.now();
+  if (wait > 0) await sleep(wait);
+  const res = await fetch(url, { headers });
+  const limit = parseInt(res.headers.get("x-ratelimit-limit") || "", 10);
+  const remaining = parseInt(res.headers.get("x-ratelimit-remaining") || "", 10);
+  // A new hour starts a fresh count; the previous hour's remaining must not carry over
+  // (a response without rate headers, a 401 say, would otherwise keep a stale low number).
+  const cur = readUsage();
+  const next = sameHour ? { ...cur } : { limit: cur.limit, photos: cur.photos };
+  Object.assign(next, { lastAt: Date.now(), hourStart: hourStart(), requests: (sameHour ? (cur.requests || 0) : 0) + 1 });
+  if (Number.isFinite(limit)) next.limit = limit;
+  if (Number.isFinite(remaining)) next.remaining = remaining; else if (!sameHour) delete next.remaining;
+  writeUsage(next);
+  return res;
+}
+function cachePhotos(list) {
+  const u = readUsage(); const photos = u.photos || {};
+  for (const p of list) photos[p.id] = p;
+  const ids = Object.keys(photos); if (ids.length > 300) ids.slice(0, ids.length - 300).forEach((k) => delete photos[k]);
+  writeUsage({ ...u, photos });
+}
 const SOURCES = {
   unsplash: {
     key: () => (process.env.UNSPLASH_ACCESS_KEY || "").trim(),
@@ -34,9 +77,11 @@ const SOURCES = {
       u.searchParams.set("content_filter", "high");
       if (orientation) u.searchParams.set("orientation", orientation);
       if (color) u.searchParams.set("color", color);
-      const res = await fetch(u, { headers: { Authorization: `Client-ID ${this.key()}`, "Accept-Version": "v1" } });
+      const res = await api(u, { Authorization: `Client-ID ${this.key()}`, "Accept-Version": "v1" });
       if (!res.ok) throw new Error(`Unsplash search: HTTP ${res.status}${res.status === 401 ? " (the key was rejected)" : res.status === 403 ? " (rate limit reached, try again in an hour)" : ""}`);
       const data = await res.json();
+      // Keep what `get` needs, so taking a photo costs one call (the download ping), not two.
+      cachePhotos((data.results || []).map((p) => ({ id: p.id, raw: p.urls && p.urls.raw, download_location: p.links && p.links.download_location, html: p.links && p.links.html, description: p.description || p.alt_description || "", user: { name: p.user && p.user.name || "", html: p.user && p.user.links && p.user.links.html || "" } })));
       return (data.results || []).map((p) => ({
         id: p.id,
         description: p.description || "",
@@ -50,12 +95,16 @@ const SOURCES = {
     },
     async take(id, width) {
       const h = { Authorization: `Client-ID ${this.key()}`, "Accept-Version": "v1" };
-      const res = await fetch(`https://api.unsplash.com/photos/${encodeURIComponent(id)}`, { headers: h });
-      if (!res.ok) throw new Error(`Unsplash photo ${id}: HTTP ${res.status}`);
-      const p = await res.json();
-      // The terms: trigger the download endpoint whenever a copy is taken.
-      if (p.links && p.links.download_location) { try { await fetch(p.links.download_location, { headers: h }); } catch {} }
-      const u = new URL(p.urls.raw);
+      let p = (readUsage().photos || {})[id];
+      if (!p) {
+        const res = await api(`https://api.unsplash.com/photos/${encodeURIComponent(id)}`, h);
+        if (!res.ok) throw new Error(`Unsplash photo ${id}: HTTP ${res.status}`);
+        const j = await res.json();
+        p = { id, raw: j.urls.raw, download_location: j.links.download_location, html: j.links.html, description: j.description || j.alt_description || "", user: { name: j.user && j.user.name || "", html: j.user && j.user.links && j.user.links.html || "" } };
+      }
+      // The terms: trigger the download endpoint whenever a copy is taken (one counted call).
+      if (p.download_location) { try { await api(p.download_location, h); } catch (e) { if (e instanceof BudgetError) throw e; } }
+      const u = new URL(p.raw);
       u.searchParams.set("w", String(width)); u.searchParams.set("q", "85"); u.searchParams.set("fm", "jpg"); u.searchParams.set("fit", "max");
       const img = await fetch(u);
       if (!img.ok) throw new Error(`Unsplash file ${id}: HTTP ${img.status}`);
@@ -63,11 +112,11 @@ const SOURCES = {
         bytes: Buffer.from(await img.arrayBuffer()),
         credit: {
           source: "unsplash.com",
-          url: `${p.links.html}?utm_source=thinkany_design&utm_medium=referral`,
+          url: `${p.html}?utm_source=thinkany_design&utm_medium=referral`,
           free: true,
-          author: p.user && p.user.name || "",
-          authorUrl: p.user && p.user.links && p.user.links.html ? `${p.user.links.html}?utm_source=thinkany_design&utm_medium=referral` : "",
-          description: p.description || p.alt_description || "",
+          author: p.user.name,
+          authorUrl: p.user.html ? `${p.user.html}?utm_source=thinkany_design&utm_medium=referral` : "",
+          description: p.description,
         },
       };
     },
@@ -115,7 +164,7 @@ async function main() {
   const cmd = a._[0];
   const src = SOURCES[a.source || "unsplash"];
   if (!src) { console.error(`Unknown source "${a.source}". Sources: ${Object.keys(SOURCES).join(", ")}`); process.exit(2); }
-  if (cmd === "status") { console.log(JSON.stringify({ source: src.label, configured: !!src.key() })); return; }
+  if (cmd === "status") { const u = readUsage(); const same = u.hourStart === hourStart(); console.log(JSON.stringify({ source: src.label, configured: !!src.key(), limit: u.limit || null, remaining: same ? u.remaining : null, requestsThisHour: same ? (u.requests || 0) : 0 })); return; }
   if (!src.key()) { console.error(`${src.label} isn't connected: no ${src.keyName}. The designer adds the key under Keys & Licenses (${src.label}, optional). Use the plain sourcing path instead.`); process.exit(3); }
   if (cmd === "search") {
     const query = a._.slice(1).join(" ").trim();
@@ -141,5 +190,6 @@ async function main() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === new URL(import.meta.url).pathname) {
-  main().catch((e) => { console.error(e.message || String(e)); process.exit(1); });
+  // exit 3: no key; exit 4: the hour's budget is spent (both mean: plain path); 1: other errors.
+  main().catch((e) => { console.error(e.message || String(e)); process.exit(e instanceof BudgetError ? 4 : 1); });
 }

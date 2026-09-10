@@ -261,10 +261,30 @@ function storeUnsplashKey(key) {
   fs.writeFileSync(unsplashKeyFilePath(), data);
 }
 function removeStoredUnsplashKey() { try { fs.unlinkSync(unsplashKeyFilePath()); } catch { /* already gone */ } }
+// Where scripts/find-images.mjs logs its calls + the library's rate headers, app-wide
+// (the key is app-wide), so Keys & Licenses can show the hour's usage.
+function unsplashUsageFilePath() { return path.join(app.getPath("userData"), "unsplash-usage.json"); }
+function readUnsplashUsage() {
+  let u = {}; try { u = JSON.parse(fs.readFileSync(unsplashUsageFilePath(), "utf8")) || {}; } catch {}
+  const hourStart = Date.now() - (Date.now() % 3600000);
+  const same = u.hourStart === hourStart;
+  return { limit: u.limit || null, remaining: same && typeof u.remaining === "number" ? u.remaining : null, requests: same ? (u.requests || 0) : 0, resetsInMin: Math.max(1, Math.ceil((hourStart + 3600000 - Date.now()) / 60000)) };
+}
+function noteUnsplashHeaders(res) {
+  try {
+    const limit = parseInt(res.headers.get("x-ratelimit-limit") || "", 10), remaining = parseInt(res.headers.get("x-ratelimit-remaining") || "", 10);
+    let u = {}; try { u = JSON.parse(fs.readFileSync(unsplashUsageFilePath(), "utf8")) || {}; } catch {}
+    const hourStart = Date.now() - (Date.now() % 3600000);
+    const next = { ...u, lastAt: Date.now(), hourStart, requests: (u.hourStart === hourStart ? (u.requests || 0) : 0) + 1 };
+    if (Number.isFinite(limit)) next.limit = limit; if (Number.isFinite(remaining)) next.remaining = remaining;
+    fs.writeFileSync(unsplashUsageFilePath(), JSON.stringify(next, null, 2));
+  } catch { /* best-effort */ }
+}
 // Validate with the cheapest authenticated call (one search result).
 async function validateUnsplashKey(key) {
   try {
     const res = await fetch("https://api.unsplash.com/search/photos?query=studio&per_page=1", { headers: { Authorization: `Client-ID ${key}`, "Accept-Version": "v1" } });
+    noteUnsplashHeaders(res);
     if (res.ok) return { ok: true };
     if (res.status === 401) return { ok: false, error: "Unsplash rejected that access key." };
     if (res.status === 403) return { ok: false, error: "That key's hourly limit is used up; try again shortly." };
@@ -4244,6 +4264,7 @@ ipcMain.handle("unsplash:clear", () => {
   delete process.env.UNSPLASH_ACCESS_KEY;
   return { ok: true };
 });
+ipcMain.handle("unsplash:usage", () => readUnsplashUsage());
 
 // ---- Publish IPC (direct-to-Vercel) -----------------------------------------
 ipcMain.handle("vercel:status", () => {
@@ -5071,6 +5092,7 @@ app.whenReady().then(async () => {
   if (storedDesignLicense) process.env.DESIGN_LICENSE_KEY = storedDesignLicense;
   const storedUnsplashKey = loadStoredUnsplashKey(); // optional: image sourcing for the design build
   if (storedUnsplashKey) process.env.UNSPLASH_ACCESS_KEY = storedUnsplashKey;
+  process.env.UNSPLASH_USAGE_FILE = unsplashUsageFilePath(); // the script's call log, shown in Keys & Licenses
   // Licensed skills: the last cache is usable at once (offline grace); a refresh
   // runs in the background whenever a Design license is present. SKILLS_LOCAL=1
   // (dev) reads desktop/skills/*.md instead, live.

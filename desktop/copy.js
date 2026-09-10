@@ -1801,7 +1801,12 @@ window.COPY = {
     figmaLabel: "Figma Export",
     figmaDesc: "Unlocks exporting your designs to Figma.",
     unsplashLabel: "Unsplash (optional)",
-    unsplashDesc: "Your own Unsplash access key lets a build search the library for photos that fit the brief: free to use, credited to the photographer. Free at unsplash.com/developers (create an app, copy its Access Key). Without it, images are sourced the plain way.",
+    unsplashDescHtml: "Your own Unsplash access key lets a build search the library for photos that fit the brief: free to use, credited to the photographer. Without it, images are found the plain way.<br><br>" +
+      "<b>To get a key:</b><br>1. Create an Unsplash account and confirm it from the email Unsplash sends.<br>2. Open <a href=\"https://unsplash.com/oauth/applications\" target=\"_blank\" rel=\"noopener\">unsplash.com/oauth/applications</a>, choose <i>New Application</i> and agree to the terms.<br>" +
+      "3. Give it a name and a description (thinkany design, for example).<br>4. Copy its <b>Access Key</b> and paste it below.<br><br>" +
+      "A new app allows 50 requests an hour; a build uses about two per photo, and the studio paces its calls and stops short of the limit.",
+    unsplashUsageLabel: "This hour",
+    unsplashUsage: (u) => u && u.limit ? `${u.requests} of ${u.limit} requests${typeof u.remaining === "number" ? `, ${u.remaining} left` : ""}, resets in ${u.resetsInMin} min` : "No requests yet",
     status: "License",
     keyLabel: "Key",
     remove: "Remove license",
