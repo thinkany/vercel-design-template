@@ -8339,8 +8339,12 @@ async function resumeIntake(p) {
   loadReferences();
   for (const g of p.groups || []) renderRestoredGroup(g, brief);
   composeRail();
-  if (!intakeProgress.modelTurnDone) beginModelIntakeTurn(type); // it closed during the one model turn
-  else showBriefComplete();                                       // the next step, or the review
+  // Continue where it stopped: the fixed questions still unanswered come first (every
+  // run asks them all), then the one model turn, then the remaining steps or the review.
+  const answeredBatches = (p.groups || []).filter((g) => g.kind === "client").length;
+  if (answeredBatches < CLIENT_SCRIPT_BATCHES) startClientIntake(type, answeredBatches);
+  else if (!intakeProgress.modelTurnDone) beginModelIntakeTurn(type); // it closed during the one model turn
+  else showBriefComplete();                                            // the next step, or the review
 }
 
 function applyRefPayload(p) {
@@ -9233,7 +9237,8 @@ let clientIntakeGen = 0;
 
 // Build the fixed question script for this deliverable and walk it, one batch at a
 // time, then hand off to the model turn (sections + color + font, tailored to type).
-async function startClientIntake(type) {
+// `from`: the batch to start at (a resumed intake continues after the batches it saved).
+async function startClientIntake(type, from = 0) {
   const gen = ++clientIntakeGen;
   const kind = type === "app" ? "app" : "web site";
   // If a Figma frame was imported, its gleaned brand name + project name pre-fill the fields
@@ -9250,8 +9255,9 @@ async function startClientIntake(type) {
     ],
     [{ id: "reference", field: "references", type: "reference", maxLength: 200, label: COPY.intake.q.reference(kind), skippable: true, agentDecidesLabel: COPY.intake.skipReference }],
   ];
-  runClientScript(script, 0, type, gen);
+  runClientScript(script, Math.min(Math.max(0, from | 0), script.length), type, gen);
 }
+const CLIENT_SCRIPT_BATCHES = 3; // what / name+logo / reference (startClientIntake's script)
 
 function runClientScript(script, i, type, gen) {
   if (intakePhase !== "gathering" || gen !== clientIntakeGen) return; // backed out / superseded
