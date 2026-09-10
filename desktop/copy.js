@@ -1983,7 +1983,7 @@ window.COPY = {
     saveEdit: "Save",
     letYouChoose: "I’ll let you choose",
     undoSkip: "Undo skip",
-    reviewQuestion: "That’s a solid start. Ready we ready to design, or want would you like to add more context first?",
+    reviewQuestion: "That’s a solid start. Are we ready to design, or would you like to add more context first?",
     startDesigning: "Looks good, start designing",
     addMoreContext: "Wait, let me add more context",
     moreContextPlaceholder: "Anything else that matters: company or site name, the client, the audience, must-haves…",
