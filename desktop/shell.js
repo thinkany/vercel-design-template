@@ -1296,7 +1296,7 @@ const TOUR_STEPS = [
   { copy: "voiceProject", onEnter: () => ensureModal("voice"), target: inDrawer("voice-project"), placement: "right" },
   { copy: "voiceGlobal", onEnter: () => ensureModal("voice"), target: inDrawer("voice-global"), placement: "right" },
   { copy: "voiceSave", onEnter: () => ensureModal("voice"), target: inDrawer("voice-save"), placement: "right" },
-  { copy: "a11y", onEnter: () => closeModal(), target: () => railA11y, placement: "right" },
+  { copy: "a11y", onEnter: () => { closeModal(); tourRevealRail(railA11y); }, target: () => railA11y, placement: "right", onExit: () => tourRestoreRail(railA11y) },
   // The Art Director icon only shows once a built design is previewed; reveal it for
   // its tip on a fresh install and hide it again afterwards.
   { copy: "artdirector", onEnter: () => { closeModal(); tourRevealRail(railDirector); }, target: () => railDirector, placement: "right", onExit: () => tourRestoreRail(railDirector) },
@@ -9760,7 +9760,7 @@ async function doReroll(sourceId, direction) {
 // The preview-toolbar reroll button shows only when licensed AND viewing a specific design.
 async function updateRerollBtn(url) {
   updateArtDirectorRailBtn(url); // same readiness signal drives the rail Art Director icon
-  updateA11yRailBtn(); // refresh the Accessibility rail dot for the previewed design
+  updateA11yRailBtn(url); // the same readiness signal drives the Accessibility icon
   const btn = el("reroll-btn");
   if (!btn) return;
   const meta = await getDirectionMeta();
@@ -10573,12 +10573,16 @@ function fixA11y(f) {
   runAgent(prompt, COPY.a11y.fixingEcho(f.title), {});
 }
 
-// Rail icon: always available; when clicked, the drawer adapts to AA-mode on/off. No license gate.
-async function updateA11yRailBtn() {
+// Rail icon: like the Art Director's, exposed only while a built design is previewed and
+// idle (hidden otherwise, its drawer closed); no license gate. The drawer adapts to AA-mode.
+async function updateA11yRailBtn(url) {
   if (!railA11y) return;
   railA11y.classList.remove("has-code", "has-passive");
-  const v = currentPreviewVariation();
-  if (!v || v === "v00") return;
+  const v = currentPreviewVariation(url);
+  const ready = !homeBuilding && !agentBusy && !intakeActive;
+  const avail = !!(ready && v && v !== "v00");
+  railA11y.hidden = !avail;
+  if (!avail) { if (isModalOpen("a11y")) closeModal(); return; }
   let store = { active: [] };
   try { store = await window.desktop.loadA11y(v); } catch {}
   if ((store.active || []).some((f) => a11yImpactRank(f.impact) <= 1)) railA11y.classList.add("has-code");

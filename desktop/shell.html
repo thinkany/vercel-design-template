@@ -86,7 +86,7 @@
       #rail-help        { order: 11; --i: 10; }
       /* Art Director confer lives on the rail, exposed only once a built design is being
          previewed (updateArtDirectorRailBtn). Hidden = not reviewable yet. */
-      #rail-artdirector[hidden] { display: none; }
+      #rail-artdirector[hidden], #rail-a11y[hidden] { display: none; }
       /* Staggered rail-icon entrance/exit — a little directional drift for "gravity".
          Transition-based (not @keyframes) so each icon settles at its OWN resting
          opacity (muted 0.75, or full for an activated icon) with no overshoot.
