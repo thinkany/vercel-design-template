@@ -12,6 +12,27 @@ import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import tailwindcss from "@tailwindcss/vite";
 import selfHostFonts from "./src/lib/self-host-fonts.mjs";
+
+function liveContentGlobs({ repoRoot }) {
+  const watched = ["forms", "pages"].map((d) => path.join(repoRoot, "content", d));
+  const formsModule = path.join(repoRoot, "site", "src", "lib", "forms.ts");
+  return {
+    name: "thinkany:live-content-globs",
+    hooks: {
+      "astro:server:setup": ({ server }) => {
+        watched.forEach((d) => server.watcher.add(d));
+        server.watcher.on("all", (event, file) => {
+          if (!file.endsWith(".json") || !watched.some((d) => file.startsWith(d + path.sep))) return;
+          if (event !== "add" && event !== "unlink" && event !== "change") return;
+          const mods = server.moduleGraph.getModulesByFile(formsModule);
+          if (!mods || !mods.size) return;
+          mods.forEach((m) => server.moduleGraph.invalidateModule(m));
+          server.ws.send({ type: "full-reload", path: "*" });
+        });
+      },
+    },
+  };
+}
 import formsDev from "./src/lib/forms-dev.mjs";
 import fs from "node:fs";
 import path from "node:path";
@@ -120,6 +141,13 @@ export default defineConfig({
     // Dev only: answers POST /api/forms with a preview stub (the published site has
     // the real function at api/forms.js).
     formsDev(),
+    // Dev only: forms.ts reads content/forms/*.json (and content/pages/*.json for the
+    // after-submit page) through an eager import.meta.glob, a snapshot taken when the
+    // module is first loaded. A form created in the Forms tab while the server runs is
+    // not in that snapshot, so the Form block reports it missing until a restart. This
+    // invalidates the module (and, through it, the pages) whenever those files change,
+    // so the next request re-reads them. The build takes a fresh snapshot anyway.
+    liveContentGlobs({ repoRoot }),
     // The sitemap is a build-time choice (Settings): off, or off while search
     // engines are discouraged, and the integration isn't loaded at all.
     ...(siteJson.seo && (siteJson.seo.discourage || siteJson.seo.sitemap === false) ? [] : [sitemap({
