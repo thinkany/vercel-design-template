@@ -10138,9 +10138,11 @@ function buildArtDirectorCritiquePrompt(id, res) {
     `An automated rule + palette pass already ran. Treat these as established fact to build on, not something to re-derive or merely repeat:`,
     findings,
     ``,
-    `Now give the judgment the lint can't: visual hierarchy, spacing rhythm and balance, type pairing and scale, palette harmony and how the palette carries the mood, imagery, ${directionJudgment} Lead with what's working, then the few highest-leverage changes, specific and grounded in the actual page. Keep it tight. Do NOT edit anything; this is advisory.`,
+    `Now give the judgment the lint can't: visual hierarchy, spacing rhythm and balance, type pairing and scale, palette harmony and how the palette carries the mood, imagery, ${directionJudgment}`,
     ``,
-    `Then, ONCE, call the \`suggest\` tool (mcp__artdirector__suggest) with your actionable items as structured cards, most impactful first. For each: a short imperative title, a one-line why, targets (file:line), and a kind: "code" (the builder can edit it: ${applyWhere}), "asset" (needs a new/replacement file you can't source, e.g. a photo, no apply), or "decision" (a client/human call, no apply). Whenever a suggestion points at a specific visible section or element, also give an \`anchor\` so the designer can SEE it highlighted on the page instead of hunting: prefer \`anchor.block\` (a data-block value on the section) or \`anchor.text\` (a short exact heading/button label from that element). Fold in the code-actionable lint findings above too.`,
+    `Your written read is SHORT: a paragraph or two on what's working and where the page stands overall. The specific changes do NOT go here, they go in the suggestion cards below, where the designer sees each one highlighted on the page. Don't write them twice. Do NOT edit anything; this is advisory.`,
+    ``,
+    `Then, ONCE, call the \`suggest\` tool (mcp__artdirector__suggest) with your actionable items as structured cards, most impactful first. For each: a short imperative title, a one-line why, targets (file:line), and a kind: "code" (the builder can edit it: ${applyWhere}), "asset" (needs a new/replacement file you can't source, e.g. a photo, no apply), or "decision" (a client/human call, no apply). ALWAYS give an \`anchor\` unless the suggestion is genuinely about the whole page at once (the overall palette, the overall density). The anchor is how the designer SEES the suggestion on their design instead of reading about it, so an anchorless card is one they have to go hunt for: prefer \`anchor.block\` (a data-block value on the section) or \`anchor.text\` (a short exact heading/button label from that element), and when a note covers several sections anchor it to the clearest one rather than leaving it off. Fold in the code-actionable lint findings above too.`,
   ].join("\n");
 }
 
@@ -10266,6 +10268,10 @@ async function renderDirector(body) {
   if (directorState.dismissed.length) body.appendChild(buildArchive(directorState.dismissed));
 }
 
+// An ANCHORED rec goes straight to the page: the review bar carries the same title, why and
+// actions the modal does, so the modal step was pure reading between the designer and their
+// design. An anchorless rec (a whole-page note with nothing to point at) keeps the modal —
+// that's where the longer read is the point, and the bar would highlight nothing.
 function buildRecRow(rec) {
   const row = document.createElement("button");
   row.className = "adrec";
@@ -10273,7 +10279,11 @@ function buildRecRow(rec) {
   const kind = document.createElement("span"); kind.className = "adrec-kind adrec-kind-" + (rec.kind || "code");
   kind.textContent = (AD_KIND[rec.kind] || AD_KIND.code).label;
   row.append(title, kind);
-  row.addEventListener("click", () => openRecModal(rec, "active"));
+  if (rec.anchor) row.classList.add("adrec-anchored");
+  row.addEventListener("click", async () => {
+    if (rec.anchor && await showAdOnPage(rec)) return; // couldn't start (no preview / no design tab) → modal
+    openRecModal(rec, "active");
+  });
   return row;
 }
 
@@ -11055,10 +11065,16 @@ async function applyAdFocus() {
   }
 }
 
+// Returns true when the walk actually started, false when it couldn't (no preview server,
+// no built design, no design tab) — the caller then falls back to the modal rather than
+// leaving the designer with a closed drawer and nothing on screen.
 async function showAdOnPage(rec) {
-  if (!rec || !viteUrl) return;
+  if (!rec || !viteUrl) return false;
   const id = directorState.vid || currentPreviewVariation();
-  if (!id || id === "v00") return;
+  if (!id || id === "v00") return false;
+  // Every bail-out is checked BEFORE anything closes, so a false return leaves the drawer /
+  // modal exactly as it was for the caller to fall back into.
+  const tab = designTab(); if (!tab) return false;
   // Page scope: open THAT page in capture mode (its route flag), not the home page.
   const routeFlag = directorState.page && directorState.page.route ? `&${directorState.page.route}` : "";
   closeRecModal(); closeModal();
@@ -11067,7 +11083,6 @@ async function showAdOnPage(rec) {
   let recs = directorState.active || [];
   let idx = recs.findIndex((r) => r && r.id === rec.id);
   if (idx < 0) { recs = [rec]; idx = 0; }
-  const tab = designTab(); if (!tab) return;
   setActiveTab(tab); // the walk happens on the design, whatever tab was active
   // Arrives OPEN so the action is one click away; the caret's state then holds across
   // Next / Prev until the designer toggles it again.
@@ -11079,6 +11094,7 @@ async function showAdOnPage(rec) {
     try { await tab.wv.executeJavaScript(AD_HIGHLIGHT_JS); } catch { /* injection blocked → bar still exits */ }
     adHighlightCurrent();
   });
+  return true;
 }
 // (Re)highlight the current rec's anchor on the already-loaded capture page. No re-navigation,
 // so Next/Prev are instant. An anchorless (or unresolvable) rec just clears the overlay.

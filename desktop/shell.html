@@ -1202,6 +1202,11 @@
       .adrec-kind-code { color: #1a6b3a; background: #e7f4ec; }
       .adrec-kind-asset { color: #8a5a12; background: #f6eede; }
       .adrec-kind-decision { color: #555; background: #eee; }
+      /* An anchored rec opens the review bar ON the page — the amber eye marks it as a
+         "take me there" row and matches the highlight overlay's marker. */
+      .adrec-anchored::after { content: ""; flex: 0 0 auto; width: 13px; height: 13px; opacity: .55;
+        background: no-repeat center/13px url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23d97706' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z'/%3E%3Ccircle cx='12' cy='12' r='2.6'/%3E%3C/svg%3E"); }
+      .adrec-anchored:hover::after { opacity: 1; }
       .adrec-dismissed { background: #fafafb; cursor: pointer; }
       .adrec-dismissed .adrec-title { color: #666666; }
       .adrec-restore { flex: 0 0 auto; border: 1px solid #d8d8de; background: none; color: #555; border-radius: 6px; padding: 3px 9px; font: inherit; font-size: 11px; cursor: pointer; }

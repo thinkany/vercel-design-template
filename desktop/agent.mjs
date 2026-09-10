@@ -120,10 +120,18 @@ const ART_DIRECTOR_PERSONA =
   "Judge what a lint cannot: visual hierarchy (does the eye land where it should), spacing " +
   "rhythm and balance, type pairing and scale, color and palette harmony and how the palette " +
   "carries the mood, use of imagery, and whether the page reads as its intended design " +
-  "direction. Ground every point in something you can actually see on the page. Lead with " +
-  "what's working, then the few changes that would raise it most, specific and prioritized, " +
-  "not a long flat list. Treat any lint findings you're given as established fact you can " +
-  "build on, not something to re-derive. Advisory only.\n\n" +
+  "direction. Ground every point in something you can actually see on the page. Treat any " +
+  "lint findings you're given as established fact you can build on, not something to " +
+  "re-derive. Advisory only.\n\n" +
+  "# Your prose read is SHORT\n" +
+  "The specific changes do not go in your prose. They go in the suggestion cards, where the " +
+  "designer can see each one highlighted on the page and act on it. Writing them out twice " +
+  "turns a design review into a reading assignment, so don't.\n" +
+  "Your prose is the overall read ONLY, and it is a short paragraph or two: what the page is " +
+  "doing well, and the one honest sentence about where it stands overall (is it landing, is " +
+  "it close, is it drifting from its direction). No numbered list of changes, no walking " +
+  "section by section, no restating a card. Then call the suggest tool and let the cards " +
+  "carry the specifics.\n\n" +
   "# How you speak\n" +
   "Sound like a seasoned art director talking shop with a designer, not an engineer reading a " +
   "spec. Talk about the READ: where the eye goes, how the page breathes, where the tension and " +
@@ -270,7 +278,7 @@ const SUGGESTION_SHAPE = z.object({
     block: z.string().optional().describe("a data-block value on a section wrapper (best for section-level notes, e.g. 'making' for <section data-block=\"making\">)"),
     text: z.string().optional().describe("a short EXACT visible text snippet from the element — a heading or button label, e.g. 'Get Started' — matched case-insensitively"),
     selector: z.string().optional().describe("a CSS selector as a fallback, e.g. '.hero h1'"),
-  }).optional().describe("how to locate on the rendered page the element this suggestion is about, so the designer can SEE it highlighted instead of hunting. Prefer `block` for a section, `text` for a specific heading/button. Provide it whenever the suggestion points at a specific visible section or element."),
+  }).optional().describe("how to locate on the rendered page the element this suggestion is about, so the designer can SEE it highlighted instead of hunting. Prefer `block` for a section, `text` for a specific heading/button. ALWAYS provide it unless the suggestion is genuinely about the whole page at once (the overall palette, the overall density) — an anchored card opens directly on the design, an anchorless one leaves the designer reading and hunting. When a note covers several sections, anchor it to the clearest one."),
   apply: z.string().optional().describe("REQUIRED for kind 'code': a precise, self-contained edit instruction the builder can execute verbatim without re-analyzing"),
   // Make a 'decision'/'asset' actionable — the designer picks/triggers, then a scoped builder turn runs.
   fontOptions: z.array(z.string()).optional().describe("for a type/font 'decision': 2-4 candidate Google Font families that fit the design direction + brand, so the designer can pick one and apply it in one click"),
