@@ -1234,7 +1234,7 @@ window.COPY = {
   // ── Usage gate — the first screen on a new install, before the key ──────────
   usageGate: {
     heading: "How do you plan on using thinkany design?",
-    intro: "You can change this later under Profile in the Publish drawer.",
+    intro: "You can change this later.",
     personalLabel: "Just for me",
     personalDesc: "Design and publish on your own. No company profile to keep.",
     companyLabel: "For my company",
