@@ -1568,9 +1568,9 @@
       .iref-info {
         position: absolute; top: 11px; right: 12px; width: 22px; height: 22px; padding: 0;
         display: flex; align-items: center; justify-content: center;
-        border: none; background: none; color: #111; cursor: pointer; transition: color .12s;
+        border: none; background: none; color: #111; opacity: .38; cursor: pointer; transition: color .12s, opacity .12s;
       }
-      .iref-info:hover { color: #6b6be0; }
+      .iref-info:hover { color: #6b6be0; opacity: 1; }
       .iref-info svg { width: 20px; height: 20px; display: block; }
       .iref-help {
         position: fixed; inset: 0; z-index: 7000; display: flex; align-items: center; justify-content: center;
@@ -1964,8 +1964,8 @@
       .idir.idir-in-card { position: static; border: 0; border-radius: 0; padding: 0; background: transparent; }
       .idir.idir-in-card .idir-head { display: none; }
       /* Its help buoy sits where the Design References card keeps its own: the card's top-right corner. */
-      .idir.idir-in-card .idir-info { top: 11px; right: 12px; color: #111; }
-      .idir.idir-in-card .idir-info:hover { color: #6b6be0; }
+      .idir.idir-in-card .idir-info { top: 11px; right: 12px; color: #111; opacity: .38; transition: color .12s, opacity .12s; }
+      .idir.idir-in-card .idir-info:hover { color: #6b6be0; opacity: 1; }
       .idir.idir-in-card .idir-info svg { width: 20px; height: 20px; }
       .idir.busy { opacity: .55; }
       .idir-head { font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #74747a; margin-bottom: 6px; }
