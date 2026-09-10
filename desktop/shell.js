@@ -11190,18 +11190,18 @@ function renderIntakeCard(card, onChange, requestSubmit) {
   let syncSkip = () => {};
   const changed = () => { onChange(); syncSkip(); };
   const built =
-    card.type === "open-text" ? buildOpenText(card, body, onChange, requestSubmit)
-    : card.type === "single-choice" ? buildChoice(card, body, false, onChange)
-    : card.type === "multi-choice" ? buildChoice(card, body, true, onChange)
-    : card.type === "chips" ? buildChips(card, body, onChange)
-    : card.type === "reference" ? buildReference(card, body, onChange)
-    : card.type === "color-swatch" ? buildColorSwatch(card, body, onChange)
-    : card.type === "font-pick" ? buildFontPick(card, body, onChange)
-    : card.type === "hero-layout" ? buildHeroLayout(card, body, onChange)
-    : card.type === "menu-layout" ? buildMenuLayout(card, body, onChange)
-    : card.type === "cta-type" ? buildCtaType(card, body, onChange)
-    : card.type === "logo" ? buildLogoUpload(card, body, onChange)
-    : card.type === "voice" ? buildVoiceRules(card, body, onChange)
+    card.type === "open-text" ? buildOpenText(card, body, changed, requestSubmit)
+    : card.type === "single-choice" ? buildChoice(card, body, false, changed)
+    : card.type === "multi-choice" ? buildChoice(card, body, true, changed)
+    : card.type === "chips" ? buildChips(card, body, changed)
+    : card.type === "reference" ? buildReference(card, body, changed)
+    : card.type === "color-swatch" ? buildColorSwatch(card, body, changed)
+    : card.type === "font-pick" ? buildFontPick(card, body, changed)
+    : card.type === "hero-layout" ? buildHeroLayout(card, body, changed)
+    : card.type === "menu-layout" ? buildMenuLayout(card, body, changed)
+    : card.type === "cta-type" ? buildCtaType(card, body, changed)
+    : card.type === "logo" ? buildLogoUpload(card, body, changed)
+    : card.type === "voice" ? buildVoiceRules(card, body, changed)
     : buildOpenText(card, body, changed); // defensive fallback
 
   // Skippable cards get a "let you decide" affordance that records null.
