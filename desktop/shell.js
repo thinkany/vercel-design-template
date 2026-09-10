@@ -9381,6 +9381,8 @@ async function renderDirectionPanel(host, opts = {}) {
       const tile = document.createElement("button"); tile.type = "button"; tile.className = "idir-tile"; tile.title = im.alt || "";
       const img = document.createElement("img"); img.src = im.thumb || im.src; img.alt = im.alt || ""; img.loading = "lazy";
       tile.appendChild(img);
+      const plus = document.createElement("span"); plus.className = "idir-plus"; plus.setAttribute("aria-hidden", "true"); plus.textContent = "+"; // "this opens": the lightbox affordance
+      tile.appendChild(plus);
       if (im.credit) {
         const cr = document.createElement("div"); cr.className = "idir-credit";
         cr.textContent = COPY.intake.direction.imageCredit(im.credit, im.license);
