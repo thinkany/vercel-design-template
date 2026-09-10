@@ -1596,7 +1596,16 @@ async function tourShow(i) {
   }
   const c = tourStepCopy(step);
   const last = i === tourActive.length - 1;
-  tourEl.querySelector(".tour-progress i").style.width = ((i + 1) / tourActive.length * 100).toFixed(1) + "%"; // progress across the top
+  // Progress across the top. The CMS walkthrough's steps carry their tab, so the bar
+  // measures within the current tab's tips and starts over at each tab (less daunting
+  // than one long fill); the studio tour measures the whole run.
+  {
+    const set = step.tab ? tourActive.filter((st) => st.tab === step.tab) : tourActive;
+    const pos = step.tab ? set.indexOf(step) + 1 : i + 1;
+    const bar = tourEl.querySelector(".tour-progress i");
+    if (pos === 1) { bar.style.transition = "none"; bar.style.width = "0%"; void bar.offsetWidth; bar.style.transition = ""; } // a fresh set starts empty, no rewind
+    bar.style.width = (pos / set.length * 100).toFixed(1) + "%";
+  }
   tourEl.querySelector(".tour-title").textContent = c.title || "";
   tourEl.querySelector(".tour-body").textContent = c.body || "";
   // A step's copy may name its own button (e.g. "Open" when Next opens a drawer).
