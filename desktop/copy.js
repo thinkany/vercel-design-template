@@ -1807,11 +1807,13 @@ window.COPY = {
       "A new app allows 50 requests an hour; a build uses about two per photo, and the studio paces its calls and stops short of the limit.",
     imageUsageLabel: "This hour",
     imageUsage: (u) => u && u.limit ? `${u.requests} of ${u.limit} requests${typeof u.remaining === "number" ? `, ${u.remaining} left` : ""}, resets in ${u.resetsInMin} min` : "No requests yet",
+    imageUsageMonthLabel: "This month",
+    imageUsageMonth: (u) => u && u.limit ? `${u.limit - (typeof u.remaining === "number" ? u.remaining : u.limit)} of ${u.limit.toLocaleString()} requests used${typeof u.remaining === "number" ? `, ${u.remaining.toLocaleString()} left` : ""}` : "No requests yet",
     pexelsLabel: "Pexels (optional)",
     pexelsDesc: "A second photo library for builds, free to use with a link back to the photographer. With Unsplash also connected, a build uses whichever still has room this hour.",
     pexelsStepsHtml: "<b>To get a key:</b><br>1. Create a Pexels account and confirm it from the email Pexels sends.<br>" +
       "2. Visit <a href=\"https://www.pexels.com/api/key/\" target=\"_blank\" rel=\"noopener\">pexels.com/api/key</a> and copy your <b>API key</b>.<br>3. Paste it below.<br><br>" +
-      "Pexels allows 200 requests an hour; a build uses about one per photo, and the studio paces its calls and stops short of the limit.",
+      "Pexels allows 200 requests an hour and 20,000 a month; a build uses about one per photo, and the studio paces its calls and stops short of the limit.",
     status: "License",
     keyLabel: "Key",
     remove: "Remove license",

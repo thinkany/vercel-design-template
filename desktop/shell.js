@@ -2718,7 +2718,7 @@ async function renderLicenses(body) {
     clear: () => window.desktop.clearPexelsKey(),
     extraRows: async (host) => {
       const u = await window.desktop.getImageUsage();
-      host.appendChild(setRow(COPY.licenses.imageUsageLabel, COPY.licenses.imageUsage(u.pexels)));
+      host.appendChild(setRow(COPY.licenses.imageUsageMonthLabel, COPY.licenses.imageUsageMonth(u.pexels)));
     },
   });
 
