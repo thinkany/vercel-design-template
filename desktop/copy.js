@@ -2155,6 +2155,14 @@ window.COPY = {
       appLabel: "App",
       appDesc: "Product UI, dashboards, in-app screens.",
     },
+    // A saved intake for this project (auto-saved after every answer): offered on the
+    // deliverable screen, which Back lands on too.
+    resume: {
+      title: "Pick up where you left off?",
+      detail: (n, when) => `${n === 1 ? "1 question" : `${n} questions`} answered, saved ${when}. Your answers stay editable.`,
+      resume: "Pick up where I left off",
+      startOver: "Start over",
+    },
     // The head shown once questions begin.
     gathering: {
       headTitle: "Let’s design something",

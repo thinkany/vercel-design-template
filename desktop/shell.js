@@ -8191,6 +8191,87 @@ function renderBriefSummary(brief) {
   composeRail();
 }
 
+// ---- Intake auto-save (Rob 2026-09-09) ---------------------------------------
+// Every answered card group is recorded here and written to the project (with the
+// Brief) after each answer or edit, so closing the app or stepping Back loses nothing.
+// The deliverable screen offers to pick it up (resumeIntake re-renders the groups
+// collapsed and editable, then continues the flow). Cleared when the build starts or
+// on Start over.
+let intakeProgress = null; // { deliverable, groups: [{ kind, cards, answers }], modelTurnDone }
+function progressBegin(type) { intakeProgress = { deliverable: type, groups: [], modelTurnDone: false }; }
+function progressSave() {
+  if (!intakeProgress) return;
+  const p = { ...intakeProgress, flags: { menuStepDone, heroStepDone, ctaStepDone, voiceStepDone, directionStepDone } };
+  try { window.desktop.saveIntakeProgress(p); } catch {}
+}
+// A logo answer carries the upload's base64; the record keeps a marker (the brief holds the saved path).
+const progressAnswers = (cards, answers) => {
+  const out = { ...(answers || {}) };
+  for (const c of cards) if (c && c.type === "logo" && out[c.id] && out[c.id].b64) out[c.id] = { keep: true, filename: out[c.id].filename };
+  return out;
+};
+const progressCard = (c) => (c && c.value && c.value.b64 ? { ...c, value: undefined } : c);
+// Record an answered group; returns the record so an edit can update its answers.
+function progressRecord(kind, cards, answers) {
+  if (!intakeProgress) return null;
+  const rec = { kind, cards: (cards || []).map(progressCard), answers: progressAnswers(cards || [], answers) };
+  intakeProgress.groups.push(rec); progressSave(); return rec;
+}
+// The persist an edited group uses: update its record, save, then the real persist.
+function progressPersist(rec, base) {
+  return async (meta, answers) => { if (rec) { rec.answers = progressAnswers(rec.cards, answers); progressSave(); } return base(meta, answers); };
+}
+// Re-render a saved group: its cards seeded with the saved answers (or skipped),
+// collapsed, answered, editable, and recorded again for this session.
+const STEP_CLASS = { heroLayout: "hero-step", menuLayout: "menu-step", ctaType: "cta-step", tone: "voice-step", direction: "direction-step" };
+function renderRestoredGroup(g, brief) {
+  const answers = g.answers || {};
+  const cards = (g.cards || []).map((c) => {
+    const card = { ...c };
+    const v = answers[c.id];
+    if (c.type === "logo") { const l = brief && brief.logo; if (l && l.src) card.value = { src: l.src, filename: l.filename }; }
+    else if (c.type === "direction") card.value = (brief && brief.direction) || null;
+    else if (v != null) card.value = v;
+    if (card.value == null && c.skippable) card.skipped = true;
+    return card;
+  });
+  const group = document.createElement("div");
+  const first = cards[0];
+  group.className = "intake-group answered" + (first && STEP_CLASS[first.id] ? " " + STEP_CLASS[first.id] : "");
+  const controls = cards.map((card) => { const r = renderIntakeCard(card, () => {}, null); group.appendChild(r.el); r.collapse(); return { card, ...r }; });
+  const rec = progressRecord(g.kind, cards, answers);
+  const base = g.kind === "voice" ? ((_m, a) => window.desktop.setBriefTone(a.tone || null))
+    : g.kind === "direction" ? ((_m, a) => window.desktop.setBriefDirection(a.direction || null))
+    : persistIntakeEdit;
+  makeCardsEditable(group, controls, progressPersist(rec, base));
+  intakeStack.appendChild(group);
+}
+// Pick up a saved intake: restore the Brief, re-render the answered groups, continue.
+async function resumeIntake(p) {
+  try { await turnGate; } catch { /* prior turn already reported */ }
+  const type = p.deliverable === "app" ? "app" : "website";
+  deliverableType = type;
+  const f = p.flags || {};
+  startChoicesShown = false; refsRevealed = true;
+  menuStepDone = !!f.menuStepDone; heroStepDone = !!f.heroStepDone; ctaStepDone = !!f.ctaStepDone;
+  voiceStepDone = !!f.voiceStepDone; directionStepDone = !!f.directionStepDone;
+  intakeProgress = { deliverable: type, groups: [], modelTurnDone: !!p.modelTurnDone };
+  intakeph.classList.add("flow"); intakeph.classList.remove("start");
+  enterIntakeMode(); exitReview();
+  setIntakeHead(COPY.intake.gathering.headTitle, COPY.intake.gathering.headSubtitle);
+  el("intake-brief").innerHTML = ""; intakeStack.innerHTML = "";
+  intakePhase = "gathering"; takingInIdx = 0; currentIntakeId = null; updateBackButton();
+  let brief = p.brief || null;
+  try { const r = await window.desktop.restoreIntake(brief, "web-pages", type); if (r && r.brief) brief = r.brief; } catch {}
+  lastBrief = brief;
+  try { await loadVoice(); } catch {}
+  loadReferences();
+  for (const g of p.groups || []) renderRestoredGroup(g, brief);
+  composeRail();
+  if (!intakeProgress.modelTurnDone) beginModelIntakeTurn(type); // it closed during the one model turn
+  else showBriefComplete();                                       // the next step, or the review
+}
+
 function applyRefPayload(p) {
   lastReferences = (p && p.assets) || [];
   if (p && "digest" in p) lastDigest = p.digest || null;
@@ -8600,7 +8681,7 @@ function renderIntakeGroup(id, cards) {
     // the second answer differs from the first (works whether or not more follow).
     showIntakePending(TAKING_IN_MESSAGES[takingInIdx % TAKING_IN_MESSAGES.length]);
     takingInIdx++;
-    makeCardsEditable(group, controls, persistIntakeEdit);
+    makeCardsEditable(group, controls, progressPersist(progressRecord("agent", cards, answers), persistIntakeEdit));
     await window.desktop.answerIntake(id, answers);
   }
   continueBtn.addEventListener("click", submit);
@@ -8759,7 +8840,7 @@ function renderVoiceStep() {
     autoDismissTool(done, 900);
     voiceStepDone = true;
     // Editable: re-picking a tone re-persists it (rules persist live in buildVoiceRules).
-    makeCardsEditable(group, [ctl], (_meta, a) => window.desktop.setBriefTone(a.tone || null));
+    makeCardsEditable(group, [ctl], progressPersist(progressRecord("voice", [card], { [card.id]: val }), (_meta, a) => window.desktop.setBriefTone(a.tone || null)));
     setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then the review
   }
   continueBtn.addEventListener("click", submit);
@@ -8813,7 +8894,7 @@ function renderHeroStep() {
     autoDismissTool(done, 900);
     heroStepDone = true;
     if (val && lastBrief) { lastBrief.heroLayout = val; composeRail(); } // immediate: brief rail
-    makeCardsEditable(group, [ctl], persistIntakeEdit);
+    makeCardsEditable(group, [ctl], progressPersist(progressRecord("step", [card], { [card.id]: val }), persistIntakeEdit));
     try { await window.desktop.applyIntakeAnswers([{ id: card.id, field: card.field, type: card.type }], { [card.id]: val }); } catch {}
     setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then continue the flow
   }
@@ -8867,7 +8948,7 @@ function renderMenuStep() {
     autoDismissTool(done, 900);
     menuStepDone = true;
     if (val && lastBrief) { lastBrief.menuLayout = val; composeRail(); } // immediate: brief rail
-    makeCardsEditable(group, [ctl], persistIntakeEdit);
+    makeCardsEditable(group, [ctl], progressPersist(progressRecord("step", [card], { [card.id]: val }), persistIntakeEdit));
     try { await window.desktop.applyIntakeAnswers([{ id: card.id, field: card.field, type: card.type }], { [card.id]: val }); } catch {}
     setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then continue the flow
   }
@@ -8921,7 +9002,7 @@ function renderCtaStep() {
     autoDismissTool(done, 900);
     ctaStepDone = true;
     if (val && lastBrief) { lastBrief.ctaType = val; composeRail(); } // immediate: brief rail
-    makeCardsEditable(group, [ctl], persistIntakeEdit);
+    makeCardsEditable(group, [ctl], progressPersist(progressRecord("step", [card], { [card.id]: val }), persistIntakeEdit));
     try { await window.desktop.applyIntakeAnswers([{ id: card.id, field: card.field, type: card.type }], { [card.id]: val }); } catch {}
     setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then continue the flow
   }
@@ -8988,7 +9069,7 @@ function renderClientBatch(cards, onDone) {
     if (!refsRevealed) { refsRevealed = true; composeRail(); } // first answer reveals the rail
     showIntakePending(TAKING_IN_MESSAGES[takingInIdx % TAKING_IN_MESSAGES.length]);
     takingInIdx++;
-    makeCardsEditable(group, controls, persistIntakeEdit);
+    makeCardsEditable(group, controls, progressPersist(progressRecord("client", cards, answers), persistIntakeEdit));
     try { await window.desktop.applyIntakeAnswers(meta, answers); } catch {}
     onDone();
   }
@@ -9051,6 +9132,7 @@ function beginModelIntakeTurn(type) {
 
 function showBriefComplete() {
   if (intakePhase !== "gathering") return; // only from the gathering state
+  if (intakeProgress && !intakeProgress.modelTurnDone) { intakeProgress.modelTurnDone = true; progressSave(); } // past the one model turn
   // Header / navigation layout comes first (website projects only), just before the hero.
   if (!menuStepDone && menuStepApplicable()) { renderMenuStep(); return; }
   // Hero layout comes right after sections, but only if Hero is one of them.
@@ -9334,7 +9416,7 @@ async function renderDirectionPanel(host, opts = {}) {
 
   host.appendChild(panel);
   if (current) { onChange(current); paint(); } // show the provided direction; reroll/steer/pick redraws
-  else { await resample(); }                    // no initial → auto-draw (the intake case)
+  else if (opts.autoDraw !== false) { await resample(); } // no initial → auto-draw (the intake case)
 }
 
 function renderReviewActions() {
@@ -9423,7 +9505,7 @@ async function renderDirectionStep() {
     continueBtn.replaceWith(done);
     autoDismissTool(done, 900);
     directionStepDone = true;
-    makeCardsEditable(group, [ctl], persist);
+    makeCardsEditable(group, [ctl], progressPersist(progressRecord("direction", [card], { [card.id]: val }), persist));
     await persist(null, { direction: val });
     setTimeout(showBriefComplete, 520); // let "Got it" flash, then the review
   }
@@ -10692,6 +10774,7 @@ function renderAdBarActions(el, rec) {
 // Animate the whole pane clean (brief rail included), then hand off to the build
 // with a persistent "preparing" status + rotating messages until the design shows.
 function startDesigning() {
+  intakeProgress = null; try { window.desktop.clearIntakeProgress(); } catch {} // the build takes the brief from here
   intakePhase = "designing";
   quietBuildActive = true;    // hold a quiet pane + closed chat until the build fully finishes
   setChatCollapsed(true);     // keep the chat closed through the build (no narration) — opens on reveal
@@ -11026,6 +11109,7 @@ function buildHeroLayout(card, body, onChange) {
     grid.appendChild(tile);
   });
   body.appendChild(grid);
+  if (card.value != null) { selected = card.value; tiles.forEach((t) => t.classList.toggle("selected", t.dataset.id === selected)); } // pre-fill (a resumed intake)
   return {
     getValue: () => selected,
     hasValue: () => selected != null,
@@ -11121,6 +11205,7 @@ function buildMenuLayout(card, body, onChange) {
     });
     body.appendChild(grid);
   });
+  if (card.value != null) { selected = card.value; tiles.forEach((t) => t.classList.toggle("selected", t.dataset.id === selected)); } // pre-fill (a resumed intake)
   return {
     getValue: () => selected,
     hasValue: () => selected != null,
@@ -11182,6 +11267,7 @@ function buildCtaType(card, body, onChange) {
     grid.appendChild(tile);
   });
   body.appendChild(grid);
+  if (card.value != null) { selected = card.value; tiles.forEach((t) => t.classList.toggle("selected", t.dataset.id === selected)); } // pre-fill (a resumed intake)
   return {
     getValue: () => selected,
     hasValue: () => selected != null,
@@ -11255,6 +11341,10 @@ function renderIntakeCard(card, onChange, requestSubmit) {
     });
     elc.appendChild(skipBtn);
     if (card.type === "reference") { syncSkip = () => { skipBtn.hidden = !skipped && built.hasValue(); }; syncSkip(); }
+    if (card.skipped === true) { // restored from a saved intake as "let you choose"
+      skipped = true; elc.classList.add("skipped"); built.setDisabled(true);
+      skipBtn.textContent = COPY.intake.undoSkip; skipBtn.classList.add("undo");
+    }
   }
 
   // Post-submit: show a read-only summary of the answer BUT keep the live inputs in
@@ -11295,8 +11385,9 @@ function renderIntakeCard(card, onChange, requestSubmit) {
 // Direction the panel shows; the panel stores each draw on the brief as it goes, so the
 // card's Continue is the confirmation and a skip clears it.
 function buildDirection(card, body, onChange) {
-  let current = (lastBrief && lastBrief.direction) || null;
-  renderDirectionPanel(body, { inCard: true, initialDirection: current, onChange: (d) => { current = d || null; onChange(); } });
+  let current = card.value || (lastBrief && lastBrief.direction) || null;
+  // A card restored as "let you choose" draws nothing on its own (a draw would land on the brief).
+  renderDirectionPanel(body, { inCard: true, initialDirection: current, autoDraw: card.skipped !== true, onChange: (d) => { current = d || null; onChange(); } });
   const axisLabel = (name) => (COPY.intake.direction.axisLabels || {})[name] || name;
   return {
     getValue: () => current,
@@ -11386,6 +11477,11 @@ function buildChoice(card, body, multi, onChange) {
     rows.push(row);
     body.appendChild(row);
   });
+  // Pre-fill (a resumed intake): the saved choice(s).
+  if (card.value != null) {
+    const init = (Array.isArray(card.value) ? card.value : [card.value]).slice(0, multi ? undefined : 1);
+    rows.forEach((row, i) => { const opt = (card.options || [])[i]; if (init.includes(opt)) { selected.add(opt); row.classList.add("selected"); row.querySelector(".iopt-check").innerHTML = CHECK_SVG; } });
+  }
   return {
     getValue: () => {
       if (!selected.size) return null;
@@ -11418,6 +11514,7 @@ function buildChips(card, body, onChange) {
     chips.push(chip);
     wrap.appendChild(chip);
   });
+  if (Array.isArray(card.value)) chips.forEach((chip, i) => { const opt = (card.options || [])[i]; if (card.value.includes(opt)) { selected.add(opt); chip.classList.add("selected"); } }); // pre-fill (a resumed intake)
   body.appendChild(wrap);
   return {
     getValue: () => (selected.size ? [...selected] : null),
@@ -11491,7 +11588,10 @@ function buildReference(card, body, onChange) {
       .map((e) => ({ url: e.url.value.trim(), reason: e.why.value.trim() || null }))
       .filter((e) => e.url);
 
-  addEntry(); // one to start
+  // Pre-fill (a resumed intake): the saved sites; else one empty entry to start.
+  if (Array.isArray(card.value) && card.value.length) {
+    for (const v of card.value.slice(0, MAX)) { addEntry(); const e = entries[entries.length - 1]; e.url.value = v.url || ""; e.why.value = v.reason || ""; }
+  } else addEntry();
   addBtn.addEventListener("click", () => { addEntry(); onChange(); });
   body.appendChild(addBtn);
 
@@ -11569,6 +11669,13 @@ function buildColorSwatch(card, body, onChange) {
   customEl.appendChild(picker);
   wrap.appendChild(customEl);
 
+  // Pre-fill (a resumed intake): a listed swatch, else the custom picker.
+  if (card.value && /^#[0-9a-f]{3,8}$/i.test(card.value)) {
+    selected = card.value;
+    const i = options.findIndex((h) => h.toLowerCase() === card.value.toLowerCase());
+    if (i >= 0) swatches[i].classList.add("selected");
+    else { picker.value = card.value; customEl.classList.add("selected", "has-color"); customEl.style.background = card.value; }
+  }
   body.appendChild(wrap);
   return {
     getValue: () => selected,
@@ -11722,6 +11829,8 @@ function buildLogoUpload(card, body, onChange) {
   input.style.display = "none";
   zone.append(preview, hint, input);
   body.appendChild(zone);
+  // A resumed intake: the logo is already saved to the project; keep it unless a new file arrives.
+  if (card.value && card.value.src) { value = { keep: true, src: card.value.src, filename: card.value.filename || String(card.value.src).split("/").pop() }; hint.textContent = value.filename; }
 
   function read(file) {
     if (!file || disabled || !/^image\//.test(file.type || "")) return;
@@ -12366,6 +12475,24 @@ function renderDeliverableChoice() {
   }
   intakeStack.appendChild(row);
   updateBackButton();
+  // A saved intake for this project (auto-saved after every answer) → offer to pick it up.
+  window.desktop.getIntakeProgress().then((r) => {
+    const p = r && r.progress;
+    if (!p || intakePhase !== "deliverable" || !row.isConnected) return;
+    const R = COPY.intake.resume;
+    const box = document.createElement("div"); box.className = "iresume";
+    const t = document.createElement("div"); t.className = "iresume-title"; t.textContent = R.title;
+    let when = ""; try { when = new Date(p.savedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }); } catch { when = String(p.savedAt || ""); }
+    const d = document.createElement("div"); d.className = "iresume-detail"; d.textContent = R.detail(p.groups.length, when);
+    const acts = document.createElement("div"); acts.className = "iresume-actions";
+    const go = document.createElement("button"); go.type = "button"; go.className = "intake-continue"; go.textContent = R.resume;
+    go.addEventListener("click", () => { go.disabled = true; resumeIntake(p); });
+    const over = document.createElement("button"); over.type = "button"; over.className = "ireview-secondary"; over.textContent = R.startOver;
+    over.addEventListener("click", () => { try { window.desktop.clearIntakeProgress(); } catch {} box.remove(); });
+    acts.append(go, over); box.append(t, d, acts);
+    intakeStack.insertBefore(box, row);
+    fadeSlideIn(box, { dy: 20, duration: 520, delay: 140 });
+  }).catch(() => {});
 
   // Entrance: head rises, cards stagger in from the sides.
   fadeSlideIn(intakeph.querySelector(".intake-head"), { dy: 40, duration: 700, delay: 40 });
@@ -12390,6 +12517,7 @@ async function pickDeliverable(type) {
   heroStepDone = false; // the hero-layout step (after sections, if Hero chosen)
   menuStepDone = false; // the header/nav step (before hero, website projects)
   ctaStepDone = false; // the contact/CTA type step (after hero, if Contact/CTA chosen)
+  progressBegin(type); // a fresh auto-save record for this run
   intakeph.classList.add("flow"); // two-column mode: questions left, references rail right
   intakeph.classList.remove("start", "hasbrief");
   enterIntakeMode();

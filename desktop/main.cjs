@@ -452,6 +452,7 @@ const LOGO_EXT_BY_MIME = {
   "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/avif": ".avif", "image/svg+xml": ".svg",
 };
 function saveDesignLogo(raw) {
+  if (raw && raw.keep && raw.src) return { src: raw.src, filename: raw.filename || path.basename(raw.src) }; // a resumed intake: the logo already saved
   if (!currentProject || !raw || !raw.b64) return null;
   try {
     const ext = LOGO_EXT_BY_MIME[raw.mime] || path.extname(raw.filename || "").toLowerCase() || ".png";
@@ -3326,6 +3327,38 @@ ipcMain.handle("intake:begin", (_event, { deliverableType, projectType } = {}) =
   intakeBrief = createEmptyBrief(deliverableType || "web-pages");
   if (projectType) intakeBrief.projectType = projectType; // website | app (first fork)
   return { ok: true };
+});
+
+// ---- Intake auto-save (Rob 2026-09-09) ---------------------------------------
+// The renderer records every answered card group; each answer or edit writes the
+// record plus the running Brief to the project (.thinkany/intake.json), so closing
+// the app or stepping Back loses nothing. The deliverable screen offers to pick it
+// up; the build handoff and Start over clear it.
+function intakeProgressFile(dir) { return path.join(dir, ".thinkany", "intake.json"); }
+ipcMain.handle("intake:saveProgress", (_event, { progress } = {}) => {
+  if (!currentProject || !progress || typeof progress !== "object") return { ok: false };
+  try {
+    fs.mkdirSync(path.join(currentProject, ".thinkany"), { recursive: true });
+    fs.writeFileSync(intakeProgressFile(currentProject), JSON.stringify({ version: 1, savedAt: new Date().toISOString(), ...progress, brief: intakeBrief }, null, 2) + "\n");
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle("intake:getProgress", () => {
+  if (!currentProject) return { progress: null };
+  const p = readJsonFile(intakeProgressFile(currentProject));
+  return { progress: p && p.version === 1 && Array.isArray(p.groups) && p.groups.length ? p : null };
+});
+ipcMain.handle("intake:clearProgress", () => {
+  if (currentProject) { try { fs.unlinkSync(intakeProgressFile(currentProject)); } catch { /* none */ } }
+  return { ok: true };
+});
+// Pick up: the saved Brief becomes the running one (on the empty brief's shape, so a
+// field added since still exists), and the pane's rail is refreshed from it.
+ipcMain.handle("intake:restore", (event, { brief, deliverableType, projectType } = {}) => {
+  intakeBrief = { ...createEmptyBrief(deliverableType || "web-pages"), ...(brief && typeof brief === "object" ? brief : {}) };
+  if (projectType) intakeBrief.projectType = projectType;
+  if (!event.sender.isDestroyed()) event.sender.send("agent:brief", intakeBrief);
+  return { ok: true, brief: intakeBrief };
 });
 
 // Free-form "add more context" from the review step → append to the Brief's notes
