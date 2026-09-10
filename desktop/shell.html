@@ -1621,7 +1621,7 @@
       }
       #intakeph.flow .intake-head { text-align: center; }
       /* The references / brief rail (right): collapsed to zero width + nudged down +
-         transparent, then .hasbrief eases it open (40% of the pane, at most 460px)
+         transparent, then .hasbrief eases it open to a set width (440px, the questions column is 640px)
          and fades in. The lone questions column sits centered in the pane until the
          rail claims its space, then the pair re-centers and the questions drift
          LEFT. margin-right mirrors the questions column's left padding, ONLY when
@@ -1641,7 +1641,7 @@
                     margin-right .62s cubic-bezier(.16,1,.3,1);
       }
       #intakeph.flow.hasbrief #intake-brief {
-        flex: 0 1 min(40%, 460px); margin-left: 0; margin-right: 40px;
+        flex: 0 1 440px; margin-left: 0; margin-right: 40px; /* a set width, like the questions column; shrinks only when the pane is too narrow */
         opacity: 1; transform: translateY(0);
         overflow-y: auto;
       }
