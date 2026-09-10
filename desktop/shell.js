@@ -1040,6 +1040,9 @@ async function refreshRailActivation() {
       railLicenses.innerHTML = unlocked ? OPEN_LOCK_SVG : CLOSED_LOCK_SVG;
       railLicenses.classList.toggle("activated", unlocked);
     }
+    // The Art Director + Accessibility icons gate on the same license and the preview's
+    // state; a keys/licence refresh re-evaluates them too, not only the next tab switch.
+    updateRerollBtn();
   } catch {}
 }
 const CLOSED_LOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>';
@@ -2550,7 +2553,7 @@ async function renderLicenses(body) {
     clear: () => window.desktop.clearDesignLicense(),
     // The design license gates the Art Director rail (+ lens picker). On change,
     // drop the cached meta and re-evaluate so the rail appears/disappears at once.
-    onChange: () => { _directionMeta = null; updateRerollBtn(); },
+    onChange: () => { _directionMeta = null; _directionMetaMissAt = 0; updateRerollBtn(); },
   });
 }
 
@@ -9428,11 +9431,21 @@ document.addEventListener("keydown", (e) => {
 }, true);
 
 let _directionMeta = null;
+let _directionMetaMissAt = 0; // when an empty answer last came back (unlicensed, or the cloud didn't answer in time)
+const DIRECTION_META_RETRY_MS = 15000;
+// The knob-panel metadata, which also tells the rail whether the Art Director is licensed.
+// Only a LICENSED answer (axes present) is kept for the session: an empty one can mean
+// "no key" but just as well "the cloud function was cold and the first call timed out",
+// and caching that would hide the Art Director icon until the next launch. Empty answers
+// are retried on the next ask, no more than every 15s, so a slow start heals itself.
 async function getDirectionMeta() {
   if (_directionMeta) return _directionMeta;
-  try { _directionMeta = await window.desktop.directionMeta(); }
-  catch { _directionMeta = { axes: {}, lenses: [] }; }
-  return _directionMeta;
+  if (Date.now() - _directionMetaMissAt < DIRECTION_META_RETRY_MS) return { axes: {}, lenses: [] };
+  let m = null;
+  try { m = await window.desktop.directionMeta(); } catch { m = null; }
+  if (m && m.axes && Object.keys(m.axes).length) { _directionMeta = m; return m; }
+  _directionMetaMissAt = Date.now();
+  return { axes: {}, lenses: [] };
 }
 
 // opts: { sample(axes)→{direction}, onChange(direction), initialDirection }. Defaults to the
