@@ -116,7 +116,10 @@ contextBridge.exposeInMainWorld("desktop", {
   getUnsplashStatus: () => ipcRenderer.invoke("unsplash:status"),
   saveUnsplashKey: (key) => ipcRenderer.invoke("unsplash:save", { key }),
   clearUnsplashKey: () => ipcRenderer.invoke("unsplash:clear"),
-  getUnsplashUsage: () => ipcRenderer.invoke("unsplash:usage"),
+  getImageUsage: () => ipcRenderer.invoke("images:usage"),
+  getPexelsStatus: () => ipcRenderer.invoke("pexels:status"),
+  savePexelsKey: (key) => ipcRenderer.invoke("pexels:save", { key }),
+  clearPexelsKey: () => ipcRenderer.invoke("pexels:clear"),
 
   // ---- Publish (direct-to-Vercel) ----
   getVercelStatus: () => ipcRenderer.invoke("vercel:status"),

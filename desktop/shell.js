@@ -2707,8 +2707,23 @@ async function renderLicenses(body) {
     // Connected: the hour's usage from the library's own rate headers (the script logs
     // every call), so the designer can see how much of the hourly allowance a build used.
     extraRows: async (host) => {
-      const u = await window.desktop.getUnsplashUsage();
-      host.appendChild(setRow(COPY.licenses.unsplashUsageLabel, COPY.licenses.unsplashUsage(u)));
+      const u = await window.desktop.getImageUsage();
+      host.appendChild(setRow(COPY.licenses.imageUsageLabel, COPY.licenses.imageUsage(u.unsplash)));
+    },
+  });
+
+  // Optional: Pexels, the second image library. With both connected a build uses
+  // whichever still has budget this hour.
+  await licenseSection(tourSection(body, "pexels-key"), {
+    label: COPY.licenses.pexelsLabel,
+    desc: COPY.licenses.pexelsDescHtml,
+    descHtml: true,
+    getStatus: () => window.desktop.getPexelsStatus(),
+    save: (k) => window.desktop.savePexelsKey(k),
+    clear: () => window.desktop.clearPexelsKey(),
+    extraRows: async (host) => {
+      const u = await window.desktop.getImageUsage();
+      host.appendChild(setRow(COPY.licenses.imageUsageLabel, COPY.licenses.imageUsage(u.pexels)));
     },
   });
 }

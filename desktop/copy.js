@@ -1631,8 +1631,8 @@ window.COPY = {
         body: "This license unlocks the studio’s own intelligence: design directions, competitor research, the Art Director review, and the site builder with pages, posts, media and publishing. Licenses are validated with thinkany and kept in your keychain too.",
       },
       unsplashKey: {
-        title: "Unsplash, optional",
-        body: "Add your own Unsplash access key and a build searches the library for photos that match the brief, downloads them, and records the photographer credit. It’s free from unsplash.com/developers. Skip it and images are found the plain way.",
+        title: "Photo libraries, optional",
+        body: "Add your own Unsplash or Pexels key and a build searches the library for photos that match the brief, downloads them, and records the photographer credit. Both are free. Skip them and images are found the plain way.",
       },
       closeDrawer: {
         title: "Closing a drawer",
@@ -1805,8 +1805,14 @@ window.COPY = {
       "<b>To get a key:</b><br>1. Create an Unsplash account and confirm it from the email Unsplash sends.<br>2. Open <a href=\"https://unsplash.com/oauth/applications\" target=\"_blank\" rel=\"noopener\">unsplash.com/oauth/applications</a>, choose <i>New Application</i> and agree to the terms.<br>" +
       "3. Give it a name and a description (thinkany design, for example).<br>4. Copy its <b>Access Key</b> and paste it below.<br><br>" +
       "A new app allows 50 requests an hour; a build uses about two per photo, and the studio paces its calls and stops short of the limit.",
-    unsplashUsageLabel: "This hour",
-    unsplashUsage: (u) => u && u.limit ? `${u.requests} of ${u.limit} requests${typeof u.remaining === "number" ? `, ${u.remaining} left` : ""}, resets in ${u.resetsInMin} min` : "No requests yet",
+    imageUsageLabel: "This hour",
+    imageUsage: (u) => u && u.limit ? `${u.requests} of ${u.limit} requests${typeof u.remaining === "number" ? `, ${u.remaining} left` : ""}, resets in ${u.resetsInMin} min` : "No requests yet",
+    pexelsLabel: "Pexels (optional)",
+    pexelsDescHtml: "A second photo library for builds, free to use with a link back to the photographer. With Unsplash also connected, a build uses whichever still has room this hour.<br><br>" +
+      "<b>To get a key:</b><br>1. Create a Pexels account at <a href=\"https://www.pexels.com/api/\" target=\"_blank\" rel=\"noopener\">pexels.com/api</a> and confirm it from the email Pexels sends.<br>" +
+      "2. Open <a href=\"https://www.pexels.com/api/new/\" target=\"_blank\" rel=\"noopener\">pexels.com/api/new</a> and describe what you’re building (thinkany design, for example).<br>" +
+      "3. Copy the <b>API key</b> it shows (also at <a href=\"https://www.pexels.com/api/key/\" target=\"_blank\" rel=\"noopener\">pexels.com/api/key</a>) and paste it below.<br><br>" +
+      "Pexels allows 200 requests an hour; a build uses about one per photo, and the studio paces its calls and stops short of the limit.",
     status: "License",
     keyLabel: "Key",
     remove: "Remove license",
