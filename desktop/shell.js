@@ -1014,6 +1014,7 @@ function noProjectPlaceholder() {
 // The Claude + Figma rail icons show their brand colors only once their key /
 // license is active; otherwise they stay monochrome white like the rest of the
 // rail. Toggled via the .activated class.
+let railAnimated = false; // false until the rail's first paint (no fade on launch)
 async function refreshRailActivation() {
   try {
     const [k, l, dl, vc] = await Promise.all([
@@ -1025,10 +1026,12 @@ async function refreshRailActivation() {
     if (appUsage) applyUsage(); // the Company Profile icon follows the usage flag (a saved profile flips it)
     railClaude.classList.toggle("activated", !!(k && k.hasKey));
     railFigma.classList.toggle("activated", !!(l && l.hasLicense));
-    railFigma.hidden = !(l && l.hasLicense); // no Figma key → no icon (the walkthrough reveals it for its steps)
-    if (railFigma.hidden && isModalOpen("figma")) closeModal();
-    railSite.hidden = !(dl && dl.hasLicense); // no Design key → no CMS icon (the site builder is part of that license)
-    if (railSite.hidden && isModalOpen("site")) closeModal();
+    const instant = !railAnimated; railAnimated = true; // the first paint snaps; later changes fade
+    const figmaOn = !!(l && l.hasLicense), siteOn = !!(dl && dl.hasLicense);
+    setRailVisible(railFigma, figmaOn, instant); // no Figma key → no icon (the walkthrough reveals it for its steps)
+    if (!figmaOn && isModalOpen("figma")) closeModal();
+    setRailVisible(railSite, siteOn, instant); // no Design key → no CMS icon (the site builder is part of that license)
+    if (!siteOn && isModalOpen("site")) closeModal();
     railPublish.classList.toggle("activated", !!(vc && vc.connected));
     // All three credentials present → the app is unlocked: open the padlock.
     const unlocked = !!(k && k.hasKey) && !!(l && l.hasLicense) && !!(dl && dl.hasLicense);
@@ -1048,7 +1051,7 @@ let appUsage = null;
 async function applyUsage() {
   try { appUsage = (await window.desktop.getUsage()).usage; } catch {} // main flips it to company when a profile is saved
   const show = appUsage === "company";
-  railCompany.hidden = !show;
+  setRailVisible(railCompany, show, !railAnimated);
   if (!show && railCompany.classList.contains("active")) closeModal(); // the drawer can’t outlive its icon
 }
 for (const [id, usage] of [["usage-personal", "personal"], ["usage-company", "company"]]) {
@@ -1457,6 +1460,38 @@ function maybeStartCmsTour() {
 }
 el("modal-info").addEventListener("click", () => startTour(0, CMS_TOUR));
 let tourRevealed = null; // the rail button the tour un-hid, if any
+// Show or hide a gated rail icon softly (Rob 2026-09-09): hiding fades it out, then its
+// slot closes (height and the rail's 6px gap) so the icons below move up; showing is the
+// reverse. `instant` for the first paint. The tour's reveal/restore stay instant.
+const RAIL_GAP = 6;
+function setRailVisible(btn, show, instant = false) {
+  if (!btn) return;
+  if (btn._railAnim) { try { btn._railAnim.cancel(); } catch {} btn._railAnim = null; }
+  if (show === !btn.hidden && !btn._railHiding) return; // already there
+  btn._railHiding = false;
+  if (instant || typeof btn.animate !== "function") { btn.hidden = !show; return; }
+  const h = btn.offsetHeight || 36;
+  btn.style.overflow = "hidden";
+  if (show) {
+    btn.hidden = false;
+    const a = btn.animate([
+      { opacity: 0, height: "0px", marginBottom: -RAIL_GAP + "px", offset: 0 },
+      { opacity: 0, height: h + "px", marginBottom: "0px", offset: 0.5 },
+      { opacity: 1, height: h + "px", marginBottom: "0px", offset: 1 },
+    ], { duration: 520, easing: "cubic-bezier(.16,1,.3,1)", fill: "both" });
+    btn._railAnim = a;
+    a.finished.then(() => { if (btn._railAnim === a) { a.cancel(); btn._railAnim = null; btn.style.overflow = ""; } }).catch(() => {});
+  } else {
+    btn._railHiding = true;
+    const a = btn.animate([
+      { opacity: 1, height: h + "px", marginBottom: "0px", offset: 0 },
+      { opacity: 0, height: h + "px", marginBottom: "0px", offset: 0.5 },
+      { opacity: 0, height: "0px", marginBottom: -RAIL_GAP + "px", offset: 1 },
+    ], { duration: 640, easing: "cubic-bezier(.4,0,.2,1)", fill: "both" });
+    btn._railAnim = a;
+    a.finished.then(() => { if (btn._railAnim === a) { btn.hidden = true; a.cancel(); btn._railAnim = null; btn._railHiding = false; btn.style.overflow = ""; } }).catch(() => {});
+  }
+}
 function tourRevealRail(btn) { if (btn && btn.hidden) { btn.hidden = false; tourRevealed = btn; } }
 function tourRestoreRail(btn) { if (tourRevealed === btn) { btn.hidden = true; tourRevealed = null; } }
 const tourEl = (() => {
@@ -2228,7 +2263,7 @@ async function renderCompanyInto(body, refresh) {
 async function renderFigma(body) {
   const lic = await window.desktop.getLicenseStatus();
   railFigma.classList.toggle("activated", !!lic.hasLicense); // color the icon on save/clear
-  railFigma.hidden = !lic.hasLicense;
+  setRailVisible(railFigma, !!lic.hasLicense);
   body = tourSection(body, "figma-export"); // the walkthrough tour anchors to the whole drawer
 
   body.appendChild(connStatusRow(COPY.figma.licenseLabel, lic.hasLicense, lic.hasLicense ? COPY.common.active : COPY.common.notSet, null, null));
@@ -10321,7 +10356,7 @@ async function updateArtDirectorRailBtn(url) {
   const v = currentPreviewVariation(url);
   const ready = !homeBuilding && !agentBusy && !intakeActive;
   const avail = !!(licensed && ready && v && v !== "v00");
-  railDirector.hidden = !avail;
+  setRailVisible(railDirector, avail, !railAnimated);
   if (!avail) { railDirector.classList.remove("has-code", "has-passive"); if (isModalOpen("director")) closeModal(); return; }
   updateDirectorIndicator(v); // reflect the previewed design's queue state
 }
@@ -10592,7 +10627,7 @@ async function updateA11yRailBtn(url) {
   const v = currentPreviewVariation(url);
   const ready = !homeBuilding && !agentBusy && !intakeActive;
   const avail = !!(ready && v && v !== "v00");
-  railA11y.hidden = !avail;
+  setRailVisible(railA11y, avail, !railAnimated);
   if (!avail) { if (isModalOpen("a11y")) closeModal(); return; }
   let store = { active: [] };
   try { store = await window.desktop.loadA11y(v); } catch {}
