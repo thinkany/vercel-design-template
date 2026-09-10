@@ -1800,16 +1800,14 @@ window.COPY = {
     designDesc: "Unlocks design directions, competitor research, the Art Director review, and the site builder (pages, posts, media, publishing).",
     figmaLabel: "Figma Export",
     figmaDesc: "Unlocks exporting your designs to Figma.",
-    imageSourcesTitle: "External Image Sources",
-    imageSourcesDesc: "Optional photo libraries a build can search for photos that fit the brief, free to use and credited to the photographer. Connect one or both; without them, images are found the plain way.",
-    unsplashLabel: "Unsplash",
+    unsplashLabel: "Unsplash (optional)",
     unsplashDesc: "Your own Unsplash access key lets a build search the library for photos that fit the brief: free to use, credited to the photographer. Without it, images are found the plain way.",
     unsplashStepsHtml: "<b>To get a key:</b><br>1. Create an Unsplash account and confirm it from the email Unsplash sends.<br>2. Open <a href=\"https://unsplash.com/oauth/applications\" target=\"_blank\" rel=\"noopener\">unsplash.com/oauth/applications</a>, choose <i>New Application</i> and agree to the terms.<br>" +
       "3. Give it a name and a description (thinkany design, for example).<br>4. Copy its <b>Access Key</b> and paste it below.<br><br>" +
       "A new app allows 50 requests an hour; a build uses about two per photo, and the studio paces its calls and stops short of the limit.",
     imageUsageLabel: "This hour",
     imageUsage: (u) => u && u.limit ? `${u.requests} of ${u.limit} requests${typeof u.remaining === "number" ? `, ${u.remaining} left` : ""}, resets in ${u.resetsInMin} min` : "No requests yet",
-    pexelsLabel: "Pexels",
+    pexelsLabel: "Pexels (optional)",
     pexelsDesc: "A second photo library for builds, free to use with a link back to the photographer. With Unsplash also connected, a build uses whichever still has room this hour.",
     pexelsStepsHtml: "<b>To get a key:</b><br>1. Create a Pexels account and confirm it from the email Pexels sends.<br>" +
       "2. Visit <a href=\"https://www.pexels.com/api/key/\" target=\"_blank\" rel=\"noopener\">pexels.com/api/key</a> and copy your <b>API key</b>.<br>3. Paste it below.<br><br>" +

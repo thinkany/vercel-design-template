@@ -1299,7 +1299,7 @@ const TOUR_STEPS = [
   { copy: "claudeKey", onEnter: () => ensureModal("licenses"), target: inDrawer("claude-key"), placement: "right" },
   { copy: "figmaLicense", onEnter: () => ensureModal("licenses"), target: inDrawer("figma-license"), placement: "right" },
   { copy: "designLicense", onEnter: () => ensureModal("licenses"), target: inDrawer("design-license"), placement: "right" },
-  { copy: "unsplashKey", onEnter: () => ensureModal("licenses"), target: inDrawer("image-sources"), placement: "right" },
+  { copy: "unsplashKey", onEnter: () => ensureModal("licenses"), target: inDrawer("unsplash-key"), placement: "right" },
   { copy: "closeDrawer", onEnter: () => ensureModal("licenses"), target: () => modalClose, placement: "right" },
   { copy: "figma", onEnter: () => { tourRevealRail(railFigma); return ensureModal("figma"); }, target: inDrawer("figma-export"), placement: "right" },
   { copy: "figmaHelp", onEnter: () => ensureModal("figma"), target: inDrawer("figma-help"), placement: "right", advanceOnClick: true, onExit: () => tourRestoreRail(railFigma) },
@@ -2665,10 +2665,62 @@ function tourSection(body, id) {
   body.appendChild(w);
   return w;
 }
+// A collapsible row of the drawer (Rob 2026-09-10: the keys fold, so the drawer stays
+// tidy). Closed or open by default per `openDefault`, the choice remembered app-wide.
+// The fold carries the walkthrough anchor, so the tour opens it for its tip.
+function licensesFold(host, { title, tourId, storeKey, openDefault = false }) {
+  let open = openDefault; try { const v = localStorage.getItem(storeKey); if (v !== null) open = v === "1"; } catch {}
+  const sec = siteEl("div", "site-acc" + (open ? " open" : ""));
+  if (tourId) sec.dataset.tour = tourId;
+  const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(open));
+  head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
+  const fold = siteEl("div", "site-acc-body"); fold.hidden = !open;
+  head.addEventListener("click", () => {
+    const now = fold.hidden; siteReveal(fold, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now));
+    try { localStorage.setItem(storeKey, now ? "1" : "0"); } catch {}
+  });
+  sec.append(head, fold); host.appendChild(sec);
+  return fold;
+}
+
 async function renderLicenses(body) {
-  // Your keys — the Anthropic API key the studio runs on.
+  // Your keys — the Anthropic API key the studio runs on, then the optional photo
+  // libraries. Each folds; the Claude key starts open until it's connected.
   licensesGroupHead(body, COPY.licenses.keysGroup);
-  await claudeKeySection(tourSection(body, "claude-key"));
+  const keyStatus = await window.desktop.getKeyStatus().catch(() => null);
+  await claudeKeySection(licensesFold(body, { title: COPY.licenses.claudeLabel, tourId: "claude-key", storeKey: "ta-fold-claude-key", openDefault: !(keyStatus && keyStatus.hasKey) }), { noLabel: true });
+
+  // Optional: the designer's own Unsplash access key, so a build can search the
+  // library for matching photos (free, attributed) instead of guessing image URLs.
+  await licenseSection(licensesFold(body, { title: COPY.licenses.unsplashLabel, tourId: "unsplash-key", storeKey: "ta-fold-unsplash" }), {
+    noLabel: true,
+    label: COPY.licenses.unsplashLabel,
+    desc: COPY.licenses.unsplashDesc,
+    stepsHtml: COPY.licenses.unsplashStepsHtml,
+    getStatus: () => window.desktop.getUnsplashStatus(),
+    save: (k) => window.desktop.saveUnsplashKey(k),
+    clear: () => window.desktop.clearUnsplashKey(),
+    extraRows: async (host) => {
+      const u = await window.desktop.getImageUsage();
+      host.appendChild(setRow(COPY.licenses.imageUsageLabel, COPY.licenses.imageUsage(u.unsplash)));
+    },
+  });
+
+  // Optional: Pexels, the second image library. With both connected a build uses
+  // whichever still has budget this hour.
+  await licenseSection(licensesFold(body, { title: COPY.licenses.pexelsLabel, tourId: "pexels-key", storeKey: "ta-fold-pexels" }), {
+    noLabel: true,
+    label: COPY.licenses.pexelsLabel,
+    desc: COPY.licenses.pexelsDesc,
+    stepsHtml: COPY.licenses.pexelsStepsHtml,
+    getStatus: () => window.desktop.getPexelsStatus(),
+    save: (k) => window.desktop.savePexelsKey(k),
+    clear: () => window.desktop.clearPexelsKey(),
+    extraRows: async (host) => {
+      const u = await window.desktop.getImageUsage();
+      host.appendChild(setRow(COPY.licenses.imageUsageLabel, COPY.licenses.imageUsage(u.pexels)));
+    },
+  });
 
   // Licenses — the feature unlocks, in order: Figma, then Design.
   licensesGroupHead(body, COPY.licenses.licensesGroup);
@@ -2693,67 +2745,17 @@ async function renderLicenses(body) {
     onChange: () => { _directionMeta = null; _directionMetaMissAt = 0; updateRerollBtn(); },
   });
 
-  licensesDivider(body);
-
-  // "External Image Sources": the optional photo-library keys, folded together (Rob
-  // 2026-09-10). Closed by default, the choice remembered app-wide; the walkthrough's
-  // step targets the fold itself, which the tour engine opens for its tip.
-  const IMG_FOLD_KEY = "ta-fold-image-sources";
-  let imgOpen = false; try { imgOpen = localStorage.getItem(IMG_FOLD_KEY) === "1"; } catch {}
-  const imgSec = siteEl("div", "site-acc" + (imgOpen ? " open" : ""));
-  imgSec.dataset.tour = "image-sources";
-  const imgHead = siteEl("button", "site-acc-head"); imgHead.type = "button"; imgHead.setAttribute("aria-expanded", String(imgOpen));
-  imgHead.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", COPY.licenses.imageSourcesTitle));
-  const imgBody = siteEl("div", "site-acc-body"); imgBody.hidden = !imgOpen;
-  imgHead.addEventListener("click", () => {
-    const now = imgBody.hidden; siteReveal(imgBody, now); imgSec.classList.toggle("open", now); imgHead.setAttribute("aria-expanded", String(now));
-    try { localStorage.setItem(IMG_FOLD_KEY, now ? "1" : "0"); } catch {}
-  });
-  imgSec.append(imgHead, imgBody); body.appendChild(imgSec);
-  const imgIntro = document.createElement("div"); imgIntro.className = "muted"; imgIntro.style.cssText = "font-size:12px;margin:0 0 12px;"; imgIntro.textContent = COPY.licenses.imageSourcesDesc; imgBody.appendChild(imgIntro);
-
-  // Optional: the designer's own Unsplash access key, so a build can search the
-  // library for matching photos (free, attributed) instead of guessing image URLs.
-  await licenseSection(tourSection(imgBody, "unsplash-key"), {
-    label: COPY.licenses.unsplashLabel,
-    desc: COPY.licenses.unsplashDesc,
-    stepsHtml: COPY.licenses.unsplashStepsHtml,
-    getStatus: () => window.desktop.getUnsplashStatus(),
-    save: (k) => window.desktop.saveUnsplashKey(k),
-    clear: () => window.desktop.clearUnsplashKey(),
-    // Connected: the hour's usage from the library's own rate headers (the script logs
-    // every call), so the designer can see how much of the hourly allowance a build used.
-    extraRows: async (host) => {
-      const u = await window.desktop.getImageUsage();
-      host.appendChild(setRow(COPY.licenses.imageUsageLabel, COPY.licenses.imageUsage(u.unsplash)));
-    },
-  });
-
-  licensesDivider(imgBody);
-
-  // Optional: Pexels, the second image library. With both connected a build uses
-  // whichever still has budget this hour.
-  await licenseSection(tourSection(imgBody, "pexels-key"), {
-    label: COPY.licenses.pexelsLabel,
-    desc: COPY.licenses.pexelsDesc,
-    stepsHtml: COPY.licenses.pexelsStepsHtml,
-    getStatus: () => window.desktop.getPexelsStatus(),
-    save: (k) => window.desktop.savePexelsKey(k),
-    clear: () => window.desktop.clearPexelsKey(),
-    extraRows: async (host) => {
-      const u = await window.desktop.getImageUsage();
-      host.appendChild(setRow(COPY.licenses.imageUsageLabel, COPY.licenses.imageUsage(u.pexels)));
-    },
-  });
 }
 
 // The Claude API key row — status + remove when connected, or a validated input
 // when not. Same encrypted-keychain storage as before; just entered here now.
-async function claudeKeySection(body) {
-  const head = document.createElement("div");
-  head.className = "sess-label";
-  head.textContent = COPY.licenses.claudeLabel;
-  body.appendChild(head);
+async function claudeKeySection(body, { noLabel = false } = {}) {
+  if (!noLabel) { // inside a fold the fold's title is the label
+    const head = document.createElement("div");
+    head.className = "sess-label";
+    head.textContent = COPY.licenses.claudeLabel;
+    body.appendChild(head);
+  }
 
   const desc = document.createElement("div");
   desc.className = "muted";
@@ -2803,10 +2805,12 @@ async function claudeKeySection(body) {
 // One license row: status + remove when active, or a validated key input when not.
 // Both sections re-open the panel on change so the rail icons + status refresh.
 async function licenseSection(body, opts) {
-  const head = document.createElement("div");
-  head.className = "sess-label";
-  head.textContent = opts.label;
-  body.appendChild(head);
+  if (!opts.noLabel) { // inside a fold the fold's title is the label
+    const head = document.createElement("div");
+    head.className = "sess-label";
+    head.textContent = opts.label;
+    body.appendChild(head);
+  }
 
   const lic = await opts.getStatus();
   if (opts.desc) {
