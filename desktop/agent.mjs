@@ -167,6 +167,29 @@ function buildStateAppend(state) {
   );
 }
 
+// Photo sourcing: which libraries the designer connected. Always on, so every turn that
+// touches an image (a build, an edit, a swap) uses the connected library through the
+// script, whether or not a playbook is loaded, and says which library it is searching.
+function buildImageSourcesAppend(state) {
+  const libs = (state && state.imageSources) || [];
+  if (!libs.length) return "";
+  const names = libs.map((l) => (l === "pexels" ? "Pexels" : "Unsplash")).join(" and ");
+  return (
+    "\n\n# Photo sourcing: " + names + " connected\n" +
+    "Whenever a photo is needed (a build, a replacement, a new section), source it from the " +
+    "connected library with the project's script, never by web search, page scraping or a " +
+    "guessed URL:\n" +
+    "  node scripts/find-images.mjs search \"<what the photo shows>\" --orientation landscape --per 10\n" +
+    "  node scripts/find-images.mjs get <id> --source <the search's source> --out public/images/<name>.avif\n" +
+    "Say which library you are searching before you run it (\"Searching " + (libs[0] === "pexels" ? "Pexels" : "Unsplash") + " for …\"), " +
+    "pick by the alt text, orientation and colour, and use `get`: it writes the AVIF and records " +
+    "the photographer credit in public/images/credits.json. The script paces itself and refuses " +
+    "(exit 4) when a library's hour is spent; it moves to the other library when one is connected. " +
+    "Only when no library answers do you fall back to a plain download, and then you record the " +
+    "credit yourself.\n"
+  );
+}
+
 // Turn the resolved copy voice into a system-prompt addendum. Empty when nothing
 // is set — so a project with no voice keeps the exact default system prompt.
 // Scoped to user-facing DESIGN copy so it shapes what lands in pages, not code.
@@ -330,7 +353,7 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
     // System-prompt append: the Art Director persona for a review turn, otherwise the
     // always-on chat (builder) persona + (when set) the project's design copy voice. A
     // review turn writes prose, not design copy, so it carries no copy voice.
-    const systemAppend = (reviewMode ? ART_DIRECTOR_PERSONA : (CHAT_PERSONA + buildVoiceAppend(copyVoice))) + GUARD_APPEND + buildStateAppend(projectState);
+    const systemAppend = (reviewMode ? ART_DIRECTOR_PERSONA : (CHAT_PERSONA + buildVoiceAppend(copyVoice))) + GUARD_APPEND + buildStateAppend(projectState) + (reviewMode ? "" : buildImageSourcesAppend(projectState));
     // Review mode is READ-ONLY: no Write/Edit/Bash and none of the MCP tools, so the Art
     // Director can look at the design (Read/Grep/Glob) but physically cannot change it.
     const REVIEW_TOOLS = ["Read", "Grep", "Glob", "WebFetch", "WebSearch"];

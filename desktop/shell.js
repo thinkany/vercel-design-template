@@ -5229,6 +5229,21 @@ function openMediaDetail(it, { allTags, onTags, onClose } = {}) {
   fields.appendChild(ro(D.name, it.name));
   fields.appendChild(ro(D.size, (it.width ? M.dims(it.width, it.height) + " · " : "") + Math.max(1, Math.round(it.size / 1024)) + " KB"));
   fields.appendChild(ro(D.path, it.url));
+  // The credit a sourced photo arrived with (credits.json): who took it and where it came
+  // from, kept with the file so it can be referenced from the design or shown on the site.
+  if (it.kind !== "file") {
+    const c = it.credit;
+    const w = siteEl("div", "site-kv"); w.appendChild(siteEl("div", "k", D.credit));
+    const v = siteEl("div", "ro");
+    if (c && (c.author || c.source || c.url)) {
+      const link = (text, href) => { if (!href) return document.createTextNode(text); const a = document.createElement("a"); a.href = href; a.textContent = text; a.target = "_blank"; a.rel = "noopener"; return a; };
+      if (c.author) { v.appendChild(document.createTextNode(D.creditBy + " ")); v.appendChild(link(c.author, c.authorUrl)); }
+      if (c.source) { if (c.author) v.appendChild(document.createTextNode(" · ")); v.appendChild(link(c.source, c.url)); }
+      if (c.free === false) { const f = siteEl("div", "", D.creditNotFree); f.style.cssText = "color:#c2410c;margin-top:4px;"; v.appendChild(f); }
+      if (c.description) { const d = siteEl("div", "", c.description); d.style.cssText = "color:#6b6b74;margin-top:4px;"; v.appendChild(d); }
+    } else v.appendChild(document.createTextNode(D.creditNone));
+    w.appendChild(v); fields.appendChild(w);
+  }
   const combo = tagCombo({ tags: it.tags || [], allTags, onChange: async (tags) => { const r = await window.desktop.setMediaTags(it.rel, tags, it.kind); if (r && r.ok) { it.tags = r.tags; if (onTags) onTags(it); } } });
   fields.appendChild(combo.wrap);
   const pv = siteEl("div", "blockedit-preview");

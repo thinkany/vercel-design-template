@@ -578,12 +578,16 @@ function gateEnvFor(dir) {
 // What the agent is told about where the design renders (agent.mjs buildStateAppend):
 // promoted or not, which design, and the block files it can edit.
 function projectStateForAgent(dir) {
+  // The connected photo libraries (in the order the script prefers them).
+  const imageSources = [];
+  if ((process.env.UNSPLASH_ACCESS_KEY || "").trim()) imageSources.push("unsplash");
+  if ((process.env.PEXELS_API_KEY || "").trim()) imageSources.push("pexels");
   try {
     const r = siteReady(dir);
-    if (!r.ready) return { promoted: false };
+    if (!r.ready) return { promoted: false, imageSources };
     const blocks = fs.readdirSync(path.join(dir, "site", "blocks")).filter((f) => /^[A-Z].*\.tsx$/.test(f)).map((f) => `site/blocks/${f}`);
-    return { promoted: true, design: r.design, blocks };
-  } catch { return { promoted: false }; }
+    return { promoted: true, design: r.design, blocks, imageSources };
+  } catch { return { promoted: false, imageSources }; }
 }
 function siteReady(dir) {
   try {
@@ -2969,8 +2973,20 @@ function filesDir(dir) { return path.join(dir, "public", "files"); }
 function mediaKindDir(dir, kind) { return kind === "file" ? filesDir(dir) : mediaDir(dir); }
 function mediaMetaKey(kind, rel) { return kind === "file" ? `files/${rel}` : rel; }
 function validRel(rel) { return typeof rel === "string" && rel && !rel.includes("..") && !path.isAbsolute(rel); }
+// public/images/credits.json, by file name: the source, the photographer and the links a
+// sourced photo arrived with (scripts/find-images.mjs, or a build's own record).
+function readImageCredits(dir) {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(dir, "public", "images", "credits.json"), "utf8"));
+    const list = Array.isArray(j) ? j : (j && j.images) || [];
+    const out = {};
+    for (const c of list) if (c && c.file) out[String(c.file).replace(/^.*\//, "")] = c;
+    return out;
+  } catch { return {}; }
+}
 function listMedia(dir, kind = "image") {
   const mediaTags = readMediaMeta(dir);
+  const credits = kind === "image" ? readImageCredits(dir) : {};
   const isFile = kind === "file";
   const root = mediaKindDir(dir, kind);
   const exts = isFile ? FILE_EXT : MEDIA_EXT;
@@ -2988,7 +3004,8 @@ function listMedia(dir, kind = "image") {
       try { const st = fs.statSync(abs); size = st.size; mtime = st.mtimeMs; } catch {}
       if (!isFile && !/\.svg$/i.test(e.name)) { try { const sz = nativeImage.createFromPath(abs).getSize(); width = sz.width; height = sz.height; } catch {} }
       const meta = mediaTags[mediaMetaKey(kind, r)];
-      out.push({ kind, rel: r, name: e.name, ext: ext.slice(1), url: `/${isFile ? "files" : "images"}/${r}`, file: pathToFileURL(abs).href, size, width, height, mtime, tags: (meta && meta.tags) || [] });
+      const credit = credits[e.name] || null;
+      out.push({ kind, rel: r, name: e.name, ext: ext.slice(1), url: `/${isFile ? "files" : "images"}/${r}`, file: pathToFileURL(abs).href, size, width, height, mtime, credit, tags: (meta && meta.tags) || [] });
     }
   };
   walk(root, "");
