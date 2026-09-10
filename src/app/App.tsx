@@ -44,6 +44,12 @@ function getVariationId(): string {
 // tokens.css is loaded (see effect below); it's injected after the base tokens
 // so its :root values win, letting a variation diverge its own fonts/colors.
 const variationTokenLoaders = import.meta.glob("../variations/*/styles/tokens.css");
+// ...and its webfonts. A variation's fonts.css is where apply-brand / setup-styleguide
+// put the brand's Google Fonts @import (and any @font-face), and the site loads it as
+// its own stylesheet (Base.astro). The design surface must load it too, or the
+// --ta-font-* families the variation's tokens name never arrive here and the preview
+// falls back to a system face while the published site shows the brand type.
+const variationFontLoaders = import.meta.glob("../variations/*/styles/fonts.css");
 
 export default function App() {
   const [page, setPage] = useState(getInitialPage);
@@ -85,12 +91,13 @@ export default function App() {
     }
   }, [variationId, page]);
 
-  // Load the active variation's design tokens (overrides the base tokens).
+  // Load the active variation's webfonts + design tokens (overrides the base tokens).
   useEffect(() => {
     if (variationId === "v00") return;
-    const key = Object.keys(variationTokenLoaders).find(p =>
-      p.includes(`/variations/${variationId}/`),
-    );
+    const own = (p: string) => p.includes(`/variations/${variationId}/`);
+    const fontsKey = Object.keys(variationFontLoaders).find(own);
+    if (fontsKey) variationFontLoaders[fontsKey]();
+    const key = Object.keys(variationTokenLoaders).find(own);
     if (key) variationTokenLoaders[key]();
   }, [variationId]);
 
