@@ -1604,24 +1604,28 @@
       .iref-help-panel { display: none; }
       .iref-help-panel.active { display: block; }
 
-      /* ---- Two-column flow: questions (left 60%) + references/brief rail (right 40%) ----
+      /* ---- Two-column flow: questions (left) + references/brief rail (right) ----
          The design intake runs in .flow (a flex row); `order` puts the questions
          left and the rail right. The rail starts collapsed (width 0) and, once it's
-         revealed (after the first answer), .hasbrief animates it open to 40% while
-         the questions column makes room. The rail is pinned to the top and fixed;
-         only the questions column scrolls. */
-      #intakeph.flow { display: flex; overflow: hidden; }
+         revealed (after the first answer), .hasbrief animates it open while the
+         questions column makes room. The PAIR is centered as a group
+         (justify-content) with a fixed gutter between the columns, so on a wide
+         pane both hug the centerline instead of drifting to their own sides
+         (Rob 2026-09-09). The rail is pinned to the top and fixed; only the
+         questions column scrolls. */
+      #intakeph.flow { display: flex; justify-content: center; overflow: hidden; }
       #intakeph.flow .intake-inner {
         order: 1;   /* questions on the LEFT */
-        flex: 1 1 auto; min-width: 0; max-width: 640px; margin: 0 auto;
-        height: 100%; overflow-y: auto; padding: 52px 40px 64px;
+        flex: 1 1 640px; min-width: 0; max-width: 640px; margin: 0;
+        height: 100%; overflow-y: auto; padding: 52px 40px 64px; /* the right padding is the gutter */
       }
       #intakeph.flow .intake-head { text-align: center; }
       /* The references / brief rail (right): collapsed to zero width + nudged down +
-         transparent, then .hasbrief eases it open to 40% and fades in. The lone
-         questions column is centered (margin: 0 auto) in the full pane until the
-         rail claims its space, then drifts LEFT. margin-right insets the rail from
-         the pane edge, but ONLY when it's open (so the single column stays centered).
+         transparent, then .hasbrief eases it open (40% of the pane, at most 460px)
+         and fades in. The lone questions column sits centered in the pane until the
+         rail claims its space, then the pair re-centers and the questions drift
+         LEFT. margin-right mirrors the questions column's left padding, ONLY when
+         the rail is open (so the single column stays centered).
          A transparent flex COLUMN of its own cards, pinned to the top. */
       #intakeph.flow #intake-brief {
         order: 2;   /* references / brief on the RIGHT */
@@ -1637,7 +1641,7 @@
                     margin-right .62s cubic-bezier(.16,1,.3,1);
       }
       #intakeph.flow.hasbrief #intake-brief {
-        flex: 0 0 40%; margin-left: 32px; margin-right: clamp(40px, 6%, 96px);
+        flex: 0 1 min(40%, 460px); margin-left: 0; margin-right: 40px;
         opacity: 1; transform: translateY(0);
         overflow-y: auto;
       }
