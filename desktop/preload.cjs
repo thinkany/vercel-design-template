@@ -188,6 +188,9 @@ contextBridge.exposeInMainWorld("desktop", {
   uploadMedia: () => ipcRenderer.invoke("media:upload"),
   addMark: () => ipcRenderer.invoke("marks:add"),
   importMedia: (paths, opts) => ipcRenderer.invoke("media:import", { paths, raw: !!(opts && opts.raw) }),
+  // Video: its own pair, because an imported clip also gets a poster still derived.
+  uploadVideo: () => ipcRenderer.invoke("media:uploadVideo"),
+  importVideo: (paths) => ipcRenderer.invoke("media:importVideo", { paths }),
   saveSiteFavicon: (favicon) => ipcRenderer.invoke("site:saveFavicon", { favicon }),
   deleteMedia: (rel, kind) => ipcRenderer.invoke("media:delete", { rel, kind }),
   uploadFiles: () => ipcRenderer.invoke("media:uploadFiles"),

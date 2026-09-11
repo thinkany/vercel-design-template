@@ -2057,6 +2057,12 @@
       .setup-libs .site-acc-body > *:first-child { margin-top: 0; }
       #setup-done { margin-top: 20px; }
 
+      /* a video field's drop zone: the image zone without the thumbnail, since a clip
+         has no still of its own until its poster is grabbed */
+      .site-video-zone { min-height: 62px; display: flex; align-items: center; justify-content: center; }
+      .site-video-zone .site-img-hint { text-align: center; }
+      .sess-desc.site-warn { color: #b45309; }
+
       /* dev-only: the onboarding-walkthrough marker. Deliberately loud, so a rehearsal
          is never mistaken for the real first run. */
       #dev-rehearsal-badge {

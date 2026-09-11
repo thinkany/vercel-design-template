@@ -3076,11 +3076,18 @@ app.on("will-quit", () => { try { phoneUpload.stopServer(); } catch {} });
 const MEDIA_EXT = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".svg"]);
 // Files (documents) live beside the images, in public/files, served at /files/<name>:
 // copied as they are, never converted. Their tags key as "files/<rel>" in media.json.
-const FILE_EXT = new Set([".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".csv", ".txt", ".zip", ".mp3", ".mp4", ".m4a", ".mov", ".wav"]);
+const FILE_EXT = new Set([".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".csv", ".txt", ".zip", ".mp3", ".m4a", ".wav"]);
+// Video the site plays, as opposed to a video someone downloads. MP4 only for the site:
+// it is the one container every browser plays without a second encode. MOV and WebM are
+// accepted on the way IN and kept as they are, so a designer's own clip is never refused.
+const VIDEO_EXT = new Set([".mp4", ".mov", ".webm", ".m4v"]);
 function mediaDir(dir) { return path.join(dir, "public", "images"); }
 function filesDir(dir) { return path.join(dir, "public", "files"); }
-function mediaKindDir(dir, kind) { return kind === "file" ? filesDir(dir) : mediaDir(dir); }
-function mediaMetaKey(kind, rel) { return kind === "file" ? `files/${rel}` : rel; }
+// Clips live in public/video, beside the poster still each one needs, NOT in public/files
+// with the documents: a video field has to find its pair, and a download does not.
+function videoDir(dir) { return path.join(dir, "public", "video"); }
+function mediaKindDir(dir, kind) { return kind === "file" ? filesDir(dir) : kind === "video" ? videoDir(dir) : mediaDir(dir); }
+function mediaMetaKey(kind, rel) { return kind === "file" ? `files/${rel}` : kind === "video" ? `video/${rel}` : rel; }
 function validRel(rel) { return typeof rel === "string" && rel && !rel.includes("..") && !path.isAbsolute(rel); }
 // public/images/credits.json, by file name: the source, the photographer and the links a
 // sourced photo arrived with (scripts/find-images.mjs, or a build's own record).
@@ -3098,7 +3105,7 @@ function listMedia(dir, kind = "image") {
   const credits = kind === "image" ? readImageCredits(dir) : {};
   const isFile = kind === "file";
   const root = mediaKindDir(dir, kind);
-  const exts = isFile ? FILE_EXT : MEDIA_EXT;
+  const exts = isFile ? FILE_EXT : kind === "video" ? VIDEO_EXT : MEDIA_EXT;
   const out = [];
   const walk = (d, rel) => {
     let entries = [];
@@ -3111,10 +3118,11 @@ function listMedia(dir, kind = "image") {
       if (!exts.has(ext)) continue;
       let size = 0, width = 0, height = 0, mtime = 0;
       try { const st = fs.statSync(abs); size = st.size; mtime = st.mtimeMs; } catch {}
-      if (!isFile && !/\.svg$/i.test(e.name)) { try { const sz = nativeImage.createFromPath(abs).getSize(); width = sz.width; height = sz.height; } catch {} }
+      if (kind === "image" && !/\.svg$/i.test(e.name)) { try { const sz = nativeImage.createFromPath(abs).getSize(); width = sz.width; height = sz.height; } catch {} }
       const meta = mediaTags[mediaMetaKey(kind, r)];
       const credit = credits[e.name] || null;
-      out.push({ kind, rel: r, name: e.name, ext: ext.slice(1), url: `/${isFile ? "files" : "images"}/${r}`, file: pathToFileURL(abs).href, size, width, height, mtime, credit, tags: (meta && meta.tags) || [] });
+      const urlRoot = isFile ? "files" : kind === "video" ? "video" : "images";
+      out.push({ kind, rel: r, name: e.name, ext: ext.slice(1), url: `/${urlRoot}/${r}`, file: pathToFileURL(abs).href, size, width, height, mtime, credit, tags: (meta && meta.tags) || [] });
     }
   };
   walk(root, "");
@@ -3129,6 +3137,52 @@ function fileName(dir, original) {
   while (fs.existsSync(path.join(filesDir(dir), name))) name = `${base}-${n++}${ext}`;
   return name;
 }
+// A clip name unique in public/video (same rule as images and files).
+function videoName(dir, original) {
+  const ext = path.extname(original).toLowerCase();
+  const base = slugifyId(path.basename(original, path.extname(original))) || "clip";
+  let name = base + ext; let n = 2;
+  while (fs.existsSync(path.join(videoDir(dir), name))) name = `${base}-${n++}${ext}`;
+  return name;
+}
+/**
+ * Bring clips into public/video, and take a poster still for each one.
+ *
+ * The poster is not a nicety: it is what a reduced-motion visitor sees, what the Figma
+ * export draws, and what shows before the first frame paints. So a clip whose poster
+ * cannot be grabbed still imports (the designer may have a better still than any frame
+ * of the video), and comes back flagged so the field can ask for one.
+ */
+async function importVideoFiles(paths) {
+  const { grabPoster } = require("./video-poster.cjs");
+  fs.mkdirSync(videoDir(currentProject), { recursive: true });
+  const added = [];
+  for (const src of paths) {
+    const ext = path.extname(src).toLowerCase();
+    if (!VIDEO_EXT.has(ext)) continue;
+    try {
+      const name = videoName(currentProject, path.basename(src));
+      const dest = path.join(videoDir(currentProject), name);
+      fs.copyFileSync(src, dest);
+      // The poster sits beside the clip under the same stem, which is the convention
+      // find-video.mjs already writes and the components already expect.
+      const stem = name.replace(/\.[^.]+$/, "");
+      const posterAbs = path.join(videoDir(currentProject), `${stem}.poster.jpg`);
+      const r = await grabPoster(dest, posterAbs).catch((e) => ({ ok: false, error: e.message }));
+      added.push({
+        url: `/video/${name}`,
+        poster: r.ok ? `/video/${stem}.poster.jpg` : null,
+        posterError: r.ok ? null : r.error,
+        bytes: (() => { try { return fs.statSync(dest).size; } catch { return 0; } })(),
+        width: r.ok ? r.width : null, height: r.ok ? r.height : null, duration: r.ok ? r.duration : null,
+      });
+    } catch (e) {
+      return { ok: false, error: e.message, added };
+    }
+  }
+  return { ok: true, added };
+}
+
 function importDocumentFiles(paths) {
   fs.mkdirSync(filesDir(currentProject), { recursive: true });
   const added = [];
@@ -3151,6 +3205,26 @@ ipcMain.handle("media:uploadFiles", async () => {
   if (res.canceled || !res.filePaths.length) return { ok: true, added: [] };
   return importDocumentFiles(res.filePaths);
 });
+ipcMain.handle("media:uploadVideo", async () => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: "Add a video",
+    properties: ["openFile", "multiSelections"],
+    filters: [{ name: "Video", extensions: Array.from(VIDEO_EXT).map((e) => e.slice(1)) }],
+  });
+  if (res.canceled || !res.filePaths.length) return { ok: true, added: [] };
+  return importVideoFiles(res.filePaths);
+});
+// Drag-and-drop of a clip onto a video field.
+ipcMain.handle("media:importVideo", (_e, { paths } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const list = (Array.isArray(paths) ? paths : []).filter((p) => typeof p === "string" && path.isAbsolute(p) && fs.existsSync(p));
+  if (!list.length) return { ok: true, added: [] };
+  return importVideoFiles(list);
+});
+
 // A file name safe for a URL and unique in the folder ("My Photo (1).JPG" → my-photo-1.jpg).
 function mediaName(dir, original) {
   const ext = path.extname(original).toLowerCase();
@@ -3159,7 +3233,7 @@ function mediaName(dir, original) {
   while (fs.existsSync(path.join(mediaDir(dir), name))) name = `${base}-${n++}${ext}`;
   return name;
 }
-ipcMain.handle("media:list", (_e, { kind } = {}) => (currentProject ? listMedia(currentProject, kind === "file" ? "file" : "image") : []));
+ipcMain.handle("media:list", (_e, { kind } = {}) => (currentProject ? listMedia(currentProject, kind === "file" || kind === "video" ? kind : "image") : []));
 // Uploads become AVIF (auto-oriented, metadata stripped, at most MEDIA_MAX_WIDTH
 // wide, never upscaled) via the conversion worker; a designer never has to know
 // what a file format is. sharp's shipped libvips encodes AVIF (and decodes HEIC),
@@ -3286,7 +3360,7 @@ ipcMain.handle("media:meta", () => (currentProject ? { meta: readMediaMeta(curre
 // Tag folders: every tag in use plus the ones made empty in the library (media.json `_tags`).
 // Folders are per kind: images use `_tags` and the image keys; files use `_fileTags` and
 // the "files/…" keys, so the two libraries never share a folder.
-function kindOfKey(k) { return k.startsWith("files/") ? "file" : "image"; }
+function kindOfKey(k) { return k.startsWith("files/") ? "file" : k.startsWith("video/") ? "video" : "image"; }
 function tagListKey(kind) { return kind === "file" ? "_fileTags" : "_tags"; }
 function allMediaTags(dir, kind = "image") {
   const meta = readMediaMeta(dir); const out = new Map();

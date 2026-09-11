@@ -5137,31 +5137,92 @@ function siteTypeFieldControl(f, value, onChange, ctx) {
     wrap.appendChild(siteImageControl(cur, (next) => { cur = next; change(); }));
     get = () => cur;
   } else if (f.kind === "video") {
-    // A clip plus the poster still that stands in for it. The poster is edited with the
-    // normal image control (upload, pick, drop); the clip is chosen from what the
-    // project already holds. Uploading a NEW clip, and deriving its poster, is not wired
-    // yet, so this never pretends it is: the hint says where a clip comes from.
+    // A clip and the poster still that stands in for it, edited together.
+    //
+    // Uploading a clip derives its poster automatically, so the common path is one drop
+    // and done. The poster control is ALWAYS shown, not just when that fails: an
+    // auto-grabbed frame is a reasonable guess and often not the still a designer would
+    // have chosen, and this is where they say so.
     let cur = {
       src: (value && value.src) || "",
       poster: (value && value.poster) || "",
       alt: (value && value.alt) || "",
     };
     const emit = () => change();
+
     const clipRow = siteEl("div", "site-kv");
     clipRow.appendChild(siteEl("div", "k", S.videoClipLabel));
-    const clip = document.createElement("input");
-    clip.className = "field";
-    clip.placeholder = S.videoClipPlaceholder;
-    clip.value = cur.src;
-    clip.addEventListener("input", () => { cur.src = clip.value.trim(); emit(); });
-    clipRow.appendChild(clip);
-    clipRow.appendChild(siteEl("div", "sess-desc", S.videoClipHint));
+    const zone = document.createElement("label");
+    zone.className = "site-img-zone site-video-zone";
+    const hint = siteEl("div", "site-img-hint");
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.m4v";
+    input.style.display = "none";
+    zone.append(hint, input);
+    clipRow.appendChild(zone);
+    const links = siteEl("div", "site-img-links");
+    const clearLink = siteEl("button", "site-link danger", COPY.site.media.clear);
+    clearLink.type = "button";
+    links.appendChild(clearLink);
+    clipRow.appendChild(links);
+    const note = siteEl("div", "sess-desc");
+    clipRow.appendChild(note);
     wrap.appendChild(clipRow);
-    wrap.appendChild(siteImageControl(
-      cur.poster ? { src: cur.poster, alt: cur.alt } : "",
-      (next) => { cur.poster = (next && next.src) || ""; cur.alt = (next && next.alt) || ""; emit(); },
-      { label: S.videoPosterLabel },
-    ));
+
+    // The poster, always present and always replaceable.
+    let posterCtl = null;
+    const paintPoster = () => {
+      if (posterCtl) posterCtl.remove();
+      posterCtl = siteImageControl(
+        cur.poster ? { src: cur.poster, alt: cur.alt } : "",
+        (next) => { cur.poster = (next && next.src) || ""; cur.alt = (next && next.alt) || ""; emit(); paint(); },
+        { label: S.videoPosterLabel },
+      );
+      wrap.appendChild(posterCtl);
+    };
+
+    const paint = () => {
+      hint.textContent = cur.src ? `${cur.src.split("/").pop()} ${S.videoReplace}` : S.videoDropHint;
+      zone.classList.toggle("has-image", !!cur.src);
+      clearLink.hidden = !cur.src;
+      // Say plainly when a clip has no still yet: it would be blank for reduced motion
+      // and in the Figma export, and the fix is the control directly below.
+      note.textContent = cur.src && !cur.poster ? S.videoNeedsPoster : S.videoClipHint;
+      note.classList.toggle("site-warn", !!(cur.src && !cur.poster));
+    };
+
+    const take = async (result) => {
+      if (!result || !result.ok) { hint.textContent = (result && result.error) || COPY.common.couldNotSave; return; }
+      const v = (result.added || [])[0];
+      if (!v) { paint(); return; }
+      cur.src = v.url;
+      if (v.poster) cur.poster = v.poster;
+      paint();
+      paintPoster();
+      emit();
+      // A clip heavier than the guide is the designer's call, but never a silent one.
+      if (v.bytes && v.bytes > 8 * 1024 * 1024) note.textContent = S.videoHeavy(Math.round(v.bytes / 1048576));
+      else if (!v.poster && v.posterError) note.textContent = S.videoPosterFailed;
+    };
+
+    const importFiles = async (files) => {
+      const paths = Array.from(files || []).map((f_) => { try { return window.desktop.pathForFile(f_); } catch { return null; } }).filter(Boolean);
+      if (!paths.length) return;
+      hint.textContent = COPY.site.media.importing;
+      take(await window.desktop.importVideo(paths).catch((e) => ({ ok: false, error: String(e) })));
+    };
+    input.addEventListener("change", () => { importFiles(input.files); input.value = ""; });
+    zone.addEventListener("click", (e) => { e.preventDefault(); window.desktop.uploadVideo().then(take).catch(() => {}); });
+    ["dragenter", "dragover"].forEach((t) => zone.addEventListener(t, (e) => { e.preventDefault(); zone.classList.add("drag"); }));
+    ["dragleave", "drop"].forEach((t) => zone.addEventListener(t, (e) => { e.preventDefault(); zone.classList.remove("drag"); }));
+    zone.addEventListener("drop", (e) => importFiles(e.dataTransfer && e.dataTransfer.files));
+    clearLink.addEventListener("click", () => { cur.src = ""; paint(); emit(); });
+
+    paint();
+    paintPoster();
+    // A clip with no poster is not a usable value: the still is what reduced motion, the
+    // Figma export and the pre-play moment all show.
     get = () => (cur.src && cur.poster ? { src: cur.src, poster: cur.poster, alt: cur.alt } : "");
   } else if (f.kind === "link") {
     const lab = document.createElement("input"); lab.className = "field"; lab.placeholder = S.linkLabel; lab.value = (value && value.label) || "";
