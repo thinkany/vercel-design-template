@@ -165,6 +165,16 @@ ok(/TOUR_FLAGS = \[[^\]]*SETUP_DONE_KEY/.test(shell),
 
 // ---- Markup -----------------------------------------------------------------
 ok(/id="setupgate"/.test(html) && /id="setup-stack"/.test(html), "the setup gate and its stack exist");
+
+// The two facts under the heading are a numbered list, left-aligned inside a gate that
+// otherwise centres its text, and large enough to read as instructions.
+ok(/<ol class="setup-intro">[\s\S]*?setupGate\.intro1[\s\S]*?setupGate\.intro2[\s\S]*?<\/ol>/.test(html),
+  "the intro is a numbered list of two, not one centred paragraph");
+const introCss = html.slice(html.indexOf(".setup-intro {"), html.indexOf("first-run key setup"));
+ok(/text-align: left/.test(introCss), "left-aligned, against the gate's centred default");
+ok(/counter-increment: setup-intro/.test(introCss) && /content: counter\(setup-intro\)/.test(introCss),
+  "numbered by CSS counter, so the markup stays semantic");
+ok(/font-size: 13\.5px/.test(introCss), "a touch larger than the gate's 13px paragraph");
 ok(/id="keygate"/.test(html), "the reconnect key gate is still there");
 ok(/id="setup-done"[^>]*hidden/.test(html), "Done starts hidden");
 ok(/\.site-acc-state \{/.test(html), "the heading state chip is styled");

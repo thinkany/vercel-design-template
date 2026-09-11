@@ -94,4 +94,14 @@ assert.ok(/before the\s*\n?first `## ` heading/.test(skill.replace(/\s+/g, " "))
   "design-brief.md must exclude EVERY '## ' block from the saved brief, not just Design direction");
 checks++;
 
+// ---- Typographic apostrophes in user-facing headings -------------------------
+// The app's headings use a real apostrophe (U+2019), not a straight tick: "Let’s set
+// up your project" sets the convention. A tick in a heading reads as a typo next to it.
+const copySrc = fs.readFileSync(path.join(__dirname, "..", "copy.js"), "utf8");
+for (const m of copySrc.matchAll(/^\s*(heading|title|headSubtitle|intro\d?)\s*:\s*"([^"]*)"/gm)) {
+  checks++;
+  assert.ok(!/[a-zA-Z]'[a-zA-Z]/.test(m[2]),
+    `${m[1]} uses a straight tick where the branding wants \u2019: ${JSON.stringify(m[2])}`);
+}
+
 console.log(`brief-prose: ${checks} checks pass.`);

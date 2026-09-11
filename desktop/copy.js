@@ -460,7 +460,7 @@ window.COPY = {
     blockDesignRunning: "Designing…",
     blockDesign: {
       title: (name) => `Design ${name}`,
-      intro: "The block keeps its fields and its content; the design pass gives it this site's look, with every option rendered. Add a line of direction if you have one.",
+      intro: "The block keeps its fields and its content; the design pass gives it this site’s look, with every option rendered. Add a line of direction if you have one.",
       placeholder: "e.g. photo left, copy right, like the hero's image treatment",
       briefLink: "The brief",
       go: "Send to the designer",
@@ -472,7 +472,7 @@ window.COPY = {
     blockUseExisting: "Use an existing design",
     blockUse: {
       title: (name) => `Use an existing design for ${name}`,
-      intro: "Move this block's content into one of the design's blocks. Pair each field with where it lands; anything left unpaired is dropped. Every page using this block switches to the chosen one, and this block is removed.",
+      intro: "Move this block’s content into one of the design’s blocks. Pair each field with where it lands; anything left unpaired is dropped. Every page using this block switches to the chosen one, and this block is removed.",
       target: "Design block",
       pick: "Choose a block…",
       pairing: "Where each field lands",
@@ -487,7 +487,7 @@ window.COPY = {
     },
     blockEditor: {
       title: (name) => `Fields of ${name}`,
-      intro: "Name each field the way you want it to read in the page editor, or remove one you won't need. A removed field leaves every page using this block in the same step.",
+      intro: "Name each field the way you want it to read in the page editor, or remove one you won’t need. A removed field leaves every page using this block in the same step.",
       remove: "Remove field",
       undo: "Keep this field",
       save: "Apply",
@@ -586,7 +586,7 @@ window.COPY = {
     // delivery (site level, the card at the top of the Forms tab)
     delivery: {
       title: "Delivery",
-      intro: "How submissions reach the client: a transactional mail service you set up once for this site. The key stays in the app and goes to the site's hosting at publish; it's never written into the project.",
+      intro: "How submissions reach the client: a transactional mail service you set up once for this site. The key stays in the app and goes to the site’s hosting at publish; it’s never written into the project.",
       statusReady: (provider, from) => `Sending through ${provider} as ${from}.`,
       statusNoKey: "Not connected yet: choose a service, enter the from address and paste its key.",
       statusNoForms: "Forms on the published site can't send until this is set up.",
@@ -709,7 +709,7 @@ window.COPY = {
       },
       media: {
         title: "Media",
-        intro: "The project's library, in two parts: Images (everything under the images folder, which is what every image field picks from) and Files (documents and downloads served at /files/, which the link pickers can point at). Each part has its own folders and tags.",
+        intro: "The project’s library, in two parts: Images (everything under the images folder, which is what every image field picks from) and Files (documents and downloads served at /files/, which the link pickers can point at). Each part has its own folders and tags.",
         sections: [
           { h: "Image settings", items: ["The gear across from <b>Images | Files</b> opens the image optimization sliders: quality and the largest width for new uploads. They are the same settings as <b>Settings → Images</b>; change them in either place."] },
           { h: "Add images", items: ["<b>Add images…</b> picks files from your computer; <b>From your phone…</b> shows a code your phone scans to send photos over Wi‑Fi.", "Added images are optimised for the web automatically (AVIF, up to 2400px wide). SVG, GIF and AVIF files are kept as they are."] },
@@ -1281,8 +1281,11 @@ window.COPY = {
 
   // ── First-run key setup (the stepper before the project chooser) ───────────
   setupGate: {
-    heading: "Let's get you set up",
-    intro: "Your Claude key is the only one the studio needs. The rest are optional and can wait, each one unlocks something extra.",
+    heading: "Let’s get you set up",
+    // Two facts, numbered so they read as the shape of what follows rather than a
+    // paragraph to wade through.
+    intro1: "Your Claude API key is the only one the studio needs to run.",
+    intro2: "Everything after it is optional and can wait. Each one unlocks something extra.",
     done: "Done setting up!",
     connected: "Connected",
     skipped: "Skipped",

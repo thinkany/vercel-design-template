@@ -1979,6 +1979,24 @@
       .ihero-chip.selected .ihero-cap { font-weight: 600; }
       .ihero-chip:disabled { cursor: default; opacity: .5; }
 
+      /* the two facts under the heading: numbered, left-aligned, and big enough to read
+         as instructions rather than fine print */
+      .setup-intro {
+        list-style: none; counter-reset: setup-intro;
+        margin: 16px 0 0; padding: 0; text-align: left;
+      }
+      .setup-intro li {
+        counter-increment: setup-intro;
+        position: relative; padding-left: 26px;
+        font-size: 13.5px; line-height: 1.6; color: #4a4a55;
+      }
+      .setup-intro li + li { margin-top: 7px; }
+      .setup-intro li::before {
+        content: counter(setup-intro) ".";
+        position: absolute; left: 0; top: 0;
+        font-weight: 600; color: #111; font-variant-numeric: tabular-nums;
+      }
+
       /* first-run key setup — a stack of steps; answered ones collapse to a done-row */
       #setup-stack { display: flex; flex-direction: column; gap: 10px; margin: 18px 0 4px; text-align: left; }
       .setup-step {
@@ -2427,7 +2445,10 @@
         <div id="setupgate" class="gate" hidden>
           <div class="gate-inner gate-wide">
             <h2 data-copy="setupGate.heading"></h2>
-            <p data-copy="setupGate.intro"></p>
+            <ol class="setup-intro">
+              <li data-copy="setupGate.intro1"></li>
+              <li data-copy="setupGate.intro2"></li>
+            </ol>
             <div id="setup-stack"></div>
             <button id="setup-done" class="btn-primary" data-copy="setupGate.done" hidden></button>
           </div>
