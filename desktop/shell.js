@@ -11249,6 +11249,10 @@ function placeAdToolbar() {
   const r = chatPanel ? chatPanel.getBoundingClientRect() : null;
   const overChat = !!r && r.width > 120; // a collapsing/collapsed pane isn't somewhere to put a bar
   adToolbarEl.classList.toggle("over-chat", overChat);
+  // Blur the pane behind the card, but ONLY when the bar is actually sitting on it: in the
+  // collapsed-chat fallback the bar floats over the preview and there's nothing to push back.
+  const app = el("app");
+  if (app) app.classList.toggle("ad-walking", overChat && !!adReview && !adToolbarEl.hidden);
   if (overChat) {
     // BOTH edges: the pane sits after the rail, so a window-relative left would put the bar
     // on the rail instead of the pane.
@@ -11297,8 +11301,14 @@ function showAdToolbar() {
   adToolbarEl.hidden = false;
   placeAdToolbar(); // over the chat pane when there is one, else centered over the preview
   updateAdToolbar();
+  // Rise + fade in on the NEXT frame, so the browser has painted the 50px-down start state
+  // to animate from (setting both in one frame would jump straight to the end).
+  requestAnimationFrame(() => { if (adToolbarEl && !adToolbarEl.hidden) adToolbarEl.classList.add("ad-in"); });
 }
-function hideAdToolbar() { if (adToolbarEl) adToolbarEl.hidden = true; }
+function hideAdToolbar() {
+  if (adToolbarEl) { adToolbarEl.hidden = true; adToolbarEl.classList.remove("ad-in"); } // reset for the next arrival
+  const app = el("app"); if (app) app.classList.remove("ad-walking"); // the pane comes back into focus
+}
 function updateAdToolbar() {
   if (!adToolbarEl || !adReview) return;
   const rec = adReview.recs[adReview.idx] || {};

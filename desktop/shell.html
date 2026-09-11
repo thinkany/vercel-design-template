@@ -1285,15 +1285,37 @@
          When the chat is collapsed (width 0) there is no pane to sit on, so the bar falls back
          to floating centered over the preview. */
       #ad-toolbar { flex-direction: column; align-items: stretch; gap: 0; width: min(600px, 92vw); border-radius: 18px; padding: 8px 8px 8px 16px; }
+      /* While a review walk is open the chat pane behind the bar is pushed out of focus: it's
+         blurred and dimmed, so the suggestion card reads as the thing to attend to and the
+         conversation behind it stops competing. The bar itself is a BODY child, not a
+         descendant of #chat, so it stays perfectly sharp over the blur.
+         The pane's own background stays solid (only its contents blur), or the blur would
+         pull the design's colors through from the preview beside it. */
+      #app.ad-walking #bar, #app.ad-walking #chatmain {
+        filter: blur(3px); opacity: .45;
+        transition: filter .22s ease, opacity .22s ease;
+        pointer-events: none; /* nothing behind the card is clickable mid-walk */
+      }
+      #bar, #chatmain { transition: filter .22s ease, opacity .22s ease; }
+      /* The card ARRIVES: it rises 50px and fades in while the pane behind it blurs back, so
+         the two read as one move (the conversation recedes, the suggestion comes forward).
+         .ad-in is added a frame after the bar is shown, so the transition has a start state
+         to animate FROM. Transform only, no layout properties, so it stays cheap. */
       #ad-toolbar.over-chat {
         /* Anchored to the pane's MEASURED box (placeAdToolbar publishes both edges) — the pane
            sits after the rail, so a window-relative left would land the bar on the rail. */
-        left: calc(var(--chat-x, 56px) + 12px); transform: none;
+        left: calc(var(--chat-x, 56px) + 12px);
         top: 63px;  /* clear of the chat's own dark #bar (51px) — the two are near-identical
                        darks, so overlapping them read as one smeared block */
         width: calc(var(--chat-w, 400px) - 24px);
         max-height: calc(100vh - 77px);
+        /* The arrival state. This also REPLACES the centered float's translateX(-50%), which
+           is why placement and animation share one rule: split across two, the later `left`
+           rule would quietly win and drop the transform. */
+        opacity: 0; transform: translateY(50px);
+        transition: opacity .3s ease, transform .34s cubic-bezier(.16, 1, .3, 1);
       }
+      #ad-toolbar.over-chat.ad-in { opacity: 1; transform: translateY(0); }
       /* One row, never wrapped: the count takes the slack on the left and truncates if it must,
          so Prev/Next/Exit stay together on the right (a wrapped row stranded Exit alone). */
       #ad-toolbar.over-chat .ad-tb-row { flex-wrap: nowrap; }
