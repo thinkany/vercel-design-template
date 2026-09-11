@@ -4422,27 +4422,6 @@ function siteFold(title, key, { defaultOpen = true } = {}) {
   const sec = siteEl("div", "site-acc" + (isOpen ? " open" : ""));
   const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(isOpen));
   head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
-  // A short note beside the title, readable while the fold is shut (the media libraries
-  // use it to say whether a key covers photos, video, or both).
-  if (note || noteIcons) {
-    const n = siteEl("span", "site-acc-note");
-    for (const svg of noteIcons || []) {
-      const i = siteEl("span", "site-acc-note-icon");
-      i.innerHTML = svg;
-      n.appendChild(i);
-    }
-    if (note) n.appendChild(siteEl("span", "", note));
-    // Whether this one is already set up, shown beside what it offers so a shut section
-    // tells the whole story. Set later too, when a key validates while the fold is open.
-    const state = siteEl("span", "site-acc-state");
-    state.hidden = true;
-    n.appendChild(state);
-    fold.setFoldState = (text) => {
-      state.textContent = text || "";
-      state.hidden = !text;
-    };
-    head.appendChild(n);
-  }
   const body = siteEl("div", "site-acc-body"); body.hidden = !isOpen;
   head.addEventListener("click", () => { const now = body.hidden; siteReveal(body, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(key, now); });
   sec.append(head, body);
@@ -7721,27 +7700,6 @@ function siteAccordionize(wrap) {
       section = sec;
       const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(isOpen));
       head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
-  // A short note beside the title, readable while the fold is shut (the media libraries
-  // use it to say whether a key covers photos, video, or both).
-  if (note || noteIcons) {
-    const n = siteEl("span", "site-acc-note");
-    for (const svg of noteIcons || []) {
-      const i = siteEl("span", "site-acc-note-icon");
-      i.innerHTML = svg;
-      n.appendChild(i);
-    }
-    if (note) n.appendChild(siteEl("span", "", note));
-    // Whether this one is already set up, shown beside what it offers so a shut section
-    // tells the whole story. Set later too, when a key validates while the fold is open.
-    const state = siteEl("span", "site-acc-state");
-    state.hidden = true;
-    n.appendChild(state);
-    fold.setFoldState = (text) => {
-      state.textContent = text || "";
-      state.hidden = !text;
-    };
-    head.appendChild(n);
-  }
       const body = siteEl("div", "site-acc-body"); body.hidden = !isOpen;
       head.addEventListener("click", () => { const now = body.hidden; siteReveal(body, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(key, now); });
       sec.append(head, body); wrap.appendChild(sec);
