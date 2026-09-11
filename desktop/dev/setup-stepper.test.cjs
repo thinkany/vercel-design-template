@@ -125,6 +125,8 @@ ok(/if \(step\.id === id\) break/.test(rest), "counting only the rows that sit a
 // ---- Reusing the drawer's key rows ------------------------------------------
 // The whole reason this is cheap: one implementation of validate/save/show/unplug.
 ok(/claudeKeySection\(host/.test(block), "step 1 renders the drawer's Claude row");
+ok(/noDesc: true/.test(block),
+  "without the row's own description, which the step has already given in full");
 // Figma, Research, and ONE call inside the media step's loop that serves all three
 // libraries: three call sites, five rows.
 ok((block.match(/licenseSection\(/g) || []).length === 3,

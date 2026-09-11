@@ -104,4 +104,15 @@ for (const m of copySrc.matchAll(/^\s*(heading|title|headSubtitle|intro\d?)\s*:\
     `${m[1]} uses a straight tick where the branding wants \u2019: ${JSON.stringify(m[2])}`);
 }
 
+// ---- No em-dashes anywhere in the copy catalog -------------------------------
+// The house rule (CLAUDE.md) is no em-dashes in anything a person reads. The phrase
+// tables above are checked as prose; this catches the rest of copy.js, which is all
+// user-facing by definition.
+for (const m of copySrc.matchAll(/^\s*([A-Za-z_$][\w$]*)\s*:\s*"([^"]*)"/gm)) {
+  if (!/\u2014/.test(m[2])) continue;
+  checks++;
+  assert.ok(false, `${m[1]} contains an em-dash (house rule: use a comma, colon, parentheses or two sentences): ${JSON.stringify(m[2].slice(0, 120))}`);
+}
+checks++; // the sweep itself ran
+
 console.log(`brief-prose: ${checks} checks pass.`);

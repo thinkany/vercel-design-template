@@ -1186,8 +1186,9 @@ const SETUP_STEPS = [
     required: true,
     title: () => COPY.setupGate.claudeTitle,
     desc: () => COPY.setupGate.claudeDesc,
+    also: () => COPY.setupGate.claudeAlso,
     status: () => window.desktop.getKeyStatus().then((k) => !!(k && k.hasKey)),
-    render: (host, done) => claudeKeySection(host, { noLabel: true, onConnected: () => done("connected") }),
+    render: (host, done) => claudeKeySection(host, { noLabel: true, noDesc: true, onConnected: () => done("connected") }),
   },
   {
     id: "figma",
@@ -3348,7 +3349,7 @@ async function renderLicenses(body) {
 
 // The Claude API key row — status + remove when connected, or a validated input
 // when not. Same encrypted-keychain storage as before; just entered here now.
-async function claudeKeySection(body, { noLabel = false, onConnected = null } = {}) {
+async function claudeKeySection(body, { noLabel = false, onConnected = null, noDesc = false } = {}) {
   if (!noLabel) { // inside a fold the fold's title is the label
     const head = document.createElement("div");
     head.className = "sess-label";
@@ -3356,11 +3357,15 @@ async function claudeKeySection(body, { noLabel = false, onConnected = null } = 
     body.appendChild(head);
   }
 
-  const desc = document.createElement("div");
-  desc.className = "muted";
-  desc.style.cssText = "font-size:12px;margin:2px 0 10px;";
-  desc.textContent = COPY.licenses.claudeDesc;
-  body.appendChild(desc);
+  // The drawer's row explains itself; the setup step already has. `noDesc` keeps the
+  // same sentence from appearing twice in one card.
+  if (!noDesc) {
+    const desc = document.createElement("div");
+    desc.className = "muted";
+    desc.style.cssText = "font-size:12px;margin:2px 0 10px;";
+    desc.textContent = COPY.licenses.claudeDesc;
+    body.appendChild(desc);
+  }
 
   const status = await window.desktop.getKeyStatus();
   body.appendChild(connStatusRow(COPY.licenses.claudeStatus, status.hasKey, status.hasKey ? COPY.common.active : COPY.common.notSet, COPY.licenses.removeKey,
