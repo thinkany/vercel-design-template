@@ -1297,6 +1297,12 @@ window.COPY = {
     mediaTitle: "Photos & video",
     mediaDesc: "Free stock libraries a build can search for images that match the brief, and download with the photographer's credit.",
     mediaOrder: "Images are searched Unsplash, then Pexels, then Pixabay; video Pexels, then Pixabay. Connect any or all: a build uses whichever is connected and still has requests left. Without a video library, designs stay stills only.",
+    // Shown beside each library's name, and readable while its section is folded shut.
+    offersImages: "Photos",
+    offersBoth: "Photos & video",
+    unsplashOffer: "The best-curated photo library of the three, and the first one a build searches. Photos only: it has no video.",
+    pexelsOffer: "Photos and video on one key, 200 requests an hour. The first library a build searches for footage.",
+    pixabayOffer: "Photos and video on one key, and the widest library of the three, though less curated. Searched last for both, so it catches what the others miss.",
   },
 
   // ── Usage gate — the first screen on a new install, before the key ──────────

@@ -1077,6 +1077,12 @@ for (const [id, usage] of [["usage-personal", "personal"], ["usage-company", "co
 // declared here: `const` is not hoisted for use either.
 const SETUP_DONE_KEY = "ta-setup-done";
 
+// What a library offers, as a mark rather than only a word. Same 1px line style as the
+// rail icons, so they read as part of the same set.
+const ICON_ATTRS = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"';
+const PHOTO_SVG = `<svg ${ICON_ATTRS}><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="m21 16-4.5-4.5L7 21"/></svg>`;
+const VIDEO_SVG = `<svg ${ICON_ATTRS}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10.5 9.5 5 2.5-5 2.5Z"/></svg>`;
+
 // Dev-only walk-through state (see "Onboarding rehearsal" below). Declared here because
 // boot() and the usage gate both read them, and `let` is not hoisted.
 let rehearsingOnboarding = false;
@@ -1229,26 +1235,38 @@ const SETUP_STEPS = [
       note.className = "setup-media-note";
       note.textContent = COPY.setupGate.mediaOrder;
       host.appendChild(note);
+      const S = COPY.setupGate;
       const libs = [
-        { label: COPY.licenses.unsplashLabel, steps: COPY.licenses.unsplashStepsHtml,
+        { id: "unsplash", label: COPY.licenses.unsplashLabel, steps: COPY.licenses.unsplashStepsHtml,
+          offers: S.offersImages, icons: [PHOTO_SVG], blurb: S.unsplashOffer,
           get: () => window.desktop.getUnsplashStatus(), save: (k) => window.desktop.saveUnsplashKey(k), clear: () => window.desktop.clearUnsplashKey() },
-        { label: COPY.licenses.pexelsLabel, steps: COPY.licenses.pexelsStepsHtml,
+        { id: "pexels", label: COPY.licenses.pexelsLabel, steps: COPY.licenses.pexelsStepsHtml,
+          offers: S.offersBoth, icons: [PHOTO_SVG, VIDEO_SVG], blurb: S.pexelsOffer,
           get: () => window.desktop.getPexelsStatus(), save: (k) => window.desktop.savePexelsKey(k), clear: () => window.desktop.clearPexelsKey() },
-        { label: COPY.licenses.pixabayLabel, steps: COPY.licenses.pixabayStepsHtml,
+        { id: "pixabay", label: COPY.licenses.pixabayLabel, steps: COPY.licenses.pixabayStepsHtml,
+          offers: S.offersBoth, icons: [PHOTO_SVG, VIDEO_SVG], blurb: S.pixabayOffer,
           get: () => window.desktop.getPixabayStatus(), save: (k) => window.desktop.savePixabayKey(k), clear: () => window.desktop.clearPixabayKey() },
       ];
+      const shelf = document.createElement("div");
+      shelf.className = "setup-libs";
+      host.appendChild(shelf);
       for (const lib of libs) {
-        const box = document.createElement("div");
-        box.className = "setup-lib";
-        const t = document.createElement("div");
-        t.className = "setup-step-title";
-        t.textContent = lib.label;
-        box.appendChild(t);
-        host.appendChild(box);
+        // Each library folds, the way the Keys drawer's rows do, so three sets of
+        // "how to get a key" steps don't land at once. An unconnected library opens (it
+        // is what there is to do); a connected one stays shut with its state on the head.
+        const status = await lib.get().catch(() => null);
+        const connected = !!(status && status.hasLicense);
+        const fold = licensesFold(shelf, {
+          title: lib.label,
+          storeKey: `ta-setup-fold-${lib.id}`,
+          openDefault: !connected,
+          remember: false, // what is not connected yet is what should be open
+          note: lib.offers, noteIcons: lib.icons, // what it offers, legible while shut
+        });
         // Connecting one library does NOT finish the step: a designer may want two or
         // three. The step ends when they press Continue (or Skip).
-        await licenseSection(box, {
-          noLabel: true, stepsHtml: lib.steps,
+        await licenseSection(fold, {
+          noLabel: true, desc: lib.blurb, stepsHtml: lib.steps,
           getStatus: lib.get, save: lib.save, clear: lib.clear,
           onConnected: () => renderSetupStep(),
         });
@@ -2958,16 +2976,36 @@ function tourSection(body, id) {
 // A collapsible row of the drawer (Rob 2026-09-10: the keys fold, so the drawer stays
 // tidy). Closed or open by default per `openDefault`, the choice remembered app-wide.
 // The fold carries the walkthrough anchor, so the tour opens it for its tip.
-function licensesFold(host, { title, tourId, storeKey, openDefault = false }) {
-  let open = openDefault; try { const v = localStorage.getItem(storeKey); if (v !== null) open = v === "1"; } catch {}
+/**
+ * One folding section. `storeKey` remembers the designer's open/closed choice, which is
+ * what the Keys drawer wants: a place they come back to, set up how they like it.
+ * `remember: false` ignores any stored choice and honours `openDefault` every time, for a
+ * screen where the state of the work should decide (first-run setup opens what is not
+ * done yet), while still letting them fold things away within that visit.
+ */
+function licensesFold(host, { title, tourId, storeKey, openDefault = false, remember = true, note = "", noteIcons = null }) {
+  let open = openDefault;
+  if (remember) { try { const v = localStorage.getItem(storeKey); if (v !== null) open = v === "1"; } catch {} }
   const sec = siteEl("div", "site-acc" + (open ? " open" : ""));
   if (tourId) sec.dataset.tour = tourId;
   const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(open));
   head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
+  // A short note beside the title, readable while the fold is shut (the media libraries
+  // use it to say whether a key covers photos, video, or both).
+  if (note || noteIcons) {
+    const n = siteEl("span", "site-acc-note");
+    for (const svg of noteIcons || []) {
+      const i = siteEl("span", "site-acc-note-icon");
+      i.innerHTML = svg;
+      n.appendChild(i);
+    }
+    if (note) n.appendChild(siteEl("span", "", note));
+    head.appendChild(n);
+  }
   const fold = siteEl("div", "site-acc-body"); fold.hidden = !open;
   head.addEventListener("click", () => {
     const now = fold.hidden; siteReveal(fold, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now));
-    try { localStorage.setItem(storeKey, now ? "1" : "0"); } catch {}
+    if (remember) { try { localStorage.setItem(storeKey, now ? "1" : "0"); } catch {} }
   });
   sec.append(head, fold); host.appendChild(sec);
   return fold;
@@ -2982,7 +3020,7 @@ async function renderLicenses(body) {
 
   // Optional: the designer's own Unsplash access key, so a build can search the
   // library for matching photos (free, attributed) instead of guessing image URLs.
-  await licenseSection(licensesFold(body, { title: COPY.licenses.unsplashLabel, tourId: "unsplash-key", storeKey: "ta-fold-unsplash" }), {
+  await licenseSection(licensesFold(body, { title: COPY.licenses.unsplashLabel, tourId: "unsplash-key", storeKey: "ta-fold-unsplash", note: COPY.setupGate.offersImages, noteIcons: [PHOTO_SVG] }), {
     noLabel: true,
     label: COPY.licenses.unsplashLabel,
     desc: COPY.licenses.unsplashDesc,
@@ -2998,7 +3036,7 @@ async function renderLicenses(body) {
 
   // Optional: Pexels, the second image library. With both connected a build uses
   // whichever still has budget this hour.
-  await licenseSection(licensesFold(body, { title: COPY.licenses.pexelsLabel, tourId: "pexels-key", storeKey: "ta-fold-pexels" }), {
+  await licenseSection(licensesFold(body, { title: COPY.licenses.pexelsLabel, tourId: "pexels-key", storeKey: "ta-fold-pexels", note: COPY.setupGate.offersBoth, noteIcons: [PHOTO_SVG, VIDEO_SVG] }), {
     noLabel: true,
     label: COPY.licenses.pexelsLabel,
     desc: COPY.licenses.pexelsDesc,
@@ -3014,7 +3052,7 @@ async function renderLicenses(body) {
 
   // Optional: Pixabay, the third library. One key covers photos AND video, which is why
   // its row says so: it is the cheapest way for a designer to unlock footage.
-  await licenseSection(licensesFold(body, { title: COPY.licenses.pixabayLabel, tourId: "pixabay-key", storeKey: "ta-fold-pixabay" }), {
+  await licenseSection(licensesFold(body, { title: COPY.licenses.pixabayLabel, tourId: "pixabay-key", storeKey: "ta-fold-pixabay", note: COPY.setupGate.offersBoth, noteIcons: [PHOTO_SVG, VIDEO_SVG] }), {
     noLabel: true,
     label: COPY.licenses.pixabayLabel,
     desc: COPY.licenses.pixabayDesc,
@@ -4086,6 +4124,18 @@ function siteFold(title, key, { defaultOpen = true } = {}) {
   const sec = siteEl("div", "site-acc" + (isOpen ? " open" : ""));
   const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(isOpen));
   head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
+  // A short note beside the title, readable while the fold is shut (the media libraries
+  // use it to say whether a key covers photos, video, or both).
+  if (note || noteIcons) {
+    const n = siteEl("span", "site-acc-note");
+    for (const svg of noteIcons || []) {
+      const i = siteEl("span", "site-acc-note-icon");
+      i.innerHTML = svg;
+      n.appendChild(i);
+    }
+    if (note) n.appendChild(siteEl("span", "", note));
+    head.appendChild(n);
+  }
   const body = siteEl("div", "site-acc-body"); body.hidden = !isOpen;
   head.addEventListener("click", () => { const now = body.hidden; siteReveal(body, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(key, now); });
   sec.append(head, body);
@@ -7303,6 +7353,18 @@ function siteAccordionize(wrap) {
       section = sec;
       const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(isOpen));
       head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
+  // A short note beside the title, readable while the fold is shut (the media libraries
+  // use it to say whether a key covers photos, video, or both).
+  if (note || noteIcons) {
+    const n = siteEl("span", "site-acc-note");
+    for (const svg of noteIcons || []) {
+      const i = siteEl("span", "site-acc-note-icon");
+      i.innerHTML = svg;
+      n.appendChild(i);
+    }
+    if (note) n.appendChild(siteEl("span", "", note));
+    head.appendChild(n);
+  }
       const body = siteEl("div", "site-acc-body"); body.hidden = !isOpen;
       head.addEventListener("click", () => { const now = body.hidden; siteReveal(body, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now)); siteFoldSet(key, now); });
       sec.append(head, body); wrap.appendChild(sec);

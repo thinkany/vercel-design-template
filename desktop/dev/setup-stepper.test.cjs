@@ -48,7 +48,7 @@ ok(/claudeKeySection\(host/.test(block), "step 1 renders the drawer's Claude row
 ok((block.match(/licenseSection\(/g) || []).length === 3,
   "the other steps render the drawer's licence rows");
 const loop = block.slice(block.indexOf("for (const lib of libs)"));
-ok(/licenseSection\(box/.test(loop), "the media step loops one licence row over its three libraries");
+ok(/licenseSection\(fold/.test(loop), "the media step loops one licence row over its three libraries");
 ok(/onConnected:/.test(block), "each row reports a successful save back to the stepper");
 // onConnected must actually be honoured, or the drawer would re-open over the stepper.
 const ls = shell.slice(shell.indexOf("async function licenseSection"), shell.indexOf("async function licenseSection") + 3000);
@@ -63,6 +63,35 @@ for (const lib of ["Unsplash", "Pexels", "Pixabay"]) {
 ok(/mediaOrder/.test(media), "and states the sourcing order, which is otherwise a guess");
 ok(/onConnected: \(\) => renderSetupStep\(\)/.test(media),
   "connecting ONE library does not end the step: a designer may want two or three");
+
+// Each library folds, so three sets of how-to-get-a-key steps don't land together.
+ok(/licensesFold\(shelf/.test(media), "each library is a folding section, like the drawer's rows");
+ok(/openDefault: !connected/.test(media), "an unconnected library opens; a connected one stays shut");
+ok(/remember: false/.test(media),
+  "on a first-run screen the state of the work decides, not a choice stored from last time");
+
+// What each key actually buys you, said where it can be read while the fold is SHUT.
+ok(/note: lib\.offers/.test(media), "each fold's heading says what that library offers");
+ok(/noteIcons: lib\.icons/.test(media), "and shows it as a mark, not only a word");
+for (const [lib, offer] of [["unsplash", "offersImages"], ["pexels", "offersBoth"], ["pixabay", "offersBoth"]]) {
+  const i = media.indexOf(`id: "${lib}"`);
+  ok(new RegExp(`S\\.${offer}`).test(media.slice(i, i + 400)),
+    `${lib} is labelled with what it carries (${offer})`);
+}
+ok(/id: "unsplash"[\s\S]{0,300}icons: \[PHOTO_SVG\]/.test(media),
+  "Unsplash shows the photo mark only: it has no video");
+for (const lib of ["pexels", "pixabay"]) {
+  const i = media.indexOf(`id: "${lib}"`);
+  ok(/icons: \[PHOTO_SVG, VIDEO_SVG\]/.test(media.slice(i, i + 400)),
+    `${lib} shows both marks: one key covers photos and video`);
+}
+// The marks follow the rail's line style rather than inventing a second one.
+ok(/stroke-width="1"/.test(shell.slice(shell.indexOf("const ICON_ATTRS"), shell.indexOf("const ICON_ATTRS") + 240)),
+  "the media marks use the same 1px line style as the rail icons");
+
+// The drawer must not inherit any of this: it remembers folds on purpose.
+const drawer = shell.slice(shell.indexOf("async function renderLicenses"), shell.indexOf("async function renderLicenses") + 3000);
+ok(!/remember:/.test(drawer), "the Keys drawer still remembers a designer's fold choices");
 
 // ---- First run vs reconnect -------------------------------------------------
 const bootStart = shell.indexOf("async function boot()");
