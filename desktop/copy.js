@@ -1845,6 +1845,9 @@ window.COPY = {
       "A new app allows 50 requests an hour; a build uses about two per photo, and the studio paces its calls and stops short of the limit.",
     imageUsageLabel: "This hour",
     imageUsage: (u) => u && u.limit ? `${u.requests} of ${u.limit} requests${typeof u.remaining === "number" ? `, ${u.remaining} left` : ""}, resets in ${u.resetsInMin} min` : "No requests yet",
+    // Pixabay's allowance is a rolling MINUTE, not an hour, so it gets its own row.
+    imageUsageMinuteLabel: "Right now",
+    imageUsageMinute: (u) => u && u.limit ? `${u.requests} of ${u.limit} requests${typeof u.remaining === "number" ? `, ${u.remaining} left` : ""} in this minute` : "No requests yet",
     imageUsageMonthLabel: "This month",
     imageUsageMonth: (u) => u && u.limit ? `${u.limit - (typeof u.remaining === "number" ? u.remaining : u.limit)} of ${u.limit.toLocaleString()} requests used${typeof u.remaining === "number" ? `, ${u.remaining.toLocaleString()} left` : ""}` : "No requests yet",
     pexelsLabel: "Pexels (optional)",
@@ -1852,6 +1855,13 @@ window.COPY = {
     pexelsStepsHtml: "<b>To get a key:</b><br>1. Create a Pexels account and confirm it from the email Pexels sends.<br>" +
       "2. Visit <a href=\"https://www.pexels.com/api/key/\" target=\"_blank\" rel=\"noopener\">pexels.com/api/key</a> and copy your <b>API key</b>.<br>3. Paste it below.<br><br>" +
       "Pexels allows 200 requests an hour and 20,000 a month; a build uses about one per photo, and the studio paces its calls and stops short of the limit.",
+    pixabayLabel: "Pixabay (optional)",
+    pixabayDesc: "A third library, and the widest. One key covers photos AND video, so this is the simplest way to let a build use footage as well as stills.",
+    pixabayStepsHtml: "<b>To get a key:</b><br>1. Create a Pixabay account and confirm it from the email Pixabay sends.<br>" +
+      "2. Visit <a href=\"https://pixabay.com/api/docs/\" target=\"_blank\" rel=\"noopener\">pixabay.com/api/docs</a>; your <b>API key</b> is shown at the top once you are signed in.<br>3. Paste it below.<br><br>" +
+      "Pixabay allows 100 requests a minute; the studio paces its calls and stops short of the limit.",
+    videoGroup: "Video",
+    videoNote: "Pexels and Pixabay also carry video, so a build can place a moving hero background or a clip in a content row. Unsplash is photos only. With no video library connected, designs stay stills only.",
     status: "License",
     keyLabel: "Key",
     remove: "Remove license",
@@ -2213,6 +2223,14 @@ window.COPY = {
       menuLayoutHelp: "Pick a header style, or let me choose.",
       ctaType: "How should the contact / call-to-action section work?",
       ctaTypeHelp: "A contact form, or a button-led call to action. Or let me choose.",
+    },
+    // The hero picker's nested background-material sub-choice (full-screen only, and
+    // only when a library that carries video is connected).
+    heroMedia: {
+      label: "Hero background",
+      image: "Image",
+      video: "Video",
+      videoSuffix: "with a video background",
     },
     // The Design References introduction: the rail's panel shown as a card right after
     // the first question, so it isn't overlooked; Continue hands it over to the rail.

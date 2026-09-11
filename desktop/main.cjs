@@ -324,6 +324,37 @@ async function validatePexelsKey(key) {
     return { ok: false, error: `Unexpected response from Pexels (${res.status}).` };
   } catch (e) { return { ok: false, error: `Couldn't reach Pexels: ${e.message}` }; }
 }
+// The Pixabay API key: the third image library, and the second that carries VIDEO (one
+// key covers both, unlike Pexels' separate endpoints or Unsplash's stills-only library).
+function pixabayKeyFilePath() { return path.join(app.getPath("userData"), "pixabay-key.enc"); }
+function loadStoredPixabayKey() {
+  try {
+    const p = pixabayKeyFilePath();
+    if (!fs.existsSync(p)) return null;
+    const buf = fs.readFileSync(p);
+    return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(buf) : buf.toString("utf8");
+  } catch { return null; }
+}
+function storePixabayKey(key) {
+  const data = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(key) : Buffer.from(key, "utf8");
+  fs.writeFileSync(pixabayKeyFilePath(), data);
+}
+function removeStoredPixabayKey() { try { fs.unlinkSync(pixabayKeyFilePath()); } catch { /* already gone */ } }
+async function validatePixabayKey(key) {
+  try {
+    // Their key rides the query string, and a bad one comes back 400, not 401.
+    const u = new URL("https://pixabay.com/api/");
+    u.searchParams.set("key", key);
+    u.searchParams.set("q", "studio");
+    u.searchParams.set("per_page", "3"); // 3 is their minimum
+    const res = await fetch(u);
+    noteImageHeaders("pixabay", res);
+    if (res.ok) return { ok: true };
+    if (res.status === 400) return { ok: false, error: "Pixabay rejected that API key." };
+    if (res.status === 429) return { ok: false, error: "That key's rate limit is used up; try again in a minute." };
+    return { ok: false, error: `Unexpected response from Pixabay (${res.status}).` };
+  } catch (e) { return { ok: false, error: `Couldn't reach Pixabay: ${e.message}` }; }
+}
 // Validate with the cheapest authenticated call (one search result).
 async function validateUnsplashKey(key) {
   try {
@@ -595,12 +626,15 @@ function projectStateForAgent(dir) {
   if ((process.env.UNSPLASH_ACCESS_KEY || "").trim()) imageSources.push("unsplash");
   if ((process.env.PEXELS_API_KEY || "").trim()) imageSources.push("pexels");
   if ((process.env.PIXABAY_API_KEY || "").trim()) imageSources.push("pixabay");
+  // The libraries that carry VIDEO, in the order find-video.mjs walks them. Unsplash is
+  // stills-only, so a designer with only that key gets images and no video affordances.
+  const videoSources = imageSources.filter((s) => s === "pexels" || s === "pixabay");
   try {
     const r = siteReady(dir);
-    if (!r.ready) return { promoted: false, imageSources };
+    if (!r.ready) return { promoted: false, imageSources, videoSources };
     const blocks = fs.readdirSync(path.join(dir, "site", "blocks")).filter((f) => /^[A-Z].*\.tsx$/.test(f)).map((f) => `site/blocks/${f}`);
-    return { promoted: true, design: r.design, blocks, imageSources };
-  } catch { return { promoted: false, imageSources }; }
+    return { promoted: true, design: r.design, blocks, imageSources, videoSources };
+  } catch { return { promoted: false, imageSources, videoSources }; }
 }
 function siteReady(dir) {
   try {
@@ -3692,6 +3726,62 @@ const CTA_TYPE_BUILD = {
   "cta-button": "",
 };
 
+// The designer's hero background material. Video is a MATERIAL, not a layout, so it
+// rides alongside heroLayout rather than replacing it. PHRASES goes in the brief body
+// (which is saved verbatim and shown on the dashboard card, so no file paths or library
+// names); BUILD is appended after it, like CTA_TYPE_BUILD.
+const HERO_MEDIA_PHRASES = {
+  video: "with a muted background video loop behind the copy",
+};
+const HERO_MEDIA_BUILD = {
+  video:
+    "Build the hero background with <VideoBackground> from @/app/components/VideoBackground " +
+    "(never a bare <video>): source the clip with `node scripts/find-video.mjs`, always keep " +
+    "the poster still it writes beside the clip, and put the copy in a `relative z-10` sibling " +
+    "above the scrim. If no video library is connected, or nothing matches, build the same hero " +
+    "with a still image instead and say so in the wrap-up.",
+};
+
+// Words a designer uses when they are picturing MOTION. A mention in their own brief
+// outranks the build's own judgement: they will be looking for it in the first design.
+// "film" alone is a subject, not a request (a film school is not an ask for footage);
+// "filmed"/"filming" is someone describing what they want shown. Same for "motion",
+// which is kept because "with motion in the hero" is a common way to ask for it.
+const VIDEO_INTENT = /\b(video|footage|clip|clips|reel|showreel|b-?roll|cinemagraph|motion|film(?:ed|ing)|loop(?:ing|s)?)\b/i;
+/** Did the designer ask for video in their own words (not via the hero picker)? */
+function briefMentionsVideo(b) {
+  const bits = [b.what, ...(Array.isArray(b.notes) ? b.notes : [])];
+  for (const r of (Array.isArray(b.references) ? b.references : [])) if (r && r.reason) bits.push(r.reason);
+  return bits.filter(Boolean).some((t) => VIDEO_INTENT.test(String(t)));
+}
+
+/**
+ * The designer asked for video in their own words. Two branches, and the second is the
+ * one that keeps this honest: with a library connected, go and find real footage; with
+ * none, build what they pictured as stills and TELL them why it isn't moving, rather
+ * than quietly handing back a design that ignores what they asked for.
+ * Returns "" when they never mentioned it (the hero picker covers that case).
+ */
+function videoAskNote(b) {
+  if (!briefMentionsVideo(b)) return "";
+  const connected = (process.env.PEXELS_API_KEY || "").trim() || (process.env.PIXABAY_API_KEY || "").trim();
+  if (connected) {
+    return (
+      "THE DESIGNER ASKED FOR VIDEO. They will be looking for it in this first design. " +
+      "Source real footage with `node scripts/find-video.mjs` and place at least one video " +
+      "spot: the hero background if the hero is full-screen, otherwise the media half of the " +
+      "most prominent content row. Use <VideoBackground> or <VideoFigure>, never a bare " +
+      "<video>. Do not substitute a still image unless sourcing genuinely fails, and if it " +
+      "does, say so plainly in the wrap-up."
+    );
+  }
+  return (
+    "The designer asked for video, but no video library is connected. Build the spots they " +
+    "would expect as stills, and in the wrap-up tell them that adding a Pexels or Pixabay key " +
+    "under Keys & Licenses would let you source real footage for those places."
+  );
+}
+
 function buildDesignPrompt(brief) {
   const b = brief || {};
   const parts = [];
@@ -3731,7 +3821,8 @@ function buildDesignPrompt(brief) {
     );
   }
   if (b.heroLayout && HERO_LAYOUT_PHRASES[b.heroLayout]) {
-    parts.push(`Hero (the designer’s explicit choice): ${HERO_LAYOUT_PHRASES[b.heroLayout]}`);
+    const media = b.heroMedia && HERO_MEDIA_PHRASES[b.heroMedia] ? `, ${HERO_MEDIA_PHRASES[b.heroMedia]}` : "";
+    parts.push(`Hero (the designer’s explicit choice): ${HERO_LAYOUT_PHRASES[b.heroLayout]}${media}`);
   }
   if (b.ctaType && CTA_TYPE_PHRASES[b.ctaType]) {
     parts.push(
@@ -3762,7 +3853,11 @@ function buildDesignPrompt(brief) {
   // out of the body on purpose — /design-brief saves everything before the first
   // "## " block as the variation's brief, and that text is shown on the dashboard
   // card. Anything with a file path, a library name or a "do NOT" belongs here.
-  const buildNotes = [b.ctaType ? CTA_TYPE_BUILD[b.ctaType] : ""].filter(Boolean);
+  const buildNotes = [
+    b.ctaType ? CTA_TYPE_BUILD[b.ctaType] : "",
+    b.heroMedia ? (HERO_MEDIA_BUILD[b.heroMedia] || "") : "",
+    videoAskNote(b),
+  ].filter(Boolean);
   if (buildNotes.length) prompt += "\n\n## Build notes\n" + buildNotes.join("\n\n");
   // Fold in the sampled Design Direction (design-variety) as its own block, so the
   // build is conditioned onto a distinct compositional direction rather than the
@@ -4074,6 +4169,14 @@ function foldCardAnswers(cards, answers) {
     // colorSources & fontSources are SourceRef[] — wrap into { value }.
     if ((c.field === "colorSources" || c.field === "fontSources") && v && !Array.isArray(v)) {
       v = [{ value: v, reason: null }];
+    }
+    // The hero card answers two fields at once: a full-screen hero with a video library
+    // connected yields { layout, media }. Split it here, so the first submit and a later
+    // EDIT of the same card both land the same way (the edit path re-sends this card
+    // alone, and would otherwise write the whole object into heroLayout).
+    if (c.field === "heroLayout" && v && typeof v === "object") {
+      byField.heroMedia = v.media || null;
+      v = v.layout || null;
     }
     byField[c.field] = v;
   }
@@ -4525,6 +4628,33 @@ ipcMain.handle("pexels:save", async (_event, { key }) => {
 ipcMain.handle("pexels:clear", () => {
   removeStoredPexelsKey();
   delete process.env.PEXELS_API_KEY;
+  return { ok: true };
+});
+// Which connected libraries carry video, in the order find-video.mjs walks them. The
+// intake's hero-media sub-choice is gated on this being non-empty.
+ipcMain.handle("video:sources", () => {
+  const out = [];
+  if ((process.env.PEXELS_API_KEY || "").trim()) out.push("pexels");
+  if ((process.env.PIXABAY_API_KEY || "").trim()) out.push("pixabay");
+  return out;
+});
+// The optional Pixabay key (image sourcing, third library; also carries video).
+ipcMain.handle("pixabay:status", () => {
+  const key = (process.env.PIXABAY_API_KEY || "").trim();
+  return { hasLicense: !!key, hint: key ? key.slice(-4) : null };
+});
+ipcMain.handle("pixabay:save", async (_event, { key }) => {
+  const k = (key || "").trim();
+  if (!k) return { ok: false, error: "Paste your Pixabay API key first." };
+  const v = await validatePixabayKey(k);
+  if (!v.ok) return v;
+  try { storePixabayKey(k); } catch (e) { return { ok: false, error: `Could not save the key: ${e.message}` }; }
+  process.env.PIXABAY_API_KEY = k;
+  return { ok: true };
+});
+ipcMain.handle("pixabay:clear", () => {
+  removeStoredPixabayKey();
+  delete process.env.PIXABAY_API_KEY;
   return { ok: true };
 });
 
@@ -5714,6 +5844,8 @@ app.whenReady().then(async () => {
   if (storedUnsplashKey) process.env.UNSPLASH_ACCESS_KEY = storedUnsplashKey;
   const storedPexelsKey = loadStoredPexelsKey(); // optional: the second image library
   if (storedPexelsKey) process.env.PEXELS_API_KEY = storedPexelsKey;
+  const storedPixabayKey = loadStoredPixabayKey(); // optional: the third, and video
+  if (storedPixabayKey) process.env.PIXABAY_API_KEY = storedPixabayKey;
   process.env.IMAGE_USAGE_FILE = imageUsageFilePath(); // the script's per-library call log, shown in Keys & Licenses
   // Licensed skills: the last cache is usable at once (offline grace); a refresh
   // runs in the background whenever a Design license is present. SKILLS_LOCAL=1

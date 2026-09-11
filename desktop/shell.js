@@ -2724,6 +2724,29 @@ async function renderLicenses(body) {
     },
   });
 
+  // Optional: Pixabay, the third library. One key covers photos AND video, which is why
+  // its row says so: it is the cheapest way for a designer to unlock footage.
+  await licenseSection(licensesFold(body, { title: COPY.licenses.pixabayLabel, tourId: "pixabay-key", storeKey: "ta-fold-pixabay" }), {
+    noLabel: true,
+    label: COPY.licenses.pixabayLabel,
+    desc: COPY.licenses.pixabayDesc,
+    stepsHtml: COPY.licenses.pixabayStepsHtml,
+    getStatus: () => window.desktop.getPixabayStatus(),
+    save: (k) => window.desktop.savePixabayKey(k),
+    clear: () => window.desktop.clearPixabayKey(),
+    extraRows: async (host) => {
+      const u = await window.desktop.getImageUsage();
+      host.appendChild(setRow(COPY.licenses.imageUsageMinuteLabel, COPY.licenses.imageUsageMinute(u.pixabay)));
+    },
+  });
+
+  // Which of those libraries can carry video, said once rather than in each row.
+  const vnote = document.createElement("div");
+  vnote.className = "muted";
+  vnote.style.cssText = "font-size:12px;margin:-2px 0 14px;";
+  vnote.textContent = COPY.licenses.videoNote;
+  body.appendChild(vnote);
+
   // Licenses — the feature unlocks, in order: Figma, then Design. Each folds like the
   // keys: open until connected, closed once it is, the choice remembered.
   licensesGroupHead(body, COPY.licenses.licensesGroup);
@@ -8698,7 +8721,10 @@ function composeRail() {
     }
     if (Array.isArray(brief.sections) && brief.sections.length) add("Sections", brief.sections.join(", "));
     if (brief.menuLayout) add("Header", MENU_LAYOUT_TITLE[brief.menuLayout] || brief.menuLayout);
-    if (brief.heroLayout) add("Hero", HERO_LAYOUT_TITLE[brief.heroLayout] || brief.heroLayout);
+    if (brief.heroLayout) {
+      const base = HERO_LAYOUT_TITLE[brief.heroLayout] || brief.heroLayout;
+      add("Hero", brief.heroMedia === "video" ? `${base}, ${COPY.intake.heroMedia.videoSuffix}` : base);
+    }
     if (brief.ctaType) add("Contact", CTA_TYPE_TITLE[brief.ctaType] || brief.ctaType);
     if (Array.isArray(brief.references) && brief.references.length) {
       add("Likes", brief.references.map((r) => r.url + (r.reason ? ` (${r.reason})` : "")).join("; "));
@@ -9251,14 +9277,20 @@ function renderHeroStep() {
   async function submit() {
     if (group.classList.contains("answered")) return;
     group.classList.add("answered");
+    // The hero card answers TWO fields: the layout, and (for a full-screen hero with a
+    // video library connected) the background material. It reports them as one value.
     const val = ctl.getValue();
+    const layout = val && typeof val === "object" ? val.layout : val;
+    const heroMedia = val && typeof val === "object" ? val.media : null;
     ctl.collapse();
     const done = doneNote();
     continueBtn.replaceWith(done);
     autoDismissTool(done, 900);
     heroStepDone = true;
-    if (val && lastBrief) { lastBrief.heroLayout = val; composeRail(); } // immediate: brief rail
+    if (layout && lastBrief) { lastBrief.heroLayout = layout; lastBrief.heroMedia = heroMedia; composeRail(); } // immediate: brief rail
     makeCardsEditable(group, [ctl], progressPersist(progressRecord("step", [card], { [card.id]: val }), persistIntakeEdit));
+    // The composite { layout, media } goes over as-is: main's foldCardAnswers splits it
+    // into heroLayout + heroMedia, so a later edit of this card lands the same way.
     try { await window.desktop.applyIntakeAnswers([{ id: card.id, field: card.field, type: card.type }], { [card.id]: val }); } catch {}
     setTimeout(showBriefComplete, 520); // let "✓ Got it" flash, then continue the flow
   }
@@ -11929,12 +11961,71 @@ function buildHeroLayout(card, body, onChange) {
     grid.appendChild(tile);
   });
   body.appendChild(grid);
-  if (card.value != null) { selected = card.value; tiles.forEach((t) => t.classList.toggle("selected", t.dataset.id === selected)); } // pre-fill (a resumed intake)
+
+  // Nested sub-choice: what fills a full-screen hero's background. Video is a MATERIAL,
+  // not a layout, so it rides under the full-screen tile rather than becoming a sixth
+  // tile that would force a false choice between the two. Only shown when a library
+  // that carries video is connected; with none, the option does not exist.
+  let media = null;
+  const mediaWrap = document.createElement("div");
+  mediaWrap.className = "ihero-media";
+  mediaWrap.hidden = true;
+  const mediaBtns = [];
+  const mediaLabel = document.createElement("div");
+  mediaLabel.className = "ihero-media-label";
+  mediaLabel.textContent = COPY.intake.heroMedia.label;
+  mediaWrap.appendChild(mediaLabel);
+  const mediaRow = document.createElement("div");
+  mediaRow.className = "ihero-media-row";
+  [["image", COPY.intake.heroMedia.image], ["video", COPY.intake.heroMedia.video]].forEach(([id, text]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ihero-media-chip";
+    b.dataset.id = id;
+    b.textContent = text;
+    b.addEventListener("click", () => {
+      media = id;
+      mediaBtns.forEach((x) => x.classList.toggle("selected", x.dataset.id === media));
+      onChange();
+    });
+    mediaBtns.push(b);
+    mediaRow.appendChild(b);
+  });
+  mediaWrap.appendChild(mediaRow);
+  body.appendChild(mediaWrap);
+
+  // Revealed only for the full-screen layout, and only with a video library connected.
+  let videoOk = false;
+  window.desktop.getVideoSources().then((v) => { videoOk = !!(v && v.length); syncMedia(); }).catch(() => {});
+  function syncMedia() {
+    const show = videoOk && selected === "full-screen";
+    if (show && media === null) { media = "image"; mediaBtns.forEach((x) => x.classList.toggle("selected", x.dataset.id === media)); }
+    if (!show) media = null;
+    if (mediaWrap.hidden !== !show) {
+      mediaWrap.hidden = !show;
+      if (show) fadeSlideIn(mediaWrap, { dy: 12, duration: 320 });
+    }
+  }
+  tiles.forEach((t) => t.addEventListener("click", syncMedia));
+
+  if (card.value != null) { // pre-fill (a resumed intake): the value may carry both parts
+    const v = card.value;
+    selected = typeof v === "object" && v ? v.layout : v;
+    if (typeof v === "object" && v && v.media) media = v.media;
+    tiles.forEach((t) => t.classList.toggle("selected", t.dataset.id === selected));
+    mediaBtns.forEach((x) => x.classList.toggle("selected", x.dataset.id === media));
+    syncMedia();
+  }
   return {
-    getValue: () => selected,
+    // The step splits this into brief.heroLayout + brief.heroMedia.
+    getValue: () => (selected ? (media ? { layout: selected, media } : selected) : null),
     hasValue: () => selected != null,
-    setDisabled: (d) => tiles.forEach((t) => { t.disabled = d; }),
-    display: () => (selected ? (HERO_LAYOUT_TITLE[selected] || selected) : ""),
+    setDisabled: (d) => { tiles.forEach((t) => { t.disabled = d; }); mediaBtns.forEach((b) => { b.disabled = d; }); },
+    display: () => {
+      if (!selected) return "";
+      const base = HERO_LAYOUT_TITLE[selected] || selected;
+      return media === "video" ? `${base}, ${COPY.intake.heroMedia.videoSuffix}` : base;
+    },
   };
 }
 

@@ -47,10 +47,12 @@ function assertProse(text, where) {
 const MENU = table("MENU_LAYOUT_PHRASES");
 const HERO = table("HERO_LAYOUT_PHRASES");
 const CTA = table("CTA_TYPE_PHRASES");
+const HERO_MEDIA = table("HERO_MEDIA_PHRASES");
 
 for (const [k, v] of Object.entries(MENU)) assertProse(v, `MENU_LAYOUT_PHRASES.${k}`);
 for (const [k, v] of Object.entries(HERO)) assertProse(v, `HERO_LAYOUT_PHRASES.${k}`);
 for (const [k, v] of Object.entries(CTA)) assertProse(v, `CTA_TYPE_PHRASES.${k}`);
+for (const [k, v] of Object.entries(HERO_MEDIA)) assertProse(v, `HERO_MEDIA_PHRASES.${k}`);
 
 assert.strictEqual(Object.keys(MENU).length, 9, "all nine header layouts still have a phrase");
 assert.strictEqual(Object.keys(HERO).length, 5, "all five hero layouts still have a phrase");
@@ -64,7 +66,7 @@ const wrappers = src
   .split("\n")
   .filter((l) => /parts\.push/.test(l) || /^\s+["`]/.test(l))
   .join("\n");
-for (const key of ["MENU_LAYOUT_PHRASES", "HERO_LAYOUT_PHRASES", "CTA_TYPE_PHRASES"]) {
+for (const key of ["MENU_LAYOUT_PHRASES", "HERO_LAYOUT_PHRASES", "CTA_TYPE_PHRASES", "HERO_MEDIA_PHRASES"]) {
   const i = wrappers.indexOf(key);
   if (i < 0) continue;
   // The ~200 characters around the interpolation: the wrapper prose.

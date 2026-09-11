@@ -127,6 +127,11 @@ contextBridge.exposeInMainWorld("desktop", {
   getPexelsStatus: () => ipcRenderer.invoke("pexels:status"),
   savePexelsKey: (key) => ipcRenderer.invoke("pexels:save", { key }),
   clearPexelsKey: () => ipcRenderer.invoke("pexels:clear"),
+  // Which connected libraries carry video (gates the hero media sub-choice).
+  getVideoSources: () => ipcRenderer.invoke("video:sources"),
+  getPixabayStatus: () => ipcRenderer.invoke("pixabay:status"),
+  savePixabayKey: (key) => ipcRenderer.invoke("pixabay:save", { key }),
+  clearPixabayKey: () => ipcRenderer.invoke("pixabay:clear"),
 
   // ---- Publish (direct-to-Vercel) ----
   getVercelStatus: () => ipcRenderer.invoke("vercel:status"),

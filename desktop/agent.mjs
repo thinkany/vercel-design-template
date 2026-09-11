@@ -200,6 +200,36 @@ function buildImageSourcesAppend(state) {
   );
 }
 
+// Where footage comes from, when a video-capable library is connected. Pexels and
+// Pixabay carry video; Unsplash is stills-only, so a designer with only that key never
+// sees this block and the build never offers video.
+function buildVideoSourcesAppend(state) {
+  const libs = (state && state.videoSources) || [];
+  if (!libs.length) return "";
+  const LABEL = { pexels: "Pexels", pixabay: "Pixabay" };
+  const names = libs.map((l) => LABEL[l] || l).join(" and ");
+  return (
+    "\n\n# Video sourcing: " + names + " connected\n" +
+    "Demo/FPO footage is available for this project. Source it with the project's script, " +
+    "never by guessing a URL:\n" +
+    "  node scripts/find-video.mjs search \"<what the clip shows>\" --orientation landscape --per 8\n" +
+    "  node scripts/find-video.mjs get <id> --source <the search's source> --out public/video/<name>.mp4 --spot background|figure\n" +
+    "`get` writes the clip, ALWAYS writes a poster still beside it, and records the credit. " +
+    "Use `--spot background` for a full-bleed hero and `--spot figure` for a clip in a content " +
+    "row; it picks the file size to match and reports the weight (say so in the wrap-up when " +
+    "it flags one as heavy).\n" +
+    "Where video may go: a full-screen section that carries copy uses it as a BACKGROUND " +
+    "(<VideoBackground> from @/app/components/VideoBackground, copy in a `relative z-10` " +
+    "sibling above it); an alternating copy/media row may hold one in its media half " +
+    "(<VideoFigure>). Never a bare <video>: those two components carry the muting, looping, " +
+    "poster, reduced-motion and Figma-capture behaviour. At most ONE background clip per " +
+    "page, and at most two video spots in total unless the designer asks for more. No video " +
+    "in card grids, testimonials, logo rows or footers.\n" +
+    "Exit 3 means no video library is connected, 4 that the budget is spent and 5 that " +
+    "nothing matched: in every case build that spot with a still image instead and say so.\n"
+  );
+}
+
 // Turn the resolved copy voice into a system-prompt addendum. Empty when nothing
 // is set — so a project with no voice keeps the exact default system prompt.
 // Scoped to user-facing DESIGN copy so it shapes what lands in pages, not code.
@@ -363,7 +393,7 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
     // System-prompt append: the Art Director persona for a review turn, otherwise the
     // always-on chat (builder) persona + (when set) the project's design copy voice. A
     // review turn writes prose, not design copy, so it carries no copy voice.
-    const systemAppend = (reviewMode ? ART_DIRECTOR_PERSONA : (CHAT_PERSONA + buildVoiceAppend(copyVoice))) + GUARD_APPEND + buildStateAppend(projectState) + (reviewMode ? "" : buildImageSourcesAppend(projectState));
+    const systemAppend = (reviewMode ? ART_DIRECTOR_PERSONA : (CHAT_PERSONA + buildVoiceAppend(copyVoice))) + GUARD_APPEND + buildStateAppend(projectState) + (reviewMode ? "" : buildImageSourcesAppend(projectState) + buildVideoSourcesAppend(projectState));
     // Review mode is READ-ONLY: no Write/Edit/Bash and none of the MCP tools, so the Art
     // Director can look at the design (Read/Grep/Glob) but physically cannot change it.
     const REVIEW_TOOLS = ["Read", "Grep", "Glob", "WebFetch", "WebSearch"];

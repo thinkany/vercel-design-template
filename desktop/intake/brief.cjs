@@ -34,6 +34,7 @@
  * @property {string|null} menuLayout        Picked header/navigation layout (a MENU_LAYOUTS id).
  * @property {string|null} heroLayout        Picked hero-section layout (a HERO_LAYOUTS id).
  * @property {string|null} ctaType           How the contact/CTA section is built ("cta-form" | "cta-button").
+ * @property {string|null} heroMedia         Full-screen hero background material ("image" | "video").
  * @property {object[]|null} referenceAssets  Uploaded design references (mirrors the ingest manifest).
  * @property {string|null} referenceDigest    The distilled reference direction (digest.md text).
  */
@@ -54,6 +55,11 @@ const BRIEF_FIELDS = [
   // "cta-button" (a button-led call to action, no form). Client-rendered card, shown
   // only when Contact or CTA is among the chosen sections. null = agent decides.
   "ctaType",
+  // Hero background material: "image" or "video". A nested sub-choice under the
+  // full-screen hero tile, shown only when that layout is picked AND a video-capable
+  // library (Pexels / Pixabay) is connected. Video is a MATERIAL, not a layout, which
+  // is why it is not a sixth HERO_LAYOUTS tile. null = agent decides (image).
+  "heroMedia",
   // Reference-ingest (set from the ingest, not from a card — see references.cjs / ingest.cjs):
   "referenceAssets", "referenceDigest",
   // Design-variety: the sampled Direction (design-variety-spec.md), set at build handoff,
