@@ -4715,8 +4715,14 @@ const AD_RECT_JS = `(function(a){
   return { x: r.left+window.scrollX, y: r.top+window.scrollY, w: r.width, h: r.height };
 })`;
 
-const AD_THUMB_W = 320;  // 2x the ~160px the row shows, so it stays crisp on a retina panel
+// The loupe shows the crop at 420px CSS = 840 device px on a retina panel, so that's the
+// stored width: the big view is pixel-for-pixel, never upscaled, and the row's 120px version
+// is a clean downscale of the same file. (It was 320, which the loupe then had to blow up.)
+const AD_THUMB_W = 840;
 const AD_THUMB_RATIO = 16 / 10;
+// Never frame narrower than this in CSS px. On a retina panel it yields a 1440px capture,
+// comfortably more than the loupe's 840 device px, so nothing is ever upscaled.
+const AD_CROP_MIN_W = 720;
 
 // Capture one crop per anchored rec. Returns { [recId]: "<abs path>" } for the ones that
 // resolved; a rec whose anchor doesn't resolve is simply absent (the row stays text-only).
@@ -4728,6 +4734,9 @@ async function captureAdThumbs(variationId, recs, route) {
   const VW = 1440, VH = 900;
   const win = new BrowserWindow({
     show: false, width: VW, height: VH,
+    // No deviceScaleFactor override: a hidden window already paints at the display's own
+    // scale (capturePage returns 1400px for a 700px CSS rect on a retina panel), and forcing
+    // 2x would only invent pixels on a 1x display.
     webPreferences: { backgroundThrottling: false, partition: "ad-thumbs" },
   });
   const wc = win.webContents;
@@ -4765,10 +4774,18 @@ async function captureAdThumbs(variationId, recs, route) {
       // Frame the element in a 16:10 window: full width plus a little air, and enough height
       // to read it in context. A tall section crops to its TOP (where the eye enters it)
       // rather than squashing the whole thing into a letterbox.
+      //
+      // MIN WIDTH matters for sharpness, not just framing: a `text` anchor can resolve to a
+      // single heading only a few hundred px wide, and a crop that narrow has fewer pixels
+      // than the loupe shows, so it would be upscaled however carefully we store it. Widening
+      // the frame to AD_CROP_MIN_W gives the loupe real pixels AND puts the element back in
+      // its surroundings, which is what makes a crop recognizable in the first place.
       const pad = Math.min(48, box.w * 0.06);
-      const cw = Math.min(VW, Math.round(box.w + pad * 2));
+      const cw = Math.min(VW, Math.max(AD_CROP_MIN_W, Math.round(box.w + pad * 2)));
       const ch = Math.round(cw / AD_THUMB_RATIO);
-      const cx = Math.max(0, Math.min(VW - cw, Math.round(box.x - pad)));
+      // Center the element in the frame when the frame is wider than it needs to be (the
+      // min-width case), rather than pinning it to the left edge with all the air on one side.
+      const cx = Math.max(0, Math.min(VW - cw, Math.round(box.x + box.w / 2 - cw / 2)));
       // Center vertically on a short element; top-align one taller than the frame.
       const cy = Math.max(0, box.h > ch ? Math.round(box.y) : Math.round(box.y - (ch - box.h) / 2));
       // Scroll the crop into the viewport, then capture in viewport coordinates.
@@ -4787,7 +4804,11 @@ async function captureAdThumbs(variationId, recs, route) {
       if (!img || img.isEmpty()) continue;
       const out = path.join(dir, `${String(rec.id).replace(/[^\w.-]/g, "_")}.png`);
       try {
-        fs.writeFileSync(out, img.resize({ width: AD_THUMB_W, quality: "good" }).toPNG());
+        // Only ever DOWNSCALE: resizing a narrow crop up to AD_THUMB_W would invent pixels and
+        // look worse than letting the loupe scale the original. "best" is Electron's highest
+        // resampler (the default, "good", is its fastest and visibly softer at this size).
+        const shot = img.getSize().width > AD_THUMB_W ? img.resize({ width: AD_THUMB_W, quality: "best" }) : img;
+        fs.writeFileSync(out, shot.toPNG());
         thumbs[rec.id] = out;
       } catch { /* a read-only tree just means no thumb for this rec */ }
     }
