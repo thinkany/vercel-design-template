@@ -47,10 +47,10 @@ That drops this from "build a wizard" to "build a stepper around an existing ren
 ## 1. Flow
 
 ```
-usage  ──▶  setup ─┬─ 1. Claude      (required, cannot skip)
-                   ├─ 2. Figma       (skippable)
-                   ├─ 3. Research    (skippable)
-                   └─ 4. Images/Video (all three at once, skippable)
+usage  ──▶  setup ─┬─ 1. Claude       (required, cannot skip)
+                   ├─ 2. Photos & Video (all three at once, skippable)
+                   ├─ 3. Figma        (skippable)
+                   └─ 4. Research     (skippable)
                                 │
                           [Done setting up!]
                                 │
@@ -59,6 +59,12 @@ usage  ──▶  setup ─┬─ 1. Claude      (required, cannot skip)
 
 Replaces the single `key` stage with a `setup` stage holding four **steps**. `usage` and
 `project` are untouched.
+
+**Order** (`SETUP_ORDER` in `shell.js`, declared apart from the step definitions so it is a
+one-line change): the keys a designer supplies themselves come first, Claude and then the
+photo/video libraries, and the two licences follow. That is the order the Keys drawer
+already lists them in and the order the walkthrough tips walk, so someone meeting them in
+setup and revisiting them later is told the same story twice. A test pins all three.
 
 ### 1.1 Step reveal
 

@@ -14,10 +14,29 @@ let checks = 0;
 const ok = (c, m) => { checks++; assert.ok(c, m); };
 
 // ---- The steps, in the order the designer meets them ------------------------
-const block = shell.slice(shell.indexOf("const SETUP_STEPS = ["), shell.indexOf("/** Read what is already connected"));
+const block = shell.slice(shell.indexOf("const SETUP_STEP_DEFS = ["), shell.indexOf("/** Read what is already connected"));
+// The order is declared on its own, so reordering is one line rather than a block move.
+const order = JSON.parse(shell.match(/const SETUP_ORDER = (\[[^\]]*\])/)[1].replace(/'/g, '"'));
+ok(JSON.stringify(order) === JSON.stringify(["claude", "media", "figma", "research"]),
+  `steps run Claude, then the libraries, then the licences; got ${JSON.stringify(order)}`);
+// Every ordered id resolves, and no definition is left out of the walk-through.
 const ids = [...block.matchAll(/^\s{4}id: "(\w+)",/gm)].map((m) => m[1]);
-ok(JSON.stringify(ids) === JSON.stringify(["claude", "figma", "research", "media"]),
-  `steps run Claude → Figma → Research → media, got ${JSON.stringify(ids)}`);
+for (const id of order) ok(ids.includes(id), `${id} is ordered but not defined`);
+for (const id of ids) ok(order.includes(id), `${id} is defined but never shown`);
+
+// Three places carry this order and they have to agree: the setup steps, the Keys
+// drawer's folds, and the walkthrough tips (which the "i" drawer lists from the same
+// array). A designer who meets them in one order and revisits them in another is being
+// told two different things about how the app is organised.
+const drawerSrc = shell.slice(shell.indexOf("async function renderLicenses"));
+const folds = [...drawerSrc.matchAll(/tourId: "([a-z]+-(?:key|license))"/g)].map((m) => m[1]).slice(0, 6);
+ok(JSON.stringify(folds) === JSON.stringify(
+  ["claude-key", "unsplash-key", "pexels-key", "pixabay-key", "figma-license", "design-license"]),
+  `the Keys drawer runs in the same order; got ${JSON.stringify(folds)}`);
+const tourBlock = shell.slice(shell.indexOf("const TOUR_STEPS = ["), shell.indexOf("const onGate ="));
+const tips = [...tourBlock.matchAll(/copy: "(claudeKey|unsplashKey|figmaLicense|designLicense)"/g)].map((m) => m[1]);
+ok(JSON.stringify(tips) === JSON.stringify(["claudeKey", "unsplashKey", "figmaLicense", "designLicense"]),
+  `the walkthrough tips walk the drawer top to bottom; got ${JSON.stringify(tips)}`);
 
 // Only the Claude key is required: the studio cannot run without it, and everything
 // else has to be skippable or the walk-through becomes a wall of credentials.

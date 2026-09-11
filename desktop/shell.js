@@ -1180,7 +1180,13 @@ window.desktop.onViteReady((url) => {
 let setupState = null; // { claude: "connected"|null, figma: "connected"|"skipped"|null, ... }
 let setupOpenStep = null; // a done step the designer reopened
 
-const SETUP_STEPS = [
+// The order the designer meets them. Claude first (nothing runs without it), then the
+// photo/video libraries, which are keys the designer supplies the same way and which the
+// Keys drawer already groups with it; the two licences follow. Declared separately from
+// the definitions below so reordering is a one-line change, not a block move.
+const SETUP_ORDER = ["claude", "media", "figma", "research"];
+
+const SETUP_STEP_DEFS = [
   {
     id: "claude",
     required: true,
@@ -1306,6 +1312,8 @@ const SETUP_STEPS = [
     },
   },
 ];
+
+const SETUP_STEPS = SETUP_ORDER.map((id) => SETUP_STEP_DEFS.find((s) => s.id === id));
 
 /** One answered step, as the quiet row it rests at: name, state, and a way back in. */
 function buildSetupDoneRow(step, answered) {
@@ -1857,10 +1865,12 @@ const TOUR_STEPS = [
   { copy: "claude", target: () => railClaude, placement: "right", advanceOnClick: true },
   // Rail-icon steps close any open drawer first so the tip isn't drawn over it.
   { copy: "licenses", onEnter: () => closeModal(), target: () => railLicenses, placement: "right", advanceOnClick: true },
+  // These walk the drawer top to bottom, which is also the order first-run setup asks in:
+  // your own keys first (Claude, then the photo/video libraries), then the two licences.
   { copy: "claudeKey", onEnter: () => ensureModal("licenses"), target: inDrawer("claude-key"), placement: "right" },
+  { copy: "unsplashKey", onEnter: () => ensureModal("licenses"), target: inDrawer("unsplash-key"), placement: "right" },
   { copy: "figmaLicense", onEnter: () => ensureModal("licenses"), target: inDrawer("figma-license"), placement: "right" },
   { copy: "designLicense", onEnter: () => ensureModal("licenses"), target: inDrawer("design-license"), placement: "right" },
-  { copy: "unsplashKey", onEnter: () => ensureModal("licenses"), target: inDrawer("unsplash-key"), placement: "right" },
   { copy: "closeDrawer", onEnter: () => ensureModal("licenses"), target: () => modalClose, placement: "right" },
   { copy: "figma", onEnter: () => { tourRevealRail(railFigma); return ensureModal("figma"); }, target: inDrawer("figma-export"), placement: "right" },
   { copy: "figmaHelp", onEnter: () => ensureModal("figma"), target: inDrawer("figma-help"), placement: "right", advanceOnClick: true, onExit: () => tourRestoreRail(railFigma) },
