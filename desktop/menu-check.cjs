@@ -72,16 +72,19 @@ function expectedItems(projectDir) {
 }
 
 /**
- * Ordered nav items from content/site.json (the SITE's nav), home excluded the way
- * the site header excludes it. The design surface's nav is pages.ts; the site's is
- * this, edited in the Navigation tab. Same rule, different source.
+ * Ordered nav items from content/site.json (the SITE's nav), exactly as written.
+ *
+ * The two surfaces differ here on purpose. The DESIGN surface's nav comes from
+ * pages.ts, which always contains a home page (it is the default route), so the
+ * header filters it out and the check expects that. The SITE's nav is data a
+ * designer edits: nothing writes a Home item any more, but one that IS there was
+ * put there deliberately and the site header renders it, so the check expects it too.
  */
 function expectedSiteItems(projectDir) {
   try {
     const site = JSON.parse(readFile(path.join(projectDir, "content", "site.json")) || "{}");
     const nav = Array.isArray(site.nav) ? site.nav : [];
     return nav
-      .filter((it) => !(/^home$/i.test(String(it.label || "").trim()) && ["/", "", "#"].includes(String(it.href || ""))))
       .map((it, i) => ({
         id: (String(it.label || it.href || "").replace(/^[/#]+/, "").replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase()) || `item-${i}`,
         name: String(it.label || ""),

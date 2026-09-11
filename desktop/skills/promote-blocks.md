@@ -255,7 +255,10 @@ Write, in the same turn as the last block:
 
 - **`content/site.json`**: set `design` to the promoted variation id; build `nav`
   from the design's HEADER nav source. Anchor links are `"/#section-id"` so they work
-  from every page; sub-links (dropdowns) go in `links`. Build `footerLinks` from the
+  from every page; sub-links (dropdowns) go in `links`. **Never write a "Home" item:**
+  the logo is the home link and every header filters one out, so a Home row would show
+  in the CMS's Navigation tab and nowhere on the site. A designer who wants one adds it
+  there deliberately. Build `footerLinks` from the
   design's FOOTER link list (`src/app/footer.ts` or the variation Footer's own list;
   if the design's footer showed the header menu, copy those links here, so the two
   lists are independent from now on). Build `legal` from the footer's copyright line

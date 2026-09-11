@@ -79,14 +79,14 @@ const itemId = (it: Item, i: number) =>
   (it.label || it.href || "").replace(/^[/#]+/, "").replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || `item-${i}`;
 
 /**
- * The nav's own items, with HOME dropped: the logo is the home link, and a
- * separate "Home" item reads dated. The design surface filters it the same way
- * (navPages in src/app/components/Header.tsx), so the two agree; without this the
- * promoted site would grow a nav item the design never showed. A designer who
- * genuinely wants one gives it a different label.
+ * The nav renders exactly what `content/site.json` says, HOME INCLUDED.
+ *
+ * Nothing writes a Home item any more (promote is told not to, and the starter
+ * site.json ships without one), because the logo is already the home link and a
+ * duplicate reads dated. But if a designer ADDS one in the Navigation tab, that is a
+ * deliberate choice and the site shows it: filtering here would silently discard
+ * their edit, which is worse than an extra link.
  */
-const navItems = (items: Item[]) =>
-  items.filter((it) => !(/^home$/i.test((it.label || "").trim()) && (it.href === "/" || it.href === "" || /^#?$/.test(it.href))));
 
 function DropdownPanel({ id, item, open, onClose }: { id: string; item: Item; open: boolean; onClose: () => void }) {
   // Positioned from its trigger, measured against the HEADER, exactly as the design
@@ -258,7 +258,7 @@ export function Header({ siteName, logos, nav }: Props) {
   const [active, setActive] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string[]>([]);
-  const items = navItems(nav || []);
+  const items = nav || [];
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
