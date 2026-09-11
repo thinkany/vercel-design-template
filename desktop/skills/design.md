@@ -515,14 +515,19 @@ structure is written once in CORE and driven by data. Three files, three owners:
 | File | Holds | Yours? |
 |---|---|---|
 | [`src/app/header.config.ts`](../../src/app/header.config.ts) | `placement`, `menuKind`, `sticky`, `menuSide`, `mega` | **Yes** — edit to MOVE things |
-| [`src/app/components/header.skin.ts`](../../src/app/components/header.skin.ts) | every class string on every part | **Yes** — edit to STYLE it |
+| `src/variations/{id}/components/header.skin.ts` | every class string on every part | **Yes** — edit to STYLE it |
 | `src/app/components/Header.tsx` + `MobileMenu.tsx` | the placement grid, panel anchoring, the drawer, hover + keyboard | **No** — CORE, and the tool guard blocks writes to it |
 
 - **The designer's header choice is already applied.** The intake's nine layouts
   are `placement` × `menuKind`, and the app writes both into `header.config.ts`
   before your turn starts. The header standing in the preview is the one they
   picked. Don't rebuild it to match the brief's description of it, it already matches.
-- **To style it, edit `header.skin.ts`.** Every slot is a class string on a fixed
+- **To style it, edit YOUR VARIATION's `header.skin.ts`**
+  (`src/variations/{id}/components/header.skin.ts`, seeded for you when the variation
+  is created, so each design skins the header its own way). The base copy at
+  `src/app/components/header.skin.ts` is the template default; editing that one
+  instead means your variation's copy silently wins and your work doesn't show.
+  Every slot is a class string on a fixed
   element: `bar` (surface + border), `inner` (height + gutters), `wordmark`, `logo`,
   `link`, `linkActive`, `cta`, `panel`, `panelInner`, `dropdownLink`,
   `columnHeading`, `columnLink`, `feature`, `drawer`, `drawerLink`, `drawerSubLink`,

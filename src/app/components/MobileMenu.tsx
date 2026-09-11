@@ -1,5 +1,5 @@
 // ©2026 thinkany llc. All rights reserved.
-import { HeaderDrawer } from "./Header";
+import { HeaderDrawer } from "@/app/components/Header";
 
 /**
  * MOBILE MENU — now part of the header (CORE tier).

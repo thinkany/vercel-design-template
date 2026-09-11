@@ -90,13 +90,30 @@ function mmddyyyy(d) {
 }
 
 // ---- variation creation (mirrors /api/variation/create from base v00) -------
+// What a new variation starts with. The designer's PAGE components (Home, plus any
+// page they add later) and the Footer, which is still hand-authored per design. The
+// header is configured rather than copied; its look is header.skin.ts, which the
+// designer overrides by dropping their own into the variation when they want to.
+const VARIATION_COMPONENTS = ["Home.tsx", "Footer.tsx", "header.skin.ts"];
+
 function ensureVariation() {
   const dir = path.join(ROOT, "src", "variations", VAR);
   const created = !fs.existsSync(dir);
   if (created) {
     fs.mkdirSync(path.join(dir, "components"), { recursive: true });
     fs.mkdirSync(path.join(dir, "styles"), { recursive: true });
-    fs.cpSync(path.join(ROOT, "src", "app", "components"), path.join(dir, "components"), { recursive: true });
+    // ONLY the components a variation can actually own. DesignSurface resolves just
+    // the page components plus the chrome per variation (resolveComponent), so
+    // copying all of src/app/components dragged the admin surfaces (Dashboard,
+    // StyleGuide, VariationCard, ui/) and every hook in with it: dead weight that
+    // also BREAKS, because a relative import in a copied file resolves against the
+    // variation folder. The header is deliberately NOT copied: it is configured
+    // (header.config.ts + header.skin.ts) and a Header.tsx here would make the
+    // variation a "custom header", opting it out of the framework's guarantees.
+    for (const f of VARIATION_COMPONENTS) {
+      const from = path.join(ROOT, "src", "app", "components", f);
+      if (fs.existsSync(from)) fs.cpSync(from, path.join(dir, "components", f));
+    }
     fs.cpSync(path.join(ROOT, "src", "styles"), path.join(dir, "styles"), { recursive: true });
     const n = parseInt(VAR.replace(/\D/g, ""), 10) || 0;
     const meta = {

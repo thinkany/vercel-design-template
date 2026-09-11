@@ -3680,7 +3680,9 @@ function buildDesignPrompt(brief) {
       "Header / navigation: the header is ALREADY CONFIGURED and standing as " +
       `${MENU_LAYOUT_PHRASES[b.menuLayout]} — src/app/header.config.ts holds that choice and ` +
       "src/app/components/Header.tsx (CORE) renders it, mobile drawer included. STYLE it to " +
-      "the design by editing src/app/components/header.skin.ts (bar, inner, wordmark, logo, " +
+      "the design by editing YOUR VARIATION's header.skin.ts, at " +
+      "src/variations/{id}/components/header.skin.ts, which is seeded when the variation is " +
+      "created and WINS over the base copy (bar, inner, wordmark, logo, " +
       "link, linkActive, cta, panel, panelInner, dropdownLink, columnHeading, columnLink, " +
       "feature, drawer, drawerLink, drawerSubLink, hamburger). Do NOT restructure it, do NOT " +
       "copy Header.tsx or MobileMenu.tsx into the variation, and do not re-derive the placement " +

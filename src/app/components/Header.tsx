@@ -6,9 +6,14 @@ import { siteConfig } from "@/config/site";
 import { useMenuState } from "@/app/menuState";
 import { menuFor, type DropdownMenu, type MegaMenu } from "@/app/menu";
 import { headerConfig as baseHeaderConfig, type HeaderConfig } from "@/app/header.config";
-import { headerSkin as baseHeaderSkin, type HeaderSkin } from "./header.skin";
+// ABSOLUTE (`@/`), never relative. `apply-brand.mjs` creates a variation by copying
+// all of src/app/components into src/variations/{id}/components, so a relative
+// import resolves against the VARIATION folder in the copy and breaks the build
+// when the sibling isn't there (header.skin.ts is seeded separately, so it can be
+// absent at copy time). Every other import in this file is already absolute.
+import { headerSkin as baseHeaderSkin, type HeaderSkin } from "@/app/components/header.skin";
 import { getVariationId, resolveData } from "@/app/variationRegistry";
-import { useDrawerLock } from "./useDrawerLock";
+import { useDrawerLock } from "@/app/components/useDrawerLock";
 
 /**
  * GLOBAL SITE HEADER — CONFIGURED, NOT HAND-BUILT (CORE tier: upgrades overwrite
