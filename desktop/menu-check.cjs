@@ -167,10 +167,15 @@ const panelProbe = (id) => `(() => {
   const header = document.querySelector('header[data-block="header"]') || document.querySelector("header");
   const panel = document.querySelector('[data-menu-panel=${JSON.stringify(id)}]');
   if (!header) return { header: null };
-  if (!panel) return { header: box(header), panel: null };
+  // The panel is positioned with top:100% (top-full), which resolves against the
+  // header PADDING box, while getBoundingClientRect reports the BORDER box. A skin
+  // that thickens the bottom border (border-b-2) therefore shifts the two apart by
+  // exactly that border, on every panel, with the header perfectly correct.
+  const borderBottom = parseFloat(getComputedStyle(header).borderBottomWidth) || 0;
+  if (!panel) return { header: box(header), panel: null, borderBottom };
   const visible = getComputedStyle(panel).display !== "none" && panel.offsetWidth > 0;
   return {
-    header: box(header), panel: box(panel), visible,
+    header: box(header), panel: box(panel), visible, borderBottom,
     links: Array.from(panel.querySelectorAll("button, a")).map((l) => (l.textContent || "").trim()).filter(Boolean),
     headings: Array.from(panel.querySelectorAll("h1,h2,h3,h4,h5,h6")).map((h) => (h.textContent || "").trim()),
     columns: (() => { const g = panel.querySelector('[class*="grid-cols-"]'); return g ? g.children.length : null; })(),
@@ -312,7 +317,11 @@ function checkPanel(probe, item, wantMenu, config, width, findings) {
     findings.push(finding("panels", width, item.id, "the panel visible when open", "it stayed hidden"));
     return;
   }
-  const gap = probe.panel.y - probe.header.bottom;
+  // Measure to the header's PADDING-box bottom, which is what `top-full` resolves
+  // against. Against the border box a design that sets a thicker bottom border
+  // (border-b-2, a perfectly ordinary skin choice) reads as every panel being
+  // "2px above" a header that is in fact exactly right.
+  const gap = probe.panel.y - (probe.header.bottom - (probe.borderBottom || 0));
   if (Math.abs(gap) > TOL.panelFlush) {
     findings.push(finding("panels", width, item.id, `the panel flush to the header's bottom edge (within ${TOL.panelFlush}px)`,
       `${Math.round(gap)}px ${gap > 0 ? "below" : "above"} it`,

@@ -204,6 +204,28 @@ async function main() {
       }
     }
 
+    // ---- A THICK-BORDERED skin (the 2026-09-11 GUI run) ---------------------
+    // A design that sets border-b-2 on the bar is an ordinary skin choice, and it
+    // used to make every panel read as "2px above" the header: top-full resolves
+    // against the padding box, getBoundingClientRect reports the border box. The
+    // header was right and the CHECK was wrong, which is the worse failure of the
+    // two, so it gets a permanent case.
+    console.log("\nchecking a thick-bordered skin (border-b-2) still reads flush…");
+    writeConfig(dir, "mega-left-right");
+    const skinPath = path.join(dir, "src", "app", "components", "header.skin.ts");
+    const skinSrc = fs.readFileSync(skinPath, "utf8");
+    fs.writeFileSync(skinPath, skinSrc.replace(/bar: "[^"]*"/, 'bar: "border-b-4 border-black bg-ta-surface"'));
+    await new Promise((r) => setTimeout(r, 900));
+    const thick = await runMenuCheck({
+      projectDir: dir, previewUrl: url, variationId: "v00",
+      captureOp: runCaptureOp, headerMode: "configured", widths: ["desktop"],
+    });
+    console.log(`${thick.ok ? "PASS" : "FAIL"}  thick-bordered skin  ${summarize(thick)}`);
+    for (const f of thick.findings || []) console.log(`      ${f.rule}/${f.width}: expected ${f.expected}; got ${f.actual}`);
+    if (!thick.ok) failures++;
+    rows.push({ layout: "thick-bordered-skin", ok: thick.ok, findings: thick.findings || [] });
+    fs.writeFileSync(skinPath, skinSrc); // put the default skin back
+
     // ---- The negative case: a custom header with the centred-logo bug --------
     console.log("\nchecking that a deliberately broken custom header FAILS…");
     writeConfig(dir, "simple-center-split");
