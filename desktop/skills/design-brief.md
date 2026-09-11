@@ -101,9 +101,12 @@ new variation on reload.
 ## 4. Design v01/Home
 **First, save the brief for reference.** Write the designer's original brief into
 `"brief"` in `src/variations/v01/variation.json` (the dashboard card shows it under
-"Original brief"). Save **only the designer's brief text**, i.e. everything BEFORE any
-`## Design direction` block: that block is system-injected (see below), not the designer's
-words, so never store it as the brief. Silent bookkeeping, don't narrate it.
+"Original brief"). Save **only the designer's brief text**, i.e. everything BEFORE the
+first `## ` heading: every such block (`## Design direction`, `## Build notes`, …) is
+system-injected, not the designer's words, so none of them is ever stored as the brief.
+**A designer reads this on the dashboard**, so if anything you are about to save
+mentions a file path, a library or a component name, you have taken too much: cut back
+to the sentence that describes what they asked for. Silent bookkeeping, don't narrate it.
 
 **Also persist the design direction.** If `/tmp/ta-direction.json` exists, write its JSON
 object **verbatim** into `"direction"` in the same `variation.json`: the sampled Design

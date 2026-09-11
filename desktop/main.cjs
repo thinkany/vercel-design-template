@@ -3649,25 +3649,34 @@ function seedHeaderConfig(dir, menuLayout) {
 // The designer's picked hero layout → an explicit, authoritative build instruction.
 // Keep the ids in sync with HERO_LAYOUTS in shell.js (the renderer catalog).
 const HERO_LAYOUT_PHRASES = {
-  "centered": "a centered hero — headline, subhead, and call-to-action buttons stacked and centered",
-  "split": "a split hero — the copy on one side and a supporting visual on the other",
-  "full-screen": "a full-screen hero that fills the viewport (100vh), with the copy overlaid on a full-bleed image or color",
-  "minimal": "a type-led hero — a large left-aligned headline with generous whitespace and no dominant image",
-  "showcase": "a product-showcase hero — a short headline up top with a large product visual dominating below",
+  "centered": "a centered hero: headline, subhead, and call-to-action buttons stacked and centered",
+  "split": "a split hero: the copy on one side and a supporting visual on the other",
+  "full-screen": "a full-screen hero that fills the viewport, with the copy overlaid on a full-bleed image or color",
+  "minimal": "a type-led hero: a large left-aligned headline with generous whitespace and no dominant image",
+  "showcase": "a product-showcase hero: a short headline up top with a large product visual dominating below",
 };
 
 // The designer's picked contact/CTA build type → an explicit build instruction. Keep
 // the ids in sync with CTA_TYPES in shell.js (the renderer catalog). The template has
 // NO backend, so the form phrase tells the model to build a client-validated form with
 // a fake success state rather than invent a server call.
+// WHAT the designer chose, in their words. Goes in the brief body, which is saved
+// verbatim as the variation's "brief" and shown on the dashboard card, so it stays
+// free of library names, file paths and build mechanics.
 const CTA_TYPE_PHRASES = {
-  "cta-form": "Build the contact / call-to-action section as a contact form (name, email, message, submit), " +
-    "using react-hook-form + the shadcn form components (form/input/textarea/label/button), with client-side " +
-    "validation and inline errors. There is NO backend, so do not POST anywhere or invent an API call: on a " +
-    "valid submit, show a graceful success state (e.g. “Thanks — we’ll be in touch”) instead of sending",
-  "cta-button": "Build the contact / call-to-action section as a button-led call to action (a prominent " +
-    "button or link like “Get in touch” or “Book a call”, plus supporting contact details such as email / " +
-    "phone / social), not a form",
+  "cta-form": "a contact form (name, email, message, submit)",
+  "cta-button": "a button-led call to action (a prominent button or link like “Get in touch” " +
+    "or “Book a call”, plus supporting contact details such as email, phone or social), not a form",
+};
+// HOW to build it. Appended as its own block AFTER the brief body, the way the
+// sampled Design Direction already is, so the model gets the detail and the
+// designer's saved brief never carries it.
+const CTA_TYPE_BUILD = {
+  "cta-form": "Build the contact form with react-hook-form + the shadcn form components " +
+    "(form/input/textarea/label/button), with client-side validation and inline errors. There is NO " +
+    "backend, so do not POST anywhere or invent an API call: on a valid submit, show a graceful " +
+    "success state (e.g. “Thanks, we’ll be in touch”) instead of sending.",
+  "cta-button": "",
 };
 
 function buildDesignPrompt(brief) {
@@ -3697,32 +3706,23 @@ function buildDesignPrompt(brief) {
   if (fonts.length) parts.push(`Fonts ${fonts.join(", ")}`);
   if (list(b.sections).length) parts.push(`Include these sections: ${b.sections.join(", ")}`);
   if (b.menuLayout && MENU_LAYOUT_PHRASES[b.menuLayout]) {
-    // DESCRIPTIVE, not an instruction to build: `header.config.ts` is already
-    // written (seedHeaderConfig), and the CORE Header renders it. The turn styles
-    // the header through its skin; it does not restructure it.
+    // THE DESIGNER'S CHOICE, in the designer's words, and nothing else. This string
+    // is saved verbatim as the variation's "brief" and shown on the dashboard card,
+    // so file paths, slot names and build instructions must never appear in it: it
+    // is read by a person, not only by the model. The HOW (the header is configured,
+    // edit the skin not the component, don't copy Header.tsx) is already in /design
+    // §4c, which the build turn reads anyway. One fact belongs in one place.
     parts.push(
-      "Header / navigation: the header is ALREADY CONFIGURED and standing as " +
-      `${MENU_LAYOUT_PHRASES[b.menuLayout]} — src/app/header.config.ts holds that choice and ` +
-      "src/app/components/Header.tsx (CORE) renders it, mobile drawer included. STYLE it to " +
-      "the design by editing YOUR VARIATION's header.skin.ts, at " +
-      "src/variations/{id}/components/header.skin.ts, which is seeded when the variation is " +
-      "created and WINS over the base copy (bar, inner, wordmark, logo, " +
-      "link, linkActive, cta, panel, panelInner, dropdownLink, columnHeading, columnLink, " +
-      "feature, drawer, drawerLink, drawerSubLink, hamburger). Do NOT restructure it, do NOT " +
-      "copy Header.tsx or MobileMenu.tsx into the variation, and do not re-derive the placement " +
-      "grid — that is done and tested. Menu CONTENT stays in src/app/menu.ts"
+      `Header (the designer’s explicit choice): ${MENU_LAYOUT_PHRASES[b.menuLayout]}, ` +
+      "already configured and standing, so style it to the design rather than rebuilding it"
     );
   }
   if (b.heroLayout && HERO_LAYOUT_PHRASES[b.heroLayout]) {
-    parts.push(
-      "Hero section layout (the designer’s explicit choice — honor this exactly for " +
-      `the hero, over any other hero guidance): ${HERO_LAYOUT_PHRASES[b.heroLayout]}`
-    );
+    parts.push(`Hero (the designer’s explicit choice): ${HERO_LAYOUT_PHRASES[b.heroLayout]}`);
   }
   if (b.ctaType && CTA_TYPE_PHRASES[b.ctaType]) {
     parts.push(
-      "Contact / call-to-action section (the designer’s explicit choice — build it this way): " +
-      CTA_TYPE_PHRASES[b.ctaType]
+      `Contact (the designer’s explicit choice): ${CTA_TYPE_PHRASES[b.ctaType]}`
     );
   }
   if (list(b.audience).length) parts.push(`Audience: ${b.audience.join(", ")}`);
@@ -3745,6 +3745,12 @@ function buildDesignPrompt(brief) {
   }
   const body = parts.join(". ");
   let prompt = "/design-brief " + (body || "a clean, modern marketing website");
+  // BUILD NOTES: mechanics the model needs and the designer should never read. Kept
+  // out of the body on purpose — /design-brief saves everything before the first
+  // "## " block as the variation's brief, and that text is shown on the dashboard
+  // card. Anything with a file path, a library name or a "do NOT" belongs here.
+  const buildNotes = [b.ctaType ? CTA_TYPE_BUILD[b.ctaType] : ""].filter(Boolean);
+  if (buildNotes.length) prompt += "\n\n## Build notes\n" + buildNotes.join("\n\n");
   // Fold in the sampled Design Direction (design-variety) as its own block, so the
   // build is conditioned onto a distinct compositional direction rather than the
   // model's default centroid. Present once the intake sets b.direction (T5).
