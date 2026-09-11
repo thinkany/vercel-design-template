@@ -10,6 +10,9 @@
  *   form  A form defined in the Forms tab (content/forms/<id>.json), rendered
  *         with the design's tokens. Submits to /api/forms; the client script in
  *         Base.astro (site/src/lib/form-client.ts) handles the success state.
+ *   video A clip with its poster still. Here so a site can carry video without a
+ *         designer having to design a block for it first: the CMS's video field
+ *         uploads a clip (deriving the poster) or picks one already in the library.
  */
 import type React from "react";
 import { z } from "astro/zod";
@@ -178,6 +181,67 @@ function Table({ caption, header, rows }: z.infer<typeof tableProps>) {
   );
 }
 
+// A clip and the poster still that stands in for it. The poster is not optional: it is
+// what a visitor who asked for less motion sees, what the Figma export draws, and what
+// shows before the first frame paints. Same markup as the design surface's <VideoFigure>,
+// written out here because a built-in may not reach into the designer-owned site/blocks.
+const videoProps = z.object({
+  /** Section anchor; nav links point at "#<id>". */
+  id: z.string().default("video"),
+  /** Above the clip, optional. */
+  heading: z.string().optional(),
+  /** The clip and its still. */
+  video: z.object({
+    src: z.string().default(""),
+    poster: z.string().default(""),
+    alt: z.string().default(""),
+  }).default({ src: "", poster: "", alt: "" }),
+  /** Wide and cinematic, or the page's usual measure. */
+  width: z.enum(["contained", "full"]).default("contained"),
+  /** The shape it is cropped to. */
+  ratio: z.enum(["16/9", "4/3", "1/1", "21/9"]).default("16/9"),
+  /** A clip that MEANS something gets a play control and a name; texture does not. */
+  controls: z.boolean().default(false),
+});
+
+function Video({ id, heading, video, width, ratio, controls }: z.infer<typeof videoProps>) {
+  const src = (video && video.src) || "";
+  const poster = (video && video.poster) || "";
+  const label = (video && video.alt) || heading || "";
+  if (!src && !poster) return null; // nothing chosen yet: draw nothing rather than a black box
+  return (
+    <section id={id} data-block="video" className={width === "full" ? "w-full" : "w-full max-w-5xl mx-auto px-6"}>
+      {heading ? <h2 className="mb-4 text-2xl font-semibold text-ta-ink">{heading}</h2> : null}
+      <div data-video-figure className="relative overflow-clip w-full rounded-lg" style={{ aspectRatio: ratio }}>
+        {poster ? (
+          <img
+            src={poster}
+            alt={controls && label ? label : ""}
+            className="ta-video-still absolute inset-0 h-full w-full object-cover"
+            aria-hidden={controls ? undefined : "true"}
+          />
+        ) : null}
+        {src ? (
+          <video
+            className="ta-video-clip absolute inset-0 h-full w-full object-cover"
+            src={src}
+            poster={poster || undefined}
+            autoPlay={!controls}
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            controls={controls}
+            tabIndex={controls ? undefined : -1}
+            aria-hidden={controls ? undefined : "true"}
+            aria-label={controls ? label || undefined : undefined}
+          />
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 export const builtinBlocks: Record<string, BlockDef> = {
   table: defineBlock({
     name: "Table",
@@ -196,6 +260,12 @@ export const builtinBlocks: Record<string, BlockDef> = {
     description: "A form from the Forms tab, with an optional heading and intro. Submissions go to the form's recipients.",
     props: formProps,
     component: Form,
+  }),
+  video: defineBlock({
+    name: "Video",
+    description: "A video with its poster still. Upload a clip and the still is taken for you, or pick one already in the library.",
+    props: videoProps,
+    component: Video,
   }),
 };
 

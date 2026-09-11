@@ -5141,9 +5141,11 @@ function siteTypeFieldControl(f, value, onChange, ctx) {
     zone.append(hint, input);
     clipRow.appendChild(zone);
     const links = siteEl("div", "site-img-links");
+    const chooseLink = siteEl("button", "site-link", COPY.site.media.chooseExistingVideo);
+    chooseLink.type = "button";
     const clearLink = siteEl("button", "site-link danger", COPY.site.media.clear);
     clearLink.type = "button";
-    links.appendChild(clearLink);
+    links.append(chooseLink, clearLink);
     clipRow.appendChild(links);
     const note = siteEl("div", "sess-desc");
     clipRow.appendChild(note);
@@ -5196,6 +5198,17 @@ function siteTypeFieldControl(f, value, onChange, ctx) {
     ["dragenter", "dragover"].forEach((t) => zone.addEventListener(t, (e) => { e.preventDefault(); zone.classList.add("drag"); }));
     ["dragleave", "drop"].forEach((t) => zone.addEventListener(t, (e) => { e.preventDefault(); zone.classList.remove("drag"); }));
     zone.addEventListener("drop", (e) => importFiles(e.dataTransfer && e.dataTransfer.files));
+    chooseLink.addEventListener("click", async () => {
+      const it = await openMediaPicker(cur.src || null, { kind: "video" });
+      if (!it || !it.url) return;
+      cur.src = it.url;
+      // A clip in the library was imported with its poster beside it, under the same
+      // stem. Adopt it, so choosing an existing clip is as complete as uploading one.
+      const guess = it.url.replace(/\.[^.]+$/, ".poster.jpg");
+      const lib = await window.desktop.listMedia("video").catch(() => []);
+      if (lib.some((x) => x.url === guess)) cur.poster = guess;
+      paint(); paintPoster(); emit();
+    });
     clearLink.addEventListener("click", () => { cur.src = ""; paint(); emit(); });
 
     paint();
@@ -6143,17 +6156,24 @@ async function renderSiteMedia(body) {
 }
 
 /** Open the picker; resolves with { url, name, width, height } or null. */
-function openMediaPicker(current) {
+/**
+ * Pick something already in the project's library. `kind` is "image" (the default) or
+ * "video": a video field picks from public/video, where the clips and their poster stills
+ * live, and uploading from here derives a poster the same way the field does.
+ */
+function openMediaPicker(current, { kind = "image" } = {}) {
   const M = COPY.site.media;
-  el("mediapick-title").textContent = M.title;
+  const isVideo = kind === "video";
+  el("mediapick-title").textContent = isVideo ? M.titleVideo : M.title;
   mediapick.hidden = false;
   return new Promise((resolve) => {
     mediaPickResolve = resolve;
     let items = []; let filter = ""; let selected = current || null;
     mediapickBar.innerHTML = ""; mediapickBody.innerHTML = "";
     const filterIn = document.createElement("input"); filterIn.className = "field"; filterIn.placeholder = M.filter;
-    const upBtn = siteEl("button", "panelbtn", M.upload); upBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+    const upBtn = siteEl("button", "panelbtn", isVideo ? M.uploadVideo : M.upload); upBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
     const phoneBtn = siteEl("button", "panelbtn", M.fromPhone); phoneBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+    phoneBtn.hidden = isVideo; // the phone path sends photos
     const useBtn = siteEl("button", "panelbtn primary", M.use); useBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;"; useBtn.disabled = true;
     mediapickBar.append(filterIn, upBtn, phoneBtn, useBtn);
     let phone = null; // the open phone panel, if any (rendered at the top of the body by paint)
@@ -6162,8 +6182,8 @@ function openMediaPicker(current) {
       mediapickBody.innerHTML = "";
       if (phone) mediapickBody.appendChild(phone.el);
       const shown = items.filter((it) => !filter || it.name.toLowerCase().includes(filter));
-      mediapickBody.appendChild(siteEl("div", "sess-desc", M.uploadNote));
-      if (!items.length) { mediapickBody.appendChild(siteEl("div", "muted", M.empty)); return; }
+      mediapickBody.appendChild(siteEl("div", "sess-desc", isVideo ? M.uploadVideoNote : M.uploadNote));
+      if (!items.length) { mediapickBody.appendChild(siteEl("div", "muted", isVideo ? M.emptyVideo : M.empty)); return; }
       const grid = siteEl("div", "media-grid");
       shown.forEach((it) => {
         grid.appendChild(mediaTile(it, {
@@ -6176,13 +6196,21 @@ function openMediaPicker(current) {
       });
       mediapickBody.appendChild(grid);
     };
-    const load = async () => { items = await window.desktop.listMedia().catch(() => []); if (selected && !items.some((i) => i.url === selected)) { /* keep: may be a subfolder path */ } useBtn.disabled = !selected; paint(); };
+    const load = async () => {
+      items = await window.desktop.listMedia(kind).catch(() => []);
+      // A video library lists the clips; the posters beside them are not separate choices.
+      if (isVideo) items = items.filter((it) => !/\.poster\.[a-z0-9]+$/i.test(it.name));
+      if (selected && !items.some((i) => i.url === selected)) { /* keep: may be a subfolder path */ }
+      useBtn.disabled = !selected; paint();
+    };
     filterIn.addEventListener("input", () => { filter = filterIn.value.trim().toLowerCase(); paint(); });
     upBtn.addEventListener("click", async () => {
       upBtn.disabled = true; upBtn.textContent = M.uploading;
-      const r = await window.desktop.uploadMedia();
-      upBtn.disabled = false; upBtn.textContent = M.upload;
-      if (r && r.ok && r.added && r.added.length) { selected = r.added[0]; await load(); }
+      const r = isVideo ? await window.desktop.uploadVideo() : await window.desktop.uploadMedia();
+      upBtn.disabled = false; upBtn.textContent = isVideo ? M.uploadVideo : M.upload;
+      // A video upload reports objects ({url, poster, …}); an image upload reports paths.
+      const first = r && r.ok && r.added && r.added.length ? (isVideo ? r.added[0].url : r.added[0]) : null;
+      if (first) { selected = first; await load(); }
     });
     useBtn.addEventListener("click", () => { const it = items.find((i) => i.url === selected); closeMediaPicker(it || (selected ? { url: selected } : null)); });
     phoneBtn.addEventListener("click", async () => {

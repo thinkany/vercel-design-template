@@ -58,4 +58,35 @@ for (const h of ["media:uploadVideo", "media:importVideo"]) {
   ok(/siteLicensed\(\)/.test(body) && /No project is open/.test(body), `${h} is gated like the rest`);
 }
 
+// ---- A built-in Video block, so a site can carry video without designing one ----
+// Without this the video field kind was unreachable: a designer had to ask for a block
+// with a video field before they could use one at all.
+const builtins = fs.readFileSync(path.join(__dirname, "..", "..", "site", "src", "lib", "builtin-blocks.tsx"), "utf8");
+ok(/video: defineBlock\(\{/.test(builtins), "video is a built-in block, like form and code");
+ok(/name: "Video"/.test(builtins), "and is named for the block picker");
+const vb = builtins.slice(builtins.indexOf("const videoProps"), builtins.indexOf("export const builtinBlocks"));
+ok(/src: z\.string\(\)/.test(vb) && /poster: z\.string\(\)/.test(vb),
+  "its clip prop is the { src, poster } shape the CMS reads as a video field");
+ok(/ta-video-still/.test(vb) && /ta-video-clip/.test(vb),
+  "and it uses the shared classes, so motion.css handles reduced motion and the Figma capture");
+ok(/if \(!src && !poster\) return null/.test(vb),
+  "an unset block renders nothing rather than a black box");
+ok(/muted/.test(vb) && /playsInline/.test(vb) && /loop/.test(vb),
+  "texture is muted, looping and inline, like the design-surface components");
+// A built-in may not reach into the designer-owned site/blocks.
+const imports = [...builtins.matchAll(/^import .*?from "([^"]+)"/gm)].map((m) => m[1]);
+ok(!imports.some((i) => i.includes("blocks/") && !i.includes("src/lib")),
+  `built-ins may not import designer-owned block files; saw ${JSON.stringify(imports)}`);
+
+// ---- The field can pick from the library, not only upload -------------------
+ok(/openMediaPicker\(cur\.src \|\| null, \{ kind: "video" \}\)/.test(field),
+  "a video field can choose a clip already in the project");
+const pStart = shell.indexOf("function openMediaPicker");
+const picker = shell.slice(pStart, shell.indexOf("\nfunction ", pStart + 10));
+ok(/kind = "image"/.test(picker), "the picker still defaults to images");
+ok(/listMedia\(kind\)/.test(picker), "and lists whichever library it was opened for");
+ok(/\\.poster\\./.test(picker), "a video listing hides the poster stills: they are not separate choices");
+ok(/isVideo \? await window\.desktop\.uploadVideo\(\)/.test(picker),
+  "uploading from the picker derives a poster too, like the field does");
+
 console.log(`video-upload: ${checks} checks pass.`);
