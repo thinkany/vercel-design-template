@@ -122,18 +122,27 @@ function shapePexels(v) {
   const files = (v.video_files || []).filter((f) => /mp4/i.test(f.file_type || "") && f.width && f.height);
   return {
     id: String(v.id),
-    // `tags` has been seen both as [{title}] and as plain strings; treat either as a label.
-    description: (Array.isArray(v.tags) ? v.tags : [])
-      .map((t) => (typeof t === "string" ? t : (t && t.title) || "")).filter(Boolean).join(", "),
+    // Verified against the live API 2026-09-11: `tags` comes back as an EMPTY ARRAY on
+    // every result, so there is no description to be had. The title lives in the page
+    // URL slug, which is the only human-readable label the response carries.
+    description: slugLabel(v.url),
     width: v.width, height: v.height,
     duration: v.duration || null,
     photographer: (v.user && v.user.name) || "",
     poster: v.image || ((v.video_pictures || [])[0] || {}).picture || "",
     html: v.url || "",
     user: { name: (v.user && v.user.name) || "", html: (v.user && v.user.url) || "" },
-    sizes: files.map((f) => ({ url: f.link, width: f.width, height: f.height, bytes: null, quality: f.quality || "" }))
+    // `size` IS present per rendition (bytes), so the weight cap needs no HEAD request.
+    // `quality` is often null; the width is what the spot actually cares about.
+    sizes: files.map((f) => ({ url: f.link, width: f.width, height: f.height, bytes: f.size || null, quality: f.quality || "" }))
       .sort((a, b) => a.width - b.width),
   };
+}
+/** "…/video/stunning-aerial-view-of-bali-s-cliffside-coastline-35357502/" → the words. */
+function slugLabel(url) {
+  const m = /\/video\/([^/?#]+)/.exec(String(url || ""));
+  if (!m) return "";
+  return m[1].replace(/-\d+$/, "").replace(/-/g, " ").trim();
 }
 // Pixabay: videos.{large,medium,small,tiny} each {url,width,height,size}. Byte counts are
 // given, so the cap is checked without a network round trip.

@@ -316,10 +316,14 @@ function storePexelsKey(key) {
 function removeStoredPexelsKey() { try { fs.unlinkSync(pexelsKeyFilePath()); } catch { /* already gone */ } }
 async function validatePexelsKey(key) {
   try {
-    const res = await fetch("https://api.pexels.com/v1/search?query=studio&per_page=1", { headers: { Authorization: key } });
+    // A SINGLE-RESOURCE endpoint, not /v1/search. Verified against the live API
+    // 2026-09-11: Pexels serves search results to any Authorization header at all, so
+    // validating there accepted every string a designer could type and only failed later,
+    // mid-build. /v1/photos/<id> answers 401 for a key it does not know.
+    const res = await fetch("https://api.pexels.com/v1/photos/1", { headers: { Authorization: key } });
     noteImageHeaders("pexels", res);
     if (res.ok) return { ok: true };
-    if (res.status === 401) return { ok: false, error: "Pexels rejected that API key." };
+    if (res.status === 401 || res.status === 403) return { ok: false, error: "Pexels rejected that API key." };
     if (res.status === 429) return { ok: false, error: "That key's hourly limit is used up; try again shortly." };
     return { ok: false, error: `Unexpected response from Pexels (${res.status}).` };
   } catch (e) { return { ok: false, error: `Couldn't reach Pexels: ${e.message}` }; }

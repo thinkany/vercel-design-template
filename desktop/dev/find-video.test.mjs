@@ -37,14 +37,14 @@ const BIG = Buffer.alloc(9 * 1048576, 7);
 const base = () => "http://127.0.0.1:" + s.address().port;
 const pexelsVideo = (id) => ({
   id, width: 3840, height: 2160, duration: 12,
-  url: "https://www.pexels.com/video/" + id + "/",
+  url: "https://www.pexels.com/video/a-stunning-coastline-" + id + "/",
   image: base() + "/poster.jpg",
   user: { name: "A Contributor", url: "https://www.pexels.com/@contrib" },
   tags: [],
   video_files: [
-    { link: base() + "/small.mp4", width: 640, height: 360, quality: "sd", file_type: "video/mp4" },
-    { link: base() + "/hd.mp4", width: 1920, height: 1080, quality: "hd", file_type: "video/mp4" },
-    { link: base() + "/uhd.mp4", width: 3840, height: 2160, quality: "uhd", file_type: "video/mp4" },
+    { link: base() + "/small.mp4", width: 640, height: 360, quality: null, file_type: "video/mp4", size: 500000 },
+    { link: base() + "/hd.mp4", width: 1920, height: 1080, quality: null, file_type: "video/mp4", size: 3000000 },
+    { link: base() + "/uhd.mp4", width: 3840, height: 2160, quality: null, file_type: "video/mp4", size: 9000000 },
   ],
   video_pictures: [{ picture: base() + "/poster.jpg" }],
 });
@@ -135,6 +135,10 @@ const c = j.results[0];
 assert.equal(c.duration, 12, "duration is reported");
 assert.equal(c.orientation, "landscape");
 assert.ok(c.poster, "a poster URL is reported");
+// Pexels sends no usable tags, so the label comes from the page-URL slug.
+assert.equal(c.description, "a stunning coastline", "the slug stands in for the missing tags");
+assert.ok(c.sizes.every((s) => typeof s.bytes === "number"),
+  "every rendition reports its byte size, so the weight cap needs no HEAD request");
 assert.equal(c.sizes.length, 3, "every MP4 rung is listed");
 assert.ok(c.sizes[0].width < c.sizes[2].width, "rungs are sorted small to large");
 
