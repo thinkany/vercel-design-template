@@ -4685,6 +4685,120 @@ async function auditA11y(variationId) {
   return { ok: true, findings, count: findings.length, ranAt: Date.now(), variationId: vid };
 }
 ipcMain.handle("a11y:audit", (_e, { variationId } = {}) => auditA11y(variationId));
+
+// ---- Art Director thumbnails -------------------------------------------------
+// A rec row that names its section in words makes the designer translate text back into the
+// page. A crop of the actual element doesn't. This renders the design once in a hidden window
+// (the auditA11y pattern) and captures ONE crop per anchored rec, so a review's whole contact
+// sheet costs a single page load and zero model tokens.
+//
+// Files, not base64 in artdirector.json: a dozen crops would bloat a store that is otherwise
+// small and hand-inspectable. They live beside it and are disposable — a missing thumb just
+// means the row renders as it always did.
+function adShotDir(dir, vid) { return path.join(dir, ".thinkany", "adshots", String(vid).replace(/[^\w.-]/g, "_")); }
+
+// Resolve an anchor to a page rect, mirroring the renderer's AD_HIGHLIGHT_JS resolver (same
+// precedence: data-block, then selector, then a visible-text match) so a thumbnail frames
+// exactly what "Show on page" would outline.
+const AD_RECT_JS = `(function(a){
+  function byText(txt){ txt=(txt||'').trim().toLowerCase(); if(!txt) return null; var best=null,bl=Infinity;
+    var all=document.querySelectorAll('h1,h2,h3,h4,h5,h6,button,a,p,span,li,figcaption,label,blockquote,strong,em');
+    for(var i=0;i<all.length;i++){ var e=all[i]; var t=(e.textContent||'').trim().toLowerCase(); if(!t) continue;
+      if(t.indexOf(txt)!==-1 && t.length<bl){ best=e; bl=t.length; } } return best; }
+  function resolve(a){ if(!a) return null;
+    try{ if(a.block){ var e=document.querySelector('[data-block="'+String(a.block).replace(/"/g,'')+'"]'); if(e) return e; } }catch(_){}
+    try{ if(a.selector){ var s=document.querySelector(a.selector); if(s) return s; } }catch(_){}
+    if(a.text) return byText(a.text); return null; }
+  var el=resolve(a); if(!el) return null;
+  var r=el.getBoundingClientRect();
+  if(!r.width||!r.height) return null;
+  return { x: r.left+window.scrollX, y: r.top+window.scrollY, w: r.width, h: r.height };
+})`;
+
+const AD_THUMB_W = 320;  // 2x the ~160px the row shows, so it stays crisp on a retina panel
+const AD_THUMB_RATIO = 16 / 10;
+
+// Capture one crop per anchored rec. Returns { [recId]: "<abs path>" } for the ones that
+// resolved; a rec whose anchor doesn't resolve is simply absent (the row stays text-only).
+async function captureAdThumbs(variationId, recs, route) {
+  if (!viteUrl || !currentProject) return { ok: false, error: "preview not running" };
+  const vid = variationId || "v01";
+  const wanted = (recs || []).filter((r) => r && r.id && r.anchor);
+  if (!wanted.length) return { ok: true, thumbs: {} };
+  const VW = 1440, VH = 900;
+  const win = new BrowserWindow({
+    show: false, width: VW, height: VH,
+    webPreferences: { backgroundThrottling: false, partition: "ad-thumbs" },
+  });
+  const wc = win.webContents;
+  const thumbs = {};
+  try {
+    win.setContentSize(VW, VH);
+    const url = `${viteUrl}/?v=${vid}${route ? `&${route}` : ""}&capture=desktop`;
+    try { await wc.loadURL(url); }
+    catch (e) { if (!/ERR_ABORTED|\(-3\)/.test(String(e && e.message))) throw e; }
+    await waitForCaptureReady(wc, 12000);
+    // Same settle as the audit: an unpainted image would crop to an empty box.
+    try {
+      await wc.executeJavaScript(
+        `(async () => {
+          const imgs = Array.from(document.images || []);
+          await Promise.race([
+            Promise.all(imgs.map((i) => i.complete ? 0 : new Promise((r) => { i.addEventListener("load", r, { once: true }); i.addEventListener("error", r, { once: true }); }))),
+            new Promise((r) => setTimeout(r, 4000)),
+          ]);
+          try { await document.fonts.ready; } catch (e) {}
+          await new Promise((r) => setTimeout(r, 200));
+        })()`, true);
+    } catch {}
+    // Crops are keyed by rec id and simply overwritten when that rec is reviewed again, so a
+    // re-review refreshes what it re-suggests. We deliberately DON'T sweep the rest: an id
+    // missing from this pass is usually one the designer dismissed or applied, and its
+    // Archive / Completed row still renders from that file. They're small, and a stale one
+    // is only reachable from a row the designer already closed out.
+    const dir = adShotDir(currentProject, vid);
+    fs.mkdirSync(dir, { recursive: true });
+    for (const rec of wanted) {
+      let box = null;
+      try { box = await wc.executeJavaScript(`(${AD_RECT_JS})(${JSON.stringify(rec.anchor)})`, true); } catch {}
+      if (!box) continue;
+      // Frame the element in a 16:10 window: full width plus a little air, and enough height
+      // to read it in context. A tall section crops to its TOP (where the eye enters it)
+      // rather than squashing the whole thing into a letterbox.
+      const pad = Math.min(48, box.w * 0.06);
+      const cw = Math.min(VW, Math.round(box.w + pad * 2));
+      const ch = Math.round(cw / AD_THUMB_RATIO);
+      const cx = Math.max(0, Math.min(VW - cw, Math.round(box.x - pad)));
+      // Center vertically on a short element; top-align one taller than the frame.
+      const cy = Math.max(0, box.h > ch ? Math.round(box.y) : Math.round(box.y - (ch - box.h) / 2));
+      // Scroll the crop into the viewport, then capture in viewport coordinates.
+      await wc.executeJavaScript(`window.scrollTo(0, ${cy}); 0`, true);
+      await new Promise((r) => setTimeout(r, 220)); // let scroll-driven effects settle
+      const shownY = await wc.executeJavaScript("Math.round(window.scrollY)", true);
+      const rect = {
+        x: cx,
+        y: Math.max(0, Math.round(cy - shownY)),
+        width: cw,
+        height: Math.min(ch, VH),
+      };
+      if (rect.y + rect.height > VH) rect.y = Math.max(0, VH - rect.height);
+      let img;
+      try { img = await wc.capturePage(rect); } catch { continue; }
+      if (!img || img.isEmpty()) continue;
+      const out = path.join(dir, `${String(rec.id).replace(/[^\w.-]/g, "_")}.png`);
+      try {
+        fs.writeFileSync(out, img.resize({ width: AD_THUMB_W, quality: "good" }).toPNG());
+        thumbs[rec.id] = out;
+      } catch { /* a read-only tree just means no thumb for this rec */ }
+    }
+  } catch (e) {
+    win.destroy();
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+  win.destroy();
+  return { ok: true, thumbs };
+}
+ipcMain.handle("artdirector:thumbs", (_e, { variationId, recs, route } = {}) => captureAdThumbs(variationId, recs, route));
 ipcMain.handle("company:status", () => ({ exists: hasCompanyProfile(currentProject) }));
 
 // Apply the COMPANY layer (company name + admin/gate fonts + logo) to the current

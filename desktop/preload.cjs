@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld("desktop", {
   reviewDesign: (id, pageId) => ipcRenderer.invoke("artdirector:review", { id, pageId: pageId || undefined }),
   loadRecs: (id) => ipcRenderer.invoke("artdirector:loadRecs", { id }),
   saveRecs: (id, active, dismissed, completed) => ipcRenderer.invoke("artdirector:saveRecs", { id, active, dismissed, completed }),
+  adThumbs: (variationId, recs, route) => ipcRenderer.invoke("artdirector:thumbs", { variationId, recs, route }),
   onAgentSuggestions: (cb) => {
     const listener = (_e, data) => cb(data);
     ipcRenderer.on("agent:suggestions", listener);

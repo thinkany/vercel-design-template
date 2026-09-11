@@ -10083,9 +10083,11 @@ async function updateRerollBtn(url) {
 // The variation the last confer reviewed — so a suggestion's [Apply] can scope its edit
 // to the right variation (only one review runs at a time).
 let lastReviewedVariation = null;
+let lastReviewedScope = null; // { vid, route } for the review just run — thumbnails need both
 async function reviewDesign(id, page) {
   if (!id || !appHasKey) return; // the critique is an agent turn → needs a key
   lastReviewedVariation = page ? `${id}:${page.id}` : id; // the recs store key
+  lastReviewedScope = { vid: id, route: (page && page.route) || "" };
   addMsg("system", page ? COPY.artDirector.reviewingPage(page.title) : COPY.artDirector.reviewing(id));
   let res;
   try { res = await window.desktop.reviewDesign(id, page ? page.id : null); }
@@ -10184,7 +10186,34 @@ window.desktop.onAgentSuggestions(async ({ suggestions }) => {
   try { await window.desktop.saveRecs(id, active, dismissed, completed); } catch {}
   updateDirectorIndicator();
   refreshDirector();
+  // Then the contact sheet: one hidden-window pass crops every anchored rec, so the drawer
+  // becomes a set of pictures to scan rather than a list of titles to read. It runs AFTER the
+  // rows are already on screen (the thumbs fade in when they land) and never blocks them.
+  captureRecThumbs(id, active);
 });
+
+// Crop each anchored rec on the reviewed page, then persist the paths onto the recs so the
+// rows can render them. Best-effort throughout: no preview server, an unresolvable anchor or
+// a read-only tree just leaves a row text-only, exactly as it was before thumbnails existed.
+async function captureRecThumbs(storeKey, active) {
+  const scope = lastReviewedScope;
+  if (!scope || !storeKey || !(active || []).some((r) => r && r.anchor)) return;
+  let res;
+  try { res = await window.desktop.adThumbs(scope.vid, active, scope.route); } catch { return; }
+  const thumbs = (res && res.ok && res.thumbs) || null;
+  if (!thumbs || !Object.keys(thumbs).length) return;
+  // Re-read rather than trusting `active`: the designer may have dismissed or applied
+  // something while the capture ran, and that decision wins.
+  let store;
+  try { store = await window.desktop.loadRecs(storeKey); } catch { return; }
+  const stamp = (list) => (list || []).map((r) => (r && thumbs[r.id] ? { ...r, thumb: thumbs[r.id] } : r));
+  const next = { active: stamp(store.active), dismissed: stamp(store.dismissed), completed: stamp(store.completed) };
+  try { await window.desktop.saveRecs(storeKey, next.active, next.dismissed, next.completed); } catch { return; }
+  if (directorState.id === storeKey) {
+    directorState.active = next.active; directorState.dismissed = next.dismissed; directorState.completed = next.completed;
+  }
+  refreshDirector();
+}
 
 // The rail clapperboard's dot reflects the CURRENT design's active queue: red if any item is
 // actionable (code), white if only "needs an asset" / "your call" remain, none if empty. It
@@ -10269,6 +10298,21 @@ async function renderDirector(body) {
   if (directorState.dismissed.length) body.appendChild(buildArchive(directorState.dismissed));
 }
 
+// A crop of what the rec points at, when we captured one. The row stops being a title to
+// read and becomes a picture to recognize — the whole point of the contact sheet. Loads from
+// disk via file://; if the file is gone (project moved, cleaned) the img just drops out and
+// the row falls back to its text layout.
+function buildRecThumb(rec) {
+  if (!rec.thumb) return null;
+  const img = document.createElement("img");
+  img.className = "adrec-thumb";
+  img.alt = ""; // decorative: the title beside it already names the rec
+  img.loading = "lazy";
+  img.src = "file://" + rec.thumb.split("/").map(encodeURIComponent).join("/");
+  img.addEventListener("error", () => img.remove());
+  return img;
+}
+
 // An ANCHORED rec goes straight to the page: the review bar carries the same title, why and
 // actions the modal does, so the modal step was pure reading between the designer and their
 // design. An anchorless rec (a whole-page note with nothing to point at) keeps the modal —
@@ -10276,10 +10320,16 @@ async function renderDirector(body) {
 function buildRecRow(rec) {
   const row = document.createElement("button");
   row.className = "adrec";
+  const thumb = buildRecThumb(rec);
+  if (thumb) { row.classList.add("adrec-hasthumb"); row.appendChild(thumb); }
+  // Title + kind sit in their own column beside the crop, so the chip stays with the title
+  // instead of being pushed to the far edge of a wide card.
+  const text = document.createElement("span"); text.className = "adrec-text";
   const title = document.createElement("span"); title.className = "adrec-title"; title.textContent = rec.title || rec.id;
   const kind = document.createElement("span"); kind.className = "adrec-kind adrec-kind-" + (rec.kind || "code");
   kind.textContent = (AD_KIND[rec.kind] || AD_KIND.code).label;
-  row.append(title, kind);
+  text.append(title, kind);
+  row.appendChild(text);
   if (rec.anchor) row.classList.add("adrec-anchored");
   row.addEventListener("click", async () => {
     if (rec.anchor && await showAdOnPage(rec)) return; // couldn't start (no preview / no design tab) → modal
