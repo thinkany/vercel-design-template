@@ -1298,8 +1298,8 @@ window.COPY = {
     researchTitle: "Design research & site building",
     researchDesc: "Design research and the direction deck that keeps each design distinct, plus the site builder that turns an approved design into a publishable website.",
     mediaTitle: "Photos & Video",
-    mediaDesc: "Free stock libraries a build can search for images that match the brief, and download with the photographer's credit.",
-    mediaOrder: "Images are searched Unsplash, then Pexels, then Pixabay; video Pexels, then Pixabay. Connect any or all: a build uses whichever is connected and still has requests left. Without a video library, designs stay stills only.",
+    mediaDesc: "Add optional free stock image and video libraries so your build can automatically find visuals that match your design description and download them with proper photographer credit.",
+    mediaOrder: "If you supply keys for each service provider, the build will search Unsplash first, then Pexels, then Pixabay. For videos, it will search Pexels first, then Pixabay. You can connect any or all of these services; the build will use whichever are connected and still have requests available. If no video libraries are connected, your designs will simply use still images only.",
     // Shown beside each library's name, and readable while its section is folded shut.
     offersImages: "Photos",
     offersBoth: "Photos & Video",
