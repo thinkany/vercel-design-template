@@ -1221,7 +1221,9 @@
          free of the card's left edge it can be far larger than an in-place grow could be.
          It's a sibling <img> the row renders once and only paints on hover, positioned by JS
          against the hovered row (see positionRecLoupe) so it can sit beside the list and flip
-         above/below near an edge. pointer-events:none so it never eats the click. */
+         to the other side near an edge. pointer-events:none so it never eats the click.
+         The whole row triggers it, not just the crop: the row is one click target, so only
+         part of it responding to the pointer read as inconsistent. */
       .adrec-loupe {
         position: fixed; z-index: 1400; width: 420px; max-width: 62vw;
         aspect-ratio: 16 / 10; object-fit: cover; object-position: left top;

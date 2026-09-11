@@ -10360,11 +10360,11 @@ function buildRecThumb(rec, row) {
   img.alt = ""; // decorative: the title beside it already names the rec
   img.loading = "lazy";
   img.src = "file://" + rec.thumb.split("/").map(encodeURIComponent).join("/");
-  img.addEventListener("error", () => { img.remove(); row.classList.remove("adrec-hasthumb"); });
-  // The loupe follows the CROP, not the whole row: hovering the title shouldn't throw a big
-  // panel over the drawer while you're only reading down the list.
-  img.addEventListener("mouseenter", () => showRecLoupe(row, img.src));
-  img.addEventListener("mouseleave", hideRecLoupe);
+  img.addEventListener("error", () => {
+    img.remove();
+    row.classList.remove("adrec-hasthumb");
+    hideRecLoupe(); // it may be showing the crop that just failed to load
+  });
   return img;
 }
 
@@ -10376,7 +10376,16 @@ function buildRecRow(rec) {
   const row = document.createElement("button");
   row.className = "adrec";
   const thumb = buildRecThumb(rec, row);
-  if (thumb) { row.classList.add("adrec-hasthumb"); row.appendChild(thumb); }
+  if (thumb) {
+    row.classList.add("adrec-hasthumb");
+    row.appendChild(thumb);
+    // The WHOLE row is the trigger, not just the crop: the row is a single click target, so
+    // having only part of it answer to the pointer read as inconsistent. Anywhere on the card
+    // shows the magnifier. (mouseenter/leave don't bubble, so they fire for the row itself and
+    // not again for the title or chip inside it.)
+    row.addEventListener("mouseenter", () => showRecLoupe(row, thumb.src));
+    row.addEventListener("mouseleave", hideRecLoupe);
+  }
   // Title + kind sit in their own column beside the crop, so the chip stays with the title
   // instead of being pushed to the far edge of a wide card.
   const text = document.createElement("span"); text.className = "adrec-text";
