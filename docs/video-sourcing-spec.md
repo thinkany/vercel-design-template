@@ -529,23 +529,19 @@ weighting, `videoSources` gating, Pixabay in Keys & Licenses.
 **P5, skills + promote.** `design.md` §4b-video and the §4b corrections, motion contract,
 promote-blocks/design-block schema, publish weight summary.
 
-**P6, video UPLOAD in the CMS.** The field kind, its schema fragment, the inference and a
-working editor shipped with P5; what remains is uploading a NEW clip.
+**P6, video upload in the CMS. DONE 2026-09-11.** A clip dropped on a video field lands in
+`public/video/`, and its poster is grabbed on the way in: Chromium decodes H.264, so a
+hidden BrowserWindow (`desktop/video-poster.cjs`) loads the clip, seeks past the opening
+frames and paints one to a canvas. No ffmpeg; about 130ms for 1080p.
 
-Found while building P5, and it changes this phase: `.mp4` and `.mov` are already accepted
-by the media importer, but as **files** (`public/files`, `FILE_EXT` in `main.cjs`), not as
-images. So an upload path half exists and lands in the wrong place for a video field, with
-no poster. P6 is therefore:
+`.mp4` and `.mov` had been DOCUMENT extensions, so an uploaded clip went to `public/files/`
+as a download. Video is now a third media kind beside image and file, and
+`publicDir: "../public"` means `public/video/` already ships with the site.
 
-- route a video upload to `public/video/` rather than `public/files/`;
-- derive the poster (the unproven piece, see open question 4);
-- show the file weight inline, since a client swapping in a 60 MB phone clip is the
-  realistic failure mode;
-- phone-upload parity.
-
-Until then the field is editable, not uploadable: the poster uses the normal image control
-(upload, pick, drop) and the clip is a path to something the project already holds. The
-copy says so rather than implying an upload that would silently fail.
+The manual poster control is shown ALWAYS, not only when the grab fails: an auto-grabbed
+frame is a guess, and often not the still a designer would choose. A clip whose poster
+cannot be read still imports and says so; one over 8 MB is flagged rather than landing
+silently; and a field with no poster is not a usable value.
 
 ---
 
@@ -562,12 +558,11 @@ copy says so rather than implying an upload that would silently fail.
 3. **Pixabay rate-window behaviour under real load.** The 100/min limit and the
    `X-RateLimit-Reset` header shape are from the docs, not observed. P1 should log actual
    headers on the first live calls and adjust §2.3 if they differ.
-4. **Poster derivation without ffmpeg.** §6.1 proposes seeking a `<video>` in the existing
-   hidden-BrowserWindow capture bridge and painting a frame to a canvas. Plausible, and it
-   avoids a heavy new dependency, but unproven for MP4 in an offscreen Electron window.
-   **Spike this before committing to P6's upload path**; if it fails, requiring a
-   designer-supplied poster is an acceptable fallback, silently shipping a posterless video
-   is not.
+4. ~~**Poster derivation without ffmpeg.**~~ ANSWERED: it works, and shipped in P6. Its own
+   hidden window rather than the capture bridge's, which is long-lived and shared across an
+   export run. GOTCHA worth keeping: the page must be served from the SAME DIRECTORY as the
+   clip. A `data:` URL page is an opaque origin and cannot load `file://` media at all, and
+   it fails as MEDIA_ERR_SRC_NOT_SUPPORTED, which looks exactly like a missing codec.
 5. **Video in the WordPress import path.** An imported site may already have hero video.
    Out of scope here, but the `video`/`poster` prop pair chosen in P5 should be the same
    shape the importer would target.
