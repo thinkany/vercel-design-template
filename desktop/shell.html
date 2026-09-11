@@ -1268,21 +1268,10 @@
         width: calc(var(--chat-w, 400px) - 24px);
         max-height: calc(100vh - 77px);
       }
-      /* The pane is narrower than the 600px float, so the title gives up its line first: it
-         truncates to whatever is left once the count and the step/exit buttons are placed,
-         keeping the whole control on ONE row (a wrapped row stranded Exit on a line of its own). */
+      /* One row, never wrapped: the count takes the slack on the left and truncates if it must,
+         so Prev/Next/Exit stay together on the right (a wrapped row stranded Exit alone). */
       #ad-toolbar.over-chat .ad-tb-row { flex-wrap: nowrap; }
-      /* The head takes the leftover width so the title uses every pixel the buttons don't,
-         truncating only when it genuinely runs out (default flex-basis stopped it early and
-         left dead space to its right). The count drops out below ~520px, where the title is
-         worth more than the "Highlighted on the page" restatement of the overlay. */
-      #ad-toolbar.over-chat .ad-tb-head { flex: 1 1 0; min-width: 0; }
-      #ad-toolbar.over-chat .a11y-tb-title { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      #ad-toolbar.over-chat .a11y-tb-count { font-size: 11.5px; }
-      /* In a tight pane the title is worth more than the count's "Highlighted on the page"
-         restatement of what the overlay already shows. placeAdToolbar sets .tight by the
-         pane's MEASURED width (a media query would key on the window, which is the wrong box). */
-      #ad-toolbar.over-chat.tight .a11y-tb-count { display: none; }
+      #ad-toolbar.over-chat .a11y-tb-count { font-size: 11.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
       /* The dropdown gets the pane's height instead of being a compact strip: the panel
          scrolls internally, so a long why + the make-the-call field stay reachable without
          the whole bar growing past the viewport. */
@@ -1295,25 +1284,17 @@
       /* Dismiss is the quiet answer, so it goes LAST in the stack (visual order only) and
          keeps its outline treatment while the primary action leads. */
       #ad-toolbar.over-chat .ad-tb-actions .adrec-dismiss-btn { order: 2; flex: 0 0 auto; margin-right: 0; }
+      /* The row is just the count + the step/exit buttons now: the rec's title lives in the
+         panel below, where it wraps in full instead of truncating. */
       .ad-tb-row { display: flex; align-items: center; gap: 10px; }
-      .ad-tb-head { display: flex; align-items: center; gap: 4px; flex: 1 1 auto; min-width: 0; } /* title + caret fill the row; count/buttons sit right */
-      /* Title truncates within the head; dim it while open so the dropdown heading leads. */
-      #ad-toolbar .a11y-tb-title { flex: 0 1 auto; min-width: 0; max-width: none; transition: opacity .28s ease; }
-      #ad-toolbar.expanded .a11y-tb-title { opacity: .5; }
-      .ad-tb-caret { flex-shrink: 0; border: none; background: none; color: #74747a; cursor: pointer; padding: 0 2px; display: inline-flex; align-items: center; }
-      .ad-tb-caret:hover { color: #fff; }
-      .ad-tb-caret svg { transition: transform .28s ease; }
-      .ad-tb-caret.open svg { transform: rotate(180deg); }
-      /* grid-rows (0fr→1fr) so the panel eases to the EXACT content height — and grows in step
-         when the make-the-call field opens inside it. The panel is light so it can reuse the
-         modal's light action buttons + field on the otherwise-dark bar. */
-      .ad-tb-drop { display: grid; grid-template-rows: 0fr; min-height: 0; opacity: 0; margin-top: 0; transition: grid-template-rows .38s ease-out, opacity .44s ease, margin-top .38s ease-out; }
-      #ad-toolbar.expanded .ad-tb-drop { grid-template-rows: 1fr; opacity: 1; margin-top: 10px; }
-      /* The bar's padding is 16px left (title) / 8px right (buttons); the card pulls left 8px so it sits centered. */
+      .ad-tb-count-lead { margin-right: auto; }
+      /* The panel is ALWAYS open — the bar owns the chat pane, so there is nothing to reclaim
+         by collapsing it. It's light so it can reuse the modal's light action buttons + field
+         on the otherwise-dark bar, and it grows on its own when make-the-call opens inside. */
+      .ad-tb-drop { margin-top: 10px; }
+      /* The bar's padding is 16px left / 8px right; the card pulls left 8px so it sits centered. */
       #ad-toolbar .ad-tb-drop { margin-left: -8px; }
-      /* The collapsing grid item carries NO padding/bg (so it truly hits 0 height); the visible
-         white panel + its padding live one level in, clipped away when collapsed. */
-      .ad-tb-drop-inner { overflow: hidden; min-height: 0; }
+      .ad-tb-drop-inner { min-height: 0; }
       .ad-tb-panel { background: #fff; border-radius: 10px; padding: 14px 16px; color: #1a1a1a; }
       .ad-tb-drop-title { font-weight: 600; font-size: 13.5px; line-height: 1.4; color: #1a1a1a; }
       .ad-tb-why { color: #555; font-size: 12.5px; line-height: 1.5; margin-top: 6px; }

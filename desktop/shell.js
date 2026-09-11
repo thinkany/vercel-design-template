@@ -11035,9 +11035,8 @@ const AD_HIGHLIGHT_JS = `(function(){
   };
 })();`;
 
-let adReview = null;   // { recs, idx, tab, prevUrl, count, expanded }
+let adReview = null;   // { recs, idx, tab, prevUrl, count }
 let adToolbarEl = null;
-const AD_CARET_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
 
 // The DESIGN tab: the Home tab, else any tab showing the design (not the Style guide,
 // not the Site). Art Director walks and actions happen there, never on whichever tab
@@ -11087,9 +11086,7 @@ async function showAdOnPage(rec) {
   let idx = recs.findIndex((r) => r && r.id === rec.id);
   if (idx < 0) { recs = [rec]; idx = 0; }
   setActiveTab(tab); // the walk happens on the design, whatever tab was active
-  // Arrives OPEN so the action is one click away; the caret's state then holds across
-  // Next / Prev until the designer toggles it again.
-  adReview = { recs, idx, tab, prevUrl: tab.url, count: 0, expanded: true };
+  adReview = { recs, idx, tab, prevUrl: tab.url, count: 0 };
   showAdToolbar();
   navigate(tab, `${viteUrl}/?v=${id}${routeFlag}&capture=desktop`);
   onceWebviewLoaded(tab.wv, async () => {
@@ -11117,16 +11114,12 @@ function adReviewStep(d) {
   if (!adReview || adReview.recs.length < 2) return;
   const n = adReview.recs.length;
   adReview.idx = ((adReview.idx + d) % n + n) % n;
-  // Keep the dropdown open across steps so the designer reads + acts on each rec in place;
-  // updateAdToolbar (via adHighlightCurrent) rebuilds its title/why/actions for the new rec.
+  // updateAdToolbar (via adHighlightCurrent) rebuilds the panel's title/why/actions for the
+  // new rec, so the designer reads + acts on each one in place.
   adHighlightCurrent();
 }
 function adReviewNext() { adReviewStep(1); }
 function adReviewPrev() { adReviewStep(-1); }
-// Open/close the description. Width and corner radius are fixed (see CSS), so opening only
-// grows the height via the dropdown's max-height transition — it stays a rounded rectangle
-// the whole way, never morphing through a pill.
-function adToggleExpand() { if (adReview) { adReview.expanded = !adReview.expanded; updateAdToolbar(); } }
 // Fix straight from the bar (code suggestions only): clear the overlay + restore the preview,
 // then run the same scoped builder turn Apply runs.
 function adReviewFix() {
@@ -11157,12 +11150,9 @@ function placeAdToolbar() {
     // on the rail instead of the pane.
     adToolbarEl.style.setProperty("--chat-x", r.left + "px");
     adToolbarEl.style.setProperty("--chat-w", r.width + "px");
-    // Below ~520px the row can't hold title + count + three buttons; the count goes first.
-    adToolbarEl.classList.toggle("tight", r.width < 520);
   } else {
     adToolbarEl.style.removeProperty("--chat-x");
     adToolbarEl.style.removeProperty("--chat-w");
-    adToolbarEl.classList.remove("tight");
   }
 }
 // The divider drag and window resizes both change the pane's width under a live bar.
@@ -11172,15 +11162,15 @@ function showAdToolbar() {
   if (!adToolbarEl) {
     adToolbarEl = document.createElement("div");
     adToolbarEl.id = "ad-toolbar";
-    // A FIXED top row (truncated title + caret + count + step/exit) that never moves, plus a
-    // dropdown that animates open below it carrying the full title, the why, and the rec's
-    // ACTIONS (Apply / Source imagery / Make the call) — everything for the walkthrough in one
-    // spot. "Make the call" expands the dropdown further with its field baked in.
+    // A FIXED top row (count + step/exit) that never moves, over a panel carrying the rec's
+    // full title, its why, and its ACTIONS (Apply / Source imagery / Make the call / Dismiss)
+    // — everything for the walkthrough in one spot. The panel is always open: the bar owns
+    // the chat pane, so there is nothing to reclaim by collapsing it, and the title lives
+    // there alone (it used to be duplicated, truncated, in the row as a collapsed-state label).
+    // "Make the call" grows the panel further with its field baked in.
     adToolbarEl.innerHTML =
       '<div class="ad-tb-row">' +
-        '<div class="ad-tb-head"><span class="a11y-tb-title"></span>' +
-        '<button class="ad-tb-caret" data-a="expand" aria-label="Expand">' + AD_CARET_SVG + '</button></div>' +
-        '<span class="a11y-tb-count"></span>' +
+        '<span class="a11y-tb-count ad-tb-count-lead"></span>' +
         '<button class="a11y-tb-btn" data-a="prev">‹ Prev</button>' +
         '<button class="a11y-tb-btn" data-a="next">Next ›</button>' +
         '<button class="a11y-tb-btn a11y-tb-exit" data-a="exit"></button>' +
@@ -11197,15 +11187,11 @@ function showAdToolbar() {
       if (a === "prev") adReviewPrev();
       else if (a === "next") adReviewNext();
       else if (a === "exit") { exitAdReview(); openModal("director"); } // back to the recommendations list
-      else if (a === "expand") adToggleExpand();
     });
     adToolbarEl.querySelector(".a11y-tb-exit").textContent = COPY.director.exitReview;
   }
   adToolbarEl.hidden = false;
   placeAdToolbar(); // over the chat pane when there is one, else centered over the preview
-  // Every arrival (Show on page, a new walk) opens the details; only the caret, via
-  // Next / Prev's updateAdToolbar path, carries a closed state along.
-  if (adReview) adReview.expanded = true;
   updateAdToolbar();
 }
 function hideAdToolbar() { if (adToolbarEl) adToolbarEl.hidden = true; }
@@ -11213,19 +11199,15 @@ function updateAdToolbar() {
   if (!adToolbarEl || !adReview) return;
   const rec = adReview.recs[adReview.idx] || {};
   const multi = adReview.recs.length > 1;
-  adToolbarEl.classList.toggle("expanded", !!adReview.expanded);
-  adToolbarEl.querySelector(".a11y-tb-title").textContent = rec.title || "";
-  // The dropdown carries the full title (as a heading) + the why; the row title stays
-  // truncated and fixed, so opening the dropdown never shifts it.
+  // The panel carries the rec: its full title (wrapping, never truncated), then the why.
   adToolbarEl.querySelector(".ad-tb-drop-title").textContent = rec.title || "";
   const why = adToolbarEl.querySelector(".ad-tb-why");
   why.textContent = rec.why || "";
   why.hidden = !rec.why;
-  adToolbarEl.querySelector(".ad-tb-caret").classList.toggle("open", !!adReview.expanded);
   const status = adReview.count ? COPY.director.shownOnPage : COPY.director.notOnView;
   adToolbarEl.querySelector(".a11y-tb-count").textContent = multi ? `${adReview.idx + 1}/${adReview.recs.length} · ${status}` : status;
   adToolbarEl.querySelectorAll('[data-a="prev"],[data-a="next"]').forEach((b) => { b.hidden = !multi; });
-  // The rec's actions live in the dropdown, rebuilt per rec as you step Next/Prev.
+  // The rec's actions live in the panel, rebuilt per rec as you step Next/Prev.
   renderAdBarActions(adToolbarEl.querySelector(".ad-tb-actions"), rec);
 }
 
@@ -11245,15 +11227,15 @@ function adReviewDismiss() {
   adHighlightCurrent(); // repaints the overlay + rebuilds the bar for the new current rec
 }
 
-// Build the action buttons for the current rec INSIDE the review-bar dropdown — the same
+// Build the action buttons for the current rec INSIDE the review-bar panel — the same
 // actions as the suggestion modal, so the designer can act mid-walkthrough. The primary
 // action exits the review (clears the overlay, restores the preview) then runs; "Make the
 // call" reveals its field inline first; Dismiss stays in the walk and steps to the next rec.
-// Rebuilt each step, so the field always starts fresh + collapsed.
+// Rebuilt each step, so the field always starts fresh + closed.
 function renderAdBarActions(el, rec) {
   if (!el) return;
-  // Only rebuild when the rec actually changes (a step). Re-rendering for the SAME rec (a caret
-  // toggle, a re-highlight) would wipe a half-typed make-the-call comment, so skip it.
+  // Only rebuild when the rec actually changes (a step). Re-rendering for the SAME rec (a
+  // re-highlight) would wipe a half-typed make-the-call comment, so skip it.
   const recId = (rec && rec.id) || "";
   if (el.dataset.recId === recId && el.childElementCount) return;
   el.dataset.recId = recId;
