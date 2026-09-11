@@ -11301,9 +11301,13 @@ function showAdToolbar() {
   adToolbarEl.hidden = false;
   placeAdToolbar(); // over the chat pane when there is one, else centered over the preview
   updateAdToolbar();
-  // Rise + fade in on the NEXT frame, so the browser has painted the 50px-down start state
-  // to animate from (setting both in one frame would jump straight to the end).
-  requestAnimationFrame(() => { if (adToolbarEl && !adToolbarEl.hidden) adToolbarEl.classList.add("ad-in"); });
+  // Rise + fade in FROM the hidden state. The element goes display:none → shown in this same
+  // tick, so the transition has no start value unless we force the browser to compute one
+  // first: reading a layout property flushes style, and only then does adding .ad-in read as
+  // a change to animate. (A bare requestAnimationFrame fires BEFORE that paint, so the card
+  // jumped straight to its end state — measured, not assumed.)
+  void adToolbarEl.offsetHeight;
+  adToolbarEl.classList.add("ad-in");
 }
 function hideAdToolbar() {
   if (adToolbarEl) { adToolbarEl.hidden = true; adToolbarEl.classList.remove("ad-in"); } // reset for the next arrival
