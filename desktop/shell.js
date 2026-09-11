@@ -1206,6 +1206,7 @@ const SETUP_STEPS = [
     id: "research",
     title: () => COPY.setupGate.researchTitle,
     desc: () => COPY.setupGate.researchDesc,
+    also: () => COPY.setupGate.researchAlso,
     status: () => window.desktop.getDesignLicenseStatus().then((l) => !!(l && l.hasLicense)),
     render: (host, done) => licenseSection(host, {
       noLabel: true,
@@ -1356,9 +1357,18 @@ async function renderSetupStep({ settle = null } = {}) {
       const d = document.createElement("div");
       d.className = "setup-step-desc";
       d.textContent = step.desc();
+      box.append(t, d);
+      // A second, quieter line for anything else the same key unlocks, so a step never
+      // hides something a designer would miss by skipping it.
+      if (step.also) {
+        const a = document.createElement("div");
+        a.className = "setup-step-also";
+        a.textContent = step.also();
+        box.appendChild(a);
+      }
       const bodyEl = document.createElement("div");
       bodyEl.className = "setup-step-body";
-      box.append(t, d, bodyEl);
+      box.appendChild(bodyEl);
       stack.appendChild(box);
       const done = (how) => finishSetupStep(step.id, how);
       try { await step.render(bodyEl, done); } catch (e) { d.textContent = String(e); }

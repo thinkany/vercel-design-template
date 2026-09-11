@@ -2009,7 +2009,13 @@
       .setup-step.travelling { z-index: 2; }
       .setup-step.live { border-color: #111; box-shadow: 0 2px 14px rgba(0,0,0,.06); }
       .setup-step-title { font-size: 13.5px; font-weight: 600; color: #111; }
-      .setup-step-desc { font-size: 12px; color: #6b6b76; margin: 5px 0 12px; line-height: 1.5; }
+      .setup-step-desc { font-size: 12px; color: #6b6b76; margin: 5px 0 12px; line-height: 1.6; }
+      /* a second, quieter line: anything else the same key unlocks, set apart so it reads
+         as an aside rather than more of the description */
+      .setup-step-also {
+        font-size: 11.5px; color: #6b6b76; line-height: 1.55;
+        margin: -6px 0 12px; padding-left: 10px; border-left: 2px solid #ececf1;
+      }
       .setup-step-body { }
       .setup-step-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
       .setup-skip { font: inherit; font-size: 12px; color: #6b6b76; background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0; }

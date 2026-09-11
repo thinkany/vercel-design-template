@@ -29,6 +29,14 @@ for (const id of ["figma", "research", "media"]) {
   ok(!/required: true/.test(seg), `${id} is skippable`);
 }
 
+// ---- A step never hides what skipping it costs ------------------------------
+// The Research key also gates the SITE BUILDER, so skipping this step quietly removes
+// the CMS icon. A step called "Design research" that says nothing about that would have
+// misled anyone who later wondered where the site builder went.
+const research = block.slice(block.indexOf('id: "research"'), block.indexOf('id: "media"'));
+ok(/also: \(\) => COPY\.setupGate\.researchAlso/.test(research),
+  "the Research step names the site builder the same key unlocks");
+
 // ---- One live step at a time ------------------------------------------------
 const render = shell.slice(shell.indexOf("async function renderSetupStep"), shell.indexOf("function finishSetupStep"));
 ok(/if \(!answered && !isLive\) continue;/.test(render),
@@ -37,6 +45,7 @@ const doneRow = shell.slice(shell.indexOf("function buildSetupDoneRow"), shell.i
 ok(/setup-done-row/.test(doneRow), "an answered step collapses to a done-row");
 ok(/COPY\.setupGate\.reopen/.test(doneRow), "a done step can be reopened");
 ok(/buildSetupDoneRow\(step, answered\)/.test(render), "and the render uses that one builder");
+ok(/setup-step-also/.test(render), "a step's second line (what else its key unlocks) is rendered");
 ok(/doneBtn\.hidden = !!nextSetupStep\(\)/.test(render),
   "Done only appears once every step is answered");
 

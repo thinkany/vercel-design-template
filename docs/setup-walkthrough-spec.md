@@ -320,9 +320,11 @@ single join between the two specs.
 
 ## 7. Open questions
 
-1. **Research step naming.** Calling it "Research" while it also gates the site builder is the
-   §1.4 honesty problem. Either the step is renamed to something covering both, or the copy
-   carries the whole truth. Prefer renaming, but that touches drawer copy too.
+1. ~~**Research step naming.**~~ RESOLVED in the build: the step is titled "Design research &
+   site building" and carries a second, quieter line naming the site builder explicitly, so
+   skipping it can't silently remove the CMS icon on someone. Renaming alone would have left
+   the drawer's own label saying something different; a step can now declare what else its
+   key unlocks (`also`), which is the general fix.
 2. **Does `licenseSection`'s fold chrome suit a card?** The drawer wraps each call in
    `licensesFold`. Setup wants the section without the fold. `licenseSection` takes a plain
    `body`, so this should just work, but P2 should confirm there is no fold-specific styling

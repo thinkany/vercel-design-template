@@ -1296,7 +1296,11 @@ window.COPY = {
     figmaTitle: "Figma export",
     figmaDesc: "Hand a finished design to Figma as editable layers: type, color and spacing arrive as real styles, not a flat image.",
     researchTitle: "Design research & site building",
-    researchDesc: "Design research and the direction deck that keeps each design distinct, plus the site builder that turns an approved design into a publishable website.",
+    researchDesc: "Add a design research feature that studies companies, brands, and products similar to your design brief, then surfaces the most relevant aesthetic directions and proven UX patterns. This research helps shape a clear \u201cdirection deck\u201d so every design stays distinctive and grounded in what works in the real world, while still respecting the originality of your ideas.",
+    // The same key unlocks the site builder, so the step says so: skipping it quietly
+    // removes the CMS icon, and a designer who later wondered where it went would have
+    // been misled by a step called "Design research".
+    researchAlso: "This key also unlocks the site builder, which turns an approved design into a publishable website with pages, posts and media.",
     mediaTitle: "Photos & Video",
     mediaDesc: "Add optional free stock image and video libraries so your build can automatically find visuals that match your design description and download them with proper photographer credit.",
     mediaOrder: "If you supply keys for each service provider, the build will search Unsplash first, then Pexels, then Pixabay. For videos, it will search Pexels first, then Pixabay. You can connect any or all of these services; the build will use whichever are connected and still have requests available. If no video libraries are connected, your designs will simply use still images only.",
