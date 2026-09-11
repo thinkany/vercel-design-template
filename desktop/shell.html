@@ -1202,30 +1202,37 @@
       .adrec-kind-code { color: #1a6b3a; background: #e7f4ec; }
       .adrec-kind-asset { color: #8a5a12; background: #f6eede; }
       .adrec-kind-decision { color: #555; background: #eee; }
-      /* An anchored rec opens the review bar ON the page — the amber eye marks it as a
-         "take me there" row and matches the highlight overlay's marker. */
       /* A rec with a crop becomes a CARD: the picture leads, the title + kind chip stack in a
-         column beside it. The eye picks the section out of the contact sheet before it reads
-         a word, which is the whole point. Rows without a crop keep the original text layout. */
-      .adrec-hasthumb { align-items: stretch; gap: 10px; padding: 0; overflow: hidden; }
+         column beside it. Rows without a crop keep the original text layout, and the two sit
+         together in one list. */
+      .adrec-hasthumb { align-items: stretch; gap: 10px; padding: 0; position: relative; }
       /* The card's 9px radius minus its 1px border = an 8px inner curve; matching it here
          keeps the crop from showing square corners inside a rounded card. */
       .adrec-thumb { flex: 0 0 auto; width: 120px; align-self: stretch; object-fit: cover;
-        background: #f1f1f4; border-right: 1px solid #ececf1; display: block; min-height: 62px;
-        border-radius: 8px 0 0 8px; }
+        object-position: left top; background: #f1f1f4; border-right: 1px solid #ececf1;
+        display: block; min-height: 62px; border-radius: 8px 0 0 8px; }
       .adrec-hasthumb .adrec-text { display: flex; flex-direction: column; align-items: flex-start;
         gap: 5px; flex: 1; min-width: 0; padding: 9px 10px 9px 0; }
       .adrec-hasthumb .adrec-title { flex: none; }
       .adrec-hasthumb .adrec-kind { flex: none; }
-      /* The eye marker floats over the crop's corner on a card (the text column has no room
-         for it), and stays an inline row affordance when there's no crop. */
-      .adrec-hasthumb { position: relative; }
-      .adrec-hasthumb.adrec-anchored::after { position: absolute; left: 8px; top: 8px; width: 15px; height: 15px;
-        background-color: rgba(255,255,255,.92); border-radius: 50%; padding: 0; opacity: .95;
-        background-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
-      .adrec-anchored::after { content: ""; flex: 0 0 auto; width: 13px; height: 13px; opacity: .55;
-        background: no-repeat center/13px url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23d97706' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z'/%3E%3Ccircle cx='12' cy='12' r='2.6'/%3E%3C/svg%3E"); }
-      .adrec-anchored:hover::after { opacity: 1; }
+      /* MAGNIFIER. At 120px a crop of a whole section is too small to recognize. Hovering the
+         crop floats a big copy of it over the drawer, like a loupe: the row itself doesn't
+         change at all (no reflow, nothing under the pointer moves), and because the panel is
+         free of the card's left edge it can be far larger than an in-place grow could be.
+         It's a sibling <img> the row renders once and only paints on hover, positioned by JS
+         against the hovered row (see positionRecLoupe) so it can sit beside the list and flip
+         above/below near an edge. pointer-events:none so it never eats the click. */
+      .adrec-loupe {
+        position: fixed; z-index: 1400; width: 420px; max-width: 62vw;
+        aspect-ratio: 16 / 10; object-fit: cover; object-position: left top;
+        background: #f1f1f4; border: 1px solid #d3d3da; border-radius: 10px;
+        box-shadow: 0 14px 40px rgba(20,20,28,.28);
+        opacity: 0; transform: scale(.97); transform-origin: left center;
+        transition: opacity .14s ease, transform .14s ease;
+        pointer-events: none; display: none;
+      }
+      .adrec-loupe.on { display: block; }
+      .adrec-loupe.in { opacity: 1; transform: scale(1); }
       .adrec-dismissed { background: #fafafb; cursor: pointer; }
       .adrec-dismissed .adrec-title { color: #666666; }
       .adrec-restore { flex: 0 0 auto; border: 1px solid #d8d8de; background: none; color: #555; border-radius: 6px; padding: 3px 9px; font: inherit; font-size: 11px; cursor: pointer; }

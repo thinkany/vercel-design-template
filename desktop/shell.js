@@ -1214,6 +1214,7 @@ const PANELS = {
 
 function closeModal() {
   Object.values(RAILS).forEach((b) => b.classList.remove("active"));
+  if (typeof hideRecLoupe === "function") hideRecLoupe(); // no loupe left floating over the app
   if (modal.hidden) return;
   // A drawer-anchored tour step can't outlive its drawer.
   if (typeof tourRunning === "function" && tourRunning() && tourTarget && modalBody.contains(tourTarget)) endTour();
@@ -10167,6 +10168,7 @@ function isModalOpen(kind) {
 }
 function refreshDirector() {
   if (!isModalOpen("director")) return;
+  hideRecLoupe(); // the rows it was anchored to are about to be replaced
   modalBody.innerHTML = "";
   renderDirector(modalBody);
 }
@@ -10298,18 +10300,71 @@ async function renderDirector(body) {
   if (directorState.dismissed.length) body.appendChild(buildArchive(directorState.dismissed));
 }
 
+// ---- Rec thumbnails + the hover magnifier -----------------------------------
+// A rec's crop is only ~120px in the row, which is enough to recognize a section you already
+// know but not enough to actually READ the design. Hovering one floats a much larger copy
+// beside the drawer, like a loupe: the row never changes, so nothing moves under the pointer.
+// ONE shared element does every row (the list can be long, and a per-row copy would hold a
+// full-size decode each).
+let recLoupeEl = null;
+let recLoupeTimer = null;
+function recLoupe() {
+  if (!recLoupeEl) {
+    recLoupeEl = document.createElement("img");
+    recLoupeEl.className = "adrec-loupe";
+    recLoupeEl.alt = "";
+    document.body.appendChild(recLoupeEl);
+  }
+  return recLoupeEl;
+}
+// Park it to the RIGHT of the drawer, vertically centered on the row, and clamp to the
+// viewport; if it won't fit right (a wide drawer, a narrow window) it flips to the left.
+function positionRecLoupe(row) {
+  const el = recLoupe();
+  const r = row.getBoundingClientRect();
+  const w = el.offsetWidth || 420, h = el.offsetHeight || Math.round((el.offsetWidth || 420) / 1.6);
+  const gap = 14;
+  let left = r.right + gap;
+  if (left + w > window.innerWidth - 8) left = r.left - w - gap;   // flip to the left
+  if (left < 8) left = Math.max(8, window.innerWidth - w - 8);      // neither side fits: pin right
+  let top = Math.round(r.top + r.height / 2 - h / 2);
+  top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
+  el.style.left = left + "px";
+  el.style.top = top + "px";
+  el.style.transformOrigin = left > r.left ? "left center" : "right center";
+}
+function showRecLoupe(row, src) {
+  clearTimeout(recLoupeTimer);
+  const el = recLoupe();
+  el.src = src;
+  el.classList.add("on");
+  positionRecLoupe(row);              // measure once it's displayed, before fading in
+  requestAnimationFrame(() => { positionRecLoupe(row); el.classList.add("in"); });
+}
+function hideRecLoupe() {
+  if (!recLoupeEl) return;
+  recLoupeEl.classList.remove("in");
+  clearTimeout(recLoupeTimer);
+  // Let the fade finish before un-displaying, so it doesn't snap away mid-transition.
+  recLoupeTimer = setTimeout(() => { if (recLoupeEl) { recLoupeEl.classList.remove("on"); recLoupeEl.removeAttribute("src"); } }, 160);
+}
+
 // A crop of what the rec points at, when we captured one. The row stops being a title to
 // read and becomes a picture to recognize — the whole point of the contact sheet. Loads from
 // disk via file://; if the file is gone (project moved, cleaned) the img just drops out and
 // the row falls back to its text layout.
-function buildRecThumb(rec) {
+function buildRecThumb(rec, row) {
   if (!rec.thumb) return null;
   const img = document.createElement("img");
   img.className = "adrec-thumb";
   img.alt = ""; // decorative: the title beside it already names the rec
   img.loading = "lazy";
   img.src = "file://" + rec.thumb.split("/").map(encodeURIComponent).join("/");
-  img.addEventListener("error", () => img.remove());
+  img.addEventListener("error", () => { img.remove(); row.classList.remove("adrec-hasthumb"); });
+  // The loupe follows the CROP, not the whole row: hovering the title shouldn't throw a big
+  // panel over the drawer while you're only reading down the list.
+  img.addEventListener("mouseenter", () => showRecLoupe(row, img.src));
+  img.addEventListener("mouseleave", hideRecLoupe);
   return img;
 }
 
@@ -10320,7 +10375,7 @@ function buildRecThumb(rec) {
 function buildRecRow(rec) {
   const row = document.createElement("button");
   row.className = "adrec";
-  const thumb = buildRecThumb(rec);
+  const thumb = buildRecThumb(rec, row);
   if (thumb) { row.classList.add("adrec-hasthumb"); row.appendChild(thumb); }
   // Title + kind sit in their own column beside the crop, so the chip stays with the title
   // instead of being pushed to the far edge of a wide card.
@@ -10330,7 +10385,6 @@ function buildRecRow(rec) {
   kind.textContent = (AD_KIND[rec.kind] || AD_KIND.code).label;
   text.append(title, kind);
   row.appendChild(text);
-  if (rec.anchor) row.classList.add("adrec-anchored");
   row.addEventListener("click", async () => {
     if (rec.anchor && await showAdOnPage(rec)) return; // couldn't start (no preview / no design tab) → modal
     openRecModal(rec, "active");
