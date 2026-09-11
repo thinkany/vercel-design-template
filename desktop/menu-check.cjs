@@ -71,6 +71,26 @@ function expectedItems(projectDir) {
   return items;
 }
 
+/**
+ * Ordered nav items from content/site.json (the SITE's nav), home excluded the way
+ * the site header excludes it. The design surface's nav is pages.ts; the site's is
+ * this, edited in the Navigation tab. Same rule, different source.
+ */
+function expectedSiteItems(projectDir) {
+  try {
+    const site = JSON.parse(readFile(path.join(projectDir, "content", "site.json")) || "{}");
+    const nav = Array.isArray(site.nav) ? site.nav : [];
+    return nav
+      .filter((it) => !(/^home$/i.test(String(it.label || "").trim()) && ["/", "", "#"].includes(String(it.href || ""))))
+      .map((it, i) => ({
+        id: (String(it.label || it.href || "").replace(/^[/#]+/, "").replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase()) || `item-${i}`,
+        name: String(it.label || ""),
+        // The site decides per item: columns = mega, links = dropdown, neither = none.
+        kind: (it.columns || []).length ? "mega" : (it.links || []).length ? "dropdown" : "none",
+      }));
+  } catch { return []; }
+}
+
 /** The header's structural config, as the component reads it. */
 function expectedConfig(projectDir, variationId) {
   // A variation may override the config; prefer its copy, exactly as resolveData does.
@@ -154,6 +174,32 @@ const PROBE_JS = `(() => {
     placement: header.getAttribute("data-header-placement"),
     menuKind: header.getAttribute("data-header-menu-kind"),
     logo: box(header.querySelector("[data-header-logo]")),
+    // A logo box can exist and be EMPTY (a wordmark with no site name, a missing
+    // image). The screenshot shows a hole in the bar; the geometry alone does not.
+    logoText: ((header.querySelector("[data-header-logo]") || {}).textContent || "").trim(),
+    logoImg: !!(header.querySelector("[data-header-logo] img")),
+    // A wordmark the same colour as the bar it sits on is invisible, and every
+    // geometric rule passes it happily. Report both so the rule can compare.
+    // The element that actually PAINTS the wordmark, which is the innermost one
+    // holding the text. A comma selector would not do: querySelector returns the
+    // first match in DOCUMENT order, so it hands back the <a> wrapper and its
+    // inherited colour rather than the span whose class sets the real one.
+    logoColor: (() => {
+      const root = header.querySelector("[data-header-logo]");
+      if (!root) return "";
+      const inner = Array.from(root.querySelectorAll("*")).filter((e) => (e.textContent || "").trim());
+      const e = inner.length ? inner[inner.length - 1] : root;
+      return getComputedStyle(e).color;
+    })(),
+    barBg: (() => {
+      let el = header;
+      for (let i = 0; el && i < 4; i++) {
+        const bg = getComputedStyle(el).backgroundColor;
+        if (bg && !/rgba\(0, 0, 0, 0\)|transparent/.test(bg)) return bg;
+        el = el.parentElement;
+      }
+      return "";
+    })(),
     navs,
     hamburger: ham ? { side: ham.getAttribute("data-header-hamburger"), visible: hamVisible, box: box(ham) } : null,
     viewport: { w: window.innerWidth, h: window.innerHeight },
@@ -205,6 +251,14 @@ const DRAWER_PROBE = `(() => {
 })()`;
 
 // ---- The rules ---------------------------------------------------------------
+
+/** Two CSS colours that render identically (so text on this bar is invisible). */
+function sameColor(a, b) {
+  const rgb = (c) => (String(c).match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+  const [x, y] = [rgb(a), rgb(b)];
+  if (x.length < 3 || y.length < 3) return false;
+  return x.every((v, i) => Math.abs(v - y[i]) < 8);
+}
 
 function finding(rule, width, item, expected, actual, note) {
   return { rule, width, item: item || null, expected, actual, ...(note ? { note } : {}) };
@@ -264,6 +318,15 @@ function checkBar(probe, items, config, width, findings) {
   if (!probe.logo) {
     findings.push(finding("placement", width, null, "a logo or wordmark in the bar", "none found"));
     return;
+  }
+  // The lockup must actually SAY something. An empty wordmark leaves a hole in the
+  // bar that every geometric rule happily passes.
+  if (!probe.logoImg && !probe.logoText) {
+    findings.push(finding("placement", width, null, "the logo showing a name or an image",
+      "the lockup is empty", "an unset client name, or a logo image that did not load"));
+  } else if (!probe.logoImg && probe.logoColor && probe.barBg && sameColor(probe.logoColor, probe.barBg)) {
+    findings.push(finding("placement", width, null, "the wordmark legible against the bar",
+      `both are ${probe.barBg}`, "the skin darkened the bar without restyling the type"));
   }
   const inner = probe.inner || probe.header;
   const innerCentre = inner.x + inner.w / 2;
@@ -426,13 +489,19 @@ function checkMobile(bar, drawer, items, menus, config, findings) {
  * Returns { ok, findings, checked, headerMode, ranAt, variationId }, and writes
  * the same object to <project>/.thinkany/menu-check.json.
  */
-async function runMenuCheck({ projectDir, previewUrl, variationId, captureOp, headerMode = "configured", widths, log } = {}) {
-  if (!previewUrl) return { ok: false, error: "The preview isn't running yet — open a built design first." };
+async function runMenuCheck({ projectDir, previewUrl, variationId, captureOp, headerMode = "configured", widths, log, site = false } = {}) {
+  if (!previewUrl) return { ok: false, error: site ? "The site isn't running yet." : "The preview isn't running yet — open a built design first." };
   if (!projectDir) return { ok: false, error: "No project is open." };
   const vid = variationId || "v01";
-  const items = expectedItems(projectDir);
+  // TWO SURFACES, ONE CHECK. The design preview reads pages.ts + menu.ts and opens a
+  // panel through `?menu=open&item=`; the promoted site reads content/site.json and
+  // opens one by hovering, because it is a real page with no capture harness. The
+  // RULES are identical, which is the point: the site's header is the design's.
+  const items = site ? expectedSiteItems(projectDir) : expectedItems(projectDir);
   const config = expectedConfig(projectDir, vid);
-  const menus = expectedMenus(projectDir, items, config);
+  const menus = site
+    ? Object.fromEntries(items.map((it) => [it.id, { kind: it.kind }]))
+    : expectedMenus(projectDir, items, config);
   const findings = [];
   const run = widths && widths.length ? WIDTHS.filter((w) => widths.includes(w.name)) : WIDTHS;
   const say = (m) => { try { log && log(m); } catch { /* logging is never fatal */ } };
@@ -448,29 +517,68 @@ async function runMenuCheck({ projectDir, previewUrl, variationId, captureOp, he
     await captureOp({ op: "waitSelector", selector: "[data-capture-ready], header", timeout: 15000 });
     // The panels measure themselves in a layout effect; give the frame a beat.
     await evaluate(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))`);
+    // The SITE's header is server-rendered then hydrated; until React has attached,
+    // a hover does nothing and every panel would read as "never opened". Wait for
+    // the island rather than guessing at a delay.
+    if (site) {
+      const t0 = Date.now();
+      for (;;) {
+        const ready = await evaluate(`!!document.querySelector("astro-island[ssr], astro-island") === false || !document.querySelector("astro-island[ssr]")`);
+        if (ready || Date.now() - t0 > 8000) break;
+        await evaluate(`new Promise((r) => setTimeout(r, 150))`);
+      }
+    }
+  };
+
+  // On the site there is no capture flag: the header is hydrated React, so drive it
+  // the way a visitor does. Hydration has to have happened, hence the settle.
+  const openItem = async (id) => {
+    const sel = JSON.stringify(`[data-menu-item="${id}"]`);
+    const opened = await evaluate(`(() => {
+      const t = document.querySelector(${sel});
+      if (!t) return false;
+      // Hover is how a visitor opens it; focus is the keyboard path. Fire both, so
+      // a header that only wires one still reads as open.
+      t.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+      t.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+      if (typeof t.focus === "function") t.focus();
+      return true;
+    })()`);
+    await evaluate(`new Promise((r) => setTimeout(r, 300))`);
+    return opened;
+  };
+  const openDrawer = async () => {
+    await evaluate(`(() => {
+      const b = document.querySelector("[data-header-hamburger]");
+      if (!b) return false;
+      b.click();
+      return true;
+    })()`);
+    await evaluate(`new Promise((r) => setTimeout(r, 450))`); // the slide
   };
 
   let panelsChecked = 0;
   try {
     for (const bp of run) {
-      const base = `${previewUrl}/?v=${encodeURIComponent(vid)}&capture=${bp.name}`;
+      const base = site ? previewUrl : `${previewUrl}/?v=${encodeURIComponent(vid)}&capture=${bp.name}`;
       await goto(base, bp.w, bp.h);
       const bar = await evaluate(PROBE_JS);
       checkBar(bar, items, config, bp.name, findings);
 
       if (bp.name === "mobile") {
-        // The drawer is forced open by `?menu=open` with no item (DesignSurface).
-        await goto(`${base}&menu=open`, bp.w, bp.h);
+        if (site) await openDrawer();                       // a real click, on a real page
+        else await goto(`${base}&menu=open`, bp.w, bp.h);   // DesignSurface's capture flag
         const drawer = await evaluate(DRAWER_PROBE);
         checkMobile(bar, drawer, items, menus, config, findings);
         continue;
       }
 
-      // Panels — one forced-open pass per menu-bearing item.
+      // Panels — one open pass per menu-bearing item.
       for (const it of items) {
         const menu = menus[it.id];
         if (!menu || menu.kind === "none") continue;
-        await goto(`${base}&menu=open&item=${encodeURIComponent(it.id)}`, bp.w, bp.h);
+        if (site) { await goto(base, bp.w, bp.h); await openItem(it.id); }
+        else await goto(`${base}&menu=open&item=${encodeURIComponent(it.id)}`, bp.w, bp.h);
         const probe = await evaluate(panelProbe(it.id));
         if (probe) probe.barLogo = bar && bar.logo;
         checkPanel(probe, it, menu, config, bp.name, findings);
@@ -483,6 +591,7 @@ async function runMenuCheck({ projectDir, previewUrl, variationId, captureOp, he
 
   const result = {
     ok: findings.length === 0,
+    surface: site ? "site" : "design",
     headerMode,
     findings,
     checked: { items: items.length, panels: panelsChecked, widths: run.map((w) => w.name) },

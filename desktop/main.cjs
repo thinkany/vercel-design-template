@@ -1916,9 +1916,33 @@ ipcMain.handle("site:saveSite", (_e, { nav, footerLinks, legal } = {}) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   const p = path.join(siteContentDir(currentProject), "site.json");
   const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
+  // A mega menu's COLUMNS survive the save. The Navigation tab edits them and the
+  // site header renders them (site/blocks/lib/Header.tsx decides dropdown vs mega
+  // per item from this data), so dropping them here silently flattened every mega
+  // menu the moment a designer touched the nav.
+  const cleanColumns = (arr) => (Array.isArray(arr) ? arr : [])
+    .map((c) => {
+      if (!c || typeof c !== "object") return null;
+      const heading = typeof c.heading === "string" ? c.heading.trim() : "";
+      const links = clean(c.links, false);
+      const f = c.feature && typeof c.feature === "object" ? c.feature : null;
+      const feature = f && (f.title || f.text || f.image || f.link) ? {
+        ...(f.image && f.image.src ? { image: { src: String(f.image.src), alt: String(f.image.alt || "") } } : {}),
+        ...(typeof f.title === "string" && f.title.trim() ? { title: f.title.trim() } : {}),
+        ...(typeof f.text === "string" && f.text.trim() ? { text: f.text.trim() } : {}),
+        ...(f.link && f.link.label && f.link.href ? { link: { label: String(f.link.label).trim(), href: String(f.link.href).trim() } } : {}),
+      } : null;
+      if (!heading && !links.length && !feature) return null;
+      return { ...(heading ? { heading } : {}), links, ...(feature ? { feature } : {}) };
+    })
+    .filter(Boolean);
   const clean = (arr, sub) => (Array.isArray(arr) ? arr : [])
     .filter((l) => l && typeof l.label === "string" && l.label.trim() && typeof l.href === "string" && l.href.trim())
-    .map((l) => ({ label: l.label.trim(), href: l.href.trim(), ...(sub && Array.isArray(l.links) && l.links.length ? { links: clean(l.links, false) } : {}) }));
+    .map((l) => ({
+      label: l.label.trim(), href: l.href.trim(),
+      ...(sub && Array.isArray(l.links) && l.links.length ? { links: clean(l.links, false) } : {}),
+      ...(sub && Array.isArray(l.columns) && l.columns.length ? { columns: cleanColumns(l.columns) } : {}),
+    }));
   // A footer item may be a column: a label with links and no address of its own.
   const cleanFooter = (arr) => (Array.isArray(arr) ? arr : [])
     .map((l) => l && typeof l.label === "string" ? { label: l.label.trim(), href: typeof l.href === "string" ? l.href.trim() : "", links: clean(l.links, false) } : null)

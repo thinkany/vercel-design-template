@@ -6,7 +6,7 @@ site 100% accurate every time regardless of menu type"). Rob asked whether a men
 agent makes sense; the answer here is no: an agent for verification, code for
 construction.
 
-**P1 + P2 + P4 BUILT 2026-09-10** on `feature/menu-deterministic-header` (harness-verified,
+**P1 + P2 + P3 + P4 BUILT 2026-09-10/11** on `feature/menu-deterministic-header` (harness-verified,
 not yet app-tested). All nine layouts pass the check at three widths, and a
 deliberately broken custom header fails with the right rule:
 `npx electron desktop/build/menu-layouts-test.cjs [--shots]`. The tool-guard's header
@@ -21,7 +21,12 @@ output is a COMPLETELY empty brief, which yields "Service One / Service Two"; th
 failure path is safe (no key, timeout, refusal or junk reply all leave the scaffold's
 files untouched and the build proceeds).
 
-P3 (the site chrome) and P5 (Art Director surfacing) are still open.
+P3 makes the SITE's header the DESIGN's header: `site/blocks/lib/Header.tsx` (CORE)
+renders `content/site.json`'s nav using the pinned design's own `header.config.ts` and
+`header.skin.ts`, resolved through two new Astro/Vite aliases, so `/promote-blocks`
+stops re-authoring the header entirely (it now only moves the menu's DATA into
+`site.json`). The menu check grew a `site: true` mode and runs the same rules against
+the built site. Only P5 (Art Director surfacing) is still open.
 
 ## Goal
 
@@ -254,7 +259,7 @@ That is the whole "menu agent": verification and explanation, never construction
 |---|---|---|
 | ~~P1~~ | ✅ `header.config.ts` + `header.skin.ts`; `Header.tsx` implements the three placements with the drawer folded in; intake writes the config; `MENU_LAYOUT_PHRASES` becomes descriptive; `/design` §4c rewritten; tool-guard rule | ✅ `menu-layouts-test.cjs`: nine layouts × three widths, all pass; `--shots` writes the per-layout PNGs (eyeballed); guard test committed at 85 cases (and caught a real `diskutil eraseDisk` gap in the existing rules) |
 | ~~P2~~ | ✅ `menu-seed.cjs` (prompt + schema + a `clean` that distrusts the reply + `menu.ts`/`pages.ts` renderers), called at the build handoff; `/design` §3 tells the agent the pages arrive seeded | ✅ `node desktop/dev/menu-seed.test.cjs` (67 checks, every misbehaving-model case) + a live run over seven briefs, and the seeded files pass the menu check in a real scaffold |
-| P3 | `site/blocks/lib/Header.tsx` + default `chrome.ts`; `/promote-blocks` chrome step reduced to config, skin and columns | Promote VH-01 and The Dog Bark; the site header matches the design header pixel-for-pixel at the top of the page |
+| ~~P3~~ | ✅ `site/blocks/lib/Header.tsx` + default `chrome.ts` + `@design-header-config`/`@design-header-skin` aliases in BOTH builds; `/promote-blocks` chrome step reduced to moving nav data; `site:saveSite` stops dropping mega `columns` | ✅ `npx electron desktop/build/site-header-test.cjs`: a mega nav in content/site.json, the design's dark skin, the SAME menu check green against the built site at two widths |
 | ~~P4~~ | ✅ `menu-check.cjs` + capture-bridge driver + `.thinkany/menu-check.json` + narration line (runs itself after a build or a header-touching edit; `menu:check` IPC for on demand) | ✅ Nine scaffolds pass; the broken custom header fails on `placement` ("an element sits 8px off centre") |
 | P5 | Art Director surfacing: findings list, Fix on custom headers, re-seed on configured ones | One broken custom header fixed through the drawer |
 

@@ -55,6 +55,18 @@ const designStyles =
 if (!fs.existsSync(designStyles)) {
   throw new Error(`content/site.json pins design "${design}", but ${designStyles} does not exist.`);
 }
+// The CONFIGURED HEADER's two data files, resolved the same way the styles are, so
+// the site's header renders the pinned design's header rather than a re-authored
+// copy of it: `@design-header-config` (structure: placement, menuKind, menuSide,
+// mega) and `@design-header-skin` (look: a class string per part). A variation
+// overrides either by having its own; otherwise the base file stands. Aliases, not
+// copies, so a later edit to the design's header reaches the site on the next build.
+const pick = (rel, varRel) => {
+  const inVariation = design === "v00" ? null : path.resolve(repoRoot, "src", "variations", design, varRel);
+  return inVariation && fs.existsSync(inVariation) ? inVariation : path.resolve(repoRoot, rel);
+};
+const designHeaderConfig = pick("src/app/header.config.ts", "header.config.ts");
+const designHeaderSkin = pick("src/app/components/header.skin.ts", "components/header.skin.ts");
 
 // URLs of entries flagged `noindex` (pages: seo.noindex in content/pages/*.json;
 // posts: `noindex: true` under seo in the frontmatter), so the sitemap agrees with
@@ -167,6 +179,8 @@ export default defineConfig({
       alias: {
         "@": path.resolve(repoRoot, "src"),
         "@design": designStyles,
+        "@design-header-config": designHeaderConfig,
+        "@design-header-skin": designHeaderSkin,
       },
     },
     server: { fs: { allow: [repoRoot] } },
