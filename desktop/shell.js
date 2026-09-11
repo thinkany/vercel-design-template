@@ -1251,32 +1251,48 @@ const SETUP_STEPS = [
       shelf.className = "setup-libs";
       host.appendChild(shelf);
       for (const lib of libs) {
-        // Each library folds, the way the Keys drawer's rows do, so three sets of
-        // "how to get a key" steps don't land at once. An unconnected library opens (it
-        // is what there is to do); a connected one stays shut with its state on the head.
-        const status = await lib.get().catch(() => null);
-        const connected = !!(status && status.hasLicense);
+        // Each library folds, the way the Keys drawer's rows do, and they all start SHUT:
+        // this step is a menu of three optional libraries, so the designer opens the one
+        // they want rather than being handed three sets of "how to get a key" steps. The
+        // heading carries what each one offers, which is what they choose on.
         const fold = licensesFold(shelf, {
           title: lib.label,
           storeKey: `ta-setup-fold-${lib.id}`,
-          openDefault: !connected,
-          remember: false, // what is not connected yet is what should be open
+          openDefault: false,
+          remember: false, // a fresh walk-through always starts from collapsed
           note: lib.offers, noteIcons: lib.icons, // what it offers, legible while shut
         });
         // Connecting one library does NOT finish the step: a designer may want two or
         // three. The step ends when they press Continue (or Skip).
-        await licenseSection(fold, {
-          noLabel: true, desc: lib.blurb, stepsHtml: lib.steps,
-          getStatus: lib.get, save: lib.save, clear: lib.clear,
-          onConnected: () => renderSetupStep(),
-        });
+        //
+        // A validated key folds ITS OWN section away (that library is done) and nothing
+        // else moves: no full re-render, which would disturb a section the designer had
+        // deliberately opened. Unplugging one repaints the row in place and leaves the
+        // section where it is, since shutting it would hide the field they now need.
+        const paintLib = async () => {
+          fold.innerHTML = "";
+          await licenseSection(fold, {
+            noLabel: true, desc: lib.blurb, stepsHtml: lib.steps,
+            getStatus: lib.get, save: lib.save, clear: lib.clear,
+            onConnected: async (res) => {
+              await paintLib();
+              if (res) fold.closeFold(); // connected → done → fold away
+            },
+          });
+        };
+        await paintLib();
       }
       // Its own Continue, since no single field completes this step.
       const go = document.createElement("button");
       go.className = "btn-primary";
       go.style.marginTop = "16px";
       go.textContent = COPY.intake.continue;
-      go.addEventListener("click", async () => done((await SETUP_STEPS[3].status()) ? "connected" : "skipped"));
+      // Reads live status on click, so it is right whatever was connected or unplugged
+      // while this step was open. Found by id, not by position in the list.
+      go.addEventListener("click", async () => {
+        const mediaStep = SETUP_STEPS.find((x) => x.id === "media");
+        done((await mediaStep.status()) ? "connected" : "skipped");
+      });
       host.appendChild(go);
     },
   },
@@ -3007,6 +3023,15 @@ function licensesFold(host, { title, tourId, storeKey, openDefault = false, reme
     const now = fold.hidden; siteReveal(fold, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now));
     if (remember) { try { localStorage.setItem(storeKey, now ? "1" : "0"); } catch {} }
   });
+  // A handle so a caller can fold this section away itself (the setup screen shuts a
+  // library once its key validates). Hung on the returned body, which callers already hold.
+  fold.closeFold = () => {
+    if (fold.hidden) return;
+    siteReveal(fold, false);
+    sec.classList.remove("open");
+    head.setAttribute("aria-expanded", "false");
+    if (remember) { try { localStorage.setItem(storeKey, "0"); } catch {} }
+  };
   sec.append(head, fold); host.appendChild(sec);
   return fold;
 }

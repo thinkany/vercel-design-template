@@ -1988,14 +1988,20 @@
       .setup-skip { font: inherit; font-size: 12px; color: #6b6b76; background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0; }
       .setup-skip:hover { color: #111; }
       /* a done step: one quiet row, name + state + a way back in */
-      .setup-done-row { display: flex; align-items: center; gap: 10px; padding: 11px 14px; }
-      .setup-done-row .setup-step-title { flex: none; }
+      .setup-done-row { display: flex; align-items: center; gap: 12px; padding: 11px 14px; }
+      /* The title takes the slack, so the state and the way back in sit together on the
+         right and line up down the stack whatever a step is called. */
+      .setup-done-row .setup-step-title {
+        flex: 1 1 auto; min-width: 0;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
       .setup-chip {
-        font-size: 11px; font-weight: 600; letter-spacing: .02em; padding: 3px 9px; border-radius: 999px;
+        flex: none; font-size: 11px; font-weight: 600; letter-spacing: .02em;
+        padding: 3px 9px; border-radius: 999px; text-align: center; min-width: 74px;
       }
       .setup-chip.connected { background: #e7f6ec; color: #1a7f37; }
       .setup-chip.skipped { background: #f1f1f4; color: #6b6b76; }
-      .setup-reopen { margin-left: auto; font: inherit; font-size: 12px; color: #6b6b76; background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0; }
+      .setup-reopen { flex: none; min-width: 52px; text-align: right; font: inherit; font-size: 12px; color: #6b6b76; background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0; }
       .setup-reopen:hover { color: #111; }
       /* the media step holds three libraries at once, each folding like a drawer row so
          three sets of "how to get a key" steps don't land on the designer together */

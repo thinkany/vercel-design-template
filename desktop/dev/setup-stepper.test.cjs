@@ -61,14 +61,32 @@ for (const lib of ["Unsplash", "Pexels", "Pixabay"]) {
   ok(new RegExp(`COPY\\.licenses\\.${lib.toLowerCase()}Label`).test(media), `the media step offers ${lib}`);
 }
 ok(/mediaOrder/.test(media), "and states the sourcing order, which is otherwise a guess");
-ok(/onConnected: \(\) => renderSetupStep\(\)/.test(media),
-  "connecting ONE library does not end the step: a designer may want two or three");
+// Connecting one library does not end the step (a designer may want two or three), and
+// it must not re-render the stack either: that would collapse sections they had opened.
+ok(!/onConnected: \(\) => renderSetupStep\(\)/.test(media),
+  "connecting a library must not rebuild the whole stack");
+ok(/const paintLib = async \(\) =>/.test(media),
+  "a library row repaints itself in place instead");
+ok(/if \(res\) fold\.closeFold\(\)/.test(media),
+  "a validated key folds ITS OWN section away");
+// The fold handle only ever CLOSES. There is deliberately no "open it for them".
+ok(!/openFold|\.open\(\)/.test(media), "nothing in this step auto-opens a section");
+ok(/closeFold/.test(shell.slice(shell.indexOf("fold.closeFold = ()"), shell.indexOf("fold.closeFold = ()") + 400)),
+  "licensesFold exposes a closer, and only a closer");
+// Unplugging repaints but must not shut, or the field they now need would be hidden.
+// (Both paths repaint; only a truthy result, i.e. a save, also folds it away.)
+ok(/await paintLib\(\);\s*\n\s*if \(res\) fold\.closeFold\(\)/.test(media),
+  "a cleared key repaints the row but leaves the section open");
+// The Continue button reads live status rather than a captured snapshot.
+ok(/SETUP_STEPS\.find\(\(x\) => x\.id === "media"\)/.test(media),
+  "the step's Continue finds its step by id, not by position");
 
 // Each library folds, so three sets of how-to-get-a-key steps don't land together.
 ok(/licensesFold\(shelf/.test(media), "each library is a folding section, like the drawer's rows");
-ok(/openDefault: !connected/.test(media), "an unconnected library opens; a connected one stays shut");
+ok(/openDefault: false/.test(media),
+  "every library starts collapsed: the step is a menu of three, not three sets of instructions");
 ok(/remember: false/.test(media),
-  "on a first-run screen the state of the work decides, not a choice stored from last time");
+  "and a fresh walk-through starts collapsed again, not from a choice stored last time");
 
 // What each key actually buys you, said where it can be read while the fold is SHUT.
 ok(/note: lib\.offers/.test(media), "each fold's heading says what that library offers");
@@ -121,5 +139,14 @@ ok(/TOUR_FLAGS = \[[^\]]*SETUP_DONE_KEY/.test(shell),
 ok(/id="setupgate"/.test(html) && /id="setup-stack"/.test(html), "the setup gate and its stack exist");
 ok(/id="keygate"/.test(html), "the reconnect key gate is still there");
 ok(/id="setup-done"[^>]*hidden/.test(html), "Done starts hidden");
+
+// A done-row reads title ......... [state] Change, and those two line up down the stack
+// however long a step's name is, so the column of states is scannable.
+const row = html.slice(html.indexOf(".setup-done-row {"), html.indexOf(".setup-reopen:hover"));
+ok(/\.setup-done-row \.setup-step-title \{[^}]*flex: 1 1 auto/.test(row),
+  "the title takes the slack, so the state and Change sit together on the right");
+ok(/\.setup-chip \{[^}]*min-width/.test(row), "the state chip has a fixed width, so Change lines up too");
+ok(!/\.setup-reopen \{[^}]*margin-left: auto/.test(row),
+  "Change is no longer pushed right on its own (that left the chips ragged)");
 
 console.log(`setup-stepper: ${checks} checks pass.`);
