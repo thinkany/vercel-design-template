@@ -11125,7 +11125,21 @@ const AD_HIGHLIGHT_JS = `(function(){
   var els=[], boxes=[], icons=[], wraps=[], layer=null, styleEl=null;
   var ICON='<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="2.6"/></svg>';
   function css(){ if(styleEl) return; styleEl=document.createElement('style'); styleEl.id='__ad-style'; styleEl.textContent='@keyframes __adP{0%{box-shadow:0 0 0 0 rgba(217,119,6,.5)}100%{box-shadow:0 0 0 12px rgba(217,119,6,0)}}#__ad-layer{position:absolute;top:0;left:0;pointer-events:none;z-index:2147483000}#__ad-layer .b{position:absolute;box-sizing:border-box;border:2px solid #d97706;border-radius:6px;background:rgba(217,119,6,.07)}#__ad-layer .ic{position:absolute;width:22px;height:22px;border-radius:50%;background:#d97706;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 5px rgba(0,0,0,.35)}#__ad-layer .cur .b{border-color:#b45309;background:rgba(180,83,9,.11)}#__ad-layer .cur .ic{background:#b45309;animation:__adP 1.2s ease-out infinite}'; document.head.appendChild(styleEl); }
-  function pos(){ for(var i=0;i<els.length;i++){ var el=els[i]; if(!el) continue; var r=el.getBoundingClientRect(); var t=r.top+window.scrollY,l=r.left+window.scrollX; boxes[i].style.top=t+'px'; boxes[i].style.left=l+'px'; boxes[i].style.width=r.width+'px'; boxes[i].style.height=r.height+'px'; icons[i].style.top=(t-8)+'px'; icons[i].style.left=(l-8)+'px'; } }
+  var INSET=13;
+  function pos(){ var vw=document.documentElement.clientWidth;
+    for(var i=0;i<els.length;i++){ var el=els[i]; if(!el) continue; var r=el.getBoundingClientRect();
+      var t=r.top+window.scrollY,l=r.left+window.scrollX,w=r.width,h=r.height;
+      /* A full-bleed section's own rect runs to the viewport edges, so the outline sits half
+         off-screen and its marker (drawn at left-8) is clipped away entirely. Pull the box in
+         from whichever edge it actually touches, so the highlight stays fully visible and
+         still reads as covering the section. Interior elements are untouched. */
+      if(l<=INSET){ w-=(INSET-l); l=INSET; }
+      if(l+w>=vw-INSET) w=Math.max(0,vw-INSET-l);
+      var vt=t-window.scrollY;
+      if(vt<=INSET){ var dt=INSET-vt; t+=dt; h-=dt; }
+      boxes[i].style.top=t+'px'; boxes[i].style.left=l+'px'; boxes[i].style.width=Math.max(0,w)+'px'; boxes[i].style.height=Math.max(0,h)+'px';
+      /* The marker rides the INSET box's corner, never the raw element's. */
+      icons[i].style.top=(t-8)+'px'; icons[i].style.left=(l-8)+'px'; } }
   function byText(txt){ txt=(txt||'').trim().toLowerCase(); if(!txt) return null; var best=null,bl=Infinity; var all=document.querySelectorAll('h1,h2,h3,h4,h5,h6,button,a,p,span,li,figcaption,label,blockquote,strong,em'); for(var i=0;i<all.length;i++){ var e=all[i]; var t=(e.textContent||'').trim().toLowerCase(); if(!t) continue; if(t.indexOf(txt)!==-1 && t.length<bl){ best=e; bl=t.length; } } return best; }
   function resolve(a){ if(!a) return null; try{ if(a.block){ var e=document.querySelector('[data-block="'+String(a.block).replace(/"/g,'')+'"]'); if(e) return e; } }catch(_){} try{ if(a.selector){ var s=document.querySelector(a.selector); if(s) return s; } }catch(_){} if(a.text) return byText(a.text); return null; }
   window.__adHighlight={
