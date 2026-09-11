@@ -4799,6 +4799,41 @@ async function captureAdThumbs(variationId, recs, route) {
   return { ok: true, thumbs };
 }
 ipcMain.handle("artdirector:thumbs", (_e, { variationId, recs, route } = {}) => captureAdThumbs(variationId, recs, route));
+
+// Dev only (Developer menu): recapture thumbnails for every rec the current project already
+// stores, across all its review keys, and stamp the paths back onto them. Lets the contact
+// sheet be exercised on an existing project without running a review turn. Reports what it
+// did in a dialog, since the drawer may not even be open.
+async function recaptureAdThumbs() {
+  if (!currentProject) { dialog.showMessageBox(mainWindow, { message: "Open a project first." }); return; }
+  if (!viteUrl) { dialog.showMessageBox(mainWindow, { message: "Open a built design first (the preview has to be running)." }); return; }
+  const storePath = artDirectorStorePath(currentProject);
+  const store = loadArtDirectorStore(currentProject);
+  const keys = Object.keys(store);
+  if (!keys.length) { dialog.showMessageBox(mainWindow, { message: "This project has no Art Director recommendations stored." }); return; }
+  let shot = 0, seen = 0;
+  for (const key of keys) {
+    // "v01" (design scope) or "v01:home" (a promoted site's page) → the variation + its route.
+    const [vid, pageId] = String(key).split(":");
+    const route = pageId && pageId !== "home" ? pageId : "";
+    const rec = store[key] || {};
+    const all = [...(rec.active || []), ...(rec.dismissed || []), ...(rec.completed || [])];
+    const anchored = all.filter((r) => r && r.anchor);
+    seen += anchored.length;
+    if (!anchored.length) continue;
+    const res = await captureAdThumbs(vid, anchored, route);
+    if (!res || !res.ok) continue;
+    const stamp = (list) => (list || []).map((r) => (r && res.thumbs[r.id] ? { ...r, thumb: res.thumbs[r.id] } : r));
+    store[key] = { ...rec, active: stamp(rec.active), dismissed: stamp(rec.dismissed), completed: stamp(rec.completed) };
+    shot += Object.keys(res.thumbs).length;
+  }
+  try { fs.writeFileSync(storePath, JSON.stringify(store, null, 2)); }
+  catch (e) { dialog.showMessageBox(mainWindow, { message: `Couldn't write the store: ${e.message}` }); return; }
+  dialog.showMessageBox(mainWindow, {
+    message: `Captured ${shot} of ${seen} anchored recommendation(s).`,
+    detail: shot < seen ? "The rest had anchors that no longer resolve on the page (the design has changed since that review)." : "Reopen the Art Director drawer to see them.",
+  });
+}
 ipcMain.handle("company:status", () => ({ exists: hasCompanyProfile(currentProject) }));
 
 // Apply the COMPANY layer (company name + admin/gate fonts + logo) to the current
@@ -5207,6 +5242,11 @@ function buildAppMenu() {
       // Re-render a single direction by id (the ids come from picks.json, so no license call at
       // menu-build time). A movement id renders nothing: the batch only does general directions.
       { label: "Render lens examples: this direction only", submenu: lensPickIds().map((id) => ({ label: id, click: () => renderLensExamples({ only: id }) })) },
+      { type: "separator" },
+      // Thumbnails normally ride along with a review. This recaptures them for the recs the
+      // current project ALREADY has, so the contact sheet can be exercised (and its framing
+      // judged on real content) without paying for another review turn.
+      { label: "Recapture Art Director thumbnails", click: () => recaptureAdThumbs() },
     ] }]),
   ]));
 }
