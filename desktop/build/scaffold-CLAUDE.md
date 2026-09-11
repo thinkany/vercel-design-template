@@ -100,14 +100,26 @@ writes both together so they never drift; the Figma foundations export reads the
 
 ### Global chrome (Header / Footer / menus)
 
-Shared site chrome lives in [Header.tsx](src/app/components/Header.tsx) +
-[Footer.tsx](src/app/components/Footer.tsx) and is rendered **once, globally, by
+Shared site chrome is rendered **once, globally, by
 [DesignSurface](src/app/DesignSurface.tsx)**, not per page, so one edit cascades to every
-page, breakpoint, and variation (a variation diverges by dropping its own
-`Header.tsx`/`Footer.tsx` into `src/variations/{id}/components/`). Both map the
-[pages.ts](src/app/pages.ts) manifest, so adding a page auto-adds its nav link. DesignSurface
-gates chrome on `projectType === "website"` (app/brand projects render none). **The
-design-phase how (default mobile menu, dropdown/mega config via `menu.ts`, the
+page, breakpoint, and variation. Both map the [pages.ts](src/app/pages.ts) manifest, so
+adding a page auto-adds its nav link. DesignSurface gates chrome on
+`projectType === "website"` (app/brand projects render none).
+
+**The header is CONFIGURED, not hand-written.** [Header.tsx](src/app/components/Header.tsx)
+is CORE: it implements all three placements (logo left/links right, logo left/links centred,
+logo centred/links split), all three menu kinds (none / dropdown / mega) and the mobile
+drawer once, correctly, and reads which to render from data. Don't rewrite it — edit
+[header.config.ts](src/app/header.config.ts) to MOVE things (`placement`, `menuKind`,
+`sticky`, `menuSide`, `mega`) and [header.skin.ts](src/app/components/header.skin.ts) to
+STYLE them (a class string per part). Both are designer-owned (KEEP tier); an upgrade never
+overwrites them. A variation that truly needs a different header still drops its own
+`Header.tsx` into `src/variations/{id}/components/` — the **custom header** path, which the
+menu check reports on rather than guarantees.
+
+[Footer.tsx](src/app/components/Footer.tsx) stays hand-authored per variation, as before.
+
+**The design-phase how (the skin slots, menu content in `menu.ts`, the
 container-query-not-viewport trap, portal-escape) is in
 [`/design`](.claude/commands/design.md); menu/mobile-menu Figma export is in
 [`/export-figma`](.claude/commands/export-figma.md).**
@@ -133,7 +145,7 @@ gate-exempt + CORS so a designer's copy reads it cross-origin; carries `zipUrl`)
 pill** ([UpdateCheck.tsx](src/app/components/UpdateCheck.tsx)) is admin+local-dev only. The
 overlay engine ([scripts/upgrade.mjs](scripts/upgrade.mjs) +
 [upgrade.manifest.json](upgrade.manifest.json)) tiers files: **CORE** overwritten, **KEEP**
-never touched (`.env`, `src/variations/**`, `pages.ts`/`menu.ts`, base `tokens.css`/`brand.ts`,
+never touched (`.env`, `src/variations/**`, `pages.ts`/`menu.ts`, `header.config.ts`/`header.skin.ts`, base `tokens.css`/`brand.ts`,
 `public/images`), **REVIEW** written as a `*.upgrade-new` sidecar; it snapshots a
 one-click-revert backup before writing and refuses a dirty tree unless forced. Two front doors,
 one engine: the dashboard button (`/api/upgrade`) and [`/upgrade`](.claude/commands/upgrade.md).

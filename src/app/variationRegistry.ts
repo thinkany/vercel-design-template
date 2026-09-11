@@ -47,6 +47,11 @@ for (const [path, mod] of Object.entries(variationModules)) {
   registerExports(registry[id], mod);
 }
 
+/** Active variation id (from `?v=`) — the one the surface is rendering. */
+export function getVariationId(): string {
+  return new URLSearchParams(window.location.search).get("v") ?? "v00";
+}
+
 /** True for the base (v00) or any variation that has a component folder. */
 export function variationExists(id: string): boolean {
   return id === "v00" || Boolean(registry[id]);
@@ -64,4 +69,39 @@ export function resolveComponent(variationId: string, name: string): AnyComponen
     );
   }
   return component;
+}
+
+// ---- Variation-scoped DATA (the header's config + skin) ----------------------
+// The component registry above only registers capitalized FUNCTIONS (React
+// components). The configured header also has two plain data modules a variation
+// may override the same way — `header.config.ts` (structure) and
+// `components/header.skin.ts` (look) — so they get their own tiny resolver here
+// rather than a second glob scattered through the header.
+const baseDataModules = import.meta.glob("./{header.config.ts,components/header.skin.ts}", {
+  eager: true,
+}) as Record<string, Record<string, unknown>>;
+const variationDataModules = import.meta.glob(
+  "../variations/*/{header.config.ts,components/header.skin.ts}",
+  { eager: true },
+) as Record<string, Record<string, unknown>>;
+
+const dataRegistry: Record<string, Record<string, unknown>> = { v00: {} };
+for (const mod of Object.values(baseDataModules)) {
+  for (const [name, value] of Object.entries(mod)) dataRegistry.v00[name] = value;
+}
+for (const [path, mod] of Object.entries(variationDataModules)) {
+  const match = path.match(/variations\/([^/]+)\//);
+  if (!match) continue;
+  (dataRegistry[match[1]] ??= {});
+  for (const [name, value] of Object.entries(mod)) dataRegistry[match[1]][name] = value;
+}
+
+/**
+ * Resolve a named data export (`headerConfig`, `headerSkin`) for a variation,
+ * falling back to the base. Unlike resolveComponent this never throws: a missing
+ * export just means "use the base", and the base always ships both.
+ */
+export function resolveData<T>(variationId: string, name: string, fallback: T): T {
+  const value = dataRegistry[variationId]?.[name] ?? dataRegistry.v00[name];
+  return (value as T) ?? fallback;
 }

@@ -152,15 +152,29 @@ section's `data-block` in the design.
 10. **Shared prop fragments** come from `site/blocks/lib/schema.ts` (`image`,
    `link`, `anchor`); extend that file rather than redefining shapes per block.
 
-**Chrome** (header/footer) goes in `site/blocks/chrome.ts`, NOT the registry:
+**THE HEADER IS NOT PROMOTED.** `site/blocks/lib/Header.tsx` (CORE) already renders
+the site's `nav` using the pinned design's own `header.config.ts` and
+`header.skin.ts`, so the site's header IS the design's header: same placement, same
+panels, same drawer, same skin, no second authoring pass. `site/blocks/chrome.ts`
+points at it by default. **Do not write a Header block, and do not touch
+`site/blocks/lib/Header.tsx`.** Your header work is §4's data: move the design's
+menu into `content/site.json` `nav` (with `columns` for a mega).
+
+A design whose header the config and skin genuinely cannot express (a two-row bar
+with a utility strip, say) is the **custom header** case: only when the designer
+asked for that in so many words, write `site/blocks/Header.tsx` following the props
+contract below, point `chrome.ts` at it, and say plainly in your summary that the
+header is custom and the framework no longer guarantees it.
+
+**The FOOTER is still yours to author**, in `site/blocks/chrome.ts`:
 
 ```ts
 import type { Chrome } from "../src/lib/blocks";
-import { header } from "./Header";
+import { Header as ConfiguredHeader, headerChrome } from "./lib/Header";
 import { footer } from "./Footer";
-export { Header } from "./Header";   // by NAME: this is what lets the header hydrate
-export { Footer } from "./Footer";
-export const chrome: Chrome = { header, footer };
+export const Header = ConfiguredHeader;  // the configured header, not a promoted one
+export { Footer } from "./Footer";       // by NAME, like the header
+export const chrome: Chrome = { header: headerChrome, footer };
 ```
 
 Chrome components receive `{ siteName, logo, logos, nav, footerLinks, legal }` from
@@ -192,17 +206,17 @@ where it sits, a run of plain links forms a column where it sits, in the design'
 and the legal line: `fillCopyright(legal.copyright, siteName)` plus `legal.links`,
 in the design's idiom.
 
-**Mega menu.** If the design's menu opens into columns (headings over link groups,
-maybe a featured image or call to action), the Header renders `item.columns`
-(`{ heading, links, feature: { image, title, text, link } }`) in the design's
-idiom, and the design's columns move to `content/site.json` `nav[].columns`. If the
-design has a plain dropdown, render `item.links` and ignore `columns`. Using
-`navItem` is what tells the CMS whether to offer columns: keep it either way.
+**Mega menu: move the DATA, not the component.** The configured header already
+renders `item.columns` (`{ heading, links, feature: { image, title, text, link } }`)
+as a mega panel and `item.links` as a dropdown, deciding per item from the data. So
+a design whose menu opens into columns needs exactly one thing from you: its columns
+written into `content/site.json` `nav[].columns` (§4), and a plain dropdown's links
+into `nav[].links`. The featured panel is a column carrying `feature`.
 
-The Header is the one block that runs in the browser: `hydrate: "load"` on its
-definition, and **`export function Header(...)`** (a named export) in its file.
-Fold `MobileMenu` INTO the Header block (own `useState`, no shared context). The
-Footer is static.
+Only a CUSTOM header (above) is a block you write, and then it is the one block that
+runs in the browser: `hydrate: "load"` on its definition, **`export function
+Header(...)`** (a named export), the mobile menu folded in with its own `useState`,
+no shared context. The Footer is static.
 
 ## 3. What does NOT carry over (translate these, every time)
 
@@ -220,7 +234,7 @@ almost every design and each has one translation:
 | `useFrameHeight` / `frameH` on the hero | `min-h-[100dvh]` |
 | `onNavigate("home")`, `scrollTo(id)`, `scrollToSection(id)` | plain `<a href="/">`, `<a href="#id">` (the site has `scroll-behavior: smooth`) |
 | `<button onClick={scroll…}>` CTAs | `<a href="…" className="…same classes… no-underline inline-block">` |
-| `useMenuState()` / `MenuStateContext` / `MENU_SIDE` | local `useState` inside the Header block; `MENU_SIDE` a const in the file |
+| `useMenuState()` / `MenuStateContext` / `MENU_SIDE` | nothing: the header is configured, not promoted (a CUSTOM header uses local `useState` and reads `headerConfig.menuSide`) |
 | `useDrawerLock`, frame-box positioning (`box.top`) | `fixed inset-0` scrim + `fixed inset-y-0` panel; lock scroll with `document.documentElement.style.overflow` |
 | `useLayoutEffect` anywhere in the Header | `const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;` and call that: the header is server-rendered first, and React warns on a layout effect there |
 | `siteConfig.clientName` / `siteConfig.logo` in chrome | the `siteName` / `logo` props |

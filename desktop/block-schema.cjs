@@ -11,6 +11,33 @@ const path = require("node:path");
 
 function readJsonFile(p) { try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; } }
 
+/**
+ * The `@design-header-*` aliases, for esbuild.
+ *
+ * The site's CORE header (site/blocks/lib/Header.tsx) reads the pinned design's
+ * header.config.ts + header.skin.ts through two aliases that site/astro.config.mjs
+ * and vite.config.ts both declare. esbuild is the THIRD consumer of that file (it
+ * bundles chrome.ts to introspect the header's props), and it knows neither, so
+ * without this the bundle fails and `megaMenu` comes back false: the CMS then hides
+ * column editing on a mega menu whose columns are sitting right there in site.json.
+ * Mirrors the other two resolvers: the variation's copy wins, else the base.
+ */
+function designHeaderAlias(dir) {
+  let design = "v00";
+  try { design = (readJsonFile(path.join(dir, "content", "site.json")) || {}).design || "v00"; } catch { /* no site yet */ }
+  const pick = (baseRel, variationRel) => {
+    if (design !== "v00") {
+      const inVariation = path.join(dir, "src", "variations", design, variationRel);
+      if (fs.existsSync(inVariation)) return inVariation;
+    }
+    return path.join(dir, baseRel);
+  };
+  return {
+    "@design-header-config": pick(path.join("src", "app", "header.config.ts"), "header.config.ts"),
+    "@design-header-skin": pick(path.join("src", "app", "components", "header.skin.ts"), path.join("components", "header.skin.ts")),
+  };
+}
+
 // ---- Block schemas → default props ------------------------------------------
 // The CMS edits a block's content from its props' SHAPE, so a block must start
 // with every field present. The registry is TSX with zod schemas, so: bundle
@@ -165,6 +192,7 @@ function headerAcceptsColumns(dir, esbuild, req) {
     const result = esbuild.buildSync({
       entryPoints: [file], bundle: true, write: false, platform: "node", format: "cjs", target: "node20",
       jsx: "automatic", tsconfig: path.join(dir, "site", "tsconfig.json"), logLevel: "silent",
+      alias: designHeaderAlias(dir), // chrome.ts pulls in the CORE header, which uses them
       external: ["react", "react-dom", "react/jsx-runtime", "lucide-react", "motion", "motion/*", "astro/zod", "astro:*"],
     });
     const mod = { exports: {} };

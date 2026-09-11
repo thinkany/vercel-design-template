@@ -8060,6 +8060,12 @@ window.desktop.onAgentEvent((evt) => {
       if (!tabsOpened || guarding) setWorkingMessage(friendlyActivity(evt.name, evt.target));
       else if (homeBuilding) setBuildMessage(friendlyActivity(evt.name, evt.target));
       break;
+    case "narrate":
+      // A deterministic check reporting in its own words (the menu check, for now).
+      // One quiet line: what was verified, or what needs fixing. It arrives after the
+      // turn, so it never interleaves with the build's own narration.
+      if (evt.text) addMsg("system", evt.ok ? `\u2713 ${evt.text}` : evt.text);
+      break;
     case "result":
       finalizeAssistant();
       agentBusy = false;
@@ -10298,6 +10304,166 @@ async function renderDirector(body) {
 
   if (directorState.completed.length) body.appendChild(buildCompleted(directorState.completed));
   if (directorState.dismissed.length) body.appendChild(buildArchive(directorState.dismissed));
+
+  // The menu check's findings (P5): deterministic, so they sit under the Art
+  // Director's recommendations rather than among them, and carry no "review" verb.
+  await renderMenuSection(body, id);
+}
+
+// ---- Menu check findings (P5) ------------------------------------------------
+// The check runs itself after a build; this is where its result is READ. A finding
+// on a CONFIGURED header is a framework bug (the config and skin cannot produce
+// one), so its action is a re-seed rather than an agent turn; on a CUSTOM header
+// the designer owns the header, so Fix hands it to a scoped edit.
+let menuState = { id: null, dismissed: [], findings: [], ok: null, headerMode: null, checked: null, ranAt: null };
+let menuChecking = false;
+let menuNote = "";
+
+function menuFindingId(f) {
+  return `${f.rule}:${f.width}:${f.item || ""}:${String(f.expected || "").slice(0, 40)}`;
+}
+
+async function renderMenuSection(body, id) {
+  const sep = document.createElement("div"); sep.className = "drawer-sep"; body.appendChild(sep);
+  const label = document.createElement("div"); label.className = "sess-label"; label.textContent = COPY.menu.heading; body.appendChild(label);
+
+  let store = { dismissed: [], findings: [], ok: null, ranAt: null, headerMode: null, checked: null };
+  try { store = await window.desktop.loadMenuFindings(id); } catch {}
+  menuState = { id, dismissed: store.dismissed || [], findings: store.findings || [], ok: store.ok, headerMode: store.headerMode, checked: store.checked, ranAt: store.ranAt };
+
+  const dismissed = new Set(menuState.dismissed);
+  const active = menuState.findings.filter((f) => !dismissed.has(menuFindingId(f)));
+
+  const desc = document.createElement("div"); desc.className = "sess-desc";
+  if (menuChecking) desc.textContent = COPY.menu.checking;
+  else if (!menuState.ranAt) desc.textContent = COPY.menu.never;
+  else if (!active.length) desc.textContent = COPY.menu.clean(menuState.checked || { items: 0, panels: 0, widths: [] });
+  else desc.textContent = menuState.headerMode === "custom" ? COPY.menu.customNote : COPY.menu.frameworkNote;
+  body.appendChild(desc);
+
+  if (menuNote) { const n = document.createElement("div"); n.className = "sess-desc"; n.style.color = "var(--ok, #2a8)"; n.textContent = menuNote; body.appendChild(n); }
+
+  const run = document.createElement("button"); run.className = "panelbtn";
+  run.textContent = menuChecking ? COPY.menu.checking : (menuState.ranAt ? COPY.menu.recheck : COPY.menu.checkNow);
+  run.disabled = menuChecking || !design.previewReady;
+  if (!design.previewReady) run.title = COPY.menu.needBuild;
+  run.addEventListener("click", () => runMenuCheckNow(id));
+  body.appendChild(run);
+
+  if (active.length) {
+    const list = document.createElement("div"); list.className = "adrec-list"; list.style.marginTop = "12px";
+    for (const f of active) list.appendChild(buildMenuRow(f, id));
+    body.appendChild(list);
+  }
+  if (menuState.dismissed.length) {
+    const wrap = document.createElement("details"); wrap.className = "adrec-archive";
+    const sum = document.createElement("summary"); sum.textContent = COPY.menu.dismissed(menuState.dismissed.length); wrap.appendChild(sum);
+    const restore = document.createElement("button"); restore.className = "adrec-restore"; restore.textContent = COPY.director.restore;
+    restore.addEventListener("click", async () => { menuState.dismissed = []; await window.desktop.saveMenuFindings(id, []); refreshDirector(); });
+    wrap.appendChild(restore);
+    body.appendChild(wrap);
+  }
+}
+
+function buildMenuRow(f, id) {
+  const row = document.createElement("div"); row.className = "adrec";
+  const title = document.createElement("span"); title.className = "adrec-title";
+  const name = (COPY.menu.ruleName && COPY.menu.ruleName[f.rule]) || f.rule;
+  title.textContent = f.item ? `${name} (${f.item})` : name;
+  const chip = document.createElement("span"); chip.className = "adrec-kind"; chip.textContent = COPY.menu.at(f.width);
+  row.append(title, chip);
+  row.addEventListener("click", () => openMenuModal(f, id));
+  return row;
+}
+
+function closeMenuModal() { const o = el("menu-overlay"); if (o) o.remove(); }
+function openMenuModal(f, id) {
+  closeMenuModal();
+  const overlay = document.createElement("div"); overlay.className = "adrec-overlay"; overlay.id = "menu-overlay";
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeMenuModal(); });
+  const card = document.createElement("div"); card.className = "adrec-modal";
+  const name = (COPY.menu.ruleName && COPY.menu.ruleName[f.rule]) || f.rule;
+  const t = document.createElement("div"); t.className = "adrec-modal-title"; t.textContent = f.item ? `${name} (${f.item})` : name; card.appendChild(t);
+  const meta = document.createElement("div"); meta.className = "adrec-modal-kind"; meta.textContent = COPY.menu.at(f.width); card.appendChild(meta);
+  if (f.note) { const w = document.createElement("div"); w.className = "adrec-modal-why"; w.textContent = f.note; card.appendChild(w); }
+  // Expected vs actual, verbatim from the check: this is a measurement, not an opinion.
+  const inst = document.createElement("div"); inst.className = "a11y-instances";
+  for (const [k, v] of [[COPY.menu.expected, f.expected], [COPY.menu.actual, f.actual]]) {
+    const r = document.createElement("div"); r.className = "a11y-inst";
+    const s1 = document.createElement("div"); s1.className = "a11y-inst-sel"; s1.textContent = k;
+    const s2 = document.createElement("div"); s2.className = "a11y-inst-why"; s2.textContent = String(v);
+    r.append(s1, s2); inst.appendChild(r);
+  }
+  card.appendChild(inst);
+
+  const actions = document.createElement("div"); actions.className = "adrec-modal-actions";
+  const hold = document.createElement("button"); hold.className = "adrec-hold-btn"; hold.textContent = COPY.director.hold; hold.title = COPY.director.holdTip;
+  hold.addEventListener("click", () => closeMenuModal());
+  const dismiss = document.createElement("button"); dismiss.className = "adrec-dismiss-btn"; dismiss.textContent = COPY.director.dismiss;
+  dismiss.addEventListener("click", async () => {
+    const key = menuFindingId(f);
+    if (!menuState.dismissed.includes(key)) menuState.dismissed.push(key);
+    await window.desktop.saveMenuFindings(id, menuState.dismissed);
+    closeMenuModal(); refreshDirector();
+  });
+  actions.append(hold, dismiss);
+
+  const right = document.createElement("div"); right.className = "a11y-right";
+  if (menuState.headerMode === "custom") {
+    // The designer owns a custom header, so the fix is theirs to make: a scoped edit.
+    const fix = document.createElement("button"); fix.className = "adrec-apply-btn"; fix.textContent = COPY.a11y.fix; fix.title = COPY.menu.fixTip;
+    if (!appHasKey) { fix.disabled = true; fix.title = COPY.director.needKey; }
+    else fix.addEventListener("click", () => { closeMenuModal(); fixMenuFinding(f); });
+    right.appendChild(fix);
+  } else {
+    // A configured header cannot produce a finding, so there is nothing for a model
+    // to author: re-seed the config from the intake and measure again.
+    const reset = document.createElement("button"); reset.className = "adrec-apply-btn"; reset.textContent = COPY.menu.reseed; reset.title = COPY.menu.reseedTip;
+    reset.addEventListener("click", () => { closeMenuModal(); reseedHeaderNow(menuState.id); });
+    right.appendChild(reset);
+  }
+  actions.appendChild(right);
+  card.appendChild(actions);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+}
+
+async function runMenuCheckNow(id) {
+  if (menuChecking) return;
+  menuChecking = true; menuNote = ""; refreshDirector();
+  try { await window.desktop.checkMenu(id); } catch {}
+  menuChecking = false; refreshDirector();
+}
+
+// Re-seed the header's configuration from the designer's intake choice, then measure
+// again. If the finding survives, say plainly that this is the tool's fault.
+async function reseedHeaderNow(id) {
+  menuChecking = true; menuNote = ""; refreshDirector();
+  let res = null;
+  try { res = await window.desktop.reseedHeader(id); } catch {}
+  menuChecking = false;
+  if (res && !res.layout) menuNote = COPY.menu.reseedNoLayout;
+  else if (res && res.result && res.result.ok) menuNote = COPY.menu.reseedFixed;
+  else menuNote = COPY.menu.reseedPersists;
+  refreshDirector();
+}
+
+// A CUSTOM header's finding, handed to a scoped edit turn with the measurement as
+// its brief. Never on a configured header: there is nothing there for it to write.
+function fixMenuFinding(f) {
+  if (!appHasKey) return;
+  const name = (COPY.menu.ruleName && COPY.menu.ruleName[f.rule]) || f.rule;
+  runAgent(
+    `[Fix one menu finding in this design's CUSTOM header.] The menu check measured the ` +
+    `header at ${f.width} width and found: ${f.expected}, but instead ${f.actual}.` +
+    (f.item ? ` This is about the "${f.item}" item.` : "") +
+    (f.note ? ` Likely cause: ${f.note}.` : "") +
+    ` The header is a custom one in this variation's components folder. Fix ONLY this, ` +
+    `keep the data-block / data-menu-item / data-header-* markers intact, and don't ` +
+    `restructure anything else.`,
+    `Fix: ${name}`,
+  );
+  closeModal();
 }
 
 // ---- Rec thumbnails + the hover magnifier -----------------------------------

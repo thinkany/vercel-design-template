@@ -258,6 +258,15 @@ routing (`?v={id}&about`), rendering, the nav link, and Figma export. No
 `App.tsx` edit. Full-bleed landing with no Header/Footer? add `chrome={false}` to
 `<DesignSurface>`.
 
+**`pages.ts` usually arrives SEEDED.** The app writes the site's architecture from
+the brief before your turn (the pages a visitor expects for this client, with
+`menu.ts` populated to match), so the header's nav is right from the first frame.
+Every seeded row starts `component: "Home"` as a placeholder. So when you build a
+page, **update its existing row's `component`** rather than adding a second row for
+it; add a new row only for a page the seed didn't anticipate, and delete a row (and
+its `menu.ts` entry) for one the design genuinely shouldn't have. A row still
+pointing at `"Home"` at the end of the build is a page you haven't built yet.
+
 ## 3b. Read only what you EDIT, the rest is already inlined
 
 The shape of the scaffold's shared files is captured in this doc, so **don't re-Read
@@ -494,19 +503,68 @@ Without a key, source over plain HTTP:
 
 The **Header, Footer, and mobile menu are already built and rendered globally** by
 `DesignSurface` (once, for every page/breakpoint/variation), so a design page never
-hand-rolls site nav. What you touch:
+hand-rolls site nav.
 
-- **Header/Footer live in the variation's own components** (`src/variations/{id}/
-  components/Header.tsx` / `Footer.tsx`, resolved per-variation, falling back to base).
-  Both map [`pages.ts`](../../src/app/pages.ts), so **adding a page auto-adds its nav
-  link**, don't wire nav by hand. Edit these once; the change cascades everywhere
-  (single-source, rule 4).
+### The header is CONFIGURED, not hand-written
+
+**This is the one component you do not author.** The header is the most mechanical
+part of a build and the easiest to get subtly wrong (a centred logo landing on a
+second row, a panel anchored mid-header, a drawer on the wrong edge), so its
+structure is written once in CORE and driven by data. Three files, three owners:
+
+| File | Holds | Yours? |
+|---|---|---|
+| [`src/app/header.config.ts`](../../src/app/header.config.ts) | `placement`, `menuKind`, `sticky`, `menuSide`, `mega` | **Yes** — edit to MOVE things |
+| `src/variations/{id}/components/header.skin.ts` | every class string on every part | **Yes** — edit to STYLE it |
+| `src/app/components/Header.tsx` + `MobileMenu.tsx` | the placement grid, panel anchoring, the drawer, hover + keyboard | **No** — CORE, and the tool guard blocks writes to it |
+
+- **The designer's header choice is already applied.** The intake's nine layouts
+  are `placement` × `menuKind`, and the app writes both into `header.config.ts`
+  before your turn starts. The header standing in the preview is the one they
+  picked. Don't rebuild it to match the brief's description of it, it already matches.
+- **To style it, edit YOUR VARIATION's `header.skin.ts`**
+  (`src/variations/{id}/components/header.skin.ts`, seeded for you when the variation
+  is created, so each design skins the header its own way). The base copy at
+  `src/app/components/header.skin.ts` is the template default; editing that one
+  instead means your variation's copy silently wins and your work doesn't show.
+  Every slot is a class string on a fixed
+  element: `bar` (surface + border), `inner` (height + gutters), `wordmark`, `logo`,
+  `link`, `linkActive`, `cta`, `panel`, `panelInner`, `dropdownLink`,
+  `columnHeading`, `columnLink`, `feature`, `drawer`, `drawerLink`, `drawerSubLink`,
+  `hamburger`. That is enough to make the header tall and airy, dense and utilitarian,
+  dark, bordered or borderless, and to restyle the panels completely. **Vary it to the
+  design**, a bold / editorial / luxury direction carries a taller, more generous bar;
+  a dense / utility one stays compact. Don't leave the default and don't reach for
+  one stock height every time. Setting `cta` to a non-empty class string adds a
+  call-to-action button in the bar; leave it `""` for none.
+- **To move things, edit `header.config.ts`.** "Logo in the middle" is
+  `placement: "center-split"`. "Menu on the left" is `menuSide: "left"`. "Three
+  columns in the mega, no feature panel" is `mega: { columns: 3, feature: false }`.
+  "Let the header scroll away" is `sticky: false`.
+- **Do NOT copy `Header.tsx` or `MobileMenu.tsx` into the variation** to restyle
+  them. The tool guard denies it and tells you this. A variation-level `Header.tsx`
+  is the **custom header** escape hatch, for a header the config and skin genuinely
+  cannot express (a two-row header with a utility strip, say). Only take it when the
+  designer asks for that in so many words, say plainly that you're doing it, and keep
+  the `data-block`/`data-menu-item` markers and the logo-vs-wordmark branch, a custom
+  header is checked but not guaranteed.
+- **The menu check runs after your turn.** It measures the rendered nav against
+  `pages.ts` / `menu.ts` / `header.config.ts` at each breakpoint and writes
+  `.thinkany/menu-check.json`. On a configured header a failure is a framework bug,
+  not yours to patch around; on a custom header the findings come back to you.
 - **Brand logo:** when the brief supplied a logo, `VITE_BRAND_LOGO` is set and
-  `siteConfig.logo` is a `public/` path. The base Header/Footer already render it (an
-  `<img>` in place of the `siteConfig.clientName` wordmark). **If you author a divergent
-  `Header.tsx`/`Footer.tsx`, keep that logo-vs-wordmark branch** (`siteConfig.logo ?
-  <img …/> : siteConfig.clientName`) so the logo isn't lost, capped to a sensible height
-  with aspect preserved.
+  `siteConfig.logo` is a `public/` path; the header renders it in place of the
+  wordmark automatically (style it through the skin's `logo` slot). **If you author a
+  divergent `Footer.tsx`, keep that logo-vs-wordmark branch** (`siteConfig.logo ?
+  <img …/> : siteConfig.clientName`) so the logo isn't lost, capped to a sensible
+  height with aspect preserved.
+
+### The footer, and the rest
+
+- **The Footer still lives in the variation's own components**
+  (`src/variations/{id}/components/Footer.tsx`, resolved per-variation, falling back
+  to base) and is yours to author. It maps [`pages.ts`](../../src/app/pages.ts), so
+  **adding a page auto-adds its nav link**, don't wire nav by hand.
 - **The footer has its OWN links, never the header's list.** They live in
   [`footer.ts`](../../src/app/footer.ts) (`footerLinks`, seeded from the pages once,
   plus `legal`: the copyright line and privacy / terms links). A divergent
@@ -518,27 +576,17 @@ hand-rolls site nav. What you touch:
   separate "Home" link reads dated; the brand lockup fills that role. Link the logo to
   home (`?v={id}`) and **omit the home page from the nav list** (filter it out of the
   `pages.ts` map when rendering nav, keep About / Work / Pricing / Contact / etc.).
-- **Vary the header's height + proportion to the design, it's a design choice, not a
-  constant.** Don't default every site to the same thin fixed bar. Let the direction and
-  brand drive it: a bold / editorial / luxury design can carry a taller, more generous
-  header (larger logo, more padding, even a two-row or split header); a dense / utility one
-  stays compact. Match the header's weight to the design instead of reaching for one stock
-  height every time.
-- **Mobile menu ships by default** ([MobileMenu.tsx](../../src/app/components/MobileMenu.tsx)),
-  a slide-in drawer, the designer never has to ask for one. It's an **in-frame overlay**
-  (not a portal), the Header hamburger toggles it via shared state, and it slides from
-  **`MENU_SIDE`** (the same edge the hamburger sits on, one constant positions both).
-  Diverge per variation by dropping `MobileMenu.tsx` into the variation folder.
-- **Desktop nav dropdown/mega panels** are configured per nav item in
-  [`menu.ts`](../../src/app/menu.ts) (`none` / `dropdown` / `mega`, seeded from the
-  setup `VITE_MENU_STYLE`, mix per item there). Panels are in-frame overlays in the
-  Header (mega spans the content column). Open/active state is shared via
-  [`menuState.ts`](../../src/app/menuState.ts). **Both dropdown AND mega panels render at
-  HEADER level (not inside the nav item) with `absolute top-full`, so they anchor flush to
-  the header's BOTTOM edge**, a dropdown measures its trigger (`[data-menu-item]`) to
-  position under it. **Never anchor a dropdown inside its `relative` nav item** (its
-  `top-full` then lands at the item's bottom, mid-header, floating beneath the item instead
-  of dropping from the header). Match the base `Header.tsx` pattern when you diverge one.
+- **Mobile menu ships by default**, a slide-in drawer, the designer never has to ask
+  for one. It's part of the header now (in-frame overlay, not a portal) and slides from
+  `headerConfig.menuSide`, the same edge the hamburger sits on, so the two can't
+  disagree. Style it through the skin's `drawer` / `drawerLink` / `drawerSubLink`
+  slots.
+- **Menu CONTENT is data**, per nav item, in [`menu.ts`](../../src/app/menu.ts)
+  (`none` / `dropdown` / `mega`, seeded from `headerConfig.menuKind`, mix per item
+  there). **That file is yours**: give each item the links or columns this client's
+  architecture actually calls for, don't leave the shop-flavoured placeholder
+  ("Shop by Category", "Summer '26") on a law firm. How a panel is anchored and
+  rendered is handled for you.
 - **In-frame chrome must not portal.** shadcn `Sheet`/`Dialog`/`Drawer`/`Popover`
   render to `document.body` and escape the device frame, use inline absolute
   positioning (like `MobileMenu` / the Header menus) for anything meant to live inside
@@ -584,9 +632,22 @@ never hardcode a hex** (rule 1). The rest is markup discipline, follow these whi
    not just a placeholder; errors are conveyed in **text**, not color alone; group related
    inputs with `<fieldset>/<legend>`.
 
+**The header is already accessible, and not yours to make so.** It is CORE code
+(§4c), and its keyboard and ARIA behaviour is built in and tested: `aria-expanded` /
+`aria-haspopup` / `aria-controls` on each trigger, panels `hidden` while closed (so
+their links are out of both the tab order and the accessibility tree), Left/Right
+along the bar, **ArrowDown to open a menu and move into it** (a hover-opened panel is
+never open for a keyboard user, so Tab alone could not reach its links), Escape to
+close and return focus to the trigger, and focus leaving the header closing whatever
+was open. Don't re-implement any of that, and don't "improve" it through the skin:
+no slot reaches it. A **custom header** is the exception, and then all of the above is
+yours to reproduce, which is one more reason to avoid one.
+
 The shadcn/Radix `ui/*` components are already keyboard- and ARIA-accessible, so when AA mode
 is on, composing from them (rather than hand-rolling) starts you compliant. In AA mode these
-rules are in force and the post-turn audit checks them. **Off (the default): none of this
+rules are in force and the post-turn audit checks them, **including inside every
+dropdown and mega panel**: the audit opens each menu and scans it, so a link's
+contrast or label failing in a panel is caught the same as one in the page body. **Off (the default): none of this
 applies — the palette is written exactly as chosen and the design is authored freely.**
 
 ## 4e. Motion: the library plus CSS, and only what survives to the published site

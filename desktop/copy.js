@@ -274,6 +274,40 @@ window.COPY = {
     failed: (why) => `Art Director couldn’t review this design (${why}).`,
   },
   // The Director drawer (Phase 3): recommendations, the modal, and the Archive.
+  // The menu check's findings, shown as a section in the Art Director drawer. The
+  // check itself is deterministic (no model, no tokens), so the copy never calls it
+  // a review or an opinion: it reports what was measured.
+  menu: {
+    heading: "Menu",
+    checking: "Checking the menu…",
+    // A pass says what was actually verified, so "no findings" reads as work done.
+    clean: (c) => `The menu checks out: ${c.items} item${c.items === 1 ? "" : "s"}${c.panels ? `, ${c.panels} panel${c.panels === 1 ? "" : "s"}` : ""}, verified at ${(c.widths || []).length} width${(c.widths || []).length === 1 ? "" : "s"}.`,
+    never: "The menu hasn’t been checked yet. It runs itself after a build.",
+    recheck: "Check the menu again",
+    checkNow: "Check the menu",
+    needBuild: "Available once the design has finished building.",
+    // A configured header cannot produce a finding, so one means the framework is at
+    // fault, not the designer. Say that plainly rather than implying they broke it.
+    frameworkNote: "This header is configured, so a finding here is a problem with the tool rather than with your design. Re-seeding it from your header choice is worth a try; if it comes back, it’s worth reporting.",
+    customNote: "This design uses a custom header, so the framework can’t guarantee it. These are the things that look wrong.",
+    reseed: "Reset the header",
+    reseedTip: "Rewrites the header’s configuration from the layout you picked, then checks again.",
+    reseedNoLayout: "No header layout was recorded for this project, so there’s nothing to reset it to.",
+    reseedFixed: "That sorted it — the menu now checks out.",
+    reseedPersists: "Still failing after a reset. This is a bug in the tool, not in your design; it’s worth reporting.",
+    fixTip: "Hand this finding to Claude as a scoped edit.",
+    ruleName: {
+      architecture: "The items don’t match",
+      panels: "A menu panel is off",
+      placement: "Something sits in the wrong place",
+      mobile: "The mobile menu is off",
+      fold: "The header is too tall",
+    },
+    at: (w) => `at ${w}`,
+    expected: "Expected",
+    actual: "Instead",
+    dismissed: (n) => `Dismissed (${n})`,
+  },
   director: {
     needDesign: "Open a built design to review it — the Art Director reviews the design you’re previewing.",
     lead: (id) => `Reviewing ${id}. Open a recommendation to read it in full, then apply or dismiss it.`,

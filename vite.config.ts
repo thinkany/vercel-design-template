@@ -288,6 +288,25 @@ function variationsManifestPlugin() {
   }
 }
 
+/**
+ * Resolve one of the configured header's data files for the design `content/site.json`
+ * pins, preferring that variation's own copy and falling back to the base. Mirrors
+ * site/astro.config.mjs, so the site block resolves to the same file in both builds.
+ * A project with no content/site.json (not site-ready yet) just gets the base.
+ */
+function designHeaderFile(baseRel: string, variationRel: string): string {
+  let design = 'v00';
+  try {
+    const raw = fs.readFileSync(path.resolve(__dirname, 'content/site.json'), 'utf8');
+    design = JSON.parse(raw).design || 'v00';
+  } catch { /* no site yet: the base file stands */ }
+  if (design !== 'v00') {
+    const inVariation = path.resolve(__dirname, 'src/variations', design, variationRel);
+    if (fs.existsSync(inVariation)) return inVariation;
+  }
+  return path.resolve(__dirname, baseRel);
+}
+
 // Template distribution: at build, zip the git-tracked source into
 // dist/template-latest.zip so the canonical deploy (create.thinkany.design) serves
 // the archive the upgrade overlay pulls. It's the full source snapshot; the overlay
@@ -376,6 +395,13 @@ export default defineConfig({
     alias: {
       // Alias @ to the src directory
       '@': path.resolve(__dirname, './src'),
+      // The site's CORE header (site/blocks/lib/Header.tsx) reads the pinned
+      // design's header config + skin through these, and site-bridge.tsx pulls
+      // site/blocks/chrome.ts into THIS build so a promoted site previews on the
+      // design surface. Astro declares the same two aliases in site/astro.config.mjs;
+      // both builds must resolve them or the bridge fails to compile.
+      '@design-header-config': designHeaderFile('src/app/header.config.ts', 'header.config.ts'),
+      '@design-header-skin': designHeaderFile('src/app/components/header.skin.ts', 'components/header.skin.ts'),
     },
   },
 

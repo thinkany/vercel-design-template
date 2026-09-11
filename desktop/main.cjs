@@ -1506,7 +1506,14 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode, mo
   if (expanded) { prompt = expanded.prompt; appLog.write("info", "agent", `skill ${expanded.name} expanded`); }
   else if (typeof prompt === "string" && /^\/[a-z0-9-]+/.test(prompt)) appLog.write("warn", "agent", `no playbook for ${prompt.split(/\s/)[0]} (known: ${skillsClient ? skillsClient.names().join(", ") || "none" : "no skills client"}); the SDK expands the project's stub, if it has one`);
   const { runPrompt } = await import(pathToFileURL(path.join(__dirname, "agent.mjs")).href);
+  // Whether this turn wrote anything that can change the header — the menu check's
+  // trigger. A build writes the whole design, so it always qualifies.
+  let touchedHeader = /\/design(-brief)?\b|\/promote-blocks\b/.test(String(prompt || ""));
   const onEvent = (evt) => {
+    if (evt && (evt.type === "tool" || evt.type === "activity")) {
+      const target = `${evt.target || ""} ${evt.name || ""}`;
+      if (HEADER_TOUCH.test(target)) touchedHeader = true;
+    }
     if (appLog.isEnabled() && evt && evt.type !== "text") {
       if (evt.type === "tool") appLog.write("info", "agent", `tool ${evt.name}`);
       else if (evt.type === "activity") appLog.write("info", "agent", `activity ${evt.name || ""} ${evt.target || ""}`.trim());
@@ -1564,8 +1571,35 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode, mo
   // not become the tracked chat session, or the next chat turn would resume the critique.
   if (!reviewMode && result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it
   maybeStartSite(currentProject); // a /promote-blocks turn makes the project site-ready mid-session
+  // The menu check (P4): after a build, and after any edit that touched the header,
+  // prove the rendered nav is the nav the data describes. Deterministic and free, so
+  // it costs nothing to be sure. Fire-and-forget — a check never blocks a turn, and
+  // never fails one; its line reaches the narration when it lands.
+  if (!reviewMode) maybeRunMenuCheck(currentProject, touchedHeader);
   return result;
 });
+
+// Which of a turn's file writes mean "the header may have changed". A build always
+// qualifies (the whole design is new); an edit qualifies only when it touched the
+// header's own files, so a copy tweak doesn't pay for three page loads.
+const HEADER_TOUCH = /header\.config\.ts|header\.skin\.ts|Header\.tsx|MobileMenu\.tsx|menu\.ts|pages\.ts/;
+let menuCheckQueued = false;
+function maybeRunMenuCheck(dir, touched) {
+  if (!dir || !touched || menuCheckQueued || !viteUrl) return;
+  menuCheckQueued = true;
+  // After the dev server has re-served the edited modules.
+  setTimeout(async () => {
+    try {
+      const result = await runMenuCheckFor(null);
+      const { summarize } = require("./menu-check.cjs");
+      const line = result && result.ok !== undefined ? summarize(result) : null;
+      if (line && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("agent:event", { type: "narrate", phase: "menu", text: line, ok: !!result.ok });
+      }
+    } catch (e) { appLog.write("info", "menu", `check skipped: ${e.message}`); }
+    finally { menuCheckQueued = false; }
+  }, 1500);
+}
 
 // ---- Site content (the Site rail) --------------------------------------------
 // The rail edits the site as FILES, no model turn: content/site.json (nav, url),
@@ -1882,9 +1916,33 @@ ipcMain.handle("site:saveSite", (_e, { nav, footerLinks, legal } = {}) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   const p = path.join(siteContentDir(currentProject), "site.json");
   const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
+  // A mega menu's COLUMNS survive the save. The Navigation tab edits them and the
+  // site header renders them (site/blocks/lib/Header.tsx decides dropdown vs mega
+  // per item from this data), so dropping them here silently flattened every mega
+  // menu the moment a designer touched the nav.
+  const cleanColumns = (arr) => (Array.isArray(arr) ? arr : [])
+    .map((c) => {
+      if (!c || typeof c !== "object") return null;
+      const heading = typeof c.heading === "string" ? c.heading.trim() : "";
+      const links = clean(c.links, false);
+      const f = c.feature && typeof c.feature === "object" ? c.feature : null;
+      const feature = f && (f.title || f.text || f.image || f.link) ? {
+        ...(f.image && f.image.src ? { image: { src: String(f.image.src), alt: String(f.image.alt || "") } } : {}),
+        ...(typeof f.title === "string" && f.title.trim() ? { title: f.title.trim() } : {}),
+        ...(typeof f.text === "string" && f.text.trim() ? { text: f.text.trim() } : {}),
+        ...(f.link && f.link.label && f.link.href ? { link: { label: String(f.link.label).trim(), href: String(f.link.href).trim() } } : {}),
+      } : null;
+      if (!heading && !links.length && !feature) return null;
+      return { ...(heading ? { heading } : {}), links, ...(feature ? { feature } : {}) };
+    })
+    .filter(Boolean);
   const clean = (arr, sub) => (Array.isArray(arr) ? arr : [])
     .filter((l) => l && typeof l.label === "string" && l.label.trim() && typeof l.href === "string" && l.href.trim())
-    .map((l) => ({ label: l.label.trim(), href: l.href.trim(), ...(sub && Array.isArray(l.links) && l.links.length ? { links: clean(l.links, false) } : {}) }));
+    .map((l) => ({
+      label: l.label.trim(), href: l.href.trim(),
+      ...(sub && Array.isArray(l.links) && l.links.length ? { links: clean(l.links, false) } : {}),
+      ...(sub && Array.isArray(l.columns) && l.columns.length ? { columns: cleanColumns(l.columns) } : {}),
+    }));
   // A footer item may be a column: a label with links and no address of its own.
   const cleanFooter = (arr) => (Array.isArray(arr) ? arr : [])
     .map((l) => l && typeof l.label === "string" ? { label: l.label.trim(), href: typeof l.href === "string" ? l.href.trim() : "", links: clean(l.links, false) } : null)
@@ -3534,6 +3592,60 @@ const MENU_LAYOUT_PHRASES = {
   "mega-center-split": "a header with a full-width mega menu, logo centered with nav links split to its left and right",
 };
 
+// The nine picker ids ARE `menuKind` × `placement`. The header is a configured
+// CORE component, so the choice is written into the project as data before the
+// build starts (seedHeaderConfig) — the prompt then DESCRIBES what is already
+// standing rather than instructing the model to construct it.
+const MENU_LAYOUT_CONFIG = {
+  "simple-left-right": { menuKind: "none", placement: "left-right" },
+  "simple-left-center": { menuKind: "none", placement: "left-center" },
+  "simple-center-split": { menuKind: "none", placement: "center-split" },
+  "dropdown-left-right": { menuKind: "dropdown", placement: "left-right" },
+  "dropdown-left-center": { menuKind: "dropdown", placement: "left-center" },
+  "dropdown-center-split": { menuKind: "dropdown", placement: "center-split" },
+  "mega-left-right": { menuKind: "mega", placement: "left-right" },
+  "mega-left-center": { menuKind: "mega", placement: "left-center" },
+  "mega-center-split": { menuKind: "mega", placement: "center-split" },
+};
+
+/**
+ * Write the designer's header choice into the project as data, before the build.
+ *
+ * This is the whole point of the configured header: the nine picker layouts are
+ * not nine things for a model to build, they are two fields. `Header.tsx` (CORE)
+ * implements every placement and menu kind once and reads them from here, so the
+ * header the designer picked is the header that renders, first pass, every time.
+ * The build turn then only styles it (header.skin.ts).
+ *
+ * Patches the two fields in the exported literal (leaving the CORE types and doc
+ * comment above it alone), so a re-run with a different pick is idempotent. Failing
+ * is never fatal: the config keeps its defaults and the build still runs.
+ */
+function seedHeaderConfig(dir, menuLayout) {
+  const cfg = MENU_LAYOUT_CONFIG[menuLayout];
+  if (!dir || !cfg) return false;
+  const file = path.join(dir, "src", "app", "header.config.ts");
+  try {
+    if (!fs.existsSync(file)) return false;
+    let src = fs.readFileSync(file, "utf8");
+    // Only the exported literal's fields — the types and the doc comment above it
+    // are CORE and stay exactly as shipped.
+    const start = src.indexOf("export const headerConfig");
+    if (start < 0) return false;
+    const head = src.slice(0, start);
+    let tail = src.slice(start);
+    tail = tail
+      .replace(/(placement:\s*)["'][^"']*["']/, `$1"${cfg.placement}"`)
+      .replace(/(menuKind:\s*)["'][^"']*["']/, `$1"${cfg.menuKind}"`);
+    fs.writeFileSync(file, head + tail);
+    appLog.write("info", "menu", `header config seeded: ${cfg.placement} / ${cfg.menuKind}`);
+    return true;
+  } catch (e) {
+    appLog.write("info", "menu", `header config not seeded (${e.message})`);
+    return false;
+  }
+}
+
 // The designer's picked hero layout → an explicit, authoritative build instruction.
 // Keep the ids in sync with HERO_LAYOUTS in shell.js (the renderer catalog).
 const HERO_LAYOUT_PHRASES = {
@@ -3585,10 +3697,20 @@ function buildDesignPrompt(brief) {
   if (fonts.length) parts.push(`Fonts ${fonts.join(", ")}`);
   if (list(b.sections).length) parts.push(`Include these sections: ${b.sections.join(", ")}`);
   if (b.menuLayout && MENU_LAYOUT_PHRASES[b.menuLayout]) {
+    // DESCRIPTIVE, not an instruction to build: `header.config.ts` is already
+    // written (seedHeaderConfig), and the CORE Header renders it. The turn styles
+    // the header through its skin; it does not restructure it.
     parts.push(
-      "Header / navigation layout (the designer’s explicit choice — build the site " +
-      "header this way, configuring menu.ts for the menu style): " +
-      MENU_LAYOUT_PHRASES[b.menuLayout]
+      "Header / navigation: the header is ALREADY CONFIGURED and standing as " +
+      `${MENU_LAYOUT_PHRASES[b.menuLayout]} — src/app/header.config.ts holds that choice and ` +
+      "src/app/components/Header.tsx (CORE) renders it, mobile drawer included. STYLE it to " +
+      "the design by editing YOUR VARIATION's header.skin.ts, at " +
+      "src/variations/{id}/components/header.skin.ts, which is seeded when the variation is " +
+      "created and WINS over the base copy (bar, inner, wordmark, logo, " +
+      "link, linkActive, cta, panel, panelInner, dropdownLink, columnHeading, columnLink, " +
+      "feature, drawer, drawerLink, drawerSubLink, hamburger). Do NOT restructure it, do NOT " +
+      "copy Header.tsx or MobileMenu.tsx into the variation, and do not re-derive the placement " +
+      "grid — that is done and tested. Menu CONTENT stays in src/app/menu.ts"
     );
   }
   if (b.heroLayout && HERO_LAYOUT_PHRASES[b.heroLayout]) {
@@ -3663,8 +3785,61 @@ ipcMain.handle("intake:designPrompt", async () => {
   if (intakeBrief && intakeBrief.direction) {
     try { fs.writeFileSync("/tmp/ta-direction.json", JSON.stringify(intakeBrief.direction, null, 2)); } catch {}
   }
+  // The header's STRUCTURE goes in as data before the build, so the turn inherits a
+  // standing header rather than instructions for making one.
+  if (intakeBrief && currentProject) seedHeaderConfig(currentProject, intakeBrief.menuLayout);
+  // …and so does its ARCHITECTURE: the brief becomes this client's pages + menus, so
+  // the nav never shows the template's clothing-shop starter content. One cheap call,
+  // awaited (the build must not start on a half-written menu.ts), but never fatal.
+  if (intakeBrief && currentProject) await seedMenuContent(currentProject, intakeBrief);
   return { prompt: buildDesignPrompt(intakeBrief) };
 });
+
+/**
+ * Write the site's navigation from the brief: pages.ts (the items) + menu.ts (what
+ * each one opens), in this client's own domain language.
+ *
+ * WHY A MODEL CALL AND NOT A TABLE. The structure is code's job and now is; the
+ * WORDS are not derivable. "Residential / Commercial / Heritage" for an architecture
+ * practice, its practice areas for a law firm: no lookup table reaches that, and the
+ * alternative is what we had, a clothing shop's menu on every site. One Haiku call
+ * at the handoff (the narrate:line / seo-fill pattern) is the cheapest place to buy
+ * it, and it lands as DATA the designer edits, not as instructions a build re-derives.
+ *
+ * Never fatal and never blocking beyond its own timeout: no key, a refusal, a
+ * timeout or a junk reply all leave the scaffold's files exactly as they were, and
+ * the build proceeds with the starter menu it has always had.
+ */
+async function seedMenuContent(dir, brief) {
+  const cfg = MENU_LAYOUT_CONFIG[brief && brief.menuLayout];
+  // Without a picked layout the header keeps its defaults, and seeding pages from a
+  // brief the designer never confirmed would presume more than we know.
+  if (!cfg || !process.env.ANTHROPIC_API_KEY) return { ok: false, reason: "skipped" };
+  const SEED = require("./menu-seed.cjs");
+  const { system, user } = SEED.prompt(brief, cfg.menuKind);
+  try {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk"); // precedent: seo-fill
+    const client = new Anthropic({ timeout: 30_000, maxRetries: 1 });
+    const msg = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1500,
+      system,
+      messages: [{ role: "user", content: user }],
+      output_config: { format: { type: "json_schema", schema: SEED.SCHEMA } },
+    });
+    const text = (msg.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+    const { items } = SEED.clean(JSON.parse(text), cfg.menuKind);
+    // No usable items → leave the scaffold alone rather than write an empty nav.
+    if (!items.length) return { ok: false, reason: "no items" };
+    fs.writeFileSync(path.join(dir, "src", "app", "pages.ts"), SEED.renderPagesTs(items));
+    fs.writeFileSync(path.join(dir, "src", "app", "menu.ts"), SEED.renderMenuTs(items));
+    appLog.write("info", "menu", `nav seeded from the brief: ${items.map((i) => i.name).join(", ")} (${cfg.menuKind})`);
+    return { ok: true, items };
+  } catch (e) {
+    appLog.write("info", "menu", `nav not seeded (${e.message}); the starter menu stands`);
+    return { ok: false, error: e.message };
+  }
+}
 
 // Design-variety is a licensed add-on (Rob 2026-08-17) sharing Research's license tier:
 // one licensed key unlocks both. Unlicensed → nothing samples, no block is injected, and
@@ -4587,6 +4762,24 @@ const A11Y_BREAKPOINTS = [
   { name: "tablet", w: 834, h: 1112 },
   { name: "mobile", w: 390, h: 780 },
 ];
+// One axe pass over whatever is currently on screen. Run repeatedly: once for the
+// page, then once per OPEN menu, since axe ignores hidden elements and a dropdown
+// or mega panel is hidden until someone opens it.
+const AXE_RUN = `(async () => {
+  if (typeof axe === "undefined") return [];
+  const r = await axe.run(document, {
+    runOnly: { type: "tag", values: ["wcag2a","wcag2aa","wcag21a","wcag21aa"] },
+    resultTypes: ["violations"],
+  });
+  return (r.violations || []).map((v) => ({
+    id: v.id, impact: v.impact, help: v.help, helpUrl: v.helpUrl,
+    wcag: (v.tags || []).filter((t) => /^wcag\d/.test(t)),
+    nodes: (v.nodes || []).map((n) => ({
+      target: n.target, html: String(n.html || "").slice(0, 400), failureSummary: n.failureSummary,
+    })),
+  }));
+})()`;
+
 let _axeSrc = null;
 function axeSource() {
   if (_axeSrc == null) {
@@ -4621,6 +4814,23 @@ async function auditA11y(variationId) {
   });
   const wc = win.webContents;
   const byKey = new Map(); // "rule::selector" → finding (accumulates the breakpoints it hits)
+  // One violation, however many times it is seen (at three widths, and once per open
+  // menu), is ONE finding that records which breakpoints it hit.
+  const collect = (violations, width) => {
+    for (const v of violations || []) {
+      for (const n of v.nodes || []) {
+        const sel = Array.isArray(n.target) ? n.target.join(" ") : String(n.target || "");
+        const key = `${v.id}::${sel}`;
+        const hit = byKey.get(key);
+        if (hit) { if (!hit.breakpoints.includes(width)) hit.breakpoints.push(width); }
+        else byKey.set(key, {
+          key, rule: v.id, impact: v.impact || "moderate", help: v.help, helpUrl: v.helpUrl,
+          wcag: v.wcag || [], selector: sel, html: n.html, failureSummary: n.failureSummary,
+          breakpoints: [width],
+        });
+      }
+    }
+  };
   try {
     for (const bp of A11Y_BREAKPOINTS) {
       win.setContentSize(bp.w, bp.h);
@@ -4661,19 +4871,44 @@ async function auditA11y(variationId) {
         })()`,
         true,
       );
-      for (const v of violations || []) {
-        for (const n of v.nodes || []) {
-          const sel = Array.isArray(n.target) ? n.target.join(" ") : String(n.target || "");
-          const key = `${v.id}::${sel}`;
-          const hit = byKey.get(key);
-          if (hit) { if (!hit.breakpoints.includes(bp.name)) hit.breakpoints.push(bp.name); }
-          else byKey.set(key, {
-            key, rule: v.id, impact: v.impact || "moderate", help: v.help, helpUrl: v.helpUrl,
-            wcag: v.wcag || [], selector: sel, html: n.html, failureSummary: n.failureSummary,
-            breakpoints: [bp.name],
-          });
+      collect(violations, bp.name);
+
+      // ---- The menus, which are HIDDEN until opened ------------------------
+      // axe only evaluates what is visible, so every dropdown and mega panel was
+      // invisible to it: their links were never checked for contrast, link text or
+      // anything else. Open each menu-bearing item in turn and scan again, so the
+      // panel's content is audited the way a visitor actually meets it. Desktop and
+      // tablet reveal panels on hover; at mobile width the same links live in the
+      // drawer, which the hamburger opens.
+      try {
+        if (bp.name === "mobile") {
+          const opened = await wc.executeJavaScript(
+            `(() => { const b = document.querySelector("[data-header-hamburger]"); if (!b) return false; b.click(); return true; })()`, true);
+          if (opened) {
+            await wc.executeJavaScript(`new Promise((r) => setTimeout(r, 450))`, true);
+            // Expand every accordion so the sub-links are visible too.
+            await wc.executeJavaScript(
+              `(() => { document.querySelectorAll("[data-menu-drawer] [aria-expanded='false']").forEach((b) => b.click()); return true; })()`, true);
+            await wc.executeJavaScript(`new Promise((r) => setTimeout(r, 400))`, true);
+            collect(await wc.executeJavaScript(AXE_RUN, true), bp.name);
+          }
+        } else {
+          const items = await wc.executeJavaScript(
+            `[...document.querySelectorAll("[data-menu-item]")].map((e) => e.getAttribute("data-menu-item")).filter(Boolean)`, true);
+          for (const item of items || []) {
+            const sel = JSON.stringify(`[data-menu-item="${item}"]`);
+            const opened = await wc.executeJavaScript(
+              `(() => { const t = document.querySelector(${sel}); if (!t) return false;
+                 t.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+                 t.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+                 if (t.focus) t.focus();
+                 return true; })()`, true);
+            if (!opened) continue;
+            await wc.executeJavaScript(`new Promise((r) => setTimeout(r, 320))`, true);
+            collect(await wc.executeJavaScript(AXE_RUN, true), bp.name);
+          }
         }
-      }
+      } catch (e) { appLog.write("info", "a11y", `menu scan skipped at ${bp.name}: ${e.message}`); }
     }
   } catch (e) {
     win.destroy();
@@ -4685,6 +4920,122 @@ async function auditA11y(variationId) {
   return { ok: true, findings, count: findings.length, ranAt: Date.now(), variationId: vid };
 }
 ipcMain.handle("a11y:audit", (_e, { variationId } = {}) => auditA11y(variationId));
+
+// ---- Menu check (P4) — the header a designer picked IS the header they got ----
+// Deterministic, zero model tokens: it measures the rendered nav against the data
+// it came from (pages.ts, menu.ts, header.config.ts) at each breakpoint, through
+// the capture bridge. Runs after a Get Designing build and after any edit that
+// touched the header; on demand from the drawer too. Writes .thinkany/menu-check.json.
+//
+// headerMode decides how a failure reads: a CONFIGURED header cannot produce one
+// (so a finding is a framework bug), while a CUSTOM header — a variation that
+// dropped in its own Header.tsx — gets its findings reported to the designer.
+function headerModeFor(dir, variationId) {
+  try {
+    const custom = path.join(dir, "src", "variations", String(variationId || ""), "components", "Header.tsx");
+    return fs.existsSync(custom) ? "custom" : "configured";
+  } catch { return "configured"; }
+}
+/**
+ * Once a design is PROMOTED, the design preview stops rendering the variation and
+ * renders the SITE's pages through the site's blocks and chrome (src/app/site-bridge),
+ * so the header on screen is the site's header reading content/site.json. The check
+ * must follow: the site's nav is the expectation, and a panel opens by hovering
+ * rather than through DesignSurface's `?menu=open` capture flag. Mirrors
+ * site-bridge's own `isPromoted`.
+ */
+function previewIsSite(dir) {
+  try {
+    const site = JSON.parse(fs.readFileSync(path.join(dir, "content", "site.json"), "utf8"));
+    if (!site.design || site.design === "v00") return false;
+    const pages = fs.readdirSync(path.join(dir, "content", "pages")).filter((f) => f.endsWith(".json"));
+    if (!pages.length) return false;
+    // A registry with at least one promoted block (the starter Hero alone is not a promotion).
+    const idx = fs.readFileSync(path.join(dir, "site", "blocks", "index.ts"), "utf8");
+    return /defineBlock|blocks\s*=/.test(idx);
+  } catch { return false; }
+}
+
+async function runMenuCheckFor(variationId, opts = {}) {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const vid = variationId || (detectDesign(currentProject).variationId || "v01");
+  const { runMenuCheck } = require("./menu-check.cjs");
+  const { runCaptureOp } = require("./capture-bridge.cjs");
+  // Skip the tablet width when the project didn't opt into a tablet preview: it
+  // isn't a surface the designer ever sees, and each width costs a page load.
+  const widths = tabletEnabled(currentProject) ? undefined : ["desktop", "mobile"];
+  // The design preview shows the SITE's header once promoted, so check it as such.
+  const promoted = previewIsSite(currentProject);
+  const site = opts.site !== undefined ? opts.site : promoted;
+  return runMenuCheck({
+    projectDir: currentProject, previewUrl: viteUrl, variationId: vid,
+    captureOp: runCaptureOp, headerMode: headerModeFor(currentProject, vid),
+    widths, log: (m) => appLog.write("info", "menu", m),
+    // A promoted preview is the SITE's header served from the DESIGN surface, so it
+    // behaves like the site but still needs ?v= to render at all.
+    ...(promoted && !opts.previewUrl ? { baseUrl: `${viteUrl}/?v=${encodeURIComponent(vid)}` } : {}),
+    ...opts, site,
+  });
+}
+/** Whether .env opted into the tablet preview (VITE_ENABLE_TABLET). */
+function tabletEnabled(dir) {
+  try {
+    const env = fs.readFileSync(path.join(dir, ".env"), "utf8");
+    return /^\s*VITE_ENABLE_TABLET\s*=\s*["']?true["']?/mi.test(env);
+  } catch { return false; }
+}
+ipcMain.handle("menu:check", (_e, { variationId, site } = {}) => runMenuCheckFor(variationId, site ? { site: true, previewUrl: siteUrl } : {}));
+
+// ---- The menu findings' Hold / Dismiss state (P5) -----------------------------
+// menu-check.json is the CHECK's output, rewritten on every run. What the designer
+// has decided about a finding is separate and must survive a re-run, so it lives
+// beside it, keyed the same way the accessibility store is.
+function menuStorePath(dir) { return path.join(dir, ".thinkany", "menu-state.json"); }
+function loadMenuStore(dir) {
+  try { return JSON.parse(fs.readFileSync(menuStorePath(dir), "utf8")); } catch { return {}; }
+}
+ipcMain.handle("menu:load", (_e, { id } = {}) => {
+  if (!currentProject || !id) return { dismissed: [], ranAt: null, findings: [], ok: null };
+  const rec = loadMenuStore(currentProject)[id] || {};
+  // The last run's findings come from the check's own file, so opening the drawer
+  // shows what the last build found without re-running anything.
+  let last = null;
+  try { last = JSON.parse(fs.readFileSync(path.join(currentProject, ".thinkany", "menu-check.json"), "utf8")); } catch {}
+  return {
+    dismissed: rec.dismissed || [],
+    ranAt: (last && last.ranAt) || null,
+    ok: last ? !!last.ok : null,
+    headerMode: (last && last.headerMode) || null,
+    surface: (last && last.surface) || "design",
+    findings: (last && last.findings) || [],
+    checked: (last && last.checked) || null,
+  };
+});
+ipcMain.handle("menu:save", (_e, { id, dismissed } = {}) => {
+  if (!currentProject || !id) return { ok: false };
+  const store = loadMenuStore(currentProject);
+  store[id] = { dismissed: dismissed || [], updatedAt: new Date().toISOString() };
+  try {
+    fs.mkdirSync(path.join(currentProject, ".thinkany"), { recursive: true });
+    fs.writeFileSync(menuStorePath(currentProject), JSON.stringify(store, null, 2));
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+  return { ok: true };
+});
+
+/**
+ * "Fix" on a CONFIGURED header. The spec is explicit that this is not an agent turn:
+ * a configured header's structure comes from header.config.ts, so the repair is to
+ * re-seed that from the designer's intake choice and re-run the check. If the finding
+ * survives, the honest answer is that this is a framework bug rather than something
+ * the designer can fix, and the caller says so.
+ */
+ipcMain.handle("menu:reseed", async (_e, { variationId } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const layout = intakeBrief && intakeBrief.menuLayout;
+  const seeded = layout ? seedHeaderConfig(currentProject, layout) : false;
+  const result = await runMenuCheckFor(variationId);
+  return { ok: true, seeded, layout: layout || null, result };
+});
 
 // ---- Art Director thumbnails -------------------------------------------------
 // A rec row that names its section in words makes the designer translate text back into the

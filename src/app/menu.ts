@@ -13,11 +13,22 @@
  */
 import { menuStyle } from "@/config/site";
 import { designPages } from "./pages";
+import { headerConfig } from "./header.config";
 import { seed, menuForIn, hasMenuIn, menuItemIdsIn, type ItemMenu } from "./menu.schema";
 
-/** Per nav-item menu, keyed by page id. Seeded from the setup style; edit freely. */
+/**
+ * The starting menu kind. `header.config.ts` is the single place the header's
+ * structure is described, so its `menuKind` wins; the older `VITE_MENU_STYLE`
+ * (from /setup-project) is the fallback for a project set up before the config
+ * existed. Either way this only SEEDS the map below — per-item data wins.
+ */
+const seedKind = headerConfig.menuKind !== "none"
+  ? headerConfig.menuKind
+  : menuStyle === "traditional" ? "none" : menuStyle;
+
+/** Per nav-item menu, keyed by page id. Seeded from the header config; edit freely. */
 export const navMenus: Record<string, ItemMenu> = Object.fromEntries(
-  designPages.map((p) => [p.id, menuStyle === "traditional" ? { kind: "none" } : seed(menuStyle)]),
+  designPages.map((p) => [p.id, seedKind === "none" ? { kind: "none" } : seed(seedKind)]),
 );
 
 export const menuFor = (id: string): ItemMenu => menuForIn(navMenus, id);
