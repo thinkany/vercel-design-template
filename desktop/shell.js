@@ -1283,6 +1283,9 @@ const SETUP_STEPS = [
             onConnected: async (res) => {
               await paintLib();
               if (res) fold.closeFold(); // connected → done → fold away
+              // This step stays open after a connection, so the rail catches up here
+              // rather than waiting for the step to finish.
+              refreshRailActivation();
             },
           });
         };
@@ -1432,7 +1435,7 @@ async function finishSetupStep(id, how) {
   const stack = el("setup-stack");
   const card = stack && stack.querySelector(".setup-step.live");
   const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (!card || reduce || !card.animate) { await renderSetupStep(); return; }
+  if (!card || reduce || !card.animate) { await renderSetupStep(); refreshRailActivation(); return; }
   setupAnimating = true;
 
   // Where it is now, and what it becomes: the row's height and padding come from a real
@@ -1484,7 +1487,7 @@ async function finishSetupStep(id, how) {
   for (const c of card.children) {
     c.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 130, easing: "ease-out", fill: "both" });
   }
-  try { await close.finished; } catch { setupAnimating = false; return; }
+  try { await close.finished; } catch { setupAnimating = false; refreshRailActivation(); return; }
 
   // Between the movements: become the row, at the size the close just left it. Pin that
   // geometry BEFORE dropping the animation holding it, or it flashes back open.
@@ -1539,6 +1542,10 @@ async function finishSetupStep(id, how) {
     );
   }
   setupAnimating = false;
+  // Now the rail can catch up with what this step connected. Doing it here rather than
+  // inside the key row keeps its four IPC round-trips and icon toggles off the screen
+  // while the card is still moving.
+  refreshRailActivation();
 }
 
 /**
@@ -3391,10 +3398,14 @@ async function claudeKeySection(body, { noLabel = false, onConnected = null, noD
     msg.textContent = "";
     const res = await window.desktop.saveKey(key);
     if (res.ok) {
-      refreshRailActivation();
-      // In the drawer: re-gate and repaint. In the setup stepper the host drives both.
+      // In the drawer: re-gate and repaint. In the setup stepper the host drives both,
+      // and the rail is left alone until the step's animation has finished: this call
+      // resolves four IPC round-trips and then toggles icon visibility, which lands as a
+      // visible repaint of the rail mid-flight. The Claude step is the only one whose
+      // save changes the app's gated state, which is why it was the only one that
+      // flashed.
       if (onConnected) { onConnected(res); }
-      else { boot(); openModal("licenses"); }
+      else { refreshRailActivation(); boot(); openModal("licenses"); }
     } else {
       msg.textContent = res.error || COPY.common.couldNotSave;
       msg.style.color = "#e5484d";
@@ -3438,8 +3449,8 @@ async function licenseSection(body, opts) {
     async () => {
       await opts.clear();
       if (opts.onChange) opts.onChange();
-      refreshRailActivation();
-      if (opts.onConnected) opts.onConnected(null); else openModal("licenses");
+      if (opts.onConnected) opts.onConnected(null);
+      else { refreshRailActivation(); openModal("licenses"); }
     }));
 
   if (lic.hasLicense) {
@@ -3463,11 +3474,12 @@ async function licenseSection(body, opts) {
     const res = await opts.save(key);
     if (res.ok) {
       if (opts.onChange) opts.onChange();
-      refreshRailActivation();
       // The drawer re-opens itself to repaint as "Active"; a different host (the setup
-      // stepper) says what happens next instead.
+      // stepper) says what happens next instead, and refreshes the rail once its own
+      // animation has landed: this call resolves four IPC round-trips and then toggles
+      // icon visibility, which reads as a flash if it arrives mid-movement.
       if (opts.onConnected) opts.onConnected(res);
-      else openModal("licenses");
+      else { refreshRailActivation(); openModal("licenses"); }
     } else {
       msg.textContent = res.error || COPY.licenses.couldNotSave;
       msg.style.color = "#e5484d";

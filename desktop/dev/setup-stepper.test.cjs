@@ -110,6 +110,19 @@ ok(closeMs >= 200 && closeMs <= 400, `the close is quick but not a snap (${close
 ok(travelMs >= 450, `the travel decelerates into place rather than darting (${travelMs}ms)`);
 ok(travelMs > closeMs, "and the arrival takes longer than the close");
 ok(/prefers-reduced-motion/.test(finish), "none of it runs for reduced motion");
+// The rail must not repaint mid-movement. refreshRailActivation resolves four IPC calls
+// and then toggles icon visibility, which lands as a flash if it arrives while the card
+// is still travelling. The key rows therefore leave it to the host, and the host does it
+// once the animation is over.
+ok(finish.lastIndexOf("refreshRailActivation()") > finish.indexOf("await glide.finished"),
+  "the rail is refreshed only after the card has landed");
+for (const [fn, where] of [["claudeKeySection", "the Claude row"], ["licenseSection", "the licence rows"]]) {
+  const body = shell.slice(shell.indexOf(`async function ${fn}(`), shell.indexOf(`async function ${fn}(`) + 4000);
+  const save = body.slice(body.indexOf("if (res.ok)"), body.indexOf("} else {"));
+  checks++;
+  assert.ok(!/^\s*refreshRailActivation\(\);/m.test(save.split("onConnected")[0]),
+    `${where} must not refresh the rail before handing back to its host`);
+}
 ok(/if \(setupAnimating\) return/.test(finish), "a second click during the transition cannot race the first");
 // The measurement must not disturb what the designer is looking at.
 const mStart = shell.indexOf("function measureDoneRow");
@@ -136,7 +149,7 @@ ok(/licenseSection\(fold/.test(loop), "the media step loops one licence row over
 ok(/onConnected:/.test(block), "each row reports a successful save back to the stepper");
 // onConnected must actually be honoured, or the drawer would re-open over the stepper.
 const ls = shell.slice(shell.indexOf("async function licenseSection"), shell.indexOf("async function licenseSection") + 3000);
-ok(/if \(opts\.onConnected\) opts\.onConnected\(res\);\s*\n\s*else openModal\("licenses"\)/.test(ls),
+ok(/if \(opts\.onConnected\) opts\.onConnected\(res\);\s*\n\s*else \{ refreshRailActivation\(\); openModal\("licenses"\); \}/.test(ls),
   "licenseSection defers to onConnected instead of always re-opening the drawer");
 
 // ---- The media step asks for three at once ----------------------------------
