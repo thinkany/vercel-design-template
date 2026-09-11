@@ -4876,6 +4876,26 @@ function headerModeFor(dir, variationId) {
     return fs.existsSync(custom) ? "custom" : "configured";
   } catch { return "configured"; }
 }
+/**
+ * Once a design is PROMOTED, the design preview stops rendering the variation and
+ * renders the SITE's pages through the site's blocks and chrome (src/app/site-bridge),
+ * so the header on screen is the site's header reading content/site.json. The check
+ * must follow: the site's nav is the expectation, and a panel opens by hovering
+ * rather than through DesignSurface's `?menu=open` capture flag. Mirrors
+ * site-bridge's own `isPromoted`.
+ */
+function previewIsSite(dir) {
+  try {
+    const site = JSON.parse(fs.readFileSync(path.join(dir, "content", "site.json"), "utf8"));
+    if (!site.design || site.design === "v00") return false;
+    const pages = fs.readdirSync(path.join(dir, "content", "pages")).filter((f) => f.endsWith(".json"));
+    if (!pages.length) return false;
+    // A registry with at least one promoted block (the starter Hero alone is not a promotion).
+    const idx = fs.readFileSync(path.join(dir, "site", "blocks", "index.ts"), "utf8");
+    return /defineBlock|blocks\s*=/.test(idx);
+  } catch { return false; }
+}
+
 async function runMenuCheckFor(variationId, opts = {}) {
   if (!currentProject) return { ok: false, error: "No project is open." };
   const vid = variationId || (detectDesign(currentProject).variationId || "v01");
@@ -4884,10 +4904,17 @@ async function runMenuCheckFor(variationId, opts = {}) {
   // Skip the tablet width when the project didn't opt into a tablet preview: it
   // isn't a surface the designer ever sees, and each width costs a page load.
   const widths = tabletEnabled(currentProject) ? undefined : ["desktop", "mobile"];
+  // The design preview shows the SITE's header once promoted, so check it as such.
+  const promoted = previewIsSite(currentProject);
+  const site = opts.site !== undefined ? opts.site : promoted;
   return runMenuCheck({
     projectDir: currentProject, previewUrl: viteUrl, variationId: vid,
     captureOp: runCaptureOp, headerMode: headerModeFor(currentProject, vid),
-    widths, log: (m) => appLog.write("info", "menu", m), ...opts,
+    widths, log: (m) => appLog.write("info", "menu", m),
+    // A promoted preview is the SITE's header served from the DESIGN surface, so it
+    // behaves like the site but still needs ?v= to render at all.
+    ...(promoted && !opts.previewUrl ? { baseUrl: `${viteUrl}/?v=${encodeURIComponent(vid)}` } : {}),
+    ...opts, site,
   });
 }
 /** Whether .env opted into the tablet preview (VITE_ENABLE_TABLET). */
@@ -4897,7 +4924,58 @@ function tabletEnabled(dir) {
     return /^\s*VITE_ENABLE_TABLET\s*=\s*["']?true["']?/mi.test(env);
   } catch { return false; }
 }
-ipcMain.handle("menu:check", (_e, { variationId } = {}) => runMenuCheckFor(variationId));
+ipcMain.handle("menu:check", (_e, { variationId, site } = {}) => runMenuCheckFor(variationId, site ? { site: true, previewUrl: siteUrl } : {}));
+
+// ---- The menu findings' Hold / Dismiss state (P5) -----------------------------
+// menu-check.json is the CHECK's output, rewritten on every run. What the designer
+// has decided about a finding is separate and must survive a re-run, so it lives
+// beside it, keyed the same way the accessibility store is.
+function menuStorePath(dir) { return path.join(dir, ".thinkany", "menu-state.json"); }
+function loadMenuStore(dir) {
+  try { return JSON.parse(fs.readFileSync(menuStorePath(dir), "utf8")); } catch { return {}; }
+}
+ipcMain.handle("menu:load", (_e, { id } = {}) => {
+  if (!currentProject || !id) return { dismissed: [], ranAt: null, findings: [], ok: null };
+  const rec = loadMenuStore(currentProject)[id] || {};
+  // The last run's findings come from the check's own file, so opening the drawer
+  // shows what the last build found without re-running anything.
+  let last = null;
+  try { last = JSON.parse(fs.readFileSync(path.join(currentProject, ".thinkany", "menu-check.json"), "utf8")); } catch {}
+  return {
+    dismissed: rec.dismissed || [],
+    ranAt: (last && last.ranAt) || null,
+    ok: last ? !!last.ok : null,
+    headerMode: (last && last.headerMode) || null,
+    surface: (last && last.surface) || "design",
+    findings: (last && last.findings) || [],
+    checked: (last && last.checked) || null,
+  };
+});
+ipcMain.handle("menu:save", (_e, { id, dismissed } = {}) => {
+  if (!currentProject || !id) return { ok: false };
+  const store = loadMenuStore(currentProject);
+  store[id] = { dismissed: dismissed || [], updatedAt: new Date().toISOString() };
+  try {
+    fs.mkdirSync(path.join(currentProject, ".thinkany"), { recursive: true });
+    fs.writeFileSync(menuStorePath(currentProject), JSON.stringify(store, null, 2));
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+  return { ok: true };
+});
+
+/**
+ * "Fix" on a CONFIGURED header. The spec is explicit that this is not an agent turn:
+ * a configured header's structure comes from header.config.ts, so the repair is to
+ * re-seed that from the designer's intake choice and re-run the check. If the finding
+ * survives, the honest answer is that this is a framework bug rather than something
+ * the designer can fix, and the caller says so.
+ */
+ipcMain.handle("menu:reseed", async (_e, { variationId } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const layout = intakeBrief && intakeBrief.menuLayout;
+  const seeded = layout ? seedHeaderConfig(currentProject, layout) : false;
+  const result = await runMenuCheckFor(variationId);
+  return { ok: true, seeded, layout: layout || null, result };
+});
 
 // ---- Art Director thumbnails -------------------------------------------------
 // A rec row that names its section in words makes the designer translate text back into the

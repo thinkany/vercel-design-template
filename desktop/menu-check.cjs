@@ -153,6 +153,16 @@ function expectedMenus(projectDir, items, config) {
 // loads and a handful of round trips rather than a call per assertion.
 
 const PROBE_JS = `(() => {
+  // Resolve ANY css colour to plain rgb by letting the browser do it. Modern
+  // palettes compute to oklab(), and scraping numbers out of that compares
+  // lightness/a/b as if they were r/g/b: different colours read as identical and
+  // identical ones read as different. Painting into a canvas is exact.
+  // Chromium keeps modern colour functions AS WRITTEN in getComputedStyle (oklab
+  // stays oklab), and a canvas echoes them back unconverted too, so there is no DOM
+  // trick that normalises them. Compare the colours numerically instead, in whatever
+  // space they are both expressed in: a wordmark and its bar are set from the same
+  // token system, so when they are the same colour they are the same string.
+  const colorOf = (el, prop) => { try { return el ? getComputedStyle(el)[prop] : ""; } catch { return ""; } };
   const box = (el) => { if (!el) return null; const r = el.getBoundingClientRect();
     return { x: r.left, y: r.top, w: r.width, h: r.height, right: r.right, bottom: r.bottom, cy: r.top + r.height / 2 }; };
   const header = document.querySelector('header[data-block="header"]') || document.querySelector("header");
@@ -189,13 +199,13 @@ const PROBE_JS = `(() => {
       if (!root) return "";
       const inner = Array.from(root.querySelectorAll("*")).filter((e) => (e.textContent || "").trim());
       const e = inner.length ? inner[inner.length - 1] : root;
-      return getComputedStyle(e).color;
+      return colorOf(e, "color");
     })(),
     barBg: (() => {
       let el = header;
       for (let i = 0; el && i < 4; i++) {
         const bg = getComputedStyle(el).backgroundColor;
-        if (bg && !/rgba\(0, 0, 0, 0\)|transparent/.test(bg)) return bg;
+        if (bg && !/rgba\(0, 0, 0, 0\)|transparent/.test(bg) && !/^rgba?\([^)]*,\s*0\)$/.test(bg)) return bg;
         el = el.parentElement;
       }
       return "";
@@ -252,12 +262,28 @@ const DRAWER_PROBE = `(() => {
 
 // ---- The rules ---------------------------------------------------------------
 
-/** Two CSS colours that render identically (so text on this bar is invisible). */
+/**
+ * Two colours that render identically, so text in one on a bar of the other is
+ * invisible. Both arrive as computed values, which Chromium leaves in whatever space
+ * the stylesheet used (rgb(), #hex, or a modern function like oklab()), and it does
+ * NOT down-convert. So compare within a space, never across one: same function, same
+ * numbers. Different notations are treated as different colours rather than guessed
+ * at, which keeps this rule quiet unless it is certain.
+ */
 function sameColor(a, b) {
-  const rgb = (c) => (String(c).match(/[\d.]+/g) || []).slice(0, 3).map(Number);
-  const [x, y] = [rgb(a), rgb(b)];
+  const A = String(a || "").trim().toLowerCase();
+  const B = String(b || "").trim().toLowerCase();
+  if (!A || !B) return false;
+  if (A === B) return true;
+  const fn = (c) => (c.match(/^([a-z]+)\(/) || [])[1] || (c.startsWith("#") ? "hex" : "");
+  if (fn(A) !== fn(B)) return false; // different notations: not comparable, so not a finding
+  const hex = (c) => { const m = c.match(/^#([0-9a-f]{6})$/); return m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : null; };
+  const x = hex(A) || (A.match(/[-\d.]+/g) || []).map(Number).slice(0, 3);
+  const y = hex(B) || (B.match(/[-\d.]+/g) || []).map(Number).slice(0, 3);
   if (x.length < 3 || y.length < 3) return false;
-  return x.every((v, i) => Math.abs(v - y[i]) < 8);
+  // rgb components run 0-255; oklab's run 0-1, so scale the tolerance to the space.
+  const tol = fn(A) === "rgb" || fn(A) === "rgba" || fn(A) === "hex" ? 8 : 0.02;
+  return x.every((v, i) => Math.abs(v - y[i]) <= tol);
 }
 
 function finding(rule, width, item, expected, actual, note) {
@@ -489,7 +515,7 @@ function checkMobile(bar, drawer, items, menus, config, findings) {
  * Returns { ok, findings, checked, headerMode, ranAt, variationId }, and writes
  * the same object to <project>/.thinkany/menu-check.json.
  */
-async function runMenuCheck({ projectDir, previewUrl, variationId, captureOp, headerMode = "configured", widths, log, site = false } = {}) {
+async function runMenuCheck({ projectDir, previewUrl, variationId, captureOp, headerMode = "configured", widths, log, site = false, baseUrl } = {}) {
   if (!previewUrl) return { ok: false, error: site ? "The site isn't running yet." : "The preview isn't running yet — open a built design first." };
   if (!projectDir) return { ok: false, error: "No project is open." };
   const vid = variationId || "v01";
@@ -560,7 +586,12 @@ async function runMenuCheck({ projectDir, previewUrl, variationId, captureOp, he
   let panelsChecked = 0;
   try {
     for (const bp of run) {
-      const base = site ? previewUrl : `${previewUrl}/?v=${encodeURIComponent(vid)}&capture=${bp.name}`;
+      // `site` says how the header BEHAVES (its data, and that panels open by hover);
+      // the URL says where it is SERVED. A promoted design preview is both: the site's
+      // header, served from the design surface, so it still needs ?v= to render.
+      const base = baseUrl
+        ? baseUrl
+        : site ? previewUrl : `${previewUrl}/?v=${encodeURIComponent(vid)}&capture=${bp.name}`;
       await goto(base, bp.w, bp.h);
       const bar = await evaluate(PROBE_JS);
       checkBar(bar, items, config, bp.name, findings);

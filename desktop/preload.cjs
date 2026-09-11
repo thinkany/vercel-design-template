@@ -88,7 +88,10 @@ contextBridge.exposeInMainWorld("desktop", {
   auditA11y: (variationId) => ipcRenderer.invoke("a11y:audit", { variationId }),
   // The menu check runs itself after a build; this is the on-demand path (and what
   // P5's Art Director surfacing will read).
-  checkMenu: (variationId) => ipcRenderer.invoke("menu:check", { variationId }),
+  checkMenu: (variationId, site) => ipcRenderer.invoke("menu:check", { variationId, site: !!site }),
+  loadMenuFindings: (id) => ipcRenderer.invoke("menu:load", { id }),
+  saveMenuFindings: (id, dismissed) => ipcRenderer.invoke("menu:save", { id, dismissed }),
+  reseedHeader: (variationId) => ipcRenderer.invoke("menu:reseed", { variationId }),
   getA11yMode: () => ipcRenderer.invoke("a11y:get"),
   setA11yMode: (enabled) => ipcRenderer.invoke("a11y:set", { enabled }),
   setA11yAuto: (auto) => ipcRenderer.invoke("a11y:setAuto", { auto }),

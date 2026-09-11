@@ -6,7 +6,7 @@ site 100% accurate every time regardless of menu type"). Rob asked whether a men
 agent makes sense; the answer here is no: an agent for verification, code for
 construction.
 
-**P1 + P2 + P3 + P4 BUILT 2026-09-10/11** on `feature/menu-deterministic-header` (harness-verified,
+**ALL FIVE PHASES BUILT 2026-09-10/11** on `feature/menu-deterministic-header` (harness-verified,
 not yet app-tested). All nine layouts pass the check at three widths, and a
 deliberately broken custom header fails with the right rule:
 `npx electron desktop/build/menu-layouts-test.cjs [--shots]`. The tool-guard's header
@@ -26,7 +26,11 @@ renders `content/site.json`'s nav using the pinned design's own `header.config.t
 `header.skin.ts`, resolved through two new Astro/Vite aliases, so `/promote-blocks`
 stops re-authoring the header entirely (it now only moves the menu's DATA into
 `site.json`). The menu check grew a `site: true` mode and runs the same rules against
-the built site. Only P5 (Art Director surfacing) is still open.
+the built site. P5 surfaces the findings as a section in the Art Director drawer (rule-grouped rows,
+expected-vs-actual in the modal, Hold / Dismiss, and an action that differs by header
+mode: a scoped edit on a CUSTOM header, a config re-seed on a CONFIGURED one, which
+says plainly when a finding survives that this is a tool bug rather than the
+designer's). The spec is now fully built.
 
 ## Goal
 
@@ -261,7 +265,7 @@ That is the whole "menu agent": verification and explanation, never construction
 | ~~P2~~ | ✅ `menu-seed.cjs` (prompt + schema + a `clean` that distrusts the reply + `menu.ts`/`pages.ts` renderers), called at the build handoff; `/design` §3 tells the agent the pages arrive seeded | ✅ `node desktop/dev/menu-seed.test.cjs` (67 checks, every misbehaving-model case) + a live run over seven briefs, and the seeded files pass the menu check in a real scaffold |
 | ~~P3~~ | ✅ `site/blocks/lib/Header.tsx` + default `chrome.ts` + `@design-header-config`/`@design-header-skin` aliases in BOTH builds; `/promote-blocks` chrome step reduced to moving nav data; `site:saveSite` stops dropping mega `columns` | ✅ `npx electron desktop/build/site-header-test.cjs`: a mega nav in content/site.json, the design's dark skin, the SAME menu check green against the built site at two widths |
 | ~~P4~~ | ✅ `menu-check.cjs` + capture-bridge driver + `.thinkany/menu-check.json` + narration line (runs itself after a build or a header-touching edit; `menu:check` IPC for on demand) | ✅ Nine scaffolds pass; the broken custom header fails on `placement` ("an element sits 8px off centre") |
-| P5 | Art Director surfacing: findings list, Fix on custom headers, re-seed on configured ones | One broken custom header fixed through the drawer |
+| ~~P5~~ | ✅ A Menu section in the Art Director drawer: rule-grouped rows, expected-vs-actual, Hold/Dismiss with state in `.thinkany/menu-state.json`, Fix (custom) vs Reset the header (configured) | ✅ Verified against Rob's promoted project; the check now detects a PROMOTED preview and measures it as the site, which is what it actually renders |
 
 P1 and P4 together deliver the guarantee. P2 makes the first pass useful rather than
 merely correct. P3 removes the second rewrite. P5 is polish.
