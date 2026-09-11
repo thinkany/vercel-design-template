@@ -73,8 +73,18 @@ ok(finish.indexOf("const restTop") > finish.indexOf('card.style.position = "abso
 // Nothing under the stack may jump while the card is out of flow.
 ok(/stack\.style\.height = stackBox\.height/.test(finish),
   "the stack holds its height, so what sits below it does not jump");
-ok(/stack\.animate\(/.test(finish),
-  "and gives that height up over the same beat as the arrival");
+// The stack must NOT shrink during the travel: in a flex column that drags the finished
+// rows above toward the top, which read as them sliding down to meet the closing card
+// and then rising with it. Only the card moves until the next step arrives.
+const travelBlock = finish.slice(finish.indexOf("const TRAVEL"), finish.indexOf("Hand over to the real stack"));
+ok(!/stack\.animate\(/.test(travelBlock),
+  "the stack keeps its full height for the trip: nothing above the card may move");
+// It gives that height up at the handover instead, under the next step's own entrance.
+const handover = finish.slice(finish.indexOf("Hand over to the real stack"));
+ok(/stack\.animate\(/.test(handover),
+  "the held height is released as the next step arrives, not snapped away before it");
+ok(/heldHeight/.test(handover) && /settledHeight/.test(handover),
+  "and it eases between the measured before and after, not a guess");
 // The held-open geometry has to be pinned before the animation holding it is dropped.
 ok(finish.indexOf("card.style.height = to.height") < finish.indexOf("card.getAnimations().forEach"),
   "the closed geometry is pinned before the close animation is cancelled (or it flashes open)");

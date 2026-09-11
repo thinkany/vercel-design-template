@@ -1488,13 +1488,13 @@ async function finishSetupStep(id, how) {
   card.replaceChildren(...buildSetupDoneRow(SETUP_STEPS.find((x) => x.id === id), setupState[id]).childNodes);
 
   // 2. Float up through the space that opened below it, decelerating into the slot.
+  //
+  // The stack keeps its full height for the whole trip. Animating it down here was wrong
+  // twice over: in a flex column a shrinking stack drags its rows toward the top, so the
+  // finished rows ABOVE appeared to slide down to meet the closing card and then rise
+  // with it. Nothing but the card should move until the next step arrives, and the stack
+  // gives up its held height at the handover, under the next step's own entrance.
   const TRAVEL = 620;
-  // The stack gives up the height the closed card no longer needs, over the same beat,
-  // so anything below settles WITH the arrival rather than snapping after it.
-  stack.animate(
-    [{ height: stackBox.height + "px" }, { height: (stackBox.height - (box.height - to.height)) + "px" }],
-    { duration: TRAVEL, easing: "cubic-bezier(.22, .61, .18, 1)", fill: "both" },
-  );
   const glide = card.animate(
     [
       { transform: `translateY(${midlineOffset}px)` },
@@ -1504,12 +1504,24 @@ async function finishSetupStep(id, how) {
   );
   try { await glide.finished; } catch { /* re-rendered under us */ }
 
-  // Hand over to the real stack, already drawn where the card came to rest.
+  // Hand over to the real stack, drawn with the row already where the card came to rest.
+  // The rows above have not moved and must not: the only change is that the next step is
+  // now in the stack, which is what the released height makes room for. Easing that
+  // release means the space closes as the next card fades in, rather than snapping shut
+  // a frame before it.
   card.style.willChange = "";
   card.classList.remove("travelling");
+  const heldHeight = stack.getBoundingClientRect().height;
   stack.getAnimations().forEach((a) => a.cancel());
   stack.style.height = "";
   await renderSetupStep({ settle: id });
+  const settledHeight = stack.getBoundingClientRect().height;
+  if (Math.abs(settledHeight - heldHeight) > 1 && stack.animate) {
+    stack.animate(
+      [{ height: heldHeight + "px" }, { height: settledHeight + "px" }],
+      { duration: 420, easing: "cubic-bezier(.22, .61, .18, 1)" },
+    );
+  }
   setupAnimating = false;
 }
 
