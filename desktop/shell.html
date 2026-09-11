@@ -1251,8 +1251,50 @@
       .a11y-tb-exit:hover { background: #3a3a44; }
       /* AD review bar only: FIXED width + a constant (non-pill) corner radius, so opening only
          grows the height via a soft dropdown below a fixed top row. It stays a rounded
-         rectangle the whole way and the truncated title never moves. AA bar keeps its pill. */
+         rectangle the whole way and the truncated title never moves. AA bar keeps its pill.
+         PLACEMENT: it covers the CHAT pane rather than floating over the preview — the walk is
+         about looking at the design, and a bar sitting on top of the design hid the very thing
+         it was pointing at. placeAdToolbar measures the pane and publishes its box as
+         --chat-x / --chat-w (re-measured on open, on a divider drag and on a window resize).
+         When the chat is collapsed (width 0) there is no pane to sit on, so the bar falls back
+         to floating centered over the preview. */
       #ad-toolbar { flex-direction: column; align-items: stretch; gap: 0; width: min(600px, 92vw); border-radius: 18px; padding: 8px 8px 8px 16px; }
+      #ad-toolbar.over-chat {
+        /* Anchored to the pane's MEASURED box (placeAdToolbar publishes both edges) — the pane
+           sits after the rail, so a window-relative left would land the bar on the rail. */
+        left: calc(var(--chat-x, 56px) + 12px); transform: none;
+        top: 63px;  /* clear of the chat's own dark #bar (51px) — the two are near-identical
+                       darks, so overlapping them read as one smeared block */
+        width: calc(var(--chat-w, 400px) - 24px);
+        max-height: calc(100vh - 77px);
+      }
+      /* The pane is narrower than the 600px float, so the title gives up its line first: it
+         truncates to whatever is left once the count and the step/exit buttons are placed,
+         keeping the whole control on ONE row (a wrapped row stranded Exit on a line of its own). */
+      #ad-toolbar.over-chat .ad-tb-row { flex-wrap: nowrap; }
+      /* The head takes the leftover width so the title uses every pixel the buttons don't,
+         truncating only when it genuinely runs out (default flex-basis stopped it early and
+         left dead space to its right). The count drops out below ~520px, where the title is
+         worth more than the "Highlighted on the page" restatement of the overlay. */
+      #ad-toolbar.over-chat .ad-tb-head { flex: 1 1 0; min-width: 0; }
+      #ad-toolbar.over-chat .a11y-tb-title { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #ad-toolbar.over-chat .a11y-tb-count { font-size: 11.5px; }
+      /* In a tight pane the title is worth more than the count's "Highlighted on the page"
+         restatement of what the overlay already shows. placeAdToolbar sets .tight by the
+         pane's MEASURED width (a media query would key on the window, which is the wrong box). */
+      #ad-toolbar.over-chat.tight .a11y-tb-count { display: none; }
+      /* The dropdown gets the pane's height instead of being a compact strip: the panel
+         scrolls internally, so a long why + the make-the-call field stay reachable without
+         the whole bar growing past the viewport. */
+      #ad-toolbar.over-chat .ad-tb-panel { max-height: calc(100vh - 200px); overflow-y: auto; }
+      /* Narrow pane: three actions side by side (Dismiss + Source imagery + Make the call)
+         would each get ~110px and clip their labels. Stack them instead, full width, in
+         priority order — a column reads cleanly at this width where a ragged wrap doesn't. */
+      #ad-toolbar.over-chat .adrec-action-split { flex-direction: column; align-items: stretch; gap: 8px; }
+      #ad-toolbar.over-chat .adrec-action-split > button { flex: 0 0 auto; width: 100%; }
+      /* Dismiss is the quiet answer, so it goes LAST in the stack (visual order only) and
+         keeps its outline treatment while the primary action leads. */
+      #ad-toolbar.over-chat .ad-tb-actions .adrec-dismiss-btn { order: 2; flex: 0 0 auto; margin-right: 0; }
       .ad-tb-row { display: flex; align-items: center; gap: 10px; }
       .ad-tb-head { display: flex; align-items: center; gap: 4px; flex: 1 1 auto; min-width: 0; } /* title + caret fill the row; count/buttons sit right */
       /* Title truncates within the head; dim it while open so the dropdown heading leads. */

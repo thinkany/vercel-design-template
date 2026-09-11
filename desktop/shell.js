@@ -206,6 +206,7 @@ let quietBuildActive = false;
   window.addEventListener("mousemove", (e) => {
     if (!dragging) return;
     chatPanel.style.width = clampWidth(e.clientX - chatPanel.getBoundingClientRect().left) + "px";
+    if (typeof placeAdToolbar === "function") placeAdToolbar(); // an AD review bar rides the pane
   });
   window.addEventListener("mouseup", () => {
     if (!dragging) return;
@@ -11141,6 +11142,32 @@ function exitAdReview() {
   if (r.prevUrl) navigate(r.tab, r.prevUrl);
   hideAdToolbar();
 }
+// Sit the bar over the CHAT pane, tracking its real width (drag-resized, or the CSS 40%
+// default). A collapsed chat has no pane to sit on, so the bar keeps its centered float over
+// the preview. Re-measured on open and on resize, since the designer can drag the divider
+// mid-walk. Returns nothing; it just keeps --chat-w and .over-chat in step.
+function placeAdToolbar() {
+  if (!adToolbarEl) return;
+  const chatPanel = el("chat");
+  const r = chatPanel ? chatPanel.getBoundingClientRect() : null;
+  const overChat = !!r && r.width > 120; // a collapsing/collapsed pane isn't somewhere to put a bar
+  adToolbarEl.classList.toggle("over-chat", overChat);
+  if (overChat) {
+    // BOTH edges: the pane sits after the rail, so a window-relative left would put the bar
+    // on the rail instead of the pane.
+    adToolbarEl.style.setProperty("--chat-x", r.left + "px");
+    adToolbarEl.style.setProperty("--chat-w", r.width + "px");
+    // Below ~520px the row can't hold title + count + three buttons; the count goes first.
+    adToolbarEl.classList.toggle("tight", r.width < 520);
+  } else {
+    adToolbarEl.style.removeProperty("--chat-x");
+    adToolbarEl.style.removeProperty("--chat-w");
+    adToolbarEl.classList.remove("tight");
+  }
+}
+// The divider drag and window resizes both change the pane's width under a live bar.
+window.addEventListener("resize", () => { if (adReview) placeAdToolbar(); });
+
 function showAdToolbar() {
   if (!adToolbarEl) {
     adToolbarEl = document.createElement("div");
@@ -11175,6 +11202,7 @@ function showAdToolbar() {
     adToolbarEl.querySelector(".a11y-tb-exit").textContent = COPY.director.exitReview;
   }
   adToolbarEl.hidden = false;
+  placeAdToolbar(); // over the chat pane when there is one, else centered over the preview
   // Every arrival (Show on page, a new walk) opens the details; only the caret, via
   // Next / Prev's updateAdToolbar path, carries a closed state along.
   if (adReview) adReview.expanded = true;
