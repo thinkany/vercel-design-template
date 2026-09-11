@@ -86,12 +86,19 @@ const iReh = boot.indexOf("if (rehearsingOnboarding)");
 const iNoKey = boot.indexOf("if (!hasKey && !proj.hasProject)");
 ok(iReh > -1 && iNoKey > -1 && iReh < iNoKey,
   "boot() must check the walk-through BEFORE its has-key/has-project branches");
-ok(/showStage\(hasKey \|\| rehearsalKeyDone \? "project" : "key"\)/.test(boot),
-  "the walk-through shows the key screen first, then the project one once that step is done");
+ok(/showSetup\(\)/.test(boot),
+  "the walk-through enters the guided key setup, not a bare key screen");
+ok(/if \(rehearsalKeyDone\) \{ showStage\("project"\); return; \}/.test(boot),
+  "and moves on to the project chooser once that walk-through finished setup");
 
-// Main reports "no key" for the whole walk-through, so the key step can only advance on
-// the rehearsal's own record of it: without this the key screen would never be left.
+// Main reports "no key" for the whole walk-through, so the setup step can only advance on
+// the rehearsal's own record of it: without this the screen would never be left.
 const save = shell.slice(shell.indexOf("async function saveKey()"), shell.indexOf("keysave.addEventListener"));
 ok(/res\.rehearsed/.test(save), "a rehearsed key save records the step (nothing is stored to read back)");
+const doneBtn = shell.slice(shell.indexOf("const setupDoneBtn"), shell.indexOf("// ---- Onboarding rehearsal"));
+ok(/rehearsalKeyDone = true/.test(doneBtn),
+  "finishing a rehearsed setup records it rather than writing the real done marker");
+ok(/if \(!rehearsingOnboarding\)[\s\S]{0,120}SETUP_DONE_KEY/.test(doneBtn),
+  "and the real marker is only written outside a walk-through");
 
 console.log(`rehearsal: ${checks} checks pass.`);

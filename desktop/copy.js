@@ -1279,6 +1279,26 @@ window.COPY = {
     rehearsalBadgeTip: "You are walking the first-run flow. Your keys are still connected; nothing you do here changes them. Turn it off from the Developer menu.",
   },
 
+  // ── First-run key setup (the stepper before the project chooser) ───────────
+  setupGate: {
+    heading: "Let's get you set up",
+    intro: "Your Claude key is the only one the studio needs. The rest are optional and can wait, each one unlocks something extra.",
+    done: "Done setting up!",
+    connected: "Connected",
+    skipped: "Skipped",
+    reopen: "Change",
+    skip: "Skip this step",
+    claudeTitle: "Claude API key",
+    claudeDesc: "The studio runs on the Claude Agent SDK, which authenticates with your own API key. Everything else on this screen is optional.",
+    figmaTitle: "Figma export",
+    figmaDesc: "Hand a finished design to Figma as editable layers: type, color and spacing arrive as real styles, not a flat image.",
+    researchTitle: "Design research & site building",
+    researchDesc: "Design research and the direction deck that keeps each design distinct, plus the site builder that turns an approved design into a publishable website.",
+    mediaTitle: "Photos & video",
+    mediaDesc: "Free stock libraries a build can search for images that match the brief, and download with the photographer's credit.",
+    mediaOrder: "Images are searched Unsplash, then Pexels, then Pixabay; video Pexels, then Pixabay. Connect any or all: a build uses whichever is connected and still has requests left. Without a video library, designs stay stills only.",
+  },
+
   // ── Usage gate — the first screen on a new install, before the key ──────────
   usageGate: {
     heading: "How do you plan on using thinkany design?",

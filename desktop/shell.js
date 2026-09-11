@@ -49,6 +49,7 @@ el("modal-preview").addEventListener("click", async () => {
 
 // Gates
 const keygate = el("keygate");
+const setupgate = el("setupgate"); // first run: the guided key walk-through
 const usagegate = el("usagegate"); // first screen on a new install: how the app is used
 const keyinput = el("keyinput");
 const keysave = el("keysave");
@@ -975,7 +976,7 @@ function showStage(stage) {
   const noKeyWorkspace = stage === "workspace" && !appHasKey;
   // The no-key reminder banner rides the preview browser whenever we're read-only.
   if (nokeyBanner) nokeyBanner.hidden = !noKeyWorkspace;
-  const gated = stage === "key" || stage === "usage"; // the two first-run screens
+  const gated = stage === "key" || stage === "usage" || stage === "setup"; // the first-run screens
   app.classList.toggle("onboarding-key", gated); // rail muting during the first-run screens
   app.classList.toggle("no-key", noKeyWorkspace); // CSS hook to disable agent-driven affordances
   // Collapse the chat column (preview goes full-width) at the key screen and in read-only mode.
@@ -985,6 +986,7 @@ function showStage(stage) {
   if (sidebar) sidebar.inert = gated;
   toggleGate(usagegate, stage === "usage");
   toggleGate(keygate, stage === "key");
+  toggleGate(setupgate, stage === "setup");
   if (stage !== "project") createproject.classList.remove("nudge");
   toggleGate(projectgate, stage === "project");
   // Chat content is ready from the project stage on (empty & waiting); the key stage and
@@ -1071,6 +1073,10 @@ for (const [id, usage] of [["usage-personal", "personal"], ["usage-company", "co
     boot();
   });
 }
+// Set once this install has finished the guided key setup. Read by boot(), so it is
+// declared here: `const` is not hoisted for use either.
+const SETUP_DONE_KEY = "ta-setup-done";
+
 // Dev-only walk-through state (see "Onboarding rehearsal" below). Declared here because
 // boot() and the usage gate both read them, and `let` is not hoisted.
 let rehearsingOnboarding = false;
@@ -1094,8 +1100,20 @@ async function boot() {
   // key screen that is the whole point of the walk-through.
   if (rehearsingOnboarding) {
     noProjectPlaceholder();
-    showStage(hasKey || rehearsalKeyDone ? "project" : "key");
+    if (rehearsalKeyDone) { showStage("project"); return; }
+    await showSetup();
     return;
+  }
+  // A FIRST RUN (this install has never finished setup) walks the guided key steps.
+  // An install that has been through it and lost its key is a RECONNECT, and gets the
+  // single focused key screen instead: it has already answered the rest.
+  let setupDone = true;
+  try { setupDone = localStorage.getItem(SETUP_DONE_KEY) === "1"; } catch {}
+  if (!setupDone) {
+    // An existing install that predates the walk-through has a key already: mark it done
+    // retroactively so an upgrade never replays first-run setup.
+    if (hasKey) { try { localStorage.setItem(SETUP_DONE_KEY, "1"); } catch {} }
+    else { noProjectPlaceholder(); await showSetup(); return; }
   }
   // No key AND no project → nothing to browse and can't create one → the connect screen.
   if (!hasKey && !proj.hasProject) {
@@ -1144,12 +1162,215 @@ window.desktop.onViteReady((url) => {
   }
 });
 
+// ---- First-run key setup -----------------------------------------------------
+// One step at a time: the Claude key (required), then Figma, Research and the photo /
+// video libraries (each skippable). An answered step collapses to a quiet done-row and
+// the next fades in beneath it, so the screen only ever asks one thing. Finishing hands
+// off to the project chooser and the walkthrough tour.
+//
+// Every step renders through the SAME functions the Keys & Licenses drawer uses
+// (claudeKeySection / licenseSection), so there is one implementation of "validate, save,
+// show the key, unplug it" and this screen is just another host for it.
+let setupState = null; // { claude: "connected"|null, figma: "connected"|"skipped"|null, ... }
+let setupOpenStep = null; // a done step the designer reopened
+
+const SETUP_STEPS = [
+  {
+    id: "claude",
+    required: true,
+    title: () => COPY.setupGate.claudeTitle,
+    desc: () => COPY.setupGate.claudeDesc,
+    status: () => window.desktop.getKeyStatus().then((k) => !!(k && k.hasKey)),
+    render: (host, done) => claudeKeySection(host, { noLabel: true, onConnected: () => done("connected") }),
+  },
+  {
+    id: "figma",
+    title: () => COPY.setupGate.figmaTitle,
+    desc: () => COPY.setupGate.figmaDesc,
+    status: () => window.desktop.getLicenseStatus().then((l) => !!(l && l.hasLicense)),
+    render: (host, done) => licenseSection(host, {
+      noLabel: true,
+      getStatus: () => window.desktop.getLicenseStatus(),
+      save: (k) => window.desktop.saveLicense(k),
+      clear: () => window.desktop.clearLicense(),
+      onConnected: (res) => done(res ? "connected" : null),
+    }),
+  },
+  {
+    id: "research",
+    title: () => COPY.setupGate.researchTitle,
+    desc: () => COPY.setupGate.researchDesc,
+    status: () => window.desktop.getDesignLicenseStatus().then((l) => !!(l && l.hasLicense)),
+    render: (host, done) => licenseSection(host, {
+      noLabel: true,
+      getStatus: () => window.desktop.getDesignLicenseStatus(),
+      save: (k) => window.desktop.saveDesignLicense(k),
+      clear: () => window.desktop.clearDesignLicense(),
+      // Same as the drawer: this licence gates the Art Director rail, so the rail has to
+      // re-evaluate the moment it changes.
+      onChange: () => { _directionMeta = null; _directionMetaMissAt = 0; updateRerollBtn(); },
+      onConnected: (res) => done(res ? "connected" : null),
+    }),
+  },
+  {
+    id: "media",
+    title: () => COPY.setupGate.mediaTitle,
+    desc: () => COPY.setupGate.mediaDesc,
+    // The one step that shows several fields at once: these are alternatives to each
+    // other, not a sequence, and asking for them one at a time would read as nagging.
+    status: async () => {
+      const [u, p, x] = await Promise.all([
+        window.desktop.getUnsplashStatus(), window.desktop.getPexelsStatus(), window.desktop.getPixabayStatus(),
+      ]);
+      return !!((u && u.hasLicense) || (p && p.hasLicense) || (x && x.hasLicense));
+    },
+    render: async (host, done) => {
+      const note = document.createElement("div");
+      note.className = "setup-media-note";
+      note.textContent = COPY.setupGate.mediaOrder;
+      host.appendChild(note);
+      const libs = [
+        { label: COPY.licenses.unsplashLabel, steps: COPY.licenses.unsplashStepsHtml,
+          get: () => window.desktop.getUnsplashStatus(), save: (k) => window.desktop.saveUnsplashKey(k), clear: () => window.desktop.clearUnsplashKey() },
+        { label: COPY.licenses.pexelsLabel, steps: COPY.licenses.pexelsStepsHtml,
+          get: () => window.desktop.getPexelsStatus(), save: (k) => window.desktop.savePexelsKey(k), clear: () => window.desktop.clearPexelsKey() },
+        { label: COPY.licenses.pixabayLabel, steps: COPY.licenses.pixabayStepsHtml,
+          get: () => window.desktop.getPixabayStatus(), save: (k) => window.desktop.savePixabayKey(k), clear: () => window.desktop.clearPixabayKey() },
+      ];
+      for (const lib of libs) {
+        const box = document.createElement("div");
+        box.className = "setup-lib";
+        const t = document.createElement("div");
+        t.className = "setup-step-title";
+        t.textContent = lib.label;
+        box.appendChild(t);
+        host.appendChild(box);
+        // Connecting one library does NOT finish the step: a designer may want two or
+        // three. The step ends when they press Continue (or Skip).
+        await licenseSection(box, {
+          noLabel: true, stepsHtml: lib.steps,
+          getStatus: lib.get, save: lib.save, clear: lib.clear,
+          onConnected: () => renderSetupStep(),
+        });
+      }
+      // Its own Continue, since no single field completes this step.
+      const go = document.createElement("button");
+      go.className = "btn-primary";
+      go.style.marginTop = "16px";
+      go.textContent = COPY.intake.continue;
+      go.addEventListener("click", async () => done((await SETUP_STEPS[3].status()) ? "connected" : "skipped"));
+      host.appendChild(go);
+    },
+  },
+];
+
+/** Read what is already connected, so a part-done setup resumes where it left off. */
+async function readSetupState() {
+  const st = {};
+  for (const step of SETUP_STEPS) {
+    try { st[step.id] = (await step.status()) ? "connected" : null; } catch { st[step.id] = null; }
+  }
+  return st;
+}
+
+/** The first step with no answer: the one to show live. */
+function nextSetupStep() {
+  if (setupOpenStep) return SETUP_STEPS.find((s) => s.id === setupOpenStep) || null;
+  return SETUP_STEPS.find((s) => !setupState[s.id]) || null;
+}
+
+async function renderSetupStep() {
+  const stack = el("setup-stack");
+  if (!stack || !setupState) return;
+  stack.innerHTML = "";
+  const live = nextSetupStep();
+  for (const step of SETUP_STEPS) {
+    const answered = setupState[step.id];
+    const isLive = live && live.id === step.id;
+    if (!answered && !isLive) continue; // steps below the live one do not exist yet
+    const box = document.createElement("div");
+    box.className = "setup-step" + (isLive ? " live" : " setup-done-row");
+    if (isLive) {
+      const t = document.createElement("div");
+      t.className = "setup-step-title";
+      t.textContent = step.title();
+      const d = document.createElement("div");
+      d.className = "setup-step-desc";
+      d.textContent = step.desc();
+      const bodyEl = document.createElement("div");
+      bodyEl.className = "setup-step-body";
+      box.append(t, d, bodyEl);
+      stack.appendChild(box);
+      const done = (how) => finishSetupStep(step.id, how);
+      try { await step.render(bodyEl, done); } catch (e) { d.textContent = String(e); }
+      if (!step.required) {
+        const actions = document.createElement("div");
+        actions.className = "setup-step-actions";
+        const skip = document.createElement("button");
+        skip.type = "button";
+        skip.className = "setup-skip";
+        skip.textContent = COPY.setupGate.skip;
+        skip.addEventListener("click", () => finishSetupStep(step.id, "skipped"));
+        actions.appendChild(skip);
+        box.appendChild(actions);
+      }
+      fadeSlideIn(box, { dy: 14, duration: 360 });
+    } else {
+      const t = document.createElement("div");
+      t.className = "setup-step-title";
+      t.textContent = step.title();
+      const chip = document.createElement("span");
+      chip.className = "setup-chip " + (answered === "connected" ? "connected" : "skipped");
+      chip.textContent = answered === "connected" ? COPY.setupGate.connected : COPY.setupGate.skipped;
+      const back = document.createElement("button");
+      back.type = "button";
+      back.className = "setup-reopen";
+      back.textContent = COPY.setupGate.reopen;
+      back.addEventListener("click", () => { setupOpenStep = step.id; renderSetupStep(); });
+      box.append(t, chip, back);
+      stack.appendChild(box);
+    }
+  }
+  // Every step answered → the way out.
+  const doneBtn = el("setup-done");
+  if (doneBtn) doneBtn.hidden = !!nextSetupStep();
+}
+
+function finishSetupStep(id, how) {
+  setupState[id] = how || (setupState[id] || "skipped");
+  if (setupOpenStep === id) setupOpenStep = null;
+  renderSetupStep();
+}
+
+/** Enter the setup screen (first run only, or a dev walk-through). */
+async function showSetup() {
+  setupOpenStep = null;
+  setupState = await readSetupState();
+  showStage("setup");
+  await renderSetupStep();
+}
+
+// Finishing: mark setup done, go to the project chooser, and let the walkthrough run
+// there (queueTour/flushPendingTour already wait for the next stage to paint).
+const setupDoneBtn = el("setup-done");
+if (setupDoneBtn) {
+  setupDoneBtn.addEventListener("click", async () => {
+    if (!rehearsingOnboarding) { try { localStorage.setItem(SETUP_DONE_KEY, "1"); } catch {} }
+    else { rehearsalKeyDone = true; }
+    queueTour();
+    await boot();
+    flushPendingTour();
+  });
+}
+
 // ---- Onboarding rehearsal (dev only) -----------------------------------------
 // The Developer menu's "Walk through onboarding": main pretends every credential is
 // absent, and this replays the first-run screens over the top. Nothing is cleared, so
 // leaving it puts the real workspace straight back. The tour flags live in
 // localStorage, so they are stashed (not deleted) for the duration and restored after.
-const TOUR_FLAGS = ["ta-tour-done", "ta-tour-cms-done", "ta-tour-design-done"];
+// Stashed for a walk-through: the tour flags, and the "setup already done" marker that
+// would otherwise send boot() straight past the key steps.
+const TOUR_FLAGS = ["ta-tour-done", "ta-tour-cms-done", "ta-tour-design-done", SETUP_DONE_KEY];
 let stashedTourFlags = null;
 
 async function setOnboardingRehearsal(on) {
@@ -1205,9 +1426,10 @@ async function saveKey() {
     if (res.ok) {
       if (res.rehearsed) rehearsalKeyDone = true; // nothing was stored; remember the step
       keyinput.value = "";
-      queueTour(); // first connection → the walkthrough, once the next stage has painted
+      // This is the RECONNECT screen: an install that already finished setup and lost its
+      // key. The walkthrough belongs to a first run and is started by "Done setting up!",
+      // not here, or it would interrupt part-way through the key steps.
       await boot();
-      flushPendingTour();
     } else {
       keyerror.textContent = res.error || COPY.keygate.couldNotSave;
     }
@@ -2843,7 +3065,7 @@ async function renderLicenses(body) {
 
 // The Claude API key row — status + remove when connected, or a validated input
 // when not. Same encrypted-keychain storage as before; just entered here now.
-async function claudeKeySection(body, { noLabel = false } = {}) {
+async function claudeKeySection(body, { noLabel = false, onConnected = null } = {}) {
   if (!noLabel) { // inside a fold the fold's title is the label
     const head = document.createElement("div");
     head.className = "sess-label";
@@ -2882,8 +3104,9 @@ async function claudeKeySection(body, { noLabel = false } = {}) {
     const res = await window.desktop.saveKey(key);
     if (res.ok) {
       refreshRailActivation();
-      boot(); // key added → re-gate (reveals chat + enables agent actions)
-      openModal("licenses"); // refresh → shows Active
+      // In the drawer: re-gate and repaint. In the setup stepper the host drives both.
+      if (onConnected) { onConnected(res); }
+      else { boot(); openModal("licenses"); }
     } else {
       msg.textContent = res.error || COPY.common.couldNotSave;
       msg.style.color = "#e5484d";
@@ -2924,7 +3147,12 @@ async function licenseSection(body, opts) {
   }
 
   body.appendChild(connStatusRow(COPY.licenses.status, lic.hasLicense, lic.hasLicense ? COPY.common.active : COPY.common.notSet, COPY.licenses.remove,
-    async () => { await opts.clear(); if (opts.onChange) opts.onChange(); refreshRailActivation(); openModal("licenses"); }));
+    async () => {
+      await opts.clear();
+      if (opts.onChange) opts.onChange();
+      refreshRailActivation();
+      if (opts.onConnected) opts.onConnected(null); else openModal("licenses");
+    }));
 
   if (lic.hasLicense) {
     body.appendChild(setRow(COPY.licenses.keyLabel, `…${lic.hint || "????"}`));
@@ -2948,7 +3176,10 @@ async function licenseSection(body, opts) {
     if (res.ok) {
       if (opts.onChange) opts.onChange();
       refreshRailActivation();
-      openModal("licenses"); // refresh → shows Active
+      // The drawer re-opens itself to repaint as "Active"; a different host (the setup
+      // stepper) says what happens next instead.
+      if (opts.onConnected) opts.onConnected(res);
+      else openModal("licenses");
     } else {
       msg.textContent = res.error || COPY.licenses.couldNotSave;
       msg.style.color = "#e5484d";
