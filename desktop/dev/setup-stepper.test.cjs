@@ -50,18 +50,31 @@ ok(/measureDoneRow\(id, stack\)/.test(finish),
 ok(/setupRestingTop\(id, stack/.test(finish),
   "and so is the slot it travels to");
 // Phase 1: the midline holds still while the height goes.
-ok(/transform: `translateY\(\$\{\(box\.height - to\.height\) \/ 2\}px\)`/.test(finish),
+ok(/const midlineOffset = \(box\.height - to\.height\) \/ 2/.test(finish),
   "the close offsets by half the height lost, which keeps the midline fixed");
+ok(/transform: `translateY\(\$\{midlineOffset\}px\)`/.test(finish),
+  "and the close animates to exactly that offset");
 // Phase 2: from that midline up to the slot, and the lift accounts for the offset.
-ok(/const lift = restTop - shrunkTop/.test(finish),
+ok(/const lift = restTop - \(startTop \+ midlineOffset\)/.test(finish),
   "the lift is measured from where the close leaves the card, not from where it started");
 ok(/translateY\(\$\{midlineOffset \+ lift\}px\)/.test(finish),
   "the travel ends on the resting slot");
 ok(finish.indexOf("await close.finished") < finish.indexOf("const glide"),
   "the travel begins only once the close has finished");
-// It must leave the flow, or the gap it vacates would not close until after it lands.
+// It must leave the flow BEFORE the close, not after. Going absolute afterwards meant
+// the flow pulled everything up while the card was still shrinking, so by the time it
+// travelled there was no open space left to float through.
 ok(/card\.style\.position = "absolute"/.test(finish) && /card\.style\.width = box\.width/.test(finish),
   "it lifts out of the flow for the trip, with its width pinned first");
+ok(finish.indexOf('card.style.position = "absolute"') < finish.indexOf("const close = card.animate"),
+  "and it does so BEFORE closing, so the space it floats through is already open");
+ok(finish.indexOf("const restTop") > finish.indexOf('card.style.position = "absolute"'),
+  "the destination is measured after the stack has reflowed without it");
+// Nothing under the stack may jump while the card is out of flow.
+ok(/stack\.style\.height = stackBox\.height/.test(finish),
+  "the stack holds its height, so what sits below it does not jump");
+ok(/stack\.animate\(/.test(finish),
+  "and gives that height up over the same beat as the arrival");
 // The held-open geometry has to be pinned before the animation holding it is dropped.
 ok(finish.indexOf("card.style.height = to.height") < finish.indexOf("card.getAnimations().forEach"),
   "the closed geometry is pinned before the close animation is cancelled (or it flashes open)");

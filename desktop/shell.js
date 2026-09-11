@@ -1430,25 +1430,41 @@ async function finishSetupStep(id, how) {
   const box = card.getBoundingClientRect();
   const to = measureDoneRow(id, stack);
 
-  // Where it will REST: the row's slot is above every step still to come, so it is the
-  // stack's top plus the rows already finished above this one.
-  const restTop = setupRestingTop(id, stack, to.height);
-  // Closing around the midline moves the top edge down by half what it loses; the travel
-  // has to undo that as well as cover the distance to the slot.
-  const shrunkTop = box.top + (box.height - to.height) / 2;
-  const lift = restTop - shrunkTop;
-
+  // Leave the flow FIRST, at exactly the size and place it currently occupies, so the
+  // card is visually unchanged by the move. The rows below immediately take up the space
+  // it vacated, which is what opens the gap the card then floats up through. Doing this
+  // after the close instead meant the flow pulled everything up while the card was still
+  // shrinking, so by the time it travelled there was no open space left to cross.
+  const stackBox = stack.getBoundingClientRect();
+  const startTop = box.top - stackBox.top;
+  // Hold the stack at its current height first: without the card in flow it would
+  // collapse, and everything under it (the Done button) would jump while the card moved.
+  stack.style.height = stackBox.height + "px";
+  card.style.height = box.height + "px";
+  card.style.width = box.width + "px";
+  card.style.position = "absolute";
+  card.style.left = (box.left - stackBox.left) + "px";
+  card.style.top = startTop + "px";
+  card.style.margin = "0";
   card.style.overflow = "hidden";
   card.style.willChange = "height, transform";
   card.classList.add("travelling"); // rides above the rows it passes
 
-  // 1. Close around the midline. translateY holds the centre still while the height goes.
+  // The stack reflows without it: the steps below close up, and the slot this card will
+  // land in settles where it belongs. Measure the destination AFTER that has happened.
+  const restTop = setupRestingTop(id, stack, to.height) - stackBox.top;
+  // Closing on the midline leaves the top half a card lower than it began; the travel
+  // covers that as well as the distance to the slot.
+  const midlineOffset = (box.height - to.height) / 2;
+  const lift = restTop - (startTop + midlineOffset);
+
+  // 1. Close around the midline: the centre held still by a transform while the height goes.
   const CLOSE = 260;
   const close = card.animate(
     [
       { height: box.height + "px", transform: "translateY(0px)", padding: cardCs.padding,
         borderColor: cardCs.borderTopColor, boxShadow: cardCs.boxShadow },
-      { height: to.height + "px", transform: `translateY(${(box.height - to.height) / 2}px)`,
+      { height: to.height + "px", transform: `translateY(${midlineOffset}px)`,
         padding: to.padding, borderColor: to.borderColor, boxShadow: "0 0 0 rgba(0,0,0,0)" },
     ],
     { duration: CLOSE, easing: "cubic-bezier(.32, 0, .28, 1)", fill: "both" },
@@ -1459,11 +1475,8 @@ async function finishSetupStep(id, how) {
   }
   try { await close.finished; } catch { setupAnimating = false; return; }
 
-  // Between the two: swap the open card's contents for the row it becomes, at the size
-  // it already is, so the thing that travels is the finished row.
-  const midlineOffset = (box.height - to.height) / 2;
-  // Pin the closed geometry as inline style BEFORE dropping the animation that is holding
-  // it, or the card flashes back to its open height between the two movements.
+  // Between the movements: become the row, at the size the close just left it. Pin that
+  // geometry BEFORE dropping the animation holding it, or it flashes back open.
   card.style.height = to.height + "px";
   card.style.padding = to.padding;
   card.style.transform = `translateY(${midlineOffset}px)`;
@@ -1474,23 +1487,18 @@ async function finishSetupStep(id, how) {
   card.classList.add("setup-done-row");
   card.replaceChildren(...buildSetupDoneRow(SETUP_STEPS.find((x) => x.id === id), setupState[id]).childNodes);
 
-  // The card leaves the flow for the trip, so the gap it vacates closes as it goes
-  // rather than after it lands. Its width is pinned first: absolute positioning would
-  // otherwise collapse it to its content.
-  const stackBox = stack.getBoundingClientRect();
-  card.style.width = box.width + "px";
-  card.style.position = "absolute";
-  card.style.left = (box.left - stackBox.left) + "px";
-  card.style.top = (box.top - stackBox.top) + "px";
-  card.style.margin = "0";
-
-  // 2. Travel up into the slot, decelerating the whole way.
+  // 2. Float up through the space that opened below it, decelerating into the slot.
   const TRAVEL = 620;
-  // Both keyframes are measured from the card's ORIGINAL top, which is what `top` pins.
+  // The stack gives up the height the closed card no longer needs, over the same beat,
+  // so anything below settles WITH the arrival rather than snapping after it.
+  stack.animate(
+    [{ height: stackBox.height + "px" }, { height: (stackBox.height - (box.height - to.height)) + "px" }],
+    { duration: TRAVEL, easing: "cubic-bezier(.22, .61, .18, 1)", fill: "both" },
+  );
   const glide = card.animate(
     [
-      { transform: `translateY(${midlineOffset}px)`, opacity: 0.85 },
-      { transform: `translateY(${midlineOffset + lift}px)`, opacity: 1 },
+      { transform: `translateY(${midlineOffset}px)` },
+      { transform: `translateY(${midlineOffset + lift}px)` },
     ],
     { duration: TRAVEL, easing: "cubic-bezier(.22, .61, .18, 1)", fill: "both" },
   );
@@ -1499,6 +1507,8 @@ async function finishSetupStep(id, how) {
   // Hand over to the real stack, already drawn where the card came to rest.
   card.style.willChange = "";
   card.classList.remove("travelling");
+  stack.getAnimations().forEach((a) => a.cancel());
+  stack.style.height = "";
   await renderSetupStep({ settle: id });
   setupAnimating = false;
 }
@@ -1544,6 +1554,8 @@ function measureDoneRow(id, stack) {
 async function showSetup() {
   setupOpenStep = null;
   setupAnimating = false; // a re-entry mid-transition must not stay locked
+  const stack = el("setup-stack");
+  if (stack) { stack.getAnimations().forEach((a) => a.cancel()); stack.style.height = ""; }
   setupState = await readSetupState();
   showStage("setup");
   await renderSetupStep();
