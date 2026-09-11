@@ -85,6 +85,12 @@ ok(/stack\.animate\(/.test(handover),
   "the held height is released as the next step arrives, not snapped away before it");
 ok(/heldHeight/.test(handover) && /settledHeight/.test(handover),
   "and it eases between the measured before and after, not a guess");
+// Order matters here. Releasing the pin before the rebuild leaves one frame where the
+// travelling card is still absolute and the stack has NO in-flow children, so it
+// collapses to nothing and everything above it reflows. That showed as a flash on the
+// first step, the only one with no finished rows left to hold the stack open.
+ok(handover.indexOf("await renderSetupStep") < handover.indexOf('stack.style.height = ""'),
+  "the stack is rebuilt BEFORE its held height is released, or the first step flashes");
 // The held-open geometry has to be pinned before the animation holding it is dropped.
 ok(finish.indexOf("card.style.height = to.height") < finish.indexOf("card.getAnimations().forEach"),
   "the closed geometry is pinned before the close animation is cancelled (or it flashes open)");

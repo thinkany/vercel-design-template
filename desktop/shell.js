@@ -1512,9 +1512,14 @@ async function finishSetupStep(id, how) {
   card.style.willChange = "";
   card.classList.remove("travelling");
   const heldHeight = stack.getBoundingClientRect().height;
+
+  // Rebuild BEFORE releasing the pinned height. Releasing first leaves a frame where the
+  // travelling card is still absolute and the stack has no in-flow children at all, so it
+  // collapses to nothing and everything above it reflows: the flash that showed on the
+  // FIRST step, the only one with no finished rows left holding the stack open.
+  await renderSetupStep({ settle: id });
   stack.getAnimations().forEach((a) => a.cancel());
   stack.style.height = "";
-  await renderSetupStep({ settle: id });
   const settledHeight = stack.getBoundingClientRect().height;
   if (Math.abs(settledHeight - heldHeight) > 1 && stack.animate) {
     stack.animate(
