@@ -4702,9 +4702,16 @@ function adShotDir(dir, vid) { return path.join(dir, ".thinkany", "adshots", Str
 // exactly what "Show on page" would outline.
 const AD_RECT_JS = `(function(a){
   function byText(txt){ txt=(txt||'').trim().toLowerCase(); if(!txt) return null; var best=null,bl=Infinity;
-    var all=document.querySelectorAll('h1,h2,h3,h4,h5,h6,button,a,p,span,li,figcaption,label,blockquote,strong,em');
+    /* div is in the list because designs put eyebrows, labels and stat captions in plain
+       divs; without it that text is simply unreachable. script/style/title are excluded via
+       the laid-out check below, which also drops the 0x0 candidates that used to win: the
+       shortest match is often a hidden nav-dropdown link, and picking it produced no rect
+       at all (so no thumbnail, and no highlight) even though the text was plainly visible. */
+    var all=document.querySelectorAll('h1,h2,h3,h4,h5,h6,button,a,p,span,div,li,figcaption,label,blockquote,strong,em');
     for(var i=0;i<all.length;i++){ var e=all[i]; var t=(e.textContent||'').trim().toLowerCase(); if(!t) continue;
-      if(t.indexOf(txt)!==-1 && t.length<bl){ best=e; bl=t.length; } } return best; }
+      if(t.indexOf(txt)===-1 || t.length>=bl) continue;
+      var r=e.getBoundingClientRect(); if(!r.width||!r.height) continue; /* must be laid out */
+      best=e; bl=t.length; } return best; }
   function resolve(a){ if(!a) return null;
     try{ if(a.block){ var e=document.querySelector('[data-block="'+String(a.block).replace(/"/g,'')+'"]'); if(e) return e; } }catch(_){}
     try{ if(a.selector){ var s=document.querySelector(a.selector); if(s) return s; } }catch(_){}
