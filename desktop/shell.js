@@ -206,6 +206,7 @@ let quietBuildActive = false;
   window.addEventListener("mousemove", (e) => {
     if (!dragging) return;
     chatPanel.style.width = clampWidth(e.clientX - chatPanel.getBoundingClientRect().left) + "px";
+    if (typeof placeAdToolbar === "function") placeAdToolbar(); // an AD review bar rides the pane
   });
   window.addEventListener("mouseup", () => {
     if (!dragging) return;
@@ -1213,6 +1214,7 @@ const PANELS = {
 
 function closeModal() {
   Object.values(RAILS).forEach((b) => b.classList.remove("active"));
+  if (typeof hideRecLoupe === "function") hideRecLoupe(); // no loupe left floating over the app
   if (modal.hidden) return;
   // A drawer-anchored tour step can't outlive its drawer.
   if (typeof tourRunning === "function" && tourRunning() && tourTarget && modalBody.contains(tourTarget)) endTour();
@@ -10082,9 +10084,11 @@ async function updateRerollBtn(url) {
 // The variation the last confer reviewed — so a suggestion's [Apply] can scope its edit
 // to the right variation (only one review runs at a time).
 let lastReviewedVariation = null;
+let lastReviewedScope = null; // { vid, route } for the review just run — thumbnails need both
 async function reviewDesign(id, page) {
   if (!id || !appHasKey) return; // the critique is an agent turn → needs a key
   lastReviewedVariation = page ? `${id}:${page.id}` : id; // the recs store key
+  lastReviewedScope = { vid: id, route: (page && page.route) || "" };
   addMsg("system", page ? COPY.artDirector.reviewingPage(page.title) : COPY.artDirector.reviewing(id));
   let res;
   try { res = await window.desktop.reviewDesign(id, page ? page.id : null); }
@@ -10138,9 +10142,11 @@ function buildArtDirectorCritiquePrompt(id, res) {
     `An automated rule + palette pass already ran. Treat these as established fact to build on, not something to re-derive or merely repeat:`,
     findings,
     ``,
-    `Now give the judgment the lint can't: visual hierarchy, spacing rhythm and balance, type pairing and scale, palette harmony and how the palette carries the mood, imagery, ${directionJudgment} Lead with what's working, then the few highest-leverage changes, specific and grounded in the actual page. Keep it tight. Do NOT edit anything; this is advisory.`,
+    `Now give the judgment the lint can't: visual hierarchy, spacing rhythm and balance, type pairing and scale, palette harmony and how the palette carries the mood, imagery, ${directionJudgment}`,
     ``,
-    `Then, ONCE, call the \`suggest\` tool (mcp__artdirector__suggest) with your actionable items as structured cards, most impactful first. For each: a short imperative title, a one-line why, targets (file:line), and a kind: "code" (the builder can edit it: ${applyWhere}), "asset" (needs a new/replacement file you can't source, e.g. a photo, no apply), or "decision" (a client/human call, no apply). Whenever a suggestion points at a specific visible section or element, also give an \`anchor\` so the designer can SEE it highlighted on the page instead of hunting: prefer \`anchor.block\` (a data-block value on the section) or \`anchor.text\` (a short exact heading/button label from that element). Fold in the code-actionable lint findings above too.`,
+    `Your written read is SHORT: a paragraph or two on what's working and where the page stands overall. The specific changes do NOT go here, they go in the suggestion cards below, where the designer sees each one highlighted on the page. Don't write them twice. Do NOT edit anything; this is advisory.`,
+    ``,
+    `Then, ONCE, call the \`suggest\` tool (mcp__artdirector__suggest) with your actionable items as structured cards, most impactful first. For each: a short imperative title, a one-line why, targets (file:line), and a kind: "code" (the builder can edit it: ${applyWhere}), "asset" (needs a new/replacement file you can't source, e.g. a photo, no apply), or "decision" (a client/human call, no apply). ALWAYS give an \`anchor\` unless the suggestion is genuinely about the whole page at once (the overall palette, the overall density). The anchor is how the designer SEES the suggestion on their design instead of reading about it, so an anchorless card is one they have to go hunt for: prefer \`anchor.block\` (a data-block value on the section) or \`anchor.text\` (a short exact heading/button label from that element), and when a note covers several sections anchor it to the clearest one rather than leaving it off. Fold in the code-actionable lint findings above too.`,
   ].join("\n");
 }
 
@@ -10162,6 +10168,7 @@ function isModalOpen(kind) {
 }
 function refreshDirector() {
   if (!isModalOpen("director")) return;
+  hideRecLoupe(); // the rows it was anchored to are about to be replaced
   modalBody.innerHTML = "";
   renderDirector(modalBody);
 }
@@ -10181,7 +10188,34 @@ window.desktop.onAgentSuggestions(async ({ suggestions }) => {
   try { await window.desktop.saveRecs(id, active, dismissed, completed); } catch {}
   updateDirectorIndicator();
   refreshDirector();
+  // Then the contact sheet: one hidden-window pass crops every anchored rec, so the drawer
+  // becomes a set of pictures to scan rather than a list of titles to read. It runs AFTER the
+  // rows are already on screen (the thumbs fade in when they land) and never blocks them.
+  captureRecThumbs(id, active);
 });
+
+// Crop each anchored rec on the reviewed page, then persist the paths onto the recs so the
+// rows can render them. Best-effort throughout: no preview server, an unresolvable anchor or
+// a read-only tree just leaves a row text-only, exactly as it was before thumbnails existed.
+async function captureRecThumbs(storeKey, active) {
+  const scope = lastReviewedScope;
+  if (!scope || !storeKey || !(active || []).some((r) => r && r.anchor)) return;
+  let res;
+  try { res = await window.desktop.adThumbs(scope.vid, active, scope.route); } catch { return; }
+  const thumbs = (res && res.ok && res.thumbs) || null;
+  if (!thumbs || !Object.keys(thumbs).length) return;
+  // Re-read rather than trusting `active`: the designer may have dismissed or applied
+  // something while the capture ran, and that decision wins.
+  let store;
+  try { store = await window.desktop.loadRecs(storeKey); } catch { return; }
+  const stamp = (list) => (list || []).map((r) => (r && thumbs[r.id] ? { ...r, thumb: thumbs[r.id] } : r));
+  const next = { active: stamp(store.active), dismissed: stamp(store.dismissed), completed: stamp(store.completed) };
+  try { await window.desktop.saveRecs(storeKey, next.active, next.dismissed, next.completed); } catch { return; }
+  if (directorState.id === storeKey) {
+    directorState.active = next.active; directorState.dismissed = next.dismissed; directorState.completed = next.completed;
+  }
+  refreshDirector();
+}
 
 // The rail clapperboard's dot reflects the CURRENT design's active queue: red if any item is
 // actionable (code), white if only "needs an asset" / "your call" remain, none if empty. It
@@ -10266,14 +10300,104 @@ async function renderDirector(body) {
   if (directorState.dismissed.length) body.appendChild(buildArchive(directorState.dismissed));
 }
 
+// ---- Rec thumbnails + the hover magnifier -----------------------------------
+// A rec's crop is only ~120px in the row, which is enough to recognize a section you already
+// know but not enough to actually READ the design. Hovering one floats a much larger copy
+// beside the drawer, like a loupe: the row never changes, so nothing moves under the pointer.
+// ONE shared element does every row (the list can be long, and a per-row copy would hold a
+// full-size decode each).
+let recLoupeEl = null;
+let recLoupeTimer = null;
+function recLoupe() {
+  if (!recLoupeEl) {
+    recLoupeEl = document.createElement("img");
+    recLoupeEl.className = "adrec-loupe";
+    recLoupeEl.alt = "";
+    document.body.appendChild(recLoupeEl);
+  }
+  return recLoupeEl;
+}
+// Park it to the RIGHT of the drawer, vertically centered on the row, and clamp to the
+// viewport; if it won't fit right (a wide drawer, a narrow window) it flips to the left.
+function positionRecLoupe(row) {
+  const el = recLoupe();
+  const r = row.getBoundingClientRect();
+  const w = el.offsetWidth || 420, h = el.offsetHeight || Math.round((el.offsetWidth || 420) / 1.6);
+  const gap = 14;
+  let left = r.right + gap;
+  if (left + w > window.innerWidth - 8) left = r.left - w - gap;   // flip to the left
+  if (left < 8) left = Math.max(8, window.innerWidth - w - 8);      // neither side fits: pin right
+  let top = Math.round(r.top + r.height / 2 - h / 2);
+  top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
+  el.style.left = left + "px";
+  el.style.top = top + "px";
+  el.style.transformOrigin = left > r.left ? "left center" : "right center";
+}
+function showRecLoupe(row, src) {
+  clearTimeout(recLoupeTimer);
+  const el = recLoupe();
+  el.src = src;
+  el.classList.add("on");
+  positionRecLoupe(row);              // measure once it's displayed, before fading in
+  requestAnimationFrame(() => { positionRecLoupe(row); el.classList.add("in"); });
+}
+function hideRecLoupe() {
+  if (!recLoupeEl) return;
+  recLoupeEl.classList.remove("in");
+  clearTimeout(recLoupeTimer);
+  // Let the fade finish before un-displaying, so it doesn't snap away mid-transition.
+  recLoupeTimer = setTimeout(() => { if (recLoupeEl) { recLoupeEl.classList.remove("on"); recLoupeEl.removeAttribute("src"); } }, 160);
+}
+
+// A crop of what the rec points at, when we captured one. The row stops being a title to
+// read and becomes a picture to recognize — the whole point of the contact sheet. Loads from
+// disk via file://; if the file is gone (project moved, cleaned) the img just drops out and
+// the row falls back to its text layout.
+function buildRecThumb(rec, row) {
+  if (!rec.thumb) return null;
+  const img = document.createElement("img");
+  img.className = "adrec-thumb";
+  img.alt = ""; // decorative: the title beside it already names the rec
+  img.loading = "lazy";
+  img.src = "file://" + rec.thumb.split("/").map(encodeURIComponent).join("/");
+  img.addEventListener("error", () => {
+    img.remove();
+    row.classList.remove("adrec-hasthumb");
+    hideRecLoupe(); // it may be showing the crop that just failed to load
+  });
+  return img;
+}
+
+// An ANCHORED rec goes straight to the page: the review bar carries the same title, why and
+// actions the modal does, so the modal step was pure reading between the designer and their
+// design. An anchorless rec (a whole-page note with nothing to point at) keeps the modal —
+// that's where the longer read is the point, and the bar would highlight nothing.
 function buildRecRow(rec) {
   const row = document.createElement("button");
   row.className = "adrec";
+  const thumb = buildRecThumb(rec, row);
+  if (thumb) {
+    row.classList.add("adrec-hasthumb");
+    row.appendChild(thumb);
+    // The WHOLE row is the trigger, not just the crop: the row is a single click target, so
+    // having only part of it answer to the pointer read as inconsistent. Anywhere on the card
+    // shows the magnifier. (mouseenter/leave don't bubble, so they fire for the row itself and
+    // not again for the title or chip inside it.)
+    row.addEventListener("mouseenter", () => showRecLoupe(row, thumb.src));
+    row.addEventListener("mouseleave", hideRecLoupe);
+  }
+  // Title + kind sit in their own column beside the crop, so the chip stays with the title
+  // instead of being pushed to the far edge of a wide card.
+  const text = document.createElement("span"); text.className = "adrec-text";
   const title = document.createElement("span"); title.className = "adrec-title"; title.textContent = rec.title || rec.id;
   const kind = document.createElement("span"); kind.className = "adrec-kind adrec-kind-" + (rec.kind || "code");
   kind.textContent = (AD_KIND[rec.kind] || AD_KIND.code).label;
-  row.append(title, kind);
-  row.addEventListener("click", () => openRecModal(rec, "active"));
+  text.append(title, kind);
+  row.appendChild(text);
+  row.addEventListener("click", async () => {
+    if (rec.anchor && await showAdOnPage(rec)) return; // couldn't start (no preview / no design tab) → modal
+    openRecModal(rec, "active");
+  });
   return row;
 }
 
@@ -11010,8 +11134,22 @@ const AD_HIGHLIGHT_JS = `(function(){
   var els=[], boxes=[], icons=[], wraps=[], layer=null, styleEl=null;
   var ICON='<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="2.6"/></svg>';
   function css(){ if(styleEl) return; styleEl=document.createElement('style'); styleEl.id='__ad-style'; styleEl.textContent='@keyframes __adP{0%{box-shadow:0 0 0 0 rgba(217,119,6,.5)}100%{box-shadow:0 0 0 12px rgba(217,119,6,0)}}#__ad-layer{position:absolute;top:0;left:0;pointer-events:none;z-index:2147483000}#__ad-layer .b{position:absolute;box-sizing:border-box;border:2px solid #d97706;border-radius:6px;background:rgba(217,119,6,.07)}#__ad-layer .ic{position:absolute;width:22px;height:22px;border-radius:50%;background:#d97706;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 5px rgba(0,0,0,.35)}#__ad-layer .cur .b{border-color:#b45309;background:rgba(180,83,9,.11)}#__ad-layer .cur .ic{background:#b45309;animation:__adP 1.2s ease-out infinite}'; document.head.appendChild(styleEl); }
-  function pos(){ for(var i=0;i<els.length;i++){ var el=els[i]; if(!el) continue; var r=el.getBoundingClientRect(); var t=r.top+window.scrollY,l=r.left+window.scrollX; boxes[i].style.top=t+'px'; boxes[i].style.left=l+'px'; boxes[i].style.width=r.width+'px'; boxes[i].style.height=r.height+'px'; icons[i].style.top=(t-8)+'px'; icons[i].style.left=(l-8)+'px'; } }
-  function byText(txt){ txt=(txt||'').trim().toLowerCase(); if(!txt) return null; var best=null,bl=Infinity; var all=document.querySelectorAll('h1,h2,h3,h4,h5,h6,button,a,p,span,li,figcaption,label,blockquote,strong,em'); for(var i=0;i<all.length;i++){ var e=all[i]; var t=(e.textContent||'').trim().toLowerCase(); if(!t) continue; if(t.indexOf(txt)!==-1 && t.length<bl){ best=e; bl=t.length; } } return best; }
+  var INSET=13;
+  function pos(){ var vw=document.documentElement.clientWidth;
+    for(var i=0;i<els.length;i++){ var el=els[i]; if(!el) continue; var r=el.getBoundingClientRect();
+      var t=r.top+window.scrollY,l=r.left+window.scrollX,w=r.width,h=r.height;
+      /* A full-bleed section's own rect runs to the viewport edges, so the outline sits half
+         off-screen and its marker (drawn at left-8) is clipped away entirely. Pull the box in
+         from whichever edge it actually touches, so the highlight stays fully visible and
+         still reads as covering the section. Interior elements are untouched. */
+      if(l<=INSET){ w-=(INSET-l); l=INSET; }
+      if(l+w>=vw-INSET) w=Math.max(0,vw-INSET-l);
+      var vt=t-window.scrollY;
+      if(vt<=INSET){ var dt=INSET-vt; t+=dt; h-=dt; }
+      boxes[i].style.top=t+'px'; boxes[i].style.left=l+'px'; boxes[i].style.width=Math.max(0,w)+'px'; boxes[i].style.height=Math.max(0,h)+'px';
+      /* The marker rides the INSET box's corner, never the raw element's. */
+      icons[i].style.top=(t-8)+'px'; icons[i].style.left=(l-8)+'px'; } }
+  function byText(txt){ txt=(txt||'').trim().toLowerCase(); if(!txt) return null; var best=null,bl=Infinity; /* div included (eyebrows/labels/captions live in plain divs); zero-size candidates skipped so a hidden nav-dropdown copy of the text can't win over the visible one. Kept in lockstep with AD_RECT_JS in main.cjs, so the crop and the highlight frame the SAME element. */ var all=document.querySelectorAll('h1,h2,h3,h4,h5,h6,button,a,p,span,div,li,figcaption,label,blockquote,strong,em'); for(var i=0;i<all.length;i++){ var e=all[i]; var t=(e.textContent||'').trim().toLowerCase(); if(!t) continue; if(t.indexOf(txt)===-1 || t.length>=bl) continue; var r=e.getBoundingClientRect(); if(!r.width||!r.height) continue; best=e; bl=t.length; } return best; }
   function resolve(a){ if(!a) return null; try{ if(a.block){ var e=document.querySelector('[data-block="'+String(a.block).replace(/"/g,'')+'"]'); if(e) return e; } }catch(_){} try{ if(a.selector){ var s=document.querySelector(a.selector); if(s) return s; } }catch(_){} if(a.text) return byText(a.text); return null; }
   window.__adHighlight={
     show:function(anchors){ this.clear(); css(); layer=document.createElement('div'); layer.id='__ad-layer'; document.body.appendChild(layer);
@@ -11024,9 +11162,8 @@ const AD_HIGHLIGHT_JS = `(function(){
   };
 })();`;
 
-let adReview = null;   // { recs, idx, tab, prevUrl, count, expanded }
+let adReview = null;   // { recs, idx, tab, prevUrl, count }
 let adToolbarEl = null;
-const AD_CARET_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
 
 // The DESIGN tab: the Home tab, else any tab showing the design (not the Style guide,
 // not the Site). Art Director walks and actions happen there, never on whichever tab
@@ -11055,23 +11192,28 @@ async function applyAdFocus() {
   }
 }
 
+// Returns true when the walk actually started, false when it couldn't (no preview server,
+// no built design, no design tab) — the caller then falls back to the modal rather than
+// leaving the designer with a closed drawer and nothing on screen.
 async function showAdOnPage(rec) {
-  if (!rec || !viteUrl) return;
+  if (!rec || !viteUrl) return false;
   const id = directorState.vid || currentPreviewVariation();
-  if (!id || id === "v00") return;
+  if (!id || id === "v00") return false;
+  // Every bail-out is checked BEFORE anything closes, so a false return leaves the drawer /
+  // modal exactly as it was for the caller to fall back into.
+  const tab = designTab(); if (!tab) return false;
   // Page scope: open THAT page in capture mode (its route flag), not the home page.
   const routeFlag = directorState.page && directorState.page.route ? `&${directorState.page.route}` : "";
   closeRecModal(); closeModal();
   // Walk the whole active list from this rec, so Next steps through every item; fall back to
   // just this rec when it isn't in the active list (e.g. opened from the archive).
-  let recs = directorState.active || [];
+  // A COPY, not the live array: dismissRec reassigns directorState.active, so an alias would
+  // silently go stale mid-walk. The walk owns its list and keeps it in step itself.
+  let recs = (directorState.active || []).slice();
   let idx = recs.findIndex((r) => r && r.id === rec.id);
   if (idx < 0) { recs = [rec]; idx = 0; }
-  const tab = designTab(); if (!tab) return;
   setActiveTab(tab); // the walk happens on the design, whatever tab was active
-  // Arrives OPEN so the action is one click away; the caret's state then holds across
-  // Next / Prev until the designer toggles it again.
-  adReview = { recs, idx, tab, prevUrl: tab.url, count: 0, expanded: true };
+  adReview = { recs, idx, tab, prevUrl: tab.url, count: 0 };
   showAdToolbar();
   navigate(tab, `${viteUrl}/?v=${id}${routeFlag}&capture=desktop`);
   onceWebviewLoaded(tab.wv, async () => {
@@ -11079,6 +11221,7 @@ async function showAdOnPage(rec) {
     try { await tab.wv.executeJavaScript(AD_HIGHLIGHT_JS); } catch { /* injection blocked → bar still exits */ }
     adHighlightCurrent();
   });
+  return true;
 }
 // (Re)highlight the current rec's anchor on the already-loaded capture page. No re-navigation,
 // so Next/Prev are instant. An anchorless (or unresolvable) rec just clears the overlay.
@@ -11098,16 +11241,12 @@ function adReviewStep(d) {
   if (!adReview || adReview.recs.length < 2) return;
   const n = adReview.recs.length;
   adReview.idx = ((adReview.idx + d) % n + n) % n;
-  // Keep the dropdown open across steps so the designer reads + acts on each rec in place;
-  // updateAdToolbar (via adHighlightCurrent) rebuilds its title/why/actions for the new rec.
+  // updateAdToolbar (via adHighlightCurrent) rebuilds the panel's title/why/actions for the
+  // new rec, so the designer reads + acts on each one in place.
   adHighlightCurrent();
 }
 function adReviewNext() { adReviewStep(1); }
 function adReviewPrev() { adReviewStep(-1); }
-// Open/close the description. Width and corner radius are fixed (see CSS), so opening only
-// grows the height via the dropdown's max-height transition — it stays a rounded rectangle
-// the whole way, never morphing through a pill.
-function adToggleExpand() { if (adReview) { adReview.expanded = !adReview.expanded; updateAdToolbar(); } }
 // Fix straight from the bar (code suggestions only): clear the overlay + restore the preview,
 // then run the same scoped builder turn Apply runs.
 function adReviewFix() {
@@ -11123,19 +11262,46 @@ function exitAdReview() {
   if (r.prevUrl) navigate(r.tab, r.prevUrl);
   hideAdToolbar();
 }
+// Sit the bar over the CHAT pane, tracking its real width (drag-resized, or the CSS 40%
+// default). A collapsed chat has no pane to sit on, so the bar keeps its centered float over
+// the preview. Re-measured on open and on resize, since the designer can drag the divider
+// mid-walk. Returns nothing; it just keeps --chat-w and .over-chat in step.
+function placeAdToolbar() {
+  if (!adToolbarEl) return;
+  const chatPanel = el("chat");
+  const r = chatPanel ? chatPanel.getBoundingClientRect() : null;
+  const overChat = !!r && r.width > 120; // a collapsing/collapsed pane isn't somewhere to put a bar
+  adToolbarEl.classList.toggle("over-chat", overChat);
+  // Blur the pane behind the card, but ONLY when the bar is actually sitting on it: in the
+  // collapsed-chat fallback the bar floats over the preview and there's nothing to push back.
+  const app = el("app");
+  if (app) app.classList.toggle("ad-walking", overChat && !!adReview && !adToolbarEl.hidden);
+  if (overChat) {
+    // BOTH edges: the pane sits after the rail, so a window-relative left would put the bar
+    // on the rail instead of the pane.
+    adToolbarEl.style.setProperty("--chat-x", r.left + "px");
+    adToolbarEl.style.setProperty("--chat-w", r.width + "px");
+  } else {
+    adToolbarEl.style.removeProperty("--chat-x");
+    adToolbarEl.style.removeProperty("--chat-w");
+  }
+}
+// The divider drag and window resizes both change the pane's width under a live bar.
+window.addEventListener("resize", () => { if (adReview) placeAdToolbar(); });
+
 function showAdToolbar() {
   if (!adToolbarEl) {
     adToolbarEl = document.createElement("div");
     adToolbarEl.id = "ad-toolbar";
-    // A FIXED top row (truncated title + caret + count + step/exit) that never moves, plus a
-    // dropdown that animates open below it carrying the full title, the why, and the rec's
-    // ACTIONS (Apply / Source imagery / Make the call) — everything for the walkthrough in one
-    // spot. "Make the call" expands the dropdown further with its field baked in.
+    // A FIXED top row (count + step/exit) that never moves, over a panel carrying the rec's
+    // full title, its why, and its ACTIONS (Apply / Source imagery / Make the call / Dismiss)
+    // — everything for the walkthrough in one spot. The panel is always open: the bar owns
+    // the chat pane, so there is nothing to reclaim by collapsing it, and the title lives
+    // there alone (it used to be duplicated, truncated, in the row as a collapsed-state label).
+    // "Make the call" grows the panel further with its field baked in.
     adToolbarEl.innerHTML =
       '<div class="ad-tb-row">' +
-        '<div class="ad-tb-head"><span class="a11y-tb-title"></span>' +
-        '<button class="ad-tb-caret" data-a="expand" aria-label="Expand">' + AD_CARET_SVG + '</button></div>' +
-        '<span class="a11y-tb-count"></span>' +
+        '<span class="a11y-tb-count ad-tb-count-lead"></span>' +
         '<button class="a11y-tb-btn" data-a="prev">‹ Prev</button>' +
         '<button class="a11y-tb-btn" data-a="next">Next ›</button>' +
         '<button class="a11y-tb-btn a11y-tb-exit" data-a="exit"></button>' +
@@ -11152,45 +11318,65 @@ function showAdToolbar() {
       if (a === "prev") adReviewPrev();
       else if (a === "next") adReviewNext();
       else if (a === "exit") { exitAdReview(); openModal("director"); } // back to the recommendations list
-      else if (a === "expand") adToggleExpand();
     });
     adToolbarEl.querySelector(".a11y-tb-exit").textContent = COPY.director.exitReview;
   }
   adToolbarEl.hidden = false;
-  // Every arrival (Show on page, a new walk) opens the details; only the caret, via
-  // Next / Prev's updateAdToolbar path, carries a closed state along.
-  if (adReview) adReview.expanded = true;
+  placeAdToolbar(); // over the chat pane when there is one, else centered over the preview
   updateAdToolbar();
+  // Rise + fade in FROM the hidden state. The element goes display:none → shown in this same
+  // tick, so the transition has no start value unless we force the browser to compute one
+  // first: reading a layout property flushes style, and only then does adding .ad-in read as
+  // a change to animate. (A bare requestAnimationFrame fires BEFORE that paint, so the card
+  // jumped straight to its end state — measured, not assumed.)
+  void adToolbarEl.offsetHeight;
+  adToolbarEl.classList.add("ad-in");
 }
-function hideAdToolbar() { if (adToolbarEl) adToolbarEl.hidden = true; }
+function hideAdToolbar() {
+  if (adToolbarEl) { adToolbarEl.hidden = true; adToolbarEl.classList.remove("ad-in"); } // reset for the next arrival
+  const app = el("app"); if (app) app.classList.remove("ad-walking"); // the pane comes back into focus
+}
 function updateAdToolbar() {
   if (!adToolbarEl || !adReview) return;
   const rec = adReview.recs[adReview.idx] || {};
   const multi = adReview.recs.length > 1;
-  adToolbarEl.classList.toggle("expanded", !!adReview.expanded);
-  adToolbarEl.querySelector(".a11y-tb-title").textContent = rec.title || "";
-  // The dropdown carries the full title (as a heading) + the why; the row title stays
-  // truncated and fixed, so opening the dropdown never shifts it.
+  // The panel carries the rec: its full title (wrapping, never truncated), then the why.
   adToolbarEl.querySelector(".ad-tb-drop-title").textContent = rec.title || "";
   const why = adToolbarEl.querySelector(".ad-tb-why");
   why.textContent = rec.why || "";
   why.hidden = !rec.why;
-  adToolbarEl.querySelector(".ad-tb-caret").classList.toggle("open", !!adReview.expanded);
   const status = adReview.count ? COPY.director.shownOnPage : COPY.director.notOnView;
   adToolbarEl.querySelector(".a11y-tb-count").textContent = multi ? `${adReview.idx + 1}/${adReview.recs.length} · ${status}` : status;
   adToolbarEl.querySelectorAll('[data-a="prev"],[data-a="next"]').forEach((b) => { b.hidden = !multi; });
-  // The rec's actions live in the dropdown, rebuilt per rec as you step Next/Prev.
+  // The rec's actions live in the panel, rebuilt per rec as you step Next/Prev.
   renderAdBarActions(adToolbarEl.querySelector(".ad-tb-actions"), rec);
 }
 
-// Build the action buttons for the current rec INSIDE the review-bar dropdown — the same
-// actions as the suggestion modal, so the designer can act mid-walkthrough. Each action exits
-// the review (clears the overlay, restores the preview) then runs; "Make the call" reveals its
-// field inline first. Rebuilt each step, so the field always starts fresh + collapsed.
+// Dismiss from the bar — the one action that does NOT exit the review. Triaging a queue is
+// the whole point of the walk, so a dismissed rec drops out of the list and the walk steps
+// straight to the next one, in place. Dismissing the last one leaves nothing to look at, so
+// that (and only that) ends the review and returns to the drawer.
+function adReviewDismiss() {
+  if (!adReview) return;
+  const rec = adReview.recs[adReview.idx];
+  if (!rec) return;
+  dismissRec(rec); // active → archive, persisted (+ rail indicator, + drawer if open)
+  const recs = adReview.recs.filter((r) => r && r.id !== rec.id);
+  if (!recs.length) { exitAdReview(); openModal("director"); return; }
+  adReview.recs = recs;
+  if (adReview.idx >= recs.length) adReview.idx = 0; // dismissed the last → wrap to the first
+  adHighlightCurrent(); // repaints the overlay + rebuilds the bar for the new current rec
+}
+
+// Build the action buttons for the current rec INSIDE the review-bar panel — the same
+// actions as the suggestion modal, so the designer can act mid-walkthrough. The primary
+// action exits the review (clears the overlay, restores the preview) then runs; "Make the
+// call" reveals its field inline first; Dismiss stays in the walk and steps to the next rec.
+// Rebuilt each step, so the field always starts fresh + closed.
 function renderAdBarActions(el, rec) {
   if (!el) return;
-  // Only rebuild when the rec actually changes (a step). Re-rendering for the SAME rec (a caret
-  // toggle, a re-highlight) would wipe a half-typed make-the-call comment, so skip it.
+  // Only rebuild when the rec actually changes (a step). Re-rendering for the SAME rec (a
+  // re-highlight) would wipe a half-typed make-the-call comment, so skip it.
   const recId = (rec && rec.id) || "";
   if (el.dataset.recId === recId && el.childElementCount) return;
   el.dataset.recId = recId;
@@ -11199,6 +11385,14 @@ function renderAdBarActions(el, rec) {
   const noKey = !appHasKey;
   const isFontRec = rec.kind === "decision" && Array.isArray(rec.fontOptions) && rec.fontOptions.length > 0;
   const row = document.createElement("div"); row.className = "adrec-action-split";
+
+  // Dismiss sits on every rec, whatever its kind — the walk is a triage pass, and "not this
+  // one" is as valid an answer as Apply. It's the quiet action, so it leads the row and
+  // carries no accent (see .ad-tb-actions .adrec-dismiss-btn).
+  const dismiss = document.createElement("button"); dismiss.className = "adrec-dismiss-btn";
+  dismiss.textContent = COPY.director.dismiss; dismiss.title = COPY.director.dismissTip;
+  dismiss.addEventListener("click", () => adReviewDismiss());
+  row.appendChild(dismiss);
 
   if (rec.kind === "code" && rec.apply) {
     const apply = document.createElement("button"); apply.className = "adrec-apply-btn"; apply.textContent = COPY.director.applyThis;
@@ -11223,6 +11417,10 @@ function renderAdBarActions(el, rec) {
       row.appendChild(mkBtn);
     }
     el.append(row, field);
+  } else {
+    // A kind with no one-click action of its own (e.g. a 'code' rec with no apply
+    // instruction): Dismiss is still the whole triage, so the row goes up on its own.
+    el.appendChild(row);
   }
 }
 
