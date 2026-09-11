@@ -1271,6 +1271,10 @@ const SETUP_STEPS = [
         // section where it is, since shutting it would hide the field they now need.
         const paintLib = async () => {
           fold.innerHTML = "";
+          // The heading says whether this library is set up, so a shut section carries
+          // both what it offers and where it stands.
+          const st = await lib.get().catch(() => null);
+          fold.setFoldState(st && st.hasLicense ? COPY.setupGate.connected : "");
           await licenseSection(fold, {
             noLabel: true, desc: lib.blurb, stepsHtml: lib.steps,
             getStatus: lib.get, save: lib.save, clear: lib.clear,
@@ -3005,6 +3009,7 @@ function licensesFold(host, { title, tourId, storeKey, openDefault = false, reme
   const sec = siteEl("div", "site-acc" + (open ? " open" : ""));
   if (tourId) sec.dataset.tour = tourId;
   const head = siteEl("button", "site-acc-head"); head.type = "button"; head.setAttribute("aria-expanded", String(open));
+  const fold = siteEl("div", "site-acc-body"); fold.hidden = !open;
   head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
   // A short note beside the title, readable while the fold is shut (the media libraries
   // use it to say whether a key covers photos, video, or both).
@@ -3016,13 +3021,22 @@ function licensesFold(host, { title, tourId, storeKey, openDefault = false, reme
       n.appendChild(i);
     }
     if (note) n.appendChild(siteEl("span", "", note));
+    // Whether this one is already set up, shown beside what it offers so a shut section
+    // tells the whole story. Set later too, when a key validates while the fold is open.
+    const state = siteEl("span", "site-acc-state");
+    state.hidden = true;
+    n.appendChild(state);
+    fold.setFoldState = (text) => {
+      state.textContent = text || "";
+      state.hidden = !text;
+    };
     head.appendChild(n);
   }
-  const fold = siteEl("div", "site-acc-body"); fold.hidden = !open;
   head.addEventListener("click", () => {
     const now = fold.hidden; siteReveal(fold, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now));
     if (remember) { try { localStorage.setItem(storeKey, now ? "1" : "0"); } catch {} }
   });
+  if (!fold.setFoldState) fold.setFoldState = () => {}; // no note on this fold: nothing to show
   // A handle so a caller can fold this section away itself (the setup screen shuts a
   // library once its key validates). Hung on the returned body, which callers already hold.
   fold.closeFold = () => {
@@ -3045,7 +3059,9 @@ async function renderLicenses(body) {
 
   // Optional: the designer's own Unsplash access key, so a build can search the
   // library for matching photos (free, attributed) instead of guessing image URLs.
-  await licenseSection(licensesFold(body, { title: COPY.licenses.unsplashLabel, tourId: "unsplash-key", storeKey: "ta-fold-unsplash", note: COPY.setupGate.offersImages, noteIcons: [PHOTO_SVG] }), {
+  const unsplashFold = licensesFold(body, { title: COPY.licenses.unsplashLabel, tourId: "unsplash-key", storeKey: "ta-fold-unsplash", note: COPY.setupGate.offersImages, noteIcons: [PHOTO_SVG] });
+  unsplashFold.setFoldState((await window.desktop.getUnsplashStatus().catch(() => null) || {}).hasLicense ? COPY.setupGate.connected : "");
+  await licenseSection(unsplashFold, {
     noLabel: true,
     label: COPY.licenses.unsplashLabel,
     desc: COPY.licenses.unsplashDesc,
@@ -3061,7 +3077,9 @@ async function renderLicenses(body) {
 
   // Optional: Pexels, the second image library. With both connected a build uses
   // whichever still has budget this hour.
-  await licenseSection(licensesFold(body, { title: COPY.licenses.pexelsLabel, tourId: "pexels-key", storeKey: "ta-fold-pexels", note: COPY.setupGate.offersBoth, noteIcons: [PHOTO_SVG, VIDEO_SVG] }), {
+  const pexelsFold = licensesFold(body, { title: COPY.licenses.pexelsLabel, tourId: "pexels-key", storeKey: "ta-fold-pexels", note: COPY.setupGate.offersBoth, noteIcons: [PHOTO_SVG, VIDEO_SVG] });
+  pexelsFold.setFoldState((await window.desktop.getPexelsStatus().catch(() => null) || {}).hasLicense ? COPY.setupGate.connected : "");
+  await licenseSection(pexelsFold, {
     noLabel: true,
     label: COPY.licenses.pexelsLabel,
     desc: COPY.licenses.pexelsDesc,
@@ -3077,7 +3095,9 @@ async function renderLicenses(body) {
 
   // Optional: Pixabay, the third library. One key covers photos AND video, which is why
   // its row says so: it is the cheapest way for a designer to unlock footage.
-  await licenseSection(licensesFold(body, { title: COPY.licenses.pixabayLabel, tourId: "pixabay-key", storeKey: "ta-fold-pixabay", note: COPY.setupGate.offersBoth, noteIcons: [PHOTO_SVG, VIDEO_SVG] }), {
+  const pixabayFold = licensesFold(body, { title: COPY.licenses.pixabayLabel, tourId: "pixabay-key", storeKey: "ta-fold-pixabay", note: COPY.setupGate.offersBoth, noteIcons: [PHOTO_SVG, VIDEO_SVG] });
+  pixabayFold.setFoldState((await window.desktop.getPixabayStatus().catch(() => null) || {}).hasLicense ? COPY.setupGate.connected : "");
+  await licenseSection(pixabayFold, {
     noLabel: true,
     label: COPY.licenses.pixabayLabel,
     desc: COPY.licenses.pixabayDesc,
@@ -4159,6 +4179,15 @@ function siteFold(title, key, { defaultOpen = true } = {}) {
       n.appendChild(i);
     }
     if (note) n.appendChild(siteEl("span", "", note));
+    // Whether this one is already set up, shown beside what it offers so a shut section
+    // tells the whole story. Set later too, when a key validates while the fold is open.
+    const state = siteEl("span", "site-acc-state");
+    state.hidden = true;
+    n.appendChild(state);
+    fold.setFoldState = (text) => {
+      state.textContent = text || "";
+      state.hidden = !text;
+    };
     head.appendChild(n);
   }
   const body = siteEl("div", "site-acc-body"); body.hidden = !isOpen;
@@ -7388,6 +7417,15 @@ function siteAccordionize(wrap) {
       n.appendChild(i);
     }
     if (note) n.appendChild(siteEl("span", "", note));
+    // Whether this one is already set up, shown beside what it offers so a shut section
+    // tells the whole story. Set later too, when a key validates while the fold is open.
+    const state = siteEl("span", "site-acc-state");
+    state.hidden = true;
+    n.appendChild(state);
+    fold.setFoldState = (text) => {
+      state.textContent = text || "";
+      state.hidden = !text;
+    };
     head.appendChild(n);
   }
       const body = siteEl("div", "site-acc-body"); body.hidden = !isOpen;

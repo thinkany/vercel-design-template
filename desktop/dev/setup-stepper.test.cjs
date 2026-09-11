@@ -91,6 +91,11 @@ ok(/remember: false/.test(media),
 // What each key actually buys you, said where it can be read while the fold is SHUT.
 ok(/note: lib\.offers/.test(media), "each fold's heading says what that library offers");
 ok(/noteIcons: lib\.icons/.test(media), "and shows it as a mark, not only a word");
+// A shut library also says whether it is already set up, beside what it offers.
+ok(/setFoldState\(st && st\.hasLicense \? COPY\.setupGate\.connected : ""\)/.test(media),
+  "a connected library shows Connected on its heading, readable while shut");
+ok(/const st = await lib\.get\(\)/.test(media),
+  "and reads it live on every repaint, so unplugging one clears the label again");
 for (const [lib, offer] of [["unsplash", "offersImages"], ["pexels", "offersBoth"], ["pixabay", "offersBoth"]]) {
   const i = media.indexOf(`id: "${lib}"`);
   ok(new RegExp(`S\\.${offer}`).test(media.slice(i, i + 400)),
@@ -139,6 +144,16 @@ ok(/TOUR_FLAGS = \[[^\]]*SETUP_DONE_KEY/.test(shell),
 ok(/id="setupgate"/.test(html) && /id="setup-stack"/.test(html), "the setup gate and its stack exist");
 ok(/id="keygate"/.test(html), "the reconnect key gate is still there");
 ok(/id="setup-done"[^>]*hidden/.test(html), "Done starts hidden");
+ok(/\.site-acc-state \{/.test(html), "the heading state chip is styled");
+ok(/\.setup-libs \.site-acc-state \{[^}]*#1a7f37/.test(html),
+  "and on the light setup panel it matches the done-rows' Connected chip");
+
+// The Keys drawer shows the same thing, since that is where people return to add one.
+const shellDrawer = shell.slice(shell.indexOf("async function renderLicenses"));
+for (const lib of ["unsplash", "pexels", "pixabay"]) {
+  ok(new RegExp(`${lib}Fold\\.setFoldState`).test(shellDrawer),
+    `the drawer's ${lib} row shows its connected state too`);
+}
 
 // A done-row reads title ......... [state] Change, and those two line up down the stack
 // however long a step's name is, so the column of states is scannable.
