@@ -7,6 +7,8 @@
 //   • no privilege escalation, disk/system commands, keychain reads, env dumps
 //     (the Claude key rides in the environment), or curl-pipe-shell installs
 //   • git pushes only to named remotes the project already has; no remote edits
+//   • the CONFIGURED HEADER's structure files stay shut: the header is data plus
+//     a tested component, and the design agent styles it through its skin
 // Pure and synchronous so it can be unit-tested (scratchpad/tool-guard-test.cjs)
 // and reasoned about. Deny reasons go back to the model, which explains in the
 // designer's terms; a false positive costs one retry, a miss costs a machine.
@@ -19,7 +21,9 @@ const SHELL_TARGETS = /\b(sh|bash|zsh|ksh|fish|node|python3?|perl|ruby|osascript
 // Patterns denied outright, wherever they appear in the command.
 const DENY = [
   [/(^|[\s;&|(])(sudo|su|doas)(\s|$)/, "privilege escalation (sudo/su)"],
-  [/\b(mkfs|diskutil\s+(erase|partition|unmount)|fdisk|newfs)\b/, "a disk-level command"],
+  // `erase` is a PREFIX here: the real subcommands are eraseDisk / eraseVolume /
+  // eraseOptical, which a trailing \b after "erase" would let straight through.
+  [/\b(mkfs|diskutil\s+(erase|partition|unmount|reformat)|fdisk|newfs)/, "a disk-level command"],
   [/\bdd\b[^|;&]*\bof=\/dev\//, "writing raw bytes to a device"],
   [/\b(shutdown|reboot|halt|poweroff)\b/, "a power command"],
   [/\b(launchctl|crontab|systemctl)\b/, "a system service or scheduler change"],
@@ -129,12 +133,58 @@ function checkBash(command, projectDir) {
   return null;
 }
 
+/**
+ * The same header rule for Bash: a heredoc, `sed -i`, `cp` or `mv` onto one of the
+ * CORE header components is the same edit by another route. Matched on the path
+ * text anywhere in the command (any of these verbs names its target as a path),
+ * which is conservative in the right direction: reading the file with `cat` is
+ * untouched because none of those verbs appear.
+ */
+function checkBashHeader(command, projectDir) {
+  const cmd = String(command || "");
+  for (const rel of HEADER_CORE) {
+    if (!cmd.includes(rel) && !cmd.includes(rel.split("/").pop())) continue;
+    // Only a WRITE to it: a redirection onto it, or a write verb naming it.
+    const name = rel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const writes = new RegExp(`(>{1,2}\\s*[^;&|]*${name})|((?:^|[\\s;&|])(?:sed\\s+[^;&|]*-i|cp|mv|tee|rm|touch|install|rsync)\\s[^;&|]*${name})`);
+    if (writes.test(cmd) && !/variations\//.test(cmd)) return HEADER_WHY;
+  }
+  return null;
+}
+
 /** Judge a file tool's target path. Returns null (fine) or a reason string. */
 function checkFilePath(filePath, projectDir) {
   if (!filePath || typeof filePath !== "string") return null;
   const roots = allowedRoots(projectDir);
   const p = path.isAbsolute(filePath) ? filePath : path.resolve(projectDir, filePath);
   return inside(p, roots) ? null : `writing outside the project (${filePath})`;
+}
+
+// ---- The configured header ---------------------------------------------------
+// `src/app/components/Header.tsx` and `MobileMenu.tsx` are CORE: they implement
+// every placement and every menu kind once, correctly, and read what to render
+// from `header.config.ts` (structure) + `header.skin.ts` (look). Rewriting them
+// per design is exactly where menus drift, so a build turn cannot. This is a
+// STRUCTURAL guard, not a security one: the message names the two files the agent
+// should be editing instead.
+//
+// The BASE files only. A variation's own Header.tsx (src/variations/{id}/…) is the
+// supported "custom header" path — allowed, and flagged as unverified by the menu
+// check rather than blocked.
+const HEADER_CORE = ["src/app/components/Header.tsx", "src/app/components/MobileMenu.tsx"];
+const HEADER_WHY =
+  "the header is configured, not hand-written. Edit src/app/header.config.ts to move the logo " +
+  "or change what opens (placement, menuKind, menuSide, mega), and " +
+  "src/app/components/header.skin.ts to restyle every part of it (bar, inner, wordmark, link, " +
+  "panel, drawer, …). If this design genuinely needs a different header, say so to the designer " +
+  "and put a Header.tsx in the variation folder instead";
+
+/** Whether a path is one of the CORE header components (never a variation's copy). */
+function isHeaderCore(filePath, projectDir) {
+  if (!filePath) return false;
+  const abs = path.isAbsolute(filePath) ? filePath : path.resolve(projectDir, filePath);
+  const rel = path.relative(path.resolve(projectDir), abs).split(path.sep).join("/");
+  return HEADER_CORE.includes(rel);
 }
 
 const FILE_TOOLS = { Write: "file_path", Edit: "file_path", MultiEdit: "file_path", NotebookEdit: "notebook_path" };
@@ -145,10 +195,13 @@ function guardToolUse({ toolName, input, projectDir }) {
   if (!projectDir) return { allow: true };
   const inp = input && typeof input === "object" ? input : {};
   let why = null;
-  if (toolName === "Bash") why = checkBash(inp.command, projectDir);
-  else if (FILE_TOOLS[toolName]) why = checkFilePath(inp[FILE_TOOLS[toolName]], projectDir);
+  if (toolName === "Bash") why = checkBash(inp.command, projectDir) || checkBashHeader(inp.command, projectDir);
+  else if (FILE_TOOLS[toolName]) {
+    const p = inp[FILE_TOOLS[toolName]];
+    why = checkFilePath(p, projectDir) || (isHeaderCore(p, projectDir) ? HEADER_WHY : null);
+  }
   if (!why) return { allow: true };
   return { allow: false, reason: `Blocked by thinkany design: ${why}. Work only inside this project's folder, and never with system-level commands. If the designer needs this, tell them in plain terms what you were going to do and why it was stopped.` };
 }
 
-module.exports = { guardToolUse, checkBash, checkFilePath, segments };
+module.exports = { guardToolUse, checkBash, checkBashHeader, checkFilePath, isHeaderCore, segments, HEADER_CORE };

@@ -86,6 +86,9 @@ contextBridge.exposeInMainWorld("desktop", {
   getBuildFidelity: () => ipcRenderer.invoke("fidelity:get"),
   setBuildFidelity: (hiFi) => ipcRenderer.invoke("fidelity:set", { hiFi }),
   auditA11y: (variationId) => ipcRenderer.invoke("a11y:audit", { variationId }),
+  // The menu check runs itself after a build; this is the on-demand path (and what
+  // P5's Art Director surfacing will read).
+  checkMenu: (variationId) => ipcRenderer.invoke("menu:check", { variationId }),
   getA11yMode: () => ipcRenderer.invoke("a11y:get"),
   setA11yMode: (enabled) => ipcRenderer.invoke("a11y:set", { enabled }),
   setA11yAuto: (auto) => ipcRenderer.invoke("a11y:setAuto", { auto }),

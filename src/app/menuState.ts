@@ -1,12 +1,16 @@
 // ©2026 thinkany llc. All rights reserved.
 import { createContext, useContext } from "react";
+import { headerConfig } from "./header.config";
 
 /**
- * Which side the mobile menu lives on. SINGLE SOURCE OF TRUTH: the Header places
- * its hamburger on this side AND the MobileMenu drawer slides in from it, so the
- * two can never disagree. Flip this one value to move both. (Default "right".)
+ * Which side the mobile menu lives on. MOVED: this now lives in `header.config.ts`
+ * as `menuSide`, alongside the header's other structural choices, so one file
+ * describes the whole header. Re-exported here so a hand-built variation that
+ * imports MENU_SIDE keeps working — set `menuSide` in the config to change it.
+ *
+ * @deprecated Read `headerConfig.menuSide` instead.
  */
-export const MENU_SIDE: "left" | "right" = "right";
+export const MENU_SIDE: "left" | "right" = headerConfig.menuSide;
 
 /**
  * Shared menu state for the whole surface, provided by DesignSurface so the

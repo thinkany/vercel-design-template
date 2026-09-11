@@ -1506,7 +1506,14 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode, mo
   if (expanded) { prompt = expanded.prompt; appLog.write("info", "agent", `skill ${expanded.name} expanded`); }
   else if (typeof prompt === "string" && /^\/[a-z0-9-]+/.test(prompt)) appLog.write("warn", "agent", `no playbook for ${prompt.split(/\s/)[0]} (known: ${skillsClient ? skillsClient.names().join(", ") || "none" : "no skills client"}); the SDK expands the project's stub, if it has one`);
   const { runPrompt } = await import(pathToFileURL(path.join(__dirname, "agent.mjs")).href);
+  // Whether this turn wrote anything that can change the header — the menu check's
+  // trigger. A build writes the whole design, so it always qualifies.
+  let touchedHeader = /\/design(-brief)?\b|\/promote-blocks\b/.test(String(prompt || ""));
   const onEvent = (evt) => {
+    if (evt && (evt.type === "tool" || evt.type === "activity")) {
+      const target = `${evt.target || ""} ${evt.name || ""}`;
+      if (HEADER_TOUCH.test(target)) touchedHeader = true;
+    }
     if (appLog.isEnabled() && evt && evt.type !== "text") {
       if (evt.type === "tool") appLog.write("info", "agent", `tool ${evt.name}`);
       else if (evt.type === "activity") appLog.write("info", "agent", `activity ${evt.name || ""} ${evt.target || ""}`.trim());
@@ -1564,8 +1571,35 @@ ipcMain.handle("agent:prompt", async (event, { prompt, sessionId, reviewMode, mo
   // not become the tracked chat session, or the next chat turn would resume the critique.
   if (!reviewMode && result && result.sessionId) currentSessionId = result.sessionId; // so quit can archive it
   maybeStartSite(currentProject); // a /promote-blocks turn makes the project site-ready mid-session
+  // The menu check (P4): after a build, and after any edit that touched the header,
+  // prove the rendered nav is the nav the data describes. Deterministic and free, so
+  // it costs nothing to be sure. Fire-and-forget — a check never blocks a turn, and
+  // never fails one; its line reaches the narration when it lands.
+  if (!reviewMode) maybeRunMenuCheck(currentProject, touchedHeader);
   return result;
 });
+
+// Which of a turn's file writes mean "the header may have changed". A build always
+// qualifies (the whole design is new); an edit qualifies only when it touched the
+// header's own files, so a copy tweak doesn't pay for three page loads.
+const HEADER_TOUCH = /header\.config\.ts|header\.skin\.ts|Header\.tsx|MobileMenu\.tsx|menu\.ts|pages\.ts/;
+let menuCheckQueued = false;
+function maybeRunMenuCheck(dir, touched) {
+  if (!dir || !touched || menuCheckQueued || !viteUrl) return;
+  menuCheckQueued = true;
+  // After the dev server has re-served the edited modules.
+  setTimeout(async () => {
+    try {
+      const result = await runMenuCheckFor(null);
+      const { summarize } = require("./menu-check.cjs");
+      const line = result && result.ok !== undefined ? summarize(result) : null;
+      if (line && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("agent:event", { type: "narrate", phase: "menu", text: line, ok: !!result.ok });
+      }
+    } catch (e) { appLog.write("info", "menu", `check skipped: ${e.message}`); }
+    finally { menuCheckQueued = false; }
+  }, 1500);
+}
 
 // ---- Site content (the Site rail) --------------------------------------------
 // The rail edits the site as FILES, no model turn: content/site.json (nav, url),
@@ -3534,6 +3568,60 @@ const MENU_LAYOUT_PHRASES = {
   "mega-center-split": "a header with a full-width mega menu, logo centered with nav links split to its left and right",
 };
 
+// The nine picker ids ARE `menuKind` × `placement`. The header is a configured
+// CORE component, so the choice is written into the project as data before the
+// build starts (seedHeaderConfig) — the prompt then DESCRIBES what is already
+// standing rather than instructing the model to construct it.
+const MENU_LAYOUT_CONFIG = {
+  "simple-left-right": { menuKind: "none", placement: "left-right" },
+  "simple-left-center": { menuKind: "none", placement: "left-center" },
+  "simple-center-split": { menuKind: "none", placement: "center-split" },
+  "dropdown-left-right": { menuKind: "dropdown", placement: "left-right" },
+  "dropdown-left-center": { menuKind: "dropdown", placement: "left-center" },
+  "dropdown-center-split": { menuKind: "dropdown", placement: "center-split" },
+  "mega-left-right": { menuKind: "mega", placement: "left-right" },
+  "mega-left-center": { menuKind: "mega", placement: "left-center" },
+  "mega-center-split": { menuKind: "mega", placement: "center-split" },
+};
+
+/**
+ * Write the designer's header choice into the project as data, before the build.
+ *
+ * This is the whole point of the configured header: the nine picker layouts are
+ * not nine things for a model to build, they are two fields. `Header.tsx` (CORE)
+ * implements every placement and menu kind once and reads them from here, so the
+ * header the designer picked is the header that renders, first pass, every time.
+ * The build turn then only styles it (header.skin.ts).
+ *
+ * Patches the two fields in the exported literal (leaving the CORE types and doc
+ * comment above it alone), so a re-run with a different pick is idempotent. Failing
+ * is never fatal: the config keeps its defaults and the build still runs.
+ */
+function seedHeaderConfig(dir, menuLayout) {
+  const cfg = MENU_LAYOUT_CONFIG[menuLayout];
+  if (!dir || !cfg) return false;
+  const file = path.join(dir, "src", "app", "header.config.ts");
+  try {
+    if (!fs.existsSync(file)) return false;
+    let src = fs.readFileSync(file, "utf8");
+    // Only the exported literal's fields — the types and the doc comment above it
+    // are CORE and stay exactly as shipped.
+    const start = src.indexOf("export const headerConfig");
+    if (start < 0) return false;
+    const head = src.slice(0, start);
+    let tail = src.slice(start);
+    tail = tail
+      .replace(/(placement:\s*)["'][^"']*["']/, `$1"${cfg.placement}"`)
+      .replace(/(menuKind:\s*)["'][^"']*["']/, `$1"${cfg.menuKind}"`);
+    fs.writeFileSync(file, head + tail);
+    appLog.write("info", "menu", `header config seeded: ${cfg.placement} / ${cfg.menuKind}`);
+    return true;
+  } catch (e) {
+    appLog.write("info", "menu", `header config not seeded (${e.message})`);
+    return false;
+  }
+}
+
 // The designer's picked hero layout → an explicit, authoritative build instruction.
 // Keep the ids in sync with HERO_LAYOUTS in shell.js (the renderer catalog).
 const HERO_LAYOUT_PHRASES = {
@@ -3585,10 +3673,18 @@ function buildDesignPrompt(brief) {
   if (fonts.length) parts.push(`Fonts ${fonts.join(", ")}`);
   if (list(b.sections).length) parts.push(`Include these sections: ${b.sections.join(", ")}`);
   if (b.menuLayout && MENU_LAYOUT_PHRASES[b.menuLayout]) {
+    // DESCRIPTIVE, not an instruction to build: `header.config.ts` is already
+    // written (seedHeaderConfig), and the CORE Header renders it. The turn styles
+    // the header through its skin; it does not restructure it.
     parts.push(
-      "Header / navigation layout (the designer’s explicit choice — build the site " +
-      "header this way, configuring menu.ts for the menu style): " +
-      MENU_LAYOUT_PHRASES[b.menuLayout]
+      "Header / navigation: the header is ALREADY CONFIGURED and standing as " +
+      `${MENU_LAYOUT_PHRASES[b.menuLayout]} — src/app/header.config.ts holds that choice and ` +
+      "src/app/components/Header.tsx (CORE) renders it, mobile drawer included. STYLE it to " +
+      "the design by editing src/app/components/header.skin.ts (bar, inner, wordmark, logo, " +
+      "link, linkActive, cta, panel, panelInner, dropdownLink, columnHeading, columnLink, " +
+      "feature, drawer, drawerLink, drawerSubLink, hamburger). Do NOT restructure it, do NOT " +
+      "copy Header.tsx or MobileMenu.tsx into the variation, and do not re-derive the placement " +
+      "grid — that is done and tested. Menu CONTENT stays in src/app/menu.ts"
     );
   }
   if (b.heroLayout && HERO_LAYOUT_PHRASES[b.heroLayout]) {
@@ -3663,6 +3759,9 @@ ipcMain.handle("intake:designPrompt", async () => {
   if (intakeBrief && intakeBrief.direction) {
     try { fs.writeFileSync("/tmp/ta-direction.json", JSON.stringify(intakeBrief.direction, null, 2)); } catch {}
   }
+  // The header's STRUCTURE goes in as data before the build, so the turn inherits a
+  // standing header rather than instructions for making one.
+  if (intakeBrief && currentProject) seedHeaderConfig(currentProject, intakeBrief.menuLayout);
   return { prompt: buildDesignPrompt(intakeBrief) };
 });
 
@@ -4685,6 +4784,44 @@ async function auditA11y(variationId) {
   return { ok: true, findings, count: findings.length, ranAt: Date.now(), variationId: vid };
 }
 ipcMain.handle("a11y:audit", (_e, { variationId } = {}) => auditA11y(variationId));
+
+// ---- Menu check (P4) — the header a designer picked IS the header they got ----
+// Deterministic, zero model tokens: it measures the rendered nav against the data
+// it came from (pages.ts, menu.ts, header.config.ts) at each breakpoint, through
+// the capture bridge. Runs after a Get Designing build and after any edit that
+// touched the header; on demand from the drawer too. Writes .thinkany/menu-check.json.
+//
+// headerMode decides how a failure reads: a CONFIGURED header cannot produce one
+// (so a finding is a framework bug), while a CUSTOM header — a variation that
+// dropped in its own Header.tsx — gets its findings reported to the designer.
+function headerModeFor(dir, variationId) {
+  try {
+    const custom = path.join(dir, "src", "variations", String(variationId || ""), "components", "Header.tsx");
+    return fs.existsSync(custom) ? "custom" : "configured";
+  } catch { return "configured"; }
+}
+async function runMenuCheckFor(variationId, opts = {}) {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const vid = variationId || (detectDesign(currentProject).variationId || "v01");
+  const { runMenuCheck } = require("./menu-check.cjs");
+  const { runCaptureOp } = require("./capture-bridge.cjs");
+  // Skip the tablet width when the project didn't opt into a tablet preview: it
+  // isn't a surface the designer ever sees, and each width costs a page load.
+  const widths = tabletEnabled(currentProject) ? undefined : ["desktop", "mobile"];
+  return runMenuCheck({
+    projectDir: currentProject, previewUrl: viteUrl, variationId: vid,
+    captureOp: runCaptureOp, headerMode: headerModeFor(currentProject, vid),
+    widths, log: (m) => appLog.write("info", "menu", m), ...opts,
+  });
+}
+/** Whether .env opted into the tablet preview (VITE_ENABLE_TABLET). */
+function tabletEnabled(dir) {
+  try {
+    const env = fs.readFileSync(path.join(dir, ".env"), "utf8");
+    return /^\s*VITE_ENABLE_TABLET\s*=\s*["']?true["']?/mi.test(env);
+  } catch { return false; }
+}
+ipcMain.handle("menu:check", (_e, { variationId } = {}) => runMenuCheckFor(variationId));
 
 // ---- Art Director thumbnails -------------------------------------------------
 // A rec row that names its section in words makes the designer translate text back into the

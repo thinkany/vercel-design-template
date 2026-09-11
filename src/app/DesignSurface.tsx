@@ -3,7 +3,7 @@ import { type ReactNode, useState } from "react";
 import { PhoneFrame } from "./components/PhoneFrame";
 import { TabletFrame } from "./components/TabletFrame";
 import { ViewToggle } from "./components/ViewToggle";
-import { resolveComponent } from "./variationRegistry";
+import { getVariationId, resolveComponent } from "./variationRegistry";
 import { MenuStateContext } from "./menuState";
 import { ImageCredits } from "./components/ImageCredits";
 import { previewConfig, projectType } from "@/config/site";
@@ -37,11 +37,6 @@ interface Props {
    */
   chrome?: boolean;
   children: ReactNode;
-}
-
-/** Active variation id (from `?v=`), so Header/Footer resolve per variation. */
-function getVariationId(): string {
-  return new URLSearchParams(window.location.search).get("v") ?? "v00";
 }
 
 /**

@@ -8060,6 +8060,12 @@ window.desktop.onAgentEvent((evt) => {
       if (!tabsOpened || guarding) setWorkingMessage(friendlyActivity(evt.name, evt.target));
       else if (homeBuilding) setBuildMessage(friendlyActivity(evt.name, evt.target));
       break;
+    case "narrate":
+      // A deterministic check reporting in its own words (the menu check, for now).
+      // One quiet line: what was verified, or what needs fixing. It arrives after the
+      // turn, so it never interleaves with the build's own narration.
+      if (evt.text) addMsg("system", evt.ok ? `\u2713 ${evt.text}` : evt.text);
+      break;
     case "result":
       finalizeAssistant();
       agentBusy = false;
