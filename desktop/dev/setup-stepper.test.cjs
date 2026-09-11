@@ -40,28 +40,49 @@ ok(/buildSetupDoneRow\(step, answered\)/.test(render), "and the render uses that
 ok(/doneBtn\.hidden = !!nextSetupStep\(\)/.test(render),
   "Done only appears once every step is answered");
 
-// ---- Answering a step is a sequence, not a swap -----------------------------
-// The card shrinks to the size of the row it becomes, that row settles, and only then
-// does the next step arrive. Three beats, so nothing changes underneath the eye at once.
-const finish = shell.slice(shell.indexOf("async function finishSetupStep"), shell.indexOf("/**\n * Where the done-row"));
+// ---- Answering a step is two movements, not a swap --------------------------
+// The card closes around its own midline (so it shuts like a door, not by the bottom
+// riding up to a fixed top), then glides up into the slot it will rest in. Both are
+// measured first, so the card lands exactly where the rebuilt stack draws it.
+const finish = shell.slice(shell.indexOf("async function finishSetupStep"), shell.indexOf("/**\n * The top of the slot"));
 ok(/measureDoneRow\(id, stack\)/.test(finish),
-  "the shrink lands on the row's real height, measured, not guessed");
-ok(/height: to\.height \+ "px", padding: to\.padding/.test(finish),
-  "padding and border travel with the height, so it lands looking like the row");
-ok(/await shrink\.finished/.test(finish) && finish.indexOf("await shrink.finished") < finish.indexOf("renderSetupStep({ settle: id })"),
-  "the stack is only rebuilt once the shrink has finished");
-ok(/prefers-reduced-motion/.test(finish), "and none of it runs for reduced motion");
+  "the closed size is measured from a real row, not guessed");
+ok(/setupRestingTop\(id, stack/.test(finish),
+  "and so is the slot it travels to");
+// Phase 1: the midline holds still while the height goes.
+ok(/transform: `translateY\(\$\{\(box\.height - to\.height\) \/ 2\}px\)`/.test(finish),
+  "the close offsets by half the height lost, which keeps the midline fixed");
+// Phase 2: from that midline up to the slot, and the lift accounts for the offset.
+ok(/const lift = restTop - shrunkTop/.test(finish),
+  "the lift is measured from where the close leaves the card, not from where it started");
+ok(/translateY\(\$\{midlineOffset \+ lift\}px\)/.test(finish),
+  "the travel ends on the resting slot");
+ok(finish.indexOf("await close.finished") < finish.indexOf("const glide"),
+  "the travel begins only once the close has finished");
+// It must leave the flow, or the gap it vacates would not close until after it lands.
+ok(/card\.style\.position = "absolute"/.test(finish) && /card\.style\.width = box\.width/.test(finish),
+  "it lifts out of the flow for the trip, with its width pinned first");
+// The held-open geometry has to be pinned before the animation holding it is dropped.
+ok(finish.indexOf("card.style.height = to.height") < finish.indexOf("card.getAnimations().forEach"),
+  "the closed geometry is pinned before the close animation is cancelled (or it flashes open)");
+// Slower than it was: the point of this pass.
+const closeMs = +(finish.match(/const CLOSE = (\d+)/) || [])[1];
+const travelMs = +(finish.match(/const TRAVEL = (\d+)/) || [])[1];
+ok(closeMs >= 200 && closeMs <= 400, `the close is quick but not a snap (${closeMs}ms)`);
+ok(travelMs >= 450, `the travel decelerates into place rather than darting (${travelMs}ms)`);
+ok(travelMs > closeMs, "and the arrival takes longer than the close");
+ok(/prefers-reduced-motion/.test(finish), "none of it runs for reduced motion");
 ok(/if \(setupAnimating\) return/.test(finish), "a second click during the transition cannot race the first");
-ok(/delay: settle \? 200 : 0/.test(render),
-  "the next step follows the settled row rather than arriving with it");
 // The measurement must not disturb what the designer is looking at.
 const mStart = shell.indexOf("function measureDoneRow");
 const measure = shell.slice(mStart, shell.indexOf("\n}", mStart));
 ok(/visibility:hidden/.test(measure) && /left:-9999px/.test(measure),
   "the row is measured off-screen, so the real stack never flickers");
 ok(/ghost\.remove\(\)/.test(measure), "and the measuring clone is removed again");
-// The skip affordance exists only on optional steps.
-ok(/if \(!step\.required\)[\s\S]{0,400}setup-skip/.test(render), "only optional steps offer Skip");
+// The slot is computed from the live stack, so a spacing change moves the target with it.
+const rest = shell.slice(shell.indexOf("function setupRestingTop"), shell.indexOf("function setupRestingTop") + 700);
+ok(/rowGap|gap/.test(rest), "the slot accounts for the stack's own gap");
+ok(/if \(step\.id === id\) break/.test(rest), "counting only the rows that sit above it");
 
 // ---- Reusing the drawer's key rows ------------------------------------------
 // The whole reason this is cheap: one implementation of validate/save/show/unplug.

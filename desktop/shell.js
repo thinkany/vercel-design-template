@@ -1306,6 +1306,7 @@ const SETUP_STEPS = [
 function buildSetupDoneRow(step, answered) {
   const box = document.createElement("div");
   box.className = "setup-step setup-done-row";
+  box.dataset.step = step.id; // so a travelling card can measure the slot it is heading for
   const t = document.createElement("div");
   t.className = "setup-step-title";
   t.textContent = step.title();
@@ -1348,6 +1349,7 @@ async function renderSetupStep({ settle = null } = {}) {
     if (isLive) {
       const box = document.createElement("div");
       box.className = "setup-step live";
+      box.dataset.step = step.id;
       const t = document.createElement("div");
       t.className = "setup-step-title";
       t.textContent = step.title();
@@ -1371,18 +1373,17 @@ async function renderSetupStep({ settle = null } = {}) {
         actions.appendChild(skip);
         box.appendChild(actions);
       }
-      // The next step follows the row that just settled rather than arriving with it, so
-      // the eye finishes one beat before the next begins. A first paint has nothing to
-      // wait for, so it comes straight in.
-      fadeSlideIn(box, { dy: 16, duration: 420, delay: settle ? 200 : 0 });
+      // The next step rises once the row above has come to rest, so the eye finishes one
+      // movement before the next begins. A first paint has nothing to wait for.
+      fadeSlideIn(box, { dy: 18, duration: 520, delay: settle ? 90 : 0 });
     } else {
       const row = buildSetupDoneRow(step, answered);
       stack.appendChild(row);
-      // The row this turn just produced settles into place: it arrives at the size the
-      // card shrank to, so only its contents fade up.
+      // The row that just travelled here is already in place and at rest: the animated
+      // card came to a stop on this exact slot, so re-animating it would be a second
+      // arrival. Its contents get the gentlest fade to cover the handover, nothing more.
       if (settle === step.id) {
-        anim(row, [{ opacity: 0, transform: "translateY(-4px)" }, { opacity: 1, transform: "translateY(0)" }],
-          { duration: 300, delay: 40 });
+        anim(row, [{ opacity: 0.85 }, { opacity: 1 }], { duration: 180 });
       }
     }
   }
@@ -1401,6 +1402,17 @@ async function renderSetupStep({ settle = null } = {}) {
  * step arrive. Respects prefers-reduced-motion by doing none of it.
  */
 let setupAnimating = false;
+/**
+ * A step is answered. Two movements, and the shape of them is the point:
+ *
+ *  1. CLOSE. The card collapses around its own MIDLINE, so it shuts like a door closing
+ *     from both edges rather than the bottom riding up to a fixed top. Quick and smooth.
+ *  2. TRAVEL. From that midline it glides up to the slot it will rest in, decelerating
+ *     into place: a train pulling into a station, not a cut.
+ *
+ * Both are measured first, so the card lands exactly where the rebuilt stack will draw
+ * it and the handover is invisible. Nothing runs under prefers-reduced-motion.
+ */
 async function finishSetupStep(id, how) {
   if (setupAnimating) return; // a second click during the transition would race the first
   setupState[id] = how || (setupState[id] || "skipped");
@@ -1412,31 +1424,101 @@ async function finishSetupStep(id, how) {
   if (!card || reduce || !card.animate) { await renderSetupStep(); return; }
   setupAnimating = true;
 
-  // Measure where it is going: render the finished stack off-screen and read the height
-  // of the row this card becomes, so the shrink lands on the real number rather than a
-  // guess that would need correcting afterwards.
+  // Where it is now, and what it becomes: the row's height and padding come from a real
+  // laid-out element, so the animation never restates numbers the stylesheet owns.
   const cardCs = getComputedStyle(card);
-  const from = { height: card.getBoundingClientRect().height, padding: cardCs.padding, borderColor: cardCs.borderTopColor };
+  const box = card.getBoundingClientRect();
   const to = measureDoneRow(id, stack);
 
-  card.style.overflow = "hidden";
-  // Padding and the live card's emphasis travel with the height, so it lands looking
-  // exactly like the row that replaces it rather than snapping to it at the end.
-  const shrink = card.animate(
-    [
-      { height: from.height + "px", padding: from.padding, borderColor: from.borderColor, boxShadow: cardCs.boxShadow },
-      { height: to.height + "px", padding: to.padding, borderColor: to.borderColor, boxShadow: "0 0 0 rgba(0,0,0,0)" },
-    ],
-    { duration: 300, easing: INTAKE_EASE, fill: "both" },
-  );
-  // The card's contents fade as it closes, so text never squashes against the edges.
-  for (const c of card.children) {
-    c.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease-out", fill: "both" });
-  }
-  try { await shrink.finished; } catch { /* cancelled by a re-render */ }
+  // Where it will REST: the row's slot is above every step still to come, so it is the
+  // stack's top plus the rows already finished above this one.
+  const restTop = setupRestingTop(id, stack, to.height);
+  // Closing around the midline moves the top edge down by half what it loses; the travel
+  // has to undo that as well as cover the distance to the slot.
+  const shrunkTop = box.top + (box.height - to.height) / 2;
+  const lift = restTop - shrunkTop;
 
+  card.style.overflow = "hidden";
+  card.style.willChange = "height, transform";
+  card.classList.add("travelling"); // rides above the rows it passes
+
+  // 1. Close around the midline. translateY holds the centre still while the height goes.
+  const CLOSE = 260;
+  const close = card.animate(
+    [
+      { height: box.height + "px", transform: "translateY(0px)", padding: cardCs.padding,
+        borderColor: cardCs.borderTopColor, boxShadow: cardCs.boxShadow },
+      { height: to.height + "px", transform: `translateY(${(box.height - to.height) / 2}px)`,
+        padding: to.padding, borderColor: to.borderColor, boxShadow: "0 0 0 rgba(0,0,0,0)" },
+    ],
+    { duration: CLOSE, easing: "cubic-bezier(.32, 0, .28, 1)", fill: "both" },
+  );
+  // The open card's contents go early, so nothing squashes against the closing edges.
+  for (const c of card.children) {
+    c.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 130, easing: "ease-out", fill: "both" });
+  }
+  try { await close.finished; } catch { setupAnimating = false; return; }
+
+  // Between the two: swap the open card's contents for the row it becomes, at the size
+  // it already is, so the thing that travels is the finished row.
+  const midlineOffset = (box.height - to.height) / 2;
+  // Pin the closed geometry as inline style BEFORE dropping the animation that is holding
+  // it, or the card flashes back to its open height between the two movements.
+  card.style.height = to.height + "px";
+  card.style.padding = to.padding;
+  card.style.transform = `translateY(${midlineOffset}px)`;
+  card.style.borderColor = to.borderColor;
+  card.style.boxShadow = "none";
+  card.getAnimations().forEach((a) => a.cancel());
+  card.classList.remove("live");
+  card.classList.add("setup-done-row");
+  card.replaceChildren(...buildSetupDoneRow(SETUP_STEPS.find((x) => x.id === id), setupState[id]).childNodes);
+
+  // The card leaves the flow for the trip, so the gap it vacates closes as it goes
+  // rather than after it lands. Its width is pinned first: absolute positioning would
+  // otherwise collapse it to its content.
+  const stackBox = stack.getBoundingClientRect();
+  card.style.width = box.width + "px";
+  card.style.position = "absolute";
+  card.style.left = (box.left - stackBox.left) + "px";
+  card.style.top = (box.top - stackBox.top) + "px";
+  card.style.margin = "0";
+
+  // 2. Travel up into the slot, decelerating the whole way.
+  const TRAVEL = 620;
+  // Both keyframes are measured from the card's ORIGINAL top, which is what `top` pins.
+  const glide = card.animate(
+    [
+      { transform: `translateY(${midlineOffset}px)`, opacity: 0.85 },
+      { transform: `translateY(${midlineOffset + lift}px)`, opacity: 1 },
+    ],
+    { duration: TRAVEL, easing: "cubic-bezier(.22, .61, .18, 1)", fill: "both" },
+  );
+  try { await glide.finished; } catch { /* re-rendered under us */ }
+
+  // Hand over to the real stack, already drawn where the card came to rest.
+  card.style.willChange = "";
+  card.classList.remove("travelling");
   await renderSetupStep({ settle: id });
   setupAnimating = false;
+}
+
+/**
+ * The top of the slot this step's row will rest in: the stack's own top, plus every row
+ * already finished above it (and the gaps between them). Read from the live stack, so a
+ * spacing change in the stylesheet moves the target with it.
+ */
+function setupRestingTop(id, stack, ownHeight) {
+  const stackTop = stack.getBoundingClientRect().top;
+  const gap = parseFloat(getComputedStyle(stack).rowGap || getComputedStyle(stack).gap || "10") || 10;
+  let top = stackTop;
+  for (const step of SETUP_STEPS) {
+    if (step.id === id) break;
+    if (!setupState[step.id]) continue; // not answered: it is not above this one
+    const row = stack.querySelector(`[data-step="${step.id}"]`);
+    top += (row ? row.getBoundingClientRect().height : ownHeight) + gap;
+  }
+  return top;
 }
 
 /**

@@ -1998,11 +1998,15 @@
       }
 
       /* first-run key setup — a stack of steps; answered ones collapse to a done-row */
-      #setup-stack { display: flex; flex-direction: column; gap: 10px; margin: 18px 0 4px; text-align: left; }
+      /* `relative` so a card that lifts out of the flow to travel can be placed against
+         the stack rather than the page. */
+      #setup-stack { position: relative; display: flex; flex-direction: column; gap: 10px; margin: 18px 0 4px; text-align: left; }
       .setup-step {
+        position: relative; /* a card travelling to its slot rides above its neighbours */
         border: 1px solid #e3e3e8; border-radius: 12px; background: #fff;
         padding: 16px 18px; transition: border-color .18s, box-shadow .18s;
       }
+      .setup-step.travelling { z-index: 2; }
       .setup-step.live { border-color: #111; box-shadow: 0 2px 14px rgba(0,0,0,.06); }
       .setup-step-title { font-size: 13.5px; font-weight: 600; color: #111; }
       .setup-step-desc { font-size: 12px; color: #6b6b76; margin: 5px 0 12px; line-height: 1.5; }
