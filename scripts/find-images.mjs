@@ -13,68 +13,24 @@
 // library's terms are honoured here: the download endpoint is triggered on every take,
 // and the credit carries the photographer and links for the site to show.
 //
-// Sources: Unsplash (UNSPLASH_ACCESS_KEY) and Pexels (PEXELS_API_KEY), the designer's own
-// keys from Keys & Licenses. `--source unsplash|pexels|auto` (default auto: the first
-// connected library that still has budget this hour, Unsplash first). Colour hints:
-// Unsplash black_and_white, black, white, yellow, orange, red, purple, magenta, green,
-// teal, blue; Pexels red, orange, yellow, green, turquoise, blue, violet, pink, brown,
-// black, gray, white, or a hex colour.
-import fs from "node:fs";
+// Sources: Unsplash (UNSPLASH_ACCESS_KEY), Pexels (PEXELS_API_KEY) and Pixabay
+// (PIXABAY_API_KEY), the designer's own keys from Keys & Licenses.
+// `--source unsplash|pexels|pixabay|auto` (default auto: each search walks the connected
+// libraries in order, Unsplash → Pexels → Pixabay, and the first one with budget and a
+// result answers). Colour hints: Unsplash black_and_white, black, white, yellow, orange,
+// red, purple, magenta, green, teal, blue; Pexels red, orange, yellow, green, turquoise,
+// blue, violet, pink, brown, black, gray, white, or a hex colour; Pixabay grayscale,
+// transparent, red, orange, yellow, green, turquoise, blue, lilac, pink, white, gray,
+// black, brown.
 import path from "node:path";
+import {
+  api, budgetLeft, cacheItems, cachedItem, cascade, BudgetError,
+  orientationOf, utm, recordCredit, writeImage, args, statusOf,
+} from "./lib/stock-budget.mjs";
 
 const ROOT = process.cwd();
+export { recordCredit, writeImage, BudgetError };
 
-// ---- Pace + budget. The libraries turn access off for bursts, and allow so many
-// requests an hour (a new Unsplash app 50, Pexels 200). Every API call goes through
-// `api()`: at least MIN_GAP_MS apart, refused once the hour's remaining count (from the
-// X-Ratelimit headers) is down to RESERVE, and logged, per library, to the usage file the
-// app shows in Keys & Licenses (IMAGE_USAGE_FILE, set by the app; falls back to
-// .thinkany/image-usage.json here). Search results are cached in the same file so `get`
-// needs one call (or none, for Pexels), not two.
-const MIN_GAP_MS = 1100;
-const RESERVE = 3;
-const USAGE_FILE = process.env.IMAGE_USAGE_FILE || process.env.UNSPLASH_USAGE_FILE || path.join(ROOT, ".thinkany", "image-usage.json");
-function readAll() { try { return JSON.parse(fs.readFileSync(USAGE_FILE, "utf8")) || {}; } catch { return {}; } }
-function writeAll(all) { try { fs.mkdirSync(path.dirname(USAGE_FILE), { recursive: true }); fs.writeFileSync(USAGE_FILE, JSON.stringify(all, null, 2)); } catch {} }
-function readUsage(id) { const all = readAll(); return (all[id] && typeof all[id] === "object") ? all[id] : {}; }
-function writeUsage(id, u) { const all = readAll(); all[id] = u; writeAll(all); }
-const hourStart = (t = Date.now()) => t - (t % 3600000);
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-export class BudgetError extends Error {}
-function budgetLeft(id) {
-  const u = readUsage(id);
-  return !(u.hourStart === hourStart() && typeof u.remaining === "number" && u.remaining <= RESERVE);
-}
-async function api(id, label, url, headers) {
-  const u = readUsage(id);
-  const sameHour = u.hourStart === hourStart();
-  if (!budgetLeft(id)) {
-    const mins = Math.max(1, Math.ceil((u.hourStart + 3600000 - Date.now()) / 60000));
-    throw new BudgetError(`${label} budget for this hour is used up (${u.limit - u.remaining} of ${u.limit}); it resets in about ${mins} min. Use another connected library, or the plain sourcing path, for the rest of this build.`);
-  }
-  const wait = (u.lastAt || 0) + MIN_GAP_MS - Date.now();
-  if (wait > 0) await sleep(wait);
-  const res = await fetch(url, { headers });
-  const limit = parseInt(res.headers.get("x-ratelimit-limit") || "", 10);
-  const remaining = parseInt(res.headers.get("x-ratelimit-remaining") || "", 10);
-  // A new hour starts a fresh count; the previous hour's remaining must not carry over
-  // (a response without rate headers, a 401 say, would otherwise keep a stale low number).
-  const cur = readUsage(id);
-  const next = sameHour ? { ...cur } : { limit: cur.limit, photos: cur.photos };
-  Object.assign(next, { lastAt: Date.now(), hourStart: hourStart(), requests: (sameHour ? (cur.requests || 0) : 0) + 1 });
-  if (Number.isFinite(limit)) next.limit = limit;
-  if (Number.isFinite(remaining)) next.remaining = remaining; else if (!sameHour) delete next.remaining;
-  writeUsage(id, next);
-  return res;
-}
-function cachePhotos(id, list) {
-  const u = readUsage(id); const photos = u.photos || {};
-  for (const p of list) photos[p.id] = p;
-  const ids = Object.keys(photos); if (ids.length > 300) ids.slice(0, ids.length - 300).forEach((k) => delete photos[k]);
-  writeUsage(id, { ...u, photos });
-}
-const orientationOf = (w, h) => (w > h * 1.15 ? "landscape" : h > w * 1.15 ? "portrait" : "squarish");
-const utm = (u) => (u ? `${u}${u.includes("?") ? "&" : "?"}utm_source=thinkany_design&utm_medium=referral` : "");
 const SOURCES = {
   unsplash: {
     id: "unsplash",
@@ -93,7 +49,7 @@ const SOURCES = {
       if (!res.ok) throw new Error(`Unsplash search: HTTP ${res.status}${res.status === 401 ? " (the key was rejected)" : res.status === 403 ? " (rate limit reached, try again in an hour)" : ""}`);
       const data = await res.json();
       // Keep what `get` needs, so taking a photo costs one call (the download ping), not two.
-      cachePhotos("unsplash", (data.results || []).map((p) => ({ id: p.id, raw: p.urls && p.urls.raw, download_location: p.links && p.links.download_location, html: p.links && p.links.html, description: p.description || p.alt_description || "", user: { name: p.user && p.user.name || "", html: p.user && p.user.links && p.user.links.html || "" } })));
+      cacheItems("unsplash", "photos", (data.results || []).map((p) => ({ id: p.id, raw: p.urls && p.urls.raw, download_location: p.links && p.links.download_location, html: p.links && p.links.html, description: p.description || p.alt_description || "", user: { name: p.user && p.user.name || "", html: p.user && p.user.links && p.user.links.html || "" } })));
       return (data.results || []).map((p) => ({
         id: p.id,
         description: p.description || "",
@@ -107,7 +63,7 @@ const SOURCES = {
     },
     async take(id, width) {
       const h = { Authorization: `Client-ID ${this.key()}`, "Accept-Version": "v1" };
-      let p = (readUsage("unsplash").photos || {})[id];
+      let p = cachedItem("unsplash", "photos", id);
       if (!p) {
         const res = await api("unsplash", "Unsplash", `https://api.unsplash.com/photos/${encodeURIComponent(id)}`, h);
         if (!res.ok) throw new Error(`Unsplash photo ${id}: HTTP ${res.status}`);
@@ -142,7 +98,7 @@ const SOURCES = {
       if (!res.ok) throw new Error(`Pexels search: HTTP ${res.status}${res.status === 401 ? " (the key was rejected)" : res.status === 429 ? " (rate limit reached, try again in an hour)" : ""}`);
       const data = await res.json();
       // Everything `get` needs comes with the search, so taking a Pexels photo costs no call.
-      cachePhotos("pexels", (data.photos || []).map((p) => ({ id: String(p.id), original: p.src && p.src.original, html: p.url, description: p.alt || "", user: { name: p.photographer || "", html: p.photographer_url || "" } })));
+      cacheItems("pexels", "photos", (data.photos || []).map((p) => ({ id: String(p.id), original: p.src && p.src.original, html: p.url, description: p.alt || "", user: { name: p.photographer || "", html: p.photographer_url || "" } })));
       return (data.photos || []).map((p) => ({
         id: String(p.id),
         description: "",
@@ -155,7 +111,7 @@ const SOURCES = {
       }));
     },
     async take(id, width) {
-      let p = (readUsage("pexels").photos || {})[String(id)];
+      let p = cachedItem("pexels", "photos", id);
       if (!p) {
         const res = await api("pexels", "Pexels", `https://api.pexels.com/v1/photos/${encodeURIComponent(id)}`, { Authorization: this.key() });
         if (!res.ok) throw new Error(`Pexels photo ${id}: HTTP ${res.status}`);
@@ -173,71 +129,100 @@ const SOURCES = {
       };
     },
   },
+  pixabay: {
+    id: "pixabay",
+    key: () => (process.env.PIXABAY_API_KEY || "").trim(),
+    keyName: "PIXABAY_API_KEY",
+    label: "Pixabay",
+    async search({ query, orientation, color, per, page }) {
+      const u = new URL("https://pixabay.com/api/");
+      u.searchParams.set("key", this.key());
+      u.searchParams.set("q", query);
+      // Pixabay wants 3-200; anything smaller comes back as a validation error.
+      u.searchParams.set("per_page", String(Math.max(3, per)));
+      u.searchParams.set("page", String(page));
+      u.searchParams.set("image_type", "photo");
+      u.searchParams.set("safesearch", "true");
+      if (orientation) u.searchParams.set("orientation", orientation === "landscape" ? "horizontal" : orientation === "portrait" ? "vertical" : "all");
+      if (color) u.searchParams.set("colors", color);
+      const res = await api("pixabay", "Pixabay", u, {});
+      if (!res.ok) throw new Error(`Pixabay search: HTTP ${res.status}${res.status === 400 ? " (the key was rejected, or the query was invalid)" : res.status === 429 ? " (rate limit reached, try again shortly)" : ""}`);
+      const data = await res.json();
+      // largeImageURL is a fixed 1280px-max render; fullHD/imageURL need a paid plan, so
+      // `get` takes the large one and lets sharp do the rest.
+      cacheItems("pixabay", "photos", (data.hits || []).map((p) => ({ id: String(p.id), large: p.largeImageURL, html: p.pageURL, description: p.tags || "", user: { name: p.user || "", html: p.user_id ? `https://pixabay.com/users/${p.user}-${p.user_id}/` : "" } })));
+      return (data.hits || []).map((p) => ({
+        id: String(p.id),
+        description: p.tags || "",
+        alt: p.tags || "",
+        color: "",
+        width: p.imageWidth, height: p.imageHeight,
+        orientation: orientationOf(p.imageWidth, p.imageHeight),
+        photographer: p.user || "",
+        thumb: p.previewURL || "",
+      }));
+    },
+    async take(id) {
+      let p = cachedItem("pixabay", "photos", id);
+      if (!p) {
+        const u = new URL("https://pixabay.com/api/");
+        u.searchParams.set("key", this.key());
+        u.searchParams.set("id", String(id));
+        const res = await api("pixabay", "Pixabay", u, {});
+        if (!res.ok) throw new Error(`Pixabay photo ${id}: HTTP ${res.status}`);
+        const j = await res.json();
+        const hit = (j.hits || [])[0];
+        if (!hit) throw new Error(`Pixabay photo ${id}: not found`);
+        p = { id: String(hit.id), large: hit.largeImageURL, html: hit.pageURL, description: hit.tags || "", user: { name: hit.user || "", html: hit.user_id ? `https://pixabay.com/users/${hit.user}-${hit.user_id}/` : "" } };
+      }
+      // Their terms ask that the CDN isn't hotlinked, which is what we want anyway: the
+      // file comes down into public/ like every other source. No sizing params here.
+      const img = await fetch(p.large);
+      if (!img.ok) throw new Error(`Pixabay file ${id}: HTTP ${img.status}`);
+      return {
+        bytes: Buffer.from(await img.arrayBuffer()),
+        credit: { source: "pixabay.com", url: p.html, free: true, author: p.user.name, authorUrl: p.user.html, description: p.description },
+      };
+    },
+  },
 };
-// auto: the first connected library with budget left this hour, in this order.
-function pickSource(name) {
-  if (name && name !== "auto") return SOURCES[name] || null;
-  const connected = Object.values(SOURCES).filter((s) => s.key());
-  return connected.find((s) => budgetLeft(s.id)) || connected[0] || SOURCES.unsplash;
-}
-
-function args(argv) {
-  const out = { _: [] };
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a.startsWith("--")) { const k = a.slice(2); const v = argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[++i] : "true"; out[k] = v; }
-    else out._.push(a);
-  }
-  return out;
-}
-
-/** Merge one credit into public/images/credits.json (by file name; fresh file if none). */
-export function recordCredit(root, file, credit) {
-  const p = path.join(root, "public", "images", "credits.json");
-  let list = [];
-  try { const j = JSON.parse(fs.readFileSync(p, "utf8")); list = Array.isArray(j) ? j : j.images || []; } catch {}
-  list = list.filter((c) => c && c.file !== file);
-  list.push({ file, ...credit });
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, JSON.stringify(list, null, 2) + "\n");
-  return list.length;
-}
-
-/** Write the bytes as AVIF at `out` (sharp), else as JPG beside the intended name. */
-export async function writeImage(bytes, out) {
-  let sharp = null;
-  try { sharp = (await import("sharp")).default; } catch {}
-  fs.mkdirSync(path.dirname(out), { recursive: true });
-  if (sharp && /\.avif$/i.test(out)) {
-    await sharp(bytes).rotate().avif({ quality: 55 }).toFile(out);
-    return out;
-  }
-  const jpg = out.replace(/\.avif$/i, ".jpg");
-  fs.writeFileSync(jpg, bytes);
-  return jpg;
-}
+// The order a search walks: best-curated first, widest last.
+const ORDER = ["unsplash", "pexels", "pixabay"];
+const inOrder = () => ORDER.map((id) => SOURCES[id]);
+const connected = () => inOrder().filter((s) => s.key());
 
 async function main() {
   const a = args(process.argv.slice(2));
   const cmd = a._[0];
-  if (cmd === "status") {
-    const out = {};
-    for (const s of Object.values(SOURCES)) { const u = readUsage(s.id); const same = u.hourStart === hourStart(); out[s.id] = { configured: !!s.key(), limit: u.limit || null, remaining: same ? (u.remaining ?? null) : null, requestsThisHour: same ? (u.requests || 0) : 0 }; }
-    console.log(JSON.stringify(out)); return;
-  }
-  const src = pickSource(a.source);
-  if (!src) { console.error(`Unknown source "${a.source}". Sources: ${Object.keys(SOURCES).join(", ")}, auto`); process.exit(2); }
-  if (!src.key()) { console.error(`No image library is connected (${Object.values(SOURCES).map((s) => s.keyName).join(" / ")}). The designer adds a key under Keys & Licenses (Unsplash or Pexels, optional). Use the plain sourcing path instead.`); process.exit(3); }
+  if (cmd === "status") { console.log(JSON.stringify(statusOf(inOrder()))); return; }
+  const forced = a.source && a.source !== "auto" ? SOURCES[a.source] : null;
+  if (a.source && a.source !== "auto" && !forced) { console.error(`Unknown source "${a.source}". Sources: ${ORDER.join(", ")}, auto`); process.exit(2); }
+  if (!connected().length) { console.error(`No image library is connected (${inOrder().map((s) => s.keyName).join(" / ")}). The designer adds a key under Keys & Licenses (Unsplash, Pexels or Pixabay, all optional). Use the plain sourcing path instead.`); process.exit(3); }
+  if (forced && !forced.key()) { console.error(`${forced.label} isn't connected (${forced.keyName}). Use --source auto, or another library.`); process.exit(3); }
+
   if (cmd === "search") {
     const query = a._.slice(1).join(" ").trim();
     if (!query) { console.error("search needs a query"); process.exit(2); }
-    const results = await src.search({ query, orientation: a.orientation, color: a.color, per: Math.min(30, parseInt(a.per || "8", 10) || 8), page: parseInt(a.page || "1", 10) || 1 });
-    console.log(JSON.stringify({ source: src.id, query, results }, null, 1));
+    const params = { query, orientation: a.orientation, color: a.color, per: Math.min(30, parseInt(a.per || "8", 10) || 8), page: parseInt(a.page || "1", 10) || 1 };
+    // Per request, not per project: a library with no budget, no match or a bad moment
+    // hands this one query to the next in line.
+    const hit = await cascade(forced ? [forced] : inOrder(), async (src) => ({ source: src.id, query, results: await src.search(params) }));
+    if (!hit) {
+      const spent = connected().every((s) => !budgetLeft(s.id));
+      console.error(spent
+        ? "Every connected library's budget is spent for this window. Use the plain sourcing path for the remaining spots."
+        : "No library had a match for that query. Try a reworded query once, or use the plain sourcing path for this spot.");
+      process.exit(spent ? 4 : 5);
+    }
+    console.log(JSON.stringify(hit, null, 1));
     return;
   }
   if (cmd === "get") {
     const id = a._[1]; const out = a.out;
     if (!id || !out) { console.error("get needs <id> --out public/images/<name>.avif"); process.exit(2); }
+    // A `get` must name the library its `search` reported: ids aren't portable between them.
+    const src = forced || (connected().length === 1 ? connected()[0] : null);
+    if (!src) { console.error(`get needs --source (${connected().map((s) => s.id).join(" / ")}): name the library the search reported.`); process.exit(2); }
     const abs = path.resolve(ROOT, out);
     if (!abs.startsWith(path.join(ROOT, "public", "images") + path.sep)) { console.error("--out must be under public/images/"); process.exit(2); }
     const { bytes, credit } = await src.take(id, Math.min(4000, parseInt(a.width || "2400", 10) || 2400));
@@ -247,11 +232,12 @@ async function main() {
     console.log(JSON.stringify({ source: src.id, file: `/images/${file}`, credit, credits: n }));
     return;
   }
-  console.error("usage: find-images.mjs search <query> [--source unsplash|pexels|auto] [--orientation ..] [--color ..] [--per 8] | get <id> --source <the search's source> --out public/images/<name>.avif [--width 2400] | status");
+  console.error("usage: find-images.mjs search <query> [--source unsplash|pexels|pixabay|auto] [--orientation ..] [--color ..] [--per 8] | get <id> --source <the search's source> --out public/images/<name>.avif [--width 2400] | status");
   process.exit(2);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === new URL(import.meta.url).pathname) {
-  // exit 3: no key; exit 4: the hour's budget is spent (both mean: plain path); 1: other errors.
+  // exit 3: no key; 4: every library's budget is spent; 5: nothing matched anywhere
+  // (3/4/5 all mean: use the plain path or a placeholder); 1: other errors.
   main().catch((e) => { console.error(e.message || String(e)); process.exit(e instanceof BudgetError ? 4 : 1); });
 }

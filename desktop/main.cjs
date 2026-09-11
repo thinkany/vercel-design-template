@@ -264,14 +264,26 @@ function removeStoredUnsplashKey() { try { fs.unlinkSync(unsplashKeyFilePath());
 // Where scripts/find-images.mjs logs its calls + each library's rate headers, app-wide
 // (the keys are app-wide), one entry per library, so Keys & Licenses can show the hour's usage.
 function imageUsageFilePath() { return path.join(app.getPath("userData"), "image-usage.json"); }
+// Unsplash and Pexels allow so many requests an HOUR, Pixabay so many a MINUTE and says
+// when the window turns over (X-RateLimit-Reset → the script stores it as `resetAt`).
+// Read each library by its own window, or a spent minute reads as a spent hour.
+const IMAGE_LIBRARIES = ["unsplash", "pexels", "pixabay"];
 function readImageUsage() {
   let all = {}; try { all = JSON.parse(fs.readFileSync(imageUsageFilePath(), "utf8")) || {}; } catch {}
-  const hourStart = Date.now() - (Date.now() % 3600000);
+  const now = Date.now();
+  const hourStart = now - (now % 3600000);
   const out = {};
-  for (const id of ["unsplash", "pexels"]) {
+  for (const id of IMAGE_LIBRARIES) {
     const u = (all[id] && typeof all[id] === "object") ? all[id] : {};
-    const same = u.hourStart === hourStart;
-    out[id] = { limit: u.limit || null, remaining: same && typeof u.remaining === "number" ? u.remaining : null, requests: same ? (u.requests || 0) : 0, resetsInMin: Math.max(1, Math.ceil((hourStart + 3600000 - Date.now()) / 60000)) };
+    const rolling = typeof u.resetAt === "number"; // a reset-header library (Pixabay)
+    const same = rolling ? u.resetAt > now : u.hourStart === hourStart;
+    const endsAt = rolling ? u.resetAt : hourStart + 3600000;
+    out[id] = {
+      limit: u.limit || null,
+      remaining: same && typeof u.remaining === "number" ? u.remaining : null,
+      requests: same ? (u.requests || 0) : 0,
+      resetsInMin: Math.max(1, Math.ceil((endsAt - now) / 60000)),
+    };
   }
   return out;
 }
@@ -582,6 +594,7 @@ function projectStateForAgent(dir) {
   const imageSources = [];
   if ((process.env.UNSPLASH_ACCESS_KEY || "").trim()) imageSources.push("unsplash");
   if ((process.env.PEXELS_API_KEY || "").trim()) imageSources.push("pexels");
+  if ((process.env.PIXABAY_API_KEY || "").trim()) imageSources.push("pixabay");
   try {
     const r = siteReady(dir);
     if (!r.ready) return { promoted: false, imageSources };

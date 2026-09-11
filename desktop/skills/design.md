@@ -72,7 +72,7 @@ request of a session, check before diving in:
 - **Is it up + what mode am I in? One batched call** does the server ping AND reads
   the design-mode flags together, so §2b/§4b/§4d never spawn their own `echo`:
   ```bash
-  echo "http=$(curl -s -o /dev/null -w '%{http_code}' "${TA_PREVIEW_URL:-http://localhost:5173}") IMAGES=${TA_DESIGN_IMAGES:-off} UNSPLASH=${UNSPLASH_ACCESS_KEY:+on} PEXELS=${PEXELS_API_KEY:+on} RESEARCH=${TA_DESIGN_RESEARCH:-off} BROAD=${TA_DESIGN_RESEARCH_BROAD:-off} A11Y=${TA_DESIGN_A11Y:-off}"
+  echo "http=$(curl -s -o /dev/null -w '%{http_code}' "${TA_PREVIEW_URL:-http://localhost:5173}") IMAGES=${TA_DESIGN_IMAGES:-off} UNSPLASH=${UNSPLASH_ACCESS_KEY:+on} PEXELS=${PEXELS_API_KEY:+on} PIXABAY=${PIXABAY_API_KEY:+on} RESEARCH=${TA_DESIGN_RESEARCH:-off} BROAD=${TA_DESIGN_RESEARCH_BROAD:-off} A11Y=${TA_DESIGN_A11Y:-off}"
   ```
   `http=200` means the preview is live (anything else, it isn't; `$TA_PREVIEW_URL`
   is the app's real port, falling back to `:5173`). Note the flags for §2b (research),
@@ -437,32 +437,33 @@ value = the sourcing flow below.
 
 **Never open a headless browser or screenshot to find images** (gated, inconsistent).
 
-**`UNSPLASH=on` or `PEXELS=on` in the session-start call → search a library first.**
-The designer connected a photo library key, so every photo spot is sourced with the
-script, not by guessing URLs (the script picks the connected library that still has
-budget this hour; `--source pexels` or `--source unsplash` forces one, and a `get` must
-name the source its `search` reported):
+**`UNSPLASH=on`, `PEXELS=on` or `PIXABAY=on` in the session-start call → search a library
+first.** The designer connected that library's key, so every photo spot is sourced with the script,
+not by guessing URLs (each search walks those libraries and the first with budget and a
+match answers; `--source <name>` forces one, and a `get` must name the source its
+`search` reported):
 
 ```bash
 node scripts/find-images.mjs search "lifted off-road truck mountain dusk" --orientation landscape --per 8
 node scripts/find-images.mjs get <id> --out public/images/hero.avif
 ```
 
-`search` reports its `source` and returns candidates with a description, alt text, dominant colour (`color`),
-size, orientation and photographer. Pick by what the brief and the section need: the
-subject in the alt/description, the orientation of the spot, a colour that sits with the
-palette (`--color` narrows: teal, orange, black_and_white, …). **The library allows a
-new app 50 requests an hour and cuts off bursts**, so: one search per spot (`--per 10`
-gives enough to choose from), at most a second with a reworded query, never a loop; a
-`get` costs one request (none on Pexels). The script paces its calls and refuses (exit 4,
-with a message) when a library's hour is nearly spent: it moves to the other library on
-its own when one is connected; otherwise use the plain path for the remaining spots,
-don't retry. `get` writes the AVIF into `public/images/` **and records the
-credit** (photographer, links) in `credits.json` for you, so steps 1 and 5 below are
-already done for that image. Every Unsplash and Pexels photo is free to use, so the
-licence badge never flags them. A `search` with no fit, or an error, falls through to the plain path
-below for that one spot; a missing key (exit 3) means the whole build uses the plain
-path. Don't paste `UNSPLASH_ACCESS_KEY` anywhere.
+`search` reports the `source` it answered from and returns candidates with a description,
+alt text, dominant colour (`color`), size, orientation and photographer. Pick by what the
+brief and the section need: the subject in the alt/description, the orientation of the
+spot, a colour that sits with the palette (`--color` narrows: teal, orange,
+black_and_white, …). **The libraries cut off bursts and allow a limited number of requests
+per window** (a new Unsplash app 50 an hour, Pexels 200 an hour, Pixabay 100 a minute),
+so: one search per spot (`--per 10` gives enough to choose from), at most a second with a
+reworded query, never a loop; a `get` costs one request (none on Pexels). The script paces
+its calls and spills to the next library on its own, per query, when one has no budget, no
+match, or a bad moment. **Exit 4** means every connected library is spent for now and
+**exit 5** that none had a match: either way use the plain path for that spot, don't retry.
+`get` writes the AVIF into `public/images/` **and records the credit** (photographer,
+links) in `credits.json` for you, so steps 1 and 5 below are already done for that image.
+Every Unsplash, Pexels and Pixabay photo is free to use, so the licence badge never flags
+them. A missing key (exit 3) means the whole build uses the plain path. Don't paste any
+library key anywhere.
 
 Without a key, source over plain HTTP:
 

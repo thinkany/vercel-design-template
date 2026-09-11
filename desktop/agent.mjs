@@ -181,20 +181,22 @@ function buildStateAppend(state) {
 function buildImageSourcesAppend(state) {
   const libs = (state && state.imageSources) || [];
   if (!libs.length) return "";
-  const names = libs.map((l) => (l === "pexels" ? "Pexels" : "Unsplash")).join(" and ");
+  const LABEL = { unsplash: "Unsplash", pexels: "Pexels", pixabay: "Pixabay" };
+  const names = libs.map((l) => LABEL[l] || l).join(", ");
   return (
     "\n\n# Photo sourcing: " + names + " connected\n" +
     "Whenever a photo is needed (a build, a replacement, a new section), source it from the " +
-    "connected library with the project's script, never by web search, page scraping or a " +
+    "connected libraries with the project's script, never by web search, page scraping or a " +
     "guessed URL:\n" +
     "  node scripts/find-images.mjs search \"<what the photo shows>\" --orientation landscape --per 10\n" +
     "  node scripts/find-images.mjs get <id> --source <the search's source> --out public/images/<name>.avif\n" +
-    "Say which library you are searching before you run it (\"Searching " + (libs[0] === "pexels" ? "Pexels" : "Unsplash") + " for …\"), " +
-    "pick by the alt text, orientation and colour, and use `get`: it writes the AVIF and records " +
-    "the photographer credit in public/images/credits.json. The script paces itself and refuses " +
-    "(exit 4) when a library's hour is spent; it moves to the other library when one is connected. " +
-    "Only when no library answers do you fall back to a plain download, and then you record the " +
-    "credit yourself.\n"
+    "Each search walks the connected libraries in order (" + names + ") and the first with budget " +
+    "and a match answers, so the result names the library it came from: say which one it was " +
+    "(\"Found this on …\") and pass that same name to `get`. Pick by the alt text, orientation and " +
+    "colour. `get` writes the AVIF and records the photographer credit in public/images/credits.json. " +
+    "The script paces itself; exit 4 means every library's budget is spent for now and exit 5 that " +
+    "none had a match. Either way, fall back to a plain download for that spot and record the " +
+    "credit yourself, or use a placeholder.\n"
   );
 }
 

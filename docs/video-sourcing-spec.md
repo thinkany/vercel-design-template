@@ -26,10 +26,11 @@ designer hand-builds anyway, so the build should offer it rather than make them 
 | Motion primitive | `src/app/components/Parallax.tsx` + `src/styles/motion.css` | CSS scroll-driven; moves in frames + site, still in capture + reduced motion |
 | Video | — | **Nothing. No `<video>`, no video component, no video sourcing.** |
 
-**Existing drift to fix in passing:** `design.md` §4b tells the model to check `IMAGES=`,
-`UNSPLASH=on`, `PEXELS=on` "from the session-start call". Those env pairs are not what the
-app sends; the real signal is `imageSources` in project state. The skill text should be
-corrected to match when §4b is touched for video (§6 below).
+**Two signals, both real.** The design skill's session-start echo (`design.md:75`) emits
+`IMAGES=`, `UNSPLASH=`, `PEXELS=` from live env vars, and `projectStateForAgent()` separately
+gives the agent an ordered `imageSources`. Both need the new libraries: the echo gains
+`PIXABAY=`, and `imageSources` gains `pixabay`. (An earlier draft of this spec wrongly called
+the echo stale; it is not.)
 
 ---
 
@@ -447,10 +448,62 @@ quota is shared.
   published site; both hold still in capture and under reduced motion.
 - **Rule 7 (anchored two-column)**, note that `VideoFigure` obeys it exactly as an image does.
 
-`desktop/skills/promote-blocks.md`: video spots promote as a `video` + `poster` prop pair on
-the block schema, so the CMS can swap a clip the way it swaps an image.
+`desktop/skills/promote-blocks.md`: video spots promote as a `video` field (§6.1), so the CMS
+can swap a clip the way it swaps an image.
 
-`desktop/skills/design-block.md`: a block may declare a video field; same schema pair.
+`desktop/skills/design-block.md`: a block may declare a video field; same schema shape.
+
+### 6.1 A `video` field kind in the CMS
+
+Without this, a designer can have video in a promoted design and **no way to change it**,
+which would make the feature a one-shot. It is the piece that turns FPO footage into
+something a client's site can actually keep.
+
+The CMS infers field kinds structurally from the block's zod schema
+(`block-schema.cjs:145-180`): an object with a `src` key becomes `kind: "image"`
+(`:161`), and the editor branches on that kind (`shell.js:4458`). A video field follows the
+same path, one line earlier in the same check:
+
+```js
+// { src, poster, alt? } → video; { src, alt? } → image. The poster is what tells them apart.
+if (keys.includes("src") && keys.includes("poster")) { out[at] = { kind: "video" }; return; }
+if (keys.includes("src")) { out[at] = { kind: "image" }; return; }
+```
+
+So the schema a promoted block declares is:
+
+```ts
+video: z.object({
+  src: z.string(),      // /video/hero-loop.mp4
+  poster: z.string(),   // /video/hero-loop.poster.avif
+  alt: z.string().optional(),
+}).optional()
+```
+
+The editor's `video` branch reuses the image field's chrome (current value, replace, clear)
+with three differences:
+
+1. **Two files, one control.** The row shows the poster as the thumbnail, since a poster
+   frame is what a video looks like at rest, with a small "video" badge. Swapping the clip
+   swaps both files.
+2. **Upload accepts MP4** and, on accepting one, **derives the poster automatically** if the
+   designer doesn't supply one. `media-convert.cjs` already handles uploaded images; the
+   poster derivation is the one genuinely new piece of work, and the honest options are
+   ffmpeg (a dependency we have deliberately avoided, see §9) or grabbing a frame via the
+   existing hidden-BrowserWindow capture bridge by seeking a `<video>` and painting it to a
+   canvas. **Prefer the capture bridge**: no new dependency, and `capture-bridge.cjs`
+   already owns exactly this kind of offscreen render. If neither is available, require the
+   designer to supply a poster rather than shipping a posterless video.
+3. **Size is shown, always.** A video field displays its file weight inline, because a
+   client swapping in a 60 MB phone clip is the realistic failure mode and it should be
+   visible at the moment of upload, not at publish.
+
+Clearing a video field falls back to the poster still rather than an empty box, so a block
+that loses its clip degrades to the design it would have had with a still image.
+
+**Phone upload** (`phone-upload.cjs`) accepts video for the same field, which is a natural
+fit: shooting a short clip on a phone and sending it to the desk is exactly the workflow
+that path exists for. Same size warning applies.
 
 ---
 
@@ -474,7 +527,13 @@ and on a promoted site.
 weighting, `videoSources` gating, Pixabay in Keys & Licenses.
 
 **P5, skills + promote.** `design.md` §4b-video and the §4b corrections, motion contract,
-promote-blocks/design-block schema pair, publish weight summary.
+promote-blocks/design-block schema, publish weight summary.
+
+**P6, the CMS `video` field kind (§6.1).** Schema inference, the editor branch, MP4 upload,
+poster derivation via the capture bridge, size display, phone-upload parity. Separated from
+P5 because poster derivation is the one piece with real unknowns, and everything before it
+ships a usable feature without it: a design can carry video the designer sources, P6 is what
+lets a client change it later.
 
 ---
 
@@ -491,7 +550,13 @@ promote-blocks/design-block schema pair, publish weight summary.
 3. **Pixabay rate-window behaviour under real load.** The 100/min limit and the
    `X-RateLimit-Reset` header shape are from the docs, not observed. P1 should log actual
    headers on the first live calls and adjust §2.3 if they differ.
-4. **Video in the WordPress import path.** An imported site may already have hero video.
+4. **Poster derivation without ffmpeg.** §6.1 proposes seeking a `<video>` in the existing
+   hidden-BrowserWindow capture bridge and painting a frame to a canvas. Plausible, and it
+   avoids a heavy new dependency, but unproven for MP4 in an offscreen Electron window.
+   **Spike this before committing to P6's upload path**; if it fails, requiring a
+   designer-supplied poster is an acceptable fallback, silently shipping a posterless video
+   is not.
+5. **Video in the WordPress import path.** An imported site may already have hero video.
    Out of scope here, but the `video`/`poster` prop pair chosen in P5 should be the same
    shape the importer would target.
 
@@ -502,8 +567,7 @@ promote-blocks/design-block schema pair, publish weight summary.
 - **Transcoding.** No ffmpeg. We take the provider's MP4.
 - **WebM/AV1 alternates.** One format, everywhere. Revisit only if weight becomes a real
   complaint.
-- **Designer video upload.** The media picker and phone-upload path could carry video
-  later; this spec is about *sourced* FPO footage.
-- **Video in the CMS beyond a swappable clip.** No playlists, no galleries, no chapters.
+- **Video in the CMS beyond a swappable clip** (§6.1 is the whole of it). No playlists, no
+  galleries, no chapters, no trimming or in-app editing.
 - **Audio.** Every clip this feature places is muted. A design that needs sound is a
   designer's deliberate hand-build, not FPO.

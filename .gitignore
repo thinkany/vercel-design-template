@@ -37,3 +37,6 @@ site/.astro/
 desktop/build/lens-gallery/out/
 # lens gallery self-rendered examples (regenerable via Developer → Render lens examples)
 desktop/build/lens-gallery/examples/
+
+# Per-project runtime state (stock-library usage, sessions, intake)
+.thinkany/
