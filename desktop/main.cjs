@@ -4762,6 +4762,24 @@ const A11Y_BREAKPOINTS = [
   { name: "tablet", w: 834, h: 1112 },
   { name: "mobile", w: 390, h: 780 },
 ];
+// One axe pass over whatever is currently on screen. Run repeatedly: once for the
+// page, then once per OPEN menu, since axe ignores hidden elements and a dropdown
+// or mega panel is hidden until someone opens it.
+const AXE_RUN = `(async () => {
+  if (typeof axe === "undefined") return [];
+  const r = await axe.run(document, {
+    runOnly: { type: "tag", values: ["wcag2a","wcag2aa","wcag21a","wcag21aa"] },
+    resultTypes: ["violations"],
+  });
+  return (r.violations || []).map((v) => ({
+    id: v.id, impact: v.impact, help: v.help, helpUrl: v.helpUrl,
+    wcag: (v.tags || []).filter((t) => /^wcag\d/.test(t)),
+    nodes: (v.nodes || []).map((n) => ({
+      target: n.target, html: String(n.html || "").slice(0, 400), failureSummary: n.failureSummary,
+    })),
+  }));
+})()`;
+
 let _axeSrc = null;
 function axeSource() {
   if (_axeSrc == null) {
@@ -4796,6 +4814,23 @@ async function auditA11y(variationId) {
   });
   const wc = win.webContents;
   const byKey = new Map(); // "rule::selector" → finding (accumulates the breakpoints it hits)
+  // One violation, however many times it is seen (at three widths, and once per open
+  // menu), is ONE finding that records which breakpoints it hit.
+  const collect = (violations, width) => {
+    for (const v of violations || []) {
+      for (const n of v.nodes || []) {
+        const sel = Array.isArray(n.target) ? n.target.join(" ") : String(n.target || "");
+        const key = `${v.id}::${sel}`;
+        const hit = byKey.get(key);
+        if (hit) { if (!hit.breakpoints.includes(width)) hit.breakpoints.push(width); }
+        else byKey.set(key, {
+          key, rule: v.id, impact: v.impact || "moderate", help: v.help, helpUrl: v.helpUrl,
+          wcag: v.wcag || [], selector: sel, html: n.html, failureSummary: n.failureSummary,
+          breakpoints: [width],
+        });
+      }
+    }
+  };
   try {
     for (const bp of A11Y_BREAKPOINTS) {
       win.setContentSize(bp.w, bp.h);
@@ -4836,19 +4871,44 @@ async function auditA11y(variationId) {
         })()`,
         true,
       );
-      for (const v of violations || []) {
-        for (const n of v.nodes || []) {
-          const sel = Array.isArray(n.target) ? n.target.join(" ") : String(n.target || "");
-          const key = `${v.id}::${sel}`;
-          const hit = byKey.get(key);
-          if (hit) { if (!hit.breakpoints.includes(bp.name)) hit.breakpoints.push(bp.name); }
-          else byKey.set(key, {
-            key, rule: v.id, impact: v.impact || "moderate", help: v.help, helpUrl: v.helpUrl,
-            wcag: v.wcag || [], selector: sel, html: n.html, failureSummary: n.failureSummary,
-            breakpoints: [bp.name],
-          });
+      collect(violations, bp.name);
+
+      // ---- The menus, which are HIDDEN until opened ------------------------
+      // axe only evaluates what is visible, so every dropdown and mega panel was
+      // invisible to it: their links were never checked for contrast, link text or
+      // anything else. Open each menu-bearing item in turn and scan again, so the
+      // panel's content is audited the way a visitor actually meets it. Desktop and
+      // tablet reveal panels on hover; at mobile width the same links live in the
+      // drawer, which the hamburger opens.
+      try {
+        if (bp.name === "mobile") {
+          const opened = await wc.executeJavaScript(
+            `(() => { const b = document.querySelector("[data-header-hamburger]"); if (!b) return false; b.click(); return true; })()`, true);
+          if (opened) {
+            await wc.executeJavaScript(`new Promise((r) => setTimeout(r, 450))`, true);
+            // Expand every accordion so the sub-links are visible too.
+            await wc.executeJavaScript(
+              `(() => { document.querySelectorAll("[data-menu-drawer] [aria-expanded='false']").forEach((b) => b.click()); return true; })()`, true);
+            await wc.executeJavaScript(`new Promise((r) => setTimeout(r, 400))`, true);
+            collect(await wc.executeJavaScript(AXE_RUN, true), bp.name);
+          }
+        } else {
+          const items = await wc.executeJavaScript(
+            `[...document.querySelectorAll("[data-menu-item]")].map((e) => e.getAttribute("data-menu-item")).filter(Boolean)`, true);
+          for (const item of items || []) {
+            const sel = JSON.stringify(`[data-menu-item="${item}"]`);
+            const opened = await wc.executeJavaScript(
+              `(() => { const t = document.querySelector(${sel}); if (!t) return false;
+                 t.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+                 t.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+                 if (t.focus) t.focus();
+                 return true; })()`, true);
+            if (!opened) continue;
+            await wc.executeJavaScript(`new Promise((r) => setTimeout(r, 320))`, true);
+            collect(await wc.executeJavaScript(AXE_RUN, true), bp.name);
+          }
         }
-      }
+      } catch (e) { appLog.write("info", "a11y", `menu scan skipped at ${bp.name}: ${e.message}`); }
     }
   } catch (e) {
     win.destroy();
