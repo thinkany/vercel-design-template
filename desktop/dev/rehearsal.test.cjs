@@ -73,5 +73,25 @@ const fn = shell.slice(shell.indexOf("async function setOnboardingRehearsal"), s
 ok(/localStorage\.removeItem/.test(fn) && /localStorage\.setItem/.test(fn),
   "a walk-through both clears the flags on entry and puts them back on exit");
 ok(/rehearsalUsage = null/.test(fn), "each walk-through starts from the first screen");
+ok(/rehearsalKeyDone = false/.test(fn), "and from the key step, not part-way through it");
+
+// ---- The walk-through must actually REACH the key screen --------------------
+// The bug this pins: boot()'s normal branches read "no key but a project is open" and
+// drop to the project chooser, so a machine with a project open would skip the key gate
+// entirely, which is the screen the walk-through exists to show. The rehearsal branch
+// therefore has to come BEFORE those.
+const bootStart = shell.indexOf("async function boot()");
+const boot = shell.slice(bootStart, shell.indexOf("\n}", bootStart));
+const iReh = boot.indexOf("if (rehearsingOnboarding)");
+const iNoKey = boot.indexOf("if (!hasKey && !proj.hasProject)");
+ok(iReh > -1 && iNoKey > -1 && iReh < iNoKey,
+  "boot() must check the walk-through BEFORE its has-key/has-project branches");
+ok(/showStage\(hasKey \|\| rehearsalKeyDone \? "project" : "key"\)/.test(boot),
+  "the walk-through shows the key screen first, then the project one once that step is done");
+
+// Main reports "no key" for the whole walk-through, so the key step can only advance on
+// the rehearsal's own record of it: without this the key screen would never be left.
+const save = shell.slice(shell.indexOf("async function saveKey()"), shell.indexOf("keysave.addEventListener"));
+ok(/res\.rehearsed/.test(save), "a rehearsed key save records the step (nothing is stored to read back)");
 
 console.log(`rehearsal: ${checks} checks pass.`);

@@ -1075,6 +1075,7 @@ for (const [id, usage] of [["usage-personal", "personal"], ["usage-company", "co
 // boot() and the usage gate both read them, and `let` is not hoisted.
 let rehearsingOnboarding = false;
 let rehearsalUsage = null; // the usage answer given DURING a walk-through (never stored)
+let rehearsalKeyDone = false; // the key step was "completed" in this walk-through
 
 async function boot() {
   refreshRailActivation(); // color the Claude/Figma icons per key + license state
@@ -1087,6 +1088,15 @@ async function boot() {
   const { hasKey } = await window.desktop.getKeyStatus();
   appHasKey = hasKey;
   const proj = await window.desktop.getProjectStatus();
+  // Rehearsing the first run: walk the screens a NEW install shows, in their real order,
+  // whatever this machine already has open. Without this the branches below would read
+  // "no key but a project is open" and drop straight to the project chooser, skipping the
+  // key screen that is the whole point of the walk-through.
+  if (rehearsingOnboarding) {
+    noProjectPlaceholder();
+    showStage(hasKey || rehearsalKeyDone ? "project" : "key");
+    return;
+  }
   // No key AND no project → nothing to browse and can't create one → the connect screen.
   if (!hasKey && !proj.hasProject) {
     noProjectPlaceholder();
@@ -1099,9 +1109,6 @@ async function boot() {
     showStage("project");
     return;
   }
-  // Rehearsing the first run: a project IS open, but the point is to walk the screens a
-  // new install shows, so hold here rather than dropping into the workspace.
-  if (rehearsingOnboarding) { noProjectPlaceholder(); showStage("project"); return; }
   // A project exists → open it. Without a key this is READ-ONLY (showStage hides the chat
   // pane; agent actions are disabled), but the designer can still view + switch projects.
   setProjTitle(proj);
@@ -1149,6 +1156,7 @@ async function setOnboardingRehearsal(on) {
   if (on === rehearsingOnboarding) return;
   rehearsingOnboarding = on;
   rehearsalUsage = null; // each walk-through starts from the first screen
+  rehearsalKeyDone = false;
   if (on) {
     // Keep the real flags aside so the walkthrough runs, then hand them back on exit.
     stashedTourFlags = {};
@@ -1195,6 +1203,7 @@ async function saveKey() {
   try {
     const res = await window.desktop.saveKey(key);
     if (res.ok) {
+      if (res.rehearsed) rehearsalKeyDone = true; // nothing was stored; remember the step
       keyinput.value = "";
       queueTour(); // first connection → the walkthrough, once the next stage has painted
       await boot();
