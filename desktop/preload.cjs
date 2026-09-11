@@ -127,6 +127,10 @@ contextBridge.exposeInMainWorld("desktop", {
   getPexelsStatus: () => ipcRenderer.invoke("pexels:status"),
   savePexelsKey: (key) => ipcRenderer.invoke("pexels:save", { key }),
   clearPexelsKey: () => ipcRenderer.invoke("pexels:clear"),
+  // Dev only: walk the first-run onboarding without unplugging any key. Main pretends
+  // every credential is absent while this is on; nothing is stored or cleared.
+  onRehearseOnboarding: (fn) => ipcRenderer.on("dev:rehearseOnboarding", (_e, p) => fn(p)),
+  rehearsalStatus: () => ipcRenderer.invoke("dev:rehearsalStatus"),
   // Which connected libraries carry video (gates the hero media sub-choice).
   getVideoSources: () => ipcRenderer.invoke("video:sources"),
   getPixabayStatus: () => ipcRenderer.invoke("pixabay:status"),

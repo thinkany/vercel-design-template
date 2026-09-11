@@ -1066,13 +1066,22 @@ for (const [id, usage] of [["usage-personal", "personal"], ["usage-company", "co
     usagegate.querySelectorAll("button").forEach((b) => { b.disabled = true; });
     try { await window.desktop.setUsage(usage); } catch {}
     appUsage = usage;
+    if (rehearsingOnboarding) rehearsalUsage = usage; // held for this walk-through only
     usagegate.querySelectorAll("button").forEach((b) => { b.disabled = false; });
     boot();
   });
 }
+// Dev-only walk-through state (see "Onboarding rehearsal" below). Declared here because
+// boot() and the usage gate both read them, and `let` is not hoisted.
+let rehearsingOnboarding = false;
+let rehearsalUsage = null; // the usage answer given DURING a walk-through (never stored)
+
 async function boot() {
   refreshRailActivation(); // color the Claude/Figma icons per key + license state
   try { appUsage = (await window.desktop.getUsage()).usage; } catch { appUsage = null; }
+  // Rehearsing: main reports the usage choice as unanswered so the first screen shows.
+  // Once this walk-through has answered it, that answer lives here (never on disk).
+  if (rehearsingOnboarding && !appUsage && rehearsalUsage) appUsage = rehearsalUsage;
   if (!appUsage) { noProjectPlaceholder(); showStage("usage"); return; }
   applyUsage();
   const { hasKey } = await window.desktop.getKeyStatus();
@@ -1090,6 +1099,9 @@ async function boot() {
     showStage("project");
     return;
   }
+  // Rehearsing the first run: a project IS open, but the point is to walk the screens a
+  // new install shows, so hold here rather than dropping into the workspace.
+  if (rehearsingOnboarding) { noProjectPlaceholder(); showStage("project"); return; }
   // A project exists → open it. Without a key this is READ-ONLY (showStage hides the chat
   // pane; agent actions are disabled), but the designer can still view + switch projects.
   setProjTitle(proj);
@@ -1124,6 +1136,51 @@ window.desktop.onViteReady((url) => {
     refreshPreview();
   }
 });
+
+// ---- Onboarding rehearsal (dev only) -----------------------------------------
+// The Developer menu's "Walk through onboarding": main pretends every credential is
+// absent, and this replays the first-run screens over the top. Nothing is cleared, so
+// leaving it puts the real workspace straight back. The tour flags live in
+// localStorage, so they are stashed (not deleted) for the duration and restored after.
+const TOUR_FLAGS = ["ta-tour-done", "ta-tour-cms-done", "ta-tour-design-done"];
+let stashedTourFlags = null;
+
+async function setOnboardingRehearsal(on) {
+  if (on === rehearsingOnboarding) return;
+  rehearsingOnboarding = on;
+  rehearsalUsage = null; // each walk-through starts from the first screen
+  if (on) {
+    // Keep the real flags aside so the walkthrough runs, then hand them back on exit.
+    stashedTourFlags = {};
+    for (const k of TOUR_FLAGS) { stashedTourFlags[k] = localStorage.getItem(k); localStorage.removeItem(k); }
+  } else if (stashedTourFlags) {
+    for (const k of TOUR_FLAGS) {
+      if (stashedTourFlags[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, stashedTourFlags[k]);
+    }
+    stashedTourFlags = null;
+  }
+  document.body.classList.toggle("rehearsing-onboarding", on);
+  devRehearsalBadge(on);
+  // Re-enter the flow from the top. While rehearsing, an open project must not send
+  // boot() straight to the workspace, so the gate below holds it on the first screens.
+  await boot();
+}
+
+// A small always-visible marker, so a rehearsal is never mistaken for the real thing.
+function devRehearsalBadge(on) {
+  let el = document.getElementById("dev-rehearsal-badge");
+  if (!on) { if (el) el.remove(); return; }
+  if (el) return;
+  el = document.createElement("div");
+  el.id = "dev-rehearsal-badge";
+  el.textContent = COPY.dev.rehearsalBadge;
+  el.title = COPY.dev.rehearsalBadgeTip;
+  document.body.appendChild(el);
+}
+
+if (window.desktop.onRehearseOnboarding) {
+  window.desktop.onRehearseOnboarding(({ on }) => { setOnboardingRehearsal(!!on); });
+}
 
 // ---- Key gate ----------------------------------------------------------------
 async function saveKey() {

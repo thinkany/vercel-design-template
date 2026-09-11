@@ -4229,6 +4229,7 @@ ipcMain.handle("agent:cancelIntake", (_event, { id }) => {
 
 // ---- Key IPC ----------------------------------------------------------------
 ipcMain.handle("key:status", () => {
+  if (rehearsing()) return { hasKey: false, keyHint: null }; // dev: walking the first run
   const key = process.env.ANTHROPIC_API_KEY || "";
   return { hasKey: !!key, keyHint: key ? key.slice(-4) : null };
 });
@@ -4277,8 +4278,18 @@ ipcMain.handle("log:reveal", () => { const d = appLog.logsDir(); if (d) { fs.mkd
 // How the app is used (Rob 2026-09-09): "personal" (just for me) hides the Company Profile
 // rail icon, drawer and the Publish drawer's company messaging; "company" keeps them. Asked
 // once on first launch (before the key), changeable under Profile in the Publish drawer.
-ipcMain.handle("usage:get", () => { const u = loadUiState().usage; return { usage: u === "personal" || u === "company" ? u : null }; });
-ipcMain.handle("usage:set", (_e, { usage } = {}) => { if (usage !== "personal" && usage !== "company") return { ok: false }; setUiState({ usage }); return { ok: true, usage }; });
+ipcMain.handle("usage:get", () => {
+  if (rehearsing()) return { usage: null }; // dev: unanswered, so the first screen shows
+  const u = loadUiState().usage; return { usage: u === "personal" || u === "company" ? u : null };
+});
+ipcMain.handle("usage:set", (_e, { usage } = {}) => {
+  if (usage !== "personal" && usage !== "company") return { ok: false };
+  // Rehearsing: the choice is answered for this walk-through only, never written, so the
+  // real one (and whether the Company Profile shows) is exactly as it was afterwards.
+  if (rehearsing()) return { ok: true, usage, rehearsed: true };
+  setUiState({ usage });
+  return { ok: true, usage };
+});
 ipcMain.handle("narrate:get", () => ({ enabled: narrateEnabled() }));
 ipcMain.handle("narrate:set", (_e, { enabled } = {}) => { setUiState({ buildNarrate: !!enabled }); return { ok: true, enabled: !!enabled }; });
 ipcMain.handle("narrate:line", async (_e, { phase, title, bits } = {}) => {
@@ -4421,6 +4432,11 @@ ipcMain.handle("model:set", (_event, { model }) => {
 ipcMain.handle("key:save", async (_event, { key }) => {
   const k = (key || "").trim();
   if (!k) return { ok: false, error: "Paste your key first." };
+  // Rehearsing the first run: accept the step without validating or storing anything.
+  // Otherwise walking the flow would demand a real key at each step and overwrite the
+  // one already connected.
+  if (rehearsing()) return { ok: true, rehearsed: true };
+
   const v = await validateKey(k);
   if (!v.ok) return v;
   try {
@@ -4432,6 +4448,7 @@ ipcMain.handle("key:save", async (_event, { key }) => {
   return { ok: true };
 });
 ipcMain.handle("key:clear", () => {
+  if (rehearsing()) return { ok: true, rehearsed: true }; // dev walkthrough: nothing is really removed
   removeStoredKey();
   delete process.env.ANTHROPIC_API_KEY;
   return { ok: true };
@@ -4440,7 +4457,7 @@ ipcMain.handle("key:clear", () => {
 // ---- License IPC ------------------------------------------------------------
 ipcMain.handle("license:status", () => {
   const key = (process.env.DERIVE_LICENSE_KEY || "").trim();
-  return { hasLicense: !!key, hint: key ? key.slice(-4) : null };
+  return asFreshInstall({ hasLicense: !!key, hint: key ? key.slice(-4) : null });
 });
 
 // "Start from Figma": after /figma-ingest writes .thinkany/references/figma.json, the renderer reads
@@ -4553,6 +4570,11 @@ ipcMain.handle("figma:uploadLogo", async () => {
 ipcMain.handle("license:save", async (_event, { key }) => {
   const k = (key || "").trim();
   if (!k) return { ok: false, error: "Enter your license key first." };
+  // Rehearsing the first run: accept the step without validating or storing anything.
+  // Otherwise walking the flow would demand a real key at each step and overwrite the
+  // one already connected.
+  if (rehearsing()) return { ok: true, rehearsed: true };
+
   const v = await validateLicense(k);
   if (!v.ok) return v;
   try {
@@ -4564,6 +4586,7 @@ ipcMain.handle("license:save", async (_event, { key }) => {
   return { ok: true };
 });
 ipcMain.handle("license:clear", () => {
+  if (rehearsing()) return { ok: true, rehearsed: true }; // dev walkthrough: nothing is really removed
   removeStoredLicense();
   delete process.env.DERIVE_LICENSE_KEY;
   return { ok: true };
@@ -4571,11 +4594,16 @@ ipcMain.handle("license:clear", () => {
 // Design/Research/Director bundle license (DESIGN_LICENSE_KEY) — same shape, its own key.
 ipcMain.handle("license:designStatus", () => {
   const key = (process.env.DESIGN_LICENSE_KEY || "").trim();
-  return { hasLicense: !!key, hint: key ? key.slice(-4) : null };
+  return asFreshInstall({ hasLicense: !!key, hint: key ? key.slice(-4) : null });
 });
 ipcMain.handle("license:designSave", async (_event, { key }) => {
   const k = (key || "").trim();
   if (!k) return { ok: false, error: "Enter your license key first." };
+  // Rehearsing the first run: accept the step without validating or storing anything.
+  // Otherwise walking the flow would demand a real key at each step and overwrite the
+  // one already connected.
+  if (rehearsing()) return { ok: true, rehearsed: true };
+
   const v = await validateDesignLicense(k);
   if (!v.ok) return v;
   try { storeDesignLicense(k); } catch (e) { return { ok: false, error: `Could not save the license: ${e.message}` }; }
@@ -4585,6 +4613,7 @@ ipcMain.handle("license:designSave", async (_event, { key }) => {
   return { ok: true };
 });
 ipcMain.handle("license:designClear", () => {
+  if (rehearsing()) return { ok: true, rehearsed: true }; // dev walkthrough: nothing is really removed
   removeStoredDesignLicense();
   delete process.env.DESIGN_LICENSE_KEY;
   resetMetaCache();
@@ -4594,11 +4623,16 @@ ipcMain.handle("license:designClear", () => {
 // The optional Unsplash key (image sourcing).
 ipcMain.handle("unsplash:status", () => {
   const key = (process.env.UNSPLASH_ACCESS_KEY || "").trim();
-  return { hasLicense: !!key, hint: key ? key.slice(-4) : null };
+  return asFreshInstall({ hasLicense: !!key, hint: key ? key.slice(-4) : null });
 });
 ipcMain.handle("unsplash:save", async (_event, { key }) => {
   const k = (key || "").trim();
   if (!k) return { ok: false, error: "Paste your Unsplash access key first." };
+  // Rehearsing the first run: accept the step without validating or storing anything.
+  // Otherwise walking the flow would demand a real key at each step and overwrite the
+  // one already connected.
+  if (rehearsing()) return { ok: true, rehearsed: true };
+
   const v = await validateUnsplashKey(k);
   if (!v.ok) return v;
   try { storeUnsplashKey(k); } catch (e) { return { ok: false, error: `Could not save the key: ${e.message}` }; }
@@ -4606,6 +4640,7 @@ ipcMain.handle("unsplash:save", async (_event, { key }) => {
   return { ok: true };
 });
 ipcMain.handle("unsplash:clear", () => {
+  if (rehearsing()) return { ok: true, rehearsed: true }; // dev walkthrough: nothing is really removed
   removeStoredUnsplashKey();
   delete process.env.UNSPLASH_ACCESS_KEY;
   return { ok: true };
@@ -4614,11 +4649,16 @@ ipcMain.handle("images:usage", () => readImageUsage());
 // The optional Pexels key (image sourcing, second library).
 ipcMain.handle("pexels:status", () => {
   const key = (process.env.PEXELS_API_KEY || "").trim();
-  return { hasLicense: !!key, hint: key ? key.slice(-4) : null };
+  return asFreshInstall({ hasLicense: !!key, hint: key ? key.slice(-4) : null });
 });
 ipcMain.handle("pexels:save", async (_event, { key }) => {
   const k = (key || "").trim();
   if (!k) return { ok: false, error: "Paste your Pexels API key first." };
+  // Rehearsing the first run: accept the step without validating or storing anything.
+  // Otherwise walking the flow would demand a real key at each step and overwrite the
+  // one already connected.
+  if (rehearsing()) return { ok: true, rehearsed: true };
+
   const v = await validatePexelsKey(k);
   if (!v.ok) return v;
   try { storePexelsKey(k); } catch (e) { return { ok: false, error: `Could not save the key: ${e.message}` }; }
@@ -4626,13 +4666,38 @@ ipcMain.handle("pexels:save", async (_event, { key }) => {
   return { ok: true };
 });
 ipcMain.handle("pexels:clear", () => {
+  if (rehearsing()) return { ok: true, rehearsed: true }; // dev walkthrough: nothing is really removed
   removeStoredPexelsKey();
   delete process.env.PEXELS_API_KEY;
   return { ok: true };
 });
+// ---- Onboarding rehearsal (dev only) -----------------------------------------
+// Walking the first-run flow normally means unplugging every key, which is both
+// tedious and a good way to lose one. This makes the app PRETEND it is a fresh
+// install for as long as it is on: the status handlers below report "not connected"
+// and the renderer replays the onboarding, while every stored key, the usage choice
+// and the real UI state are left exactly as they were. Nothing is written, so the
+// way out is to turn it off (or restart the app).
+//
+// Unpackaged only: `dev:rehearseOnboarding` is refused in a packaged build, and the
+// menu item that turns it on does not exist there either.
+let onboardingRehearsal = false;
+const rehearsing = () => onboardingRehearsal && !app.isPackaged;
+/** A key status handler's answer while rehearsing: connected keys read as absent. */
+const asFreshInstall = (real) => (rehearsing() ? { hasLicense: false, hint: null } : real);
+
+ipcMain.handle("dev:rehearseOnboarding", (_e, { on } = {}) => {
+  if (app.isPackaged) return { ok: false, error: "Not available in a packaged build." };
+  onboardingRehearsal = !!on;
+  appLog.write("info", "dev", `onboarding rehearsal ${onboardingRehearsal ? "on" : "off"}`);
+  return { ok: true, on: onboardingRehearsal };
+});
+ipcMain.handle("dev:rehearsalStatus", () => ({ on: rehearsing(), dev: !app.isPackaged }));
+
 // Which connected libraries carry video, in the order find-video.mjs walks them. The
 // intake's hero-media sub-choice is gated on this being non-empty.
 ipcMain.handle("video:sources", () => {
+  if (rehearsing()) return []; // dev: no library connected yet, so video gates itself off
   const out = [];
   if ((process.env.PEXELS_API_KEY || "").trim()) out.push("pexels");
   if ((process.env.PIXABAY_API_KEY || "").trim()) out.push("pixabay");
@@ -4641,11 +4706,16 @@ ipcMain.handle("video:sources", () => {
 // The optional Pixabay key (image sourcing, third library; also carries video).
 ipcMain.handle("pixabay:status", () => {
   const key = (process.env.PIXABAY_API_KEY || "").trim();
-  return { hasLicense: !!key, hint: key ? key.slice(-4) : null };
+  return asFreshInstall({ hasLicense: !!key, hint: key ? key.slice(-4) : null });
 });
 ipcMain.handle("pixabay:save", async (_event, { key }) => {
   const k = (key || "").trim();
   if (!k) return { ok: false, error: "Paste your Pixabay API key first." };
+  // Rehearsing the first run: accept the step without validating or storing anything.
+  // Otherwise walking the flow would demand a real key at each step and overwrite the
+  // one already connected.
+  if (rehearsing()) return { ok: true, rehearsed: true };
+
   const v = await validatePixabayKey(k);
   if (!v.ok) return v;
   try { storePixabayKey(k); } catch (e) { return { ok: false, error: `Could not save the key: ${e.message}` }; }
@@ -4653,6 +4723,7 @@ ipcMain.handle("pixabay:save", async (_event, { key }) => {
   return { ok: true };
 });
 ipcMain.handle("pixabay:clear", () => {
+  if (rehearsing()) return { ok: true, rehearsed: true }; // dev walkthrough: nothing is really removed
   removeStoredPixabayKey();
   delete process.env.PIXABAY_API_KEY;
   return { ok: true };
@@ -5775,6 +5846,28 @@ function buildAppMenu() {
       // current project ALREADY has, so the contact sheet can be exercised (and its framing
       // judged on real content) without paying for another review turn.
       { label: "Recapture Art Director thumbnails", click: () => recaptureAdThumbs() },
+      { type: "separator" },
+      // Walk the first-run flow without unplugging anything. Nothing is written: the
+      // status handlers report "not connected" while this is on, and the real keys,
+      // the usage choice and the tour flags come back the moment it is turned off.
+      {
+        label: "Walk through onboarding (keys stay connected)",
+        click: () => {
+          if (!mainWindow || mainWindow.isDestroyed()) return;
+          onboardingRehearsal = true;
+          appLog.write("info", "dev", "onboarding rehearsal on (menu)");
+          mainWindow.webContents.send("dev:rehearseOnboarding", { on: true });
+        },
+      },
+      {
+        label: "Stop walking through onboarding",
+        click: () => {
+          if (!mainWindow || mainWindow.isDestroyed()) return;
+          onboardingRehearsal = false;
+          appLog.write("info", "dev", "onboarding rehearsal off (menu)");
+          mainWindow.webContents.send("dev:rehearseOnboarding", { on: false });
+        },
+      },
     ] }]),
   ]));
 }

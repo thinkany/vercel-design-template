@@ -1273,6 +1273,12 @@ window.COPY = {
     couldNotSave: "Could not save the key.",
   },
 
+  // ── Developer-only affordances (never shown in a packaged build) ───────────
+  dev: {
+    rehearsalBadge: "Onboarding walkthrough",
+    rehearsalBadgeTip: "You are walking the first-run flow. Your keys are still connected; nothing you do here changes them. Turn it off from the Developer menu.",
+  },
+
   // ── Usage gate — the first screen on a new install, before the key ──────────
   usageGate: {
     heading: "How do you plan on using thinkany design?",

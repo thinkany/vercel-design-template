@@ -1967,6 +1967,15 @@
       .ihero-chip.selected .ihero-cap { font-weight: 600; }
       .ihero-chip:disabled { cursor: default; opacity: .5; }
 
+      /* dev-only: the onboarding-walkthrough marker. Deliberately loud, so a rehearsal
+         is never mistaken for the real first run. */
+      #dev-rehearsal-badge {
+        position: fixed; z-index: 9999; left: 50%; transform: translateX(-50%); bottom: 14px;
+        font-size: 11.5px; font-weight: 600; letter-spacing: .02em;
+        padding: 6px 14px; border-radius: 999px; cursor: default;
+        background: #1a1a1a; color: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.25);
+      }
+
       /* hero background material — a nested sub-choice revealed under the full-screen
          tile, and only when a library that carries video is connected. */
       .ihero-media { margin-top: 14px; }

@@ -44,6 +44,23 @@ The old `project/` worktree (scaffold-only on `main`) is retired.
   with `git checkout` once electron-builder is done (see below), so uncommitted edits to
   those files would be lost. The stripper refuses to start on a dirty tree for that reason.
 
+## Developer menu (unpackaged only)
+
+`npm run desktop` adds a **Developer** menu that never ships in a DMG. Besides the
+lens-example renderers and the Art Director thumbnail recapture, it holds:
+
+**Walk through onboarding (keys stay connected)** — replays the first-run flow (usage
+choice, key gate, project chooser, walkthrough tour) without unplugging anything. While it
+is on, main reports every credential as absent and **refuses every write**: saving a key,
+clearing one, or answering the usage question all no-op, so you can type nonsense into any
+field and your real keys, licences and usage choice are untouched. The tour flags in
+localStorage are stashed and handed back when you stop. A dark pill at the bottom of the
+window marks the session so a rehearsal is never mistaken for the real thing.
+
+Turn it off from the same menu ("Stop walking through onboarding"), or restart the app;
+the flag lives in memory only. `desktop/dev/rehearsal.test.cjs` pins the guards, including
+that each one sits *before* the write it protects.
+
 ## What ships in the bundle
 
 The app code is packed into `app.asar`, so `Show Package Contents` no longer exposes a
