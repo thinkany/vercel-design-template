@@ -1894,7 +1894,8 @@ const TOUR_STEPS = [
   // In the drawer the tips sit below the buttons so neither button is covered.
   { copy: "newProject", onEnter: () => onGate() || ensureModal("projects"), target: () => onGate() ? createproject : inDrawer("project-create")(), placement: () => onGate() ? "right" : "bottom" },
   { copy: "openProject", onEnter: () => onGate() || ensureModal("projects"), target: () => onGate() ? openproject : inDrawer("project-switch")(), placement: () => onGate() ? "right" : "bottom" },
-  { copy: () => onGate() ? "afterCreate" : "afterCreateOpen", onEnter: () => onGate() || ensureModal("projects"), target: () => onGate() ? gateCard() : inDrawer("project-create")(), placement: () => onGate() ? "right" : "bottom" },
+  // No "what happens next" tip here: the start screen the designer lands on names both
+  // ways to begin and describes each, which is the moment they actually need it.
   // Last: the "i" in the rail, where this walkthrough and the rest of the help live for later.
   { copy: "help", onEnter: () => closeModal(), target: () => railHelp, placement: "right", advanceOnClick: true },
 ];

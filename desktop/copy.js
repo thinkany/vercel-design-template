@@ -1773,10 +1773,6 @@ window.COPY = {
         body: "Every design lives in its own project folder, separate from the app. This is where you start a new one or jump between recent ones. Let’s open it.",
         next: "Open",
       },
-      afterCreateOpen: {
-        title: "What happens next",
-        body: "When a new project opens, you pick how to begin. Get Designing asks a few questions about the site and starts designing from your answers. With a Figma Export license you also get Start from Figma, which imports a Figma frame to seed the brand and, if it’s a page, designs from it. Without the license, Get Designing starts right away.",
-      },
       help: {
         title: "Help, whenever you need it",
         body: "Everything you have just seen lives behind this icon: replay this walkthrough, read how each part of the studio works, and find the version and your licenses. Come back to it any time.",
@@ -1792,10 +1788,6 @@ window.COPY = {
       openProject: {
         title: "Open an existing project",
         body: "Have a project folder from before, or from another machine? Open it here. Recent projects are also one click away under Switch Projects, at the top of the rail.",
-      },
-      afterCreate: {
-        title: "What happens next",
-        body: "Once the project opens, you pick how to begin. Get Designing asks a few questions about the site and starts designing from your answers. With a Figma Export license you also get Start from Figma, which imports a Figma frame to seed the brand and, if it’s a page, designs from it. Without the license, Get Designing starts right away. Ready? Pick New project.",
       },
     },
   },
