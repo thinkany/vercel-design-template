@@ -4482,6 +4482,33 @@ function siteTypeFieldControl(f, value, onChange, ctx) {
     let cur = value && value.src ? { src: value.src, alt: value.alt || "" } : "";
     wrap.appendChild(siteImageControl(cur, (next) => { cur = next; change(); }));
     get = () => cur;
+  } else if (f.kind === "video") {
+    // A clip plus the poster still that stands in for it. The poster is edited with the
+    // normal image control (upload, pick, drop); the clip is chosen from what the
+    // project already holds. Uploading a NEW clip, and deriving its poster, is not wired
+    // yet, so this never pretends it is: the hint says where a clip comes from.
+    let cur = {
+      src: (value && value.src) || "",
+      poster: (value && value.poster) || "",
+      alt: (value && value.alt) || "",
+    };
+    const emit = () => change();
+    const clipRow = siteEl("div", "site-kv");
+    clipRow.appendChild(siteEl("div", "k", S.videoClipLabel));
+    const clip = document.createElement("input");
+    clip.className = "field";
+    clip.placeholder = S.videoClipPlaceholder;
+    clip.value = cur.src;
+    clip.addEventListener("input", () => { cur.src = clip.value.trim(); emit(); });
+    clipRow.appendChild(clip);
+    clipRow.appendChild(siteEl("div", "sess-desc", S.videoClipHint));
+    wrap.appendChild(clipRow);
+    wrap.appendChild(siteImageControl(
+      cur.poster ? { src: cur.poster, alt: cur.alt } : "",
+      (next) => { cur.poster = (next && next.src) || ""; cur.alt = (next && next.alt) || ""; emit(); },
+      { label: S.videoPosterLabel },
+    ));
+    get = () => (cur.src && cur.poster ? { src: cur.src, poster: cur.poster, alt: cur.alt } : "");
   } else if (f.kind === "link") {
     const lab = document.createElement("input"); lab.className = "field"; lab.placeholder = S.linkLabel; lab.value = (value && value.label) || "";
     const href = document.createElement("input"); href.className = "field"; href.placeholder = S.linkHref; href.value = (value && value.href) || ""; href.setAttribute("list", siteLinkListId()); href.autocomplete = "off";

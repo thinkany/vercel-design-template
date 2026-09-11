@@ -529,11 +529,23 @@ weighting, `videoSources` gating, Pixabay in Keys & Licenses.
 **P5, skills + promote.** `design.md` §4b-video and the §4b corrections, motion contract,
 promote-blocks/design-block schema, publish weight summary.
 
-**P6, the CMS `video` field kind (§6.1).** Schema inference, the editor branch, MP4 upload,
-poster derivation via the capture bridge, size display, phone-upload parity. Separated from
-P5 because poster derivation is the one piece with real unknowns, and everything before it
-ships a usable feature without it: a design can carry video the designer sources, P6 is what
-lets a client change it later.
+**P6, video UPLOAD in the CMS.** The field kind, its schema fragment, the inference and a
+working editor shipped with P5; what remains is uploading a NEW clip.
+
+Found while building P5, and it changes this phase: `.mp4` and `.mov` are already accepted
+by the media importer, but as **files** (`public/files`, `FILE_EXT` in `main.cjs`), not as
+images. So an upload path half exists and lands in the wrong place for a video field, with
+no poster. P6 is therefore:
+
+- route a video upload to `public/video/` rather than `public/files/`;
+- derive the poster (the unproven piece, see open question 4);
+- show the file weight inline, since a client swapping in a 60 MB phone clip is the
+  realistic failure mode;
+- phone-upload parity.
+
+Until then the field is editable, not uploadable: the poster uses the normal image control
+(upload, pick, drop) and the clip is a path to something the project already holds. The
+copy says so rather than implying an upload that would silently fail.
 
 ---
 

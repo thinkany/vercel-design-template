@@ -149,7 +149,12 @@ section's `data-block` in the design.
    a background, a photo, a logo or a poster: never a bare string path. The CMS
    turns `image` props into an upload field and enum props into a choice; a designer
    is never asked to type a path or a name.
-10. **Shared prop fragments** come from `site/blocks/lib/schema.ts` (`image`,
+10. **Every video is the `video` fragment** (`{ src, poster, alt }`), never a bare
+   string and never the `image` fragment. The `poster` key is what tells the CMS the
+   field is video, and the still is load-bearing (reduced motion, the Figma export, the
+   moment before the first frame). A section built with `<VideoBackground>` or
+   `<VideoFigure>` promotes with its clip AND poster paths as one `video` prop.
+11. **Shared prop fragments** come from `site/blocks/lib/schema.ts` (`image`, `video`,
    `link`, `anchor`); extend that file rather than redefining shapes per block.
 
 **THE HEADER IS NOT PROMOTED.** `site/blocks/lib/Header.tsx` (CORE) already renders

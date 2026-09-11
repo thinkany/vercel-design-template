@@ -370,7 +370,8 @@ file only when you're about to **change** it:
    bleeding photo in `vw`/`cqw` or pull it with a negative margin beside copy, and
    never use `fr` columns for the pair: those put the photo and the copy on different
    references, so one of them drifts as the viewport changes. Below `@lg` the pair
-   stacks in one column with the section's own `px-8`.
+   stacks in one column with the section's own `px-8`. A `<VideoFigure>` in the media
+   half follows this rule exactly as a photo does.
 
 8. **Parallax comes from `<Parallax>`, never from CSS tricks.** When the designer asks
    for parallax (a photo drifting slower than the page), wrap the image in `<Parallax>`
@@ -499,6 +500,83 @@ Without a key, source over plain HTTP:
    fetched (the badge links to it). `DesignSurface` reads this and shows a small "not free
    to reuse" badge (lower-left, local-dev only, excluded from the Figma export + Vercel
    preview).
+
+## 4b-video. Video, when a library that carries it is connected
+
+**`PIXABAY=on` or `PEXELS=on` in the session-start call → footage is available.**
+Unsplash is stills-only, so a project with only that key has no video: build every spot
+with a still image and don't mention video. (A "Video sourcing" block in your context
+says the same thing and names the libraries.)
+
+Video is a **material**, like a photograph, not a section type. Reach for it when the
+brief asks for it, when the designer picked a video hero, or when a section genuinely
+reads better moving. A still photograph is the right answer most of the time.
+
+### Where it may go
+
+| Section shape | Treatment |
+|---|---|
+| Full-screen hero with copy over it | `<VideoBackground>` + scrim, copy in a `relative z-10` sibling |
+| Full-bleed interstitial / CTA band | `<VideoBackground>` + scrim |
+| Alternating copy/media row | `<VideoFigure>` in the media half |
+| Split hero, showcase, product section | `<VideoFigure>`, in flow |
+| Card grids, testimonials, logo rows, footers | **No video.** Stills only. |
+
+Hard limits, so a page doesn't turn into a showreel: **at most one `<VideoBackground>`
+per page**, **at most two video spots in total** unless the designer asks for more, and
+never a clip in the first paint of a page whose brief asks for speed.
+
+### Sourcing
+
+```bash
+node scripts/find-video.mjs search "aerial coastline at dusk" --orientation landscape --per 8
+node scripts/find-video.mjs get <id> --source <the search's source> --out public/video/hero.mp4 --spot background
+```
+
+`search` walks the connected libraries (Pexels, then Pixabay) and reports the one that
+answered, with each candidate's duration, orientation and the file sizes available. Pick
+by what the section needs; 6 to 20 seconds loops well. `--spot background` (a full-bleed
+hero) or `--spot figure` (a content row) sets the size it takes.
+
+`get` writes the clip **and a poster still beside it** (`hero.mp4` + `hero.poster.avif`)
+and records the credit in `public/video/credits.json`. **Always pass both paths to the
+component.** If it reports `overCap`, the clip is heavier than the guide for that spot:
+keep it, and say so in the wrap-up so the designer can decide.
+
+Exit 3 = no video library, 4 = budget spent, 5 = nothing matched. In every case build
+that spot with a still image and mention it in the wrap-up. One search per spot, at most
+a second with a reworded query, never a loop.
+
+### Building it
+
+**Never write a bare `<video>`.** These two components carry the muting, looping, poster,
+reduced-motion and Figma-capture behaviour, and they promote to the site unchanged:
+
+```tsx
+<section className="relative fill-screen">
+  <VideoBackground src="/video/hero.mp4" poster="/video/hero.poster.avif" />
+  <div className="relative z-10 ...">...copy...</div>
+</section>
+
+<VideoFigure src="/video/process.mp4" poster="/video/process.poster.avif"
+             className="aspect-[4/3] w-full rounded-xl" label="Our process" />
+```
+
+from `@/app/components/VideoBackground` and `@/app/components/VideoFigure`.
+
+- The background is **decoration**: always muted, always looping, never focusable, never
+  announced. That is not configurable, and it is why copy goes in a sibling above it,
+  never inside it.
+- The scrim is `scrim="ink"` (the default, off the palette) or `"soft"`, or `"none"` with
+  your own overlay as a child. **Never a hardcoded colour**: use `ta-ink` like any other
+  scrim.
+- `<VideoFigure>` is texture by default (decorative, silent, out of the tab order). Add
+  `controls` ONLY when the clip carries meaning, and then give it a `label`: that makes it
+  focusable, operable and announced.
+- Both obey the anchored two-column rule (rule 7) exactly as an image does.
+
+Both render the poster AND the clip, and `motion.css` decides which shows, so reduced
+motion and the Figma capture get the still automatically. Don't add your own guard.
 
 ## 4c. Global chrome & menus, shipped by DesignSurface, don't rebuild
 
@@ -664,6 +742,7 @@ lost on the published site unless it has the CSS translation below.
 |---|---|---|
 | Reveal on scroll (fade / slide / stagger in) | `motion` `whileInView` (`initial`/`animate`, `viewport={{ once: true }}`), or the `<Reveal>` pattern | `<Reveal delay>` (a `data-reveal` div, CSS + one observer). Carries. |
 | Parallax (a photo drifting slower than the page) | `<Parallax>` (rule 8) | the same component, CSS only. Carries. |
+| Video (a moving hero background, a clip in a content row) | `<VideoBackground>` / `<VideoFigure>` (§4b-video) | the same components, CSS only. Carries. |
 | Scroll-linked progress (a bar filling, a mask opening, a scrub) | CSS scroll-driven animation: `animation-timeline: view()` / `scroll()` in the variation's `styles/globals.css` (promoted: `site/blocks/blocks.css`), wrapped in `@supports`, on an `overflow-clip` (never `hidden`) ancestor chain | the same CSS. Carries. |
 | Ambient loops (drift, bob, rotate, marquee, pulse) | a CSS `@keyframes` + class in the variation's `styles/globals.css` (promoted: `site/blocks/blocks.css`); not a `motion` `repeat: Infinity` | the keyframe moves to `site/blocks/blocks.css`. Carries. |
 | Hover / focus / press micro-interactions | Tailwind `transition-*`, `hover:`, `group-hover:`, `focus-visible:`; `motion` `whileHover` only for physics a transition can't do | CSS. Carries (a `whileHover` is rewritten as a transition, so keep it simple). |

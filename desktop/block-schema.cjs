@@ -158,6 +158,9 @@ function zodFields(schema, out, at, depth, desc) {
       const shape = typeof d.shape === "function" ? d.shape() : d.shape;
       const keys = Object.keys(shape);
       if (at) {
+        // { src, poster } is the video fragment; { src } alone is the image one. The
+        // poster is what tells them apart, and why it is required in the fragment.
+        if (keys.includes("src") && keys.includes("poster")) { out[at] = { kind: "video" }; return; }
         if (keys.includes("src")) { out[at] = { kind: "image" }; return; }
         const list = out[at] && out[at].kind === "list"; // the items of a list keep the list's kind
         if (keys.length === 2 && keys.includes("label") && keys.includes("href")) { if (!list) out[at] = { kind: "link" }; }
