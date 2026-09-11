@@ -11080,7 +11080,9 @@ async function showAdOnPage(rec) {
   closeRecModal(); closeModal();
   // Walk the whole active list from this rec, so Next steps through every item; fall back to
   // just this rec when it isn't in the active list (e.g. opened from the archive).
-  let recs = directorState.active || [];
+  // A COPY, not the live array: dismissRec reassigns directorState.active, so an alias would
+  // silently go stale mid-walk. The walk owns its list and keeps it in step itself.
+  let recs = (directorState.active || []).slice();
   let idx = recs.findIndex((r) => r && r.id === rec.id);
   if (idx < 0) { recs = [rec]; idx = 0; }
   setActiveTab(tab); // the walk happens on the design, whatever tab was active
@@ -11199,10 +11201,27 @@ function updateAdToolbar() {
   renderAdBarActions(adToolbarEl.querySelector(".ad-tb-actions"), rec);
 }
 
+// Dismiss from the bar — the one action that does NOT exit the review. Triaging a queue is
+// the whole point of the walk, so a dismissed rec drops out of the list and the walk steps
+// straight to the next one, in place. Dismissing the last one leaves nothing to look at, so
+// that (and only that) ends the review and returns to the drawer.
+function adReviewDismiss() {
+  if (!adReview) return;
+  const rec = adReview.recs[adReview.idx];
+  if (!rec) return;
+  dismissRec(rec); // active → archive, persisted (+ rail indicator, + drawer if open)
+  const recs = adReview.recs.filter((r) => r && r.id !== rec.id);
+  if (!recs.length) { exitAdReview(); openModal("director"); return; }
+  adReview.recs = recs;
+  if (adReview.idx >= recs.length) adReview.idx = 0; // dismissed the last → wrap to the first
+  adHighlightCurrent(); // repaints the overlay + rebuilds the bar for the new current rec
+}
+
 // Build the action buttons for the current rec INSIDE the review-bar dropdown — the same
-// actions as the suggestion modal, so the designer can act mid-walkthrough. Each action exits
-// the review (clears the overlay, restores the preview) then runs; "Make the call" reveals its
-// field inline first. Rebuilt each step, so the field always starts fresh + collapsed.
+// actions as the suggestion modal, so the designer can act mid-walkthrough. The primary
+// action exits the review (clears the overlay, restores the preview) then runs; "Make the
+// call" reveals its field inline first; Dismiss stays in the walk and steps to the next rec.
+// Rebuilt each step, so the field always starts fresh + collapsed.
 function renderAdBarActions(el, rec) {
   if (!el) return;
   // Only rebuild when the rec actually changes (a step). Re-rendering for the SAME rec (a caret
@@ -11215,6 +11234,14 @@ function renderAdBarActions(el, rec) {
   const noKey = !appHasKey;
   const isFontRec = rec.kind === "decision" && Array.isArray(rec.fontOptions) && rec.fontOptions.length > 0;
   const row = document.createElement("div"); row.className = "adrec-action-split";
+
+  // Dismiss sits on every rec, whatever its kind — the walk is a triage pass, and "not this
+  // one" is as valid an answer as Apply. It's the quiet action, so it leads the row and
+  // carries no accent (see .ad-tb-actions .adrec-dismiss-btn).
+  const dismiss = document.createElement("button"); dismiss.className = "adrec-dismiss-btn";
+  dismiss.textContent = COPY.director.dismiss; dismiss.title = COPY.director.dismissTip;
+  dismiss.addEventListener("click", () => adReviewDismiss());
+  row.appendChild(dismiss);
 
   if (rec.kind === "code" && rec.apply) {
     const apply = document.createElement("button"); apply.className = "adrec-apply-btn"; apply.textContent = COPY.director.applyThis;
@@ -11239,6 +11266,10 @@ function renderAdBarActions(el, rec) {
       row.appendChild(mkBtn);
     }
     el.append(row, field);
+  } else {
+    // A kind with no one-click action of its own (e.g. a 'code' rec with no apply
+    // instruction): Dismiss is still the whole triage, so the row goes up on its own.
+    el.appendChild(row);
   }
 }
 

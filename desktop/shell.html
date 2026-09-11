@@ -1275,6 +1275,10 @@
       .ad-tb-panel { background: #fff; border-radius: 10px; padding: 14px 16px; color: #1a1a1a; }
       .ad-tb-drop-title { font-weight: 600; font-size: 13.5px; line-height: 1.4; color: #1a1a1a; }
       .ad-tb-why { color: #555; font-size: 12.5px; line-height: 1.5; margin-top: 6px; }
+      /* Dismiss rides along on every rec in the walk, but it's the secondary answer: it sizes
+         to its label and sits left, leaving the primary action the rest of the row. On a rec
+         with no primary action it's alone, and stays its own width rather than stretching. */
+      .ad-tb-actions .adrec-dismiss-btn { flex: 0 0 auto; margin-right: auto; }
       /* Inline font-pick for an actionable type 'decision' (reuses .ifonts / .ifont) */
       .adrec-fontpick-label { font-size: 12.5px; color: #6a6a72; margin-top: 14px; }
       .adrec-fontpick { margin-top: 8px; max-height: 260px; overflow-y: auto; }
