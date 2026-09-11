@@ -632,9 +632,22 @@ never hardcode a hex** (rule 1). The rest is markup discipline, follow these whi
    not just a placeholder; errors are conveyed in **text**, not color alone; group related
    inputs with `<fieldset>/<legend>`.
 
+**The header is already accessible, and not yours to make so.** It is CORE code
+(§4c), and its keyboard and ARIA behaviour is built in and tested: `aria-expanded` /
+`aria-haspopup` / `aria-controls` on each trigger, panels `hidden` while closed (so
+their links are out of both the tab order and the accessibility tree), Left/Right
+along the bar, **ArrowDown to open a menu and move into it** (a hover-opened panel is
+never open for a keyboard user, so Tab alone could not reach its links), Escape to
+close and return focus to the trigger, and focus leaving the header closing whatever
+was open. Don't re-implement any of that, and don't "improve" it through the skin:
+no slot reaches it. A **custom header** is the exception, and then all of the above is
+yours to reproduce, which is one more reason to avoid one.
+
 The shadcn/Radix `ui/*` components are already keyboard- and ARIA-accessible, so when AA mode
 is on, composing from them (rather than hand-rolling) starts you compliant. In AA mode these
-rules are in force and the post-turn audit checks them. **Off (the default): none of this
+rules are in force and the post-turn audit checks them, **including inside every
+dropdown and mega panel**: the audit opens each menu and scans it, so a link's
+contrast or label failing in a panel is caught the same as one in the page body. **Off (the default): none of this
 applies — the palette is written exactly as chosen and the design is authored freely.**
 
 ## 4e. Motion: the library plus CSS, and only what survives to the published site

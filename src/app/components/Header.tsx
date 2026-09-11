@@ -92,8 +92,15 @@ function DropdownPanel({
   return (
     <div
       ref={ref}
+      id={`menu-panel-${id}`}
+      role="group"
+      aria-label={`${name} menu`}
       {...(open ? { "data-block": `menu-${id}`, "data-block-name": `Menu — ${name}`, "data-menu-panel": id } : {})}
       style={pos ?? undefined}
+      // `hidden` while closed, not just a hidden CLASS: that takes the links out of
+      // the tab order and out of the accessibility tree together, so a keyboard user
+      // never tabs into a menu that isn't on screen.
+      hidden={!open}
       className={cx("absolute top-full z-40 min-w-[220px] flex-col", skin.panel, open ? "flex" : "hidden")}
     >
       {menu.links.map((l) => (
@@ -121,7 +128,11 @@ function MegaPanel({
   const showFeature = mega.feature && Boolean(menu.featured);
   return (
     <div
+      id={`menu-panel-${id}`}
+      role="group"
+      aria-label={`${name} menu`}
       {...(open ? { "data-block": `menu-${id}`, "data-block-name": `Menu — ${name}`, "data-menu-panel": id } : {})}
+      hidden={!open}
       className={cx(
         "absolute inset-x-0 top-full z-40 mx-auto max-w-[1200px]",
         skin.panel, skin.panelInner, open ? "block" : "hidden",
@@ -320,9 +331,26 @@ function NavLinks({
 }) {
   // Arrow keys move between top-level items; Enter/Space navigates; a menu-bearing
   // item opens on hover AND on focus, so the nav is reachable without a mouse.
+  // KEYBOARD (WCAG 2.1.1). Left/Right move along the bar. Down opens a menu and
+  // moves into it, which is what makes a panel's links REACHABLE without a mouse:
+  // Tab alone would walk into them only while the panel happens to be open, and a
+  // panel that opens on hover is never open for a keyboard user. Escape closes and
+  // returns focus to the trigger it came from (handled on the header).
   const onKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
+    const trigger = e.currentTarget as HTMLElement;
+    const id = trigger.getAttribute("data-nav-link");
+    if (e.key === "ArrowDown" && id && trigger.getAttribute("aria-haspopup")) {
+      e.preventDefault();
+      setActiveItem(id);
+      // The panel renders on the next frame; move into its first link then.
+      requestAnimationFrame(() => {
+        const panel = document.getElementById(`menu-panel-${id}`);
+        panel?.querySelector<HTMLElement>("a, button")?.focus();
+      });
+      return;
+    }
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    const nav = e.currentTarget.closest("nav");
+    const nav = trigger.closest("header");
     const items = Array.from(nav?.querySelectorAll<HTMLElement>("[data-nav-link]") ?? []);
     const i = items.indexOf(e.target as HTMLElement);
     if (i < 0) return;
@@ -339,7 +367,12 @@ function NavLinks({
           <button
             key={p.id}
             data-nav-link={p.id}
-            {...(hasMenu ? { "data-menu-item": p.id, "aria-expanded": isOpen, "aria-haspopup": "true" } : {})}
+            {...(hasMenu ? {
+              "data-menu-item": p.id,
+              "aria-expanded": isOpen,
+              "aria-haspopup": "true",
+              "aria-controls": `menu-panel-${p.id}`, // names the panel it opens
+            } : {})}
             onMouseEnter={() => hasMenu && setActiveItem(p.id)}
             onFocus={() => setActiveItem(hasMenu ? p.id : null)}
             onKeyDown={onKeyDown}
@@ -379,16 +412,23 @@ export function Header({ onNavigate }: { onNavigate: (page: string) => void }) {
   const config = resolveData<HeaderConfig>(vid, "headerConfig", baseHeaderConfig);
   const skin = resolveData<HeaderSkin>(vid, "headerSkin", baseHeaderSkin);
 
-  // Escape closes whichever menu is open, from anywhere in the header.
+  // Escape closes whichever menu is open, from anywhere in the header, and returns
+  // focus to the trigger that opened it so the keyboard user isn't dropped at the
+  // top of the document (WCAG 2.1.2: no keyboard trap, and a predictable way out).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      const openId = activeItem;
       setActiveItem(null);
       setOpen(false);
+      if (openId) {
+        const trigger = document.querySelector<HTMLElement>(`[data-menu-item="${openId}"]`);
+        trigger?.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setActiveItem, setOpen]);
+  }, [setActiveItem, setOpen, activeItem]);
 
   const navProps = {
     pages, skin, activeItem, setActiveItem, onNavigate,
@@ -484,6 +524,11 @@ export function Header({ onNavigate }: { onNavigate: (page: string) => void }) {
       data-header-placement={config.placement}
       data-header-menu-kind={config.menuKind}
       onMouseLeave={() => setActiveItem(null)}
+      // Tabbing out of the header closes whatever was open, so a panel never lingers
+      // behind the page for a keyboard user who has moved on.
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setActiveItem(null);
+      }}
       // Sticky by default (headerConfig.sticky) so the nav never scrolls away.
       // `sticky` + a high z establishes a stacking context ABOVE the page content,
       // so panels that overflow below the header are never hidden behind a later

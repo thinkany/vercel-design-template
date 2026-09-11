@@ -108,8 +108,14 @@ function DropdownPanel({ id, item, open, onClose }: { id: string; item: Item; op
   return (
     <div
       ref={ref}
+      id={`menu-panel-${id}`}
+      role="group"
+      aria-label={`${item.label} menu`}
       {...(open ? { "data-menu-panel": id } : {})}
       style={pos ?? undefined}
+      // `hidden`, not just a hidden class: out of the tab order and out of the
+      // accessibility tree together, so nobody tabs into an off-screen menu.
+      hidden={!open}
       className={cx("absolute top-full z-40 min-w-[220px] flex-col", headerSkin.panel, open ? "flex" : "hidden")}
     >
       {(item.links || []).map((l) => (
@@ -131,7 +137,11 @@ function MegaPanel({ id, item, open, onClose }: { id: string; item: Item; open: 
   const plain = columns.filter((c) => !c.feature);
   return (
     <div
+      id={`menu-panel-${id}`}
+      role="group"
+      aria-label={`${item.label} menu`}
       {...(open ? { "data-menu-panel": id } : {})}
+      hidden={!open}
       className={cx("absolute inset-x-0 top-full z-40 mx-auto max-w-[1200px]",
         headerSkin.panel, headerSkin.panelInner, open ? "block" : "hidden")}
     >
@@ -188,9 +198,21 @@ function Logo({ siteName, logos }: { siteName: string; logos: Props["logos"] }) 
 function NavLinks({
   items, offset, active, setActive,
 }: { items: Item[]; offset: number; active: string | null; setActive: (id: string | null) => void }) {
+  // WCAG 2.1.1: a panel that opens on hover is never open for a keyboard user, so
+  // ArrowDown opens it and moves in. Escape (on the header) closes and comes back.
   const onKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
+    const trigger = e.currentTarget as HTMLElement;
+    const tid = trigger.getAttribute("data-nav-link");
+    if (e.key === "ArrowDown" && tid && trigger.getAttribute("aria-haspopup")) {
+      e.preventDefault();
+      setActive(tid);
+      requestAnimationFrame(() => {
+        document.getElementById(`menu-panel-${tid}`)?.querySelector<HTMLElement>("a, button")?.focus();
+      });
+      return;
+    }
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    const nav = e.currentTarget.closest("header");
+    const nav = trigger.closest("header");
     const all = Array.from(nav?.querySelectorAll<HTMLElement>("[data-nav-link]") ?? []);
     const i = all.indexOf(e.target as HTMLElement);
     if (i < 0) return;
@@ -208,7 +230,10 @@ function NavLinks({
             key={id}
             href={it.href}
             data-nav-link={id}
-            {...(menu ? { "data-menu-item": id, "aria-expanded": open, "aria-haspopup": "true" } : {})}
+            {...(menu ? {
+              "data-menu-item": id, "aria-expanded": open, "aria-haspopup": "true",
+              "aria-controls": `menu-panel-${id}`,
+            } : {})}
             onMouseEnter={() => menu && setActive(id)}
             onFocus={() => setActive(menu ? id : null)}
             onKeyDown={onKeyDown}
@@ -236,10 +261,17 @@ export function Header({ siteName, logos, nav }: Props) {
   const items = navItems(nav || []);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setActive(null); setOpen(false); } };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const openId = active;
+      setActive(null); setOpen(false);
+      // Return focus to the trigger, so Escape is a way OUT rather than a way to
+      // lose your place (WCAG 2.1.2).
+      if (openId) document.querySelector<HTMLElement>(`[data-menu-item="${openId}"]`)?.focus();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [active]);
 
   // Lock the page behind the drawer (the site's viewport is the frame, so this is
   // the document, not a scroll container).
@@ -315,6 +347,7 @@ export function Header({ siteName, logos, nav }: Props) {
       data-block="header"
       data-header-placement={headerConfig.placement}
       onMouseLeave={() => setActive(null)}
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setActive(null); }}
       className={cx("relative z-[60] w-full", headerConfig.sticky && "sticky top-0", headerSkin.bar)}
     >
       {bar}
