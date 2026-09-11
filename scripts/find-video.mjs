@@ -174,7 +174,7 @@ const publicFields = (v) => ({
 
 /**
  * The smallest rung at or above the spot's target width, else the largest available.
- * Returns { rung, overCap, bytes } — `overCap` is what the caller reports rather than
+ * Returns { rung, overCap, bytes }. `overCap` is what the caller reports rather than
  * silently dropping a heavy clip into the project.
  */
 async function pickRung(sizes, spot) {

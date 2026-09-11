@@ -104,3 +104,36 @@
 [data-capture-ready] .ta-parallax-layer {
   animation: none;
 }
+
+/* VIDEO: <VideoBackground> / <VideoFigure> (src/app/components/, and the same files
+   under site/blocks/lib/ once promoted) render BOTH the poster still and the clip:
+
+     <div data-video-bg|data-video-figure>
+       <img   class="ta-video-still" …>
+       <video class="ta-video-clip"  …>
+     </div>
+
+   and this file decides which one shows. Doing it here rather than in JavaScript is
+   what lets one component serve the design surface AND a promoted site block, which
+   is static HTML with no React runtime to run an effect.
+
+   The clip covers the still while it plays, and is REMOVED (revealing the poster
+   underneath) for `prefers-reduced-motion` and in the Figma capture, where a <video>
+   would serialise as an empty box. `display: none` rather than `visibility: hidden`
+   because a hidden-but-present autoplaying video still downloads and decodes: a visitor
+   who asked for less motion should not pay for the clip they were spared. Both layers
+   are absolutely positioned against the wrapper, so removing one moves nothing. */
+.ta-video-still {
+  z-index: 0;
+}
+.ta-video-clip {
+  z-index: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ta-video-clip {
+    display: none;
+  }
+}
+[data-capture-ready] .ta-video-clip {
+  display: none;
+}
