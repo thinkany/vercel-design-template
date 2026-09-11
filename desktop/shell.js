@@ -1415,6 +1415,121 @@ async function renderSetupStep({ settle = null } = {}) {
  * nothing below jumps), the summary fades in at that size, and only then does the next
  * step arrive. Respects prefers-reduced-motion by doing none of it.
  */
+/**
+ * CLOSE-AND-TRAVEL: an open card answers, shrinks to the summary row it becomes, and
+ * floats up into its resting place. Built for the first-run key steps; written general
+ * so the Get Designing intake can use the same movement (see docs/close-and-travel.md).
+ *
+ *   await closeAndTravel({ card, container, restTop, toHeight, toPadding, toBorderColor,
+ *                          becomeRow, rebuild });
+ *
+ * `card`      the open element (must be a child of `container`)
+ * `container` its scroll/flow parent, `position: relative`
+ * `restTop`   where the row should end up, in pixels from the container's top
+ * `to*`       the geometry of the row it becomes (measure it, do not guess)
+ * `becomeRow` swap the card's contents for the summary; called between the movements
+ * `rebuild`   redraw the real list with the row in place; called once it has landed
+ *
+ * FIVE ORDERING RULES, each of which was a visible bug before it was a rule:
+ *
+ *  1. Leave the flow BEFORE closing, not after. Otherwise the flow spends the close
+ *     pulling everything up to meet the shrinking card, and by the time it travels there
+ *     is no open space left to cross.
+ *  2. Measure the destination AFTER that reflow, so it targets where the slot settled.
+ *  3. Hold the container's height for the whole trip, and never animate it down while
+ *     the card moves: in a flex column shrinking the container drags its rows toward the
+ *     top, so everything above appears to slide down and then ride up with the card.
+ *  4. Rebuild BEFORE releasing the held height. Releasing first leaves a frame where the
+ *     travelling card is still absolute and the container has no in-flow children, so it
+ *     collapses to nothing and everything above it reflows.
+ *  5. Keep expensive side effects (IPC, icon repaints) out of the movement: run them
+ *     after it lands, or they arrive mid-flight and read as a flash.
+ *
+ * Returns false and does nothing when the caller should just swap (reduced motion, or no
+ * Web Animations), so every caller needs a plain fallback path.
+ */
+async function closeAndTravel({
+  card, container, restTop, toHeight, toPadding, toBorderColor,
+  becomeRow, rebuild, closeMs = 260, travelMs = 620,
+}) {
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!card || !container || reduce || !card.animate) return false;
+
+  const cardCs = getComputedStyle(card);
+  const box = card.getBoundingClientRect();
+  const containerBox = container.getBoundingClientRect();
+  const startTop = box.top - containerBox.top;
+
+  // (3) hold the container open, and (1) leave the flow at the size and place it already
+  // occupies, so the card looks unchanged by the move and its slot is freed at once.
+  container.style.height = containerBox.height + "px";
+  Object.assign(card.style, {
+    height: box.height + "px",
+    width: box.width + "px",
+    position: "absolute",
+    left: (box.left - containerBox.left) + "px",
+    top: startTop + "px",
+    margin: "0",
+    overflow: "hidden",
+    willChange: "height, transform",
+  });
+  card.classList.add("travelling");
+
+  // (2) the rows below have closed up: measure the slot now, not before.
+  const rest = typeof restTop === "function" ? restTop() : restTop;
+  const midlineOffset = (box.height - toHeight) / 2;
+  const lift = rest - (startTop + midlineOffset);
+
+  // Close around the midline: the transform holds the centre still while the height goes.
+  const close = card.animate(
+    [
+      { height: box.height + "px", transform: "translateY(0px)", padding: cardCs.padding,
+        borderColor: cardCs.borderTopColor, boxShadow: cardCs.boxShadow },
+      { height: toHeight + "px", transform: `translateY(${midlineOffset}px)`,
+        padding: toPadding, borderColor: toBorderColor, boxShadow: "0 0 0 rgba(0,0,0,0)" },
+    ],
+    { duration: closeMs, easing: "cubic-bezier(.32, 0, .28, 1)", fill: "both" },
+  );
+  for (const c of card.children) {
+    c.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 130, easing: "ease-out", fill: "both" });
+  }
+  try { await close.finished; } catch { return false; }
+
+  // Become the row at the size the close left it. Pin that geometry BEFORE dropping the
+  // animation holding it, or the card flashes back open between the two movements.
+  Object.assign(card.style, {
+    height: toHeight + "px", padding: toPadding, borderColor: toBorderColor,
+    boxShadow: "none", transform: `translateY(${midlineOffset}px)`,
+  });
+  card.getAnimations().forEach((a) => a.cancel());
+  if (becomeRow) becomeRow(card);
+
+  // Float up through the space that opened below it, decelerating into the slot.
+  const glide = card.animate(
+    [{ transform: `translateY(${midlineOffset}px)` }, { transform: `translateY(${midlineOffset + lift}px)` }],
+    { duration: travelMs, easing: "cubic-bezier(.22, .61, .18, 1)", fill: "both" },
+  );
+  try { await glide.finished; } catch { /* re-rendered under us */ }
+
+  card.style.willChange = "";
+  card.classList.remove("travelling");
+
+  // (4) rebuild first, THEN release the held height, easing it to its settled size so the
+  // space closes as the next card arrives rather than snapping a frame ahead of it.
+  const heldHeight = container.getBoundingClientRect().height;
+  if (rebuild) await rebuild();
+  container.getAnimations().forEach((a) => a.cancel());
+  container.style.height = "";
+  const settledHeight = container.getBoundingClientRect().height;
+  if (Math.abs(settledHeight - heldHeight) > 1 && container.animate) {
+    container.animate(
+      [{ height: heldHeight + "px" }, { height: settledHeight + "px" }],
+      { duration: 420, easing: "cubic-bezier(.22, .61, .18, 1)" },
+    );
+  }
+  return true;
+}
+
 let setupAnimating = false;
 /**
  * A step is answered. Two movements, and the shape of them is the point:
@@ -1434,117 +1549,27 @@ async function finishSetupStep(id, how) {
 
   const stack = el("setup-stack");
   const card = stack && stack.querySelector(".setup-step.live");
-  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (!card || reduce || !card.animate) { await renderSetupStep(); refreshRailActivation(); return; }
+  const step = SETUP_STEPS.find((x) => x.id === id);
+  const to = card && stack ? measureDoneRow(id, stack) : null;
   setupAnimating = true;
 
-  // Where it is now, and what it becomes: the row's height and padding come from a real
-  // laid-out element, so the animation never restates numbers the stylesheet owns.
-  const cardCs = getComputedStyle(card);
-  const box = card.getBoundingClientRect();
-  const to = measureDoneRow(id, stack);
+  const moved = to && await closeAndTravel({
+    card, container: stack,
+    // Measured lazily, after the card has left the flow and the rows below have closed up.
+    restTop: () => setupRestingTop(id, stack, to.height) - stack.getBoundingClientRect().top,
+    toHeight: to.height, toPadding: to.padding, toBorderColor: to.borderColor,
+    becomeRow: (el_) => {
+      el_.classList.remove("live");
+      el_.classList.add("setup-done-row");
+      el_.replaceChildren(...buildSetupDoneRow(step, setupState[id]).childNodes);
+    },
+    rebuild: () => renderSetupStep({ settle: id }),
+  });
+  if (!moved) await renderSetupStep({ settle: id }); // reduced motion, or nothing to animate
 
-  // Leave the flow FIRST, at exactly the size and place it currently occupies, so the
-  // card is visually unchanged by the move. The rows below immediately take up the space
-  // it vacated, which is what opens the gap the card then floats up through. Doing this
-  // after the close instead meant the flow pulled everything up while the card was still
-  // shrinking, so by the time it travelled there was no open space left to cross.
-  const stackBox = stack.getBoundingClientRect();
-  const startTop = box.top - stackBox.top;
-  // Hold the stack at its current height first: without the card in flow it would
-  // collapse, and everything under it (the Done button) would jump while the card moved.
-  stack.style.height = stackBox.height + "px";
-  card.style.height = box.height + "px";
-  card.style.width = box.width + "px";
-  card.style.position = "absolute";
-  card.style.left = (box.left - stackBox.left) + "px";
-  card.style.top = startTop + "px";
-  card.style.margin = "0";
-  card.style.overflow = "hidden";
-  card.style.willChange = "height, transform";
-  card.classList.add("travelling"); // rides above the rows it passes
-
-  // The stack reflows without it: the steps below close up, and the slot this card will
-  // land in settles where it belongs. Measure the destination AFTER that has happened.
-  const restTop = setupRestingTop(id, stack, to.height) - stackBox.top;
-  // Closing on the midline leaves the top half a card lower than it began; the travel
-  // covers that as well as the distance to the slot.
-  const midlineOffset = (box.height - to.height) / 2;
-  const lift = restTop - (startTop + midlineOffset);
-
-  // 1. Close around the midline: the centre held still by a transform while the height goes.
-  const CLOSE = 260;
-  const close = card.animate(
-    [
-      { height: box.height + "px", transform: "translateY(0px)", padding: cardCs.padding,
-        borderColor: cardCs.borderTopColor, boxShadow: cardCs.boxShadow },
-      { height: to.height + "px", transform: `translateY(${midlineOffset}px)`,
-        padding: to.padding, borderColor: to.borderColor, boxShadow: "0 0 0 rgba(0,0,0,0)" },
-    ],
-    { duration: CLOSE, easing: "cubic-bezier(.32, 0, .28, 1)", fill: "both" },
-  );
-  // The open card's contents go early, so nothing squashes against the closing edges.
-  for (const c of card.children) {
-    c.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 130, easing: "ease-out", fill: "both" });
-  }
-  try { await close.finished; } catch { setupAnimating = false; refreshRailActivation(); return; }
-
-  // Between the movements: become the row, at the size the close just left it. Pin that
-  // geometry BEFORE dropping the animation holding it, or it flashes back open.
-  card.style.height = to.height + "px";
-  card.style.padding = to.padding;
-  card.style.transform = `translateY(${midlineOffset}px)`;
-  card.style.borderColor = to.borderColor;
-  card.style.boxShadow = "none";
-  card.getAnimations().forEach((a) => a.cancel());
-  card.classList.remove("live");
-  card.classList.add("setup-done-row");
-  card.replaceChildren(...buildSetupDoneRow(SETUP_STEPS.find((x) => x.id === id), setupState[id]).childNodes);
-
-  // 2. Float up through the space that opened below it, decelerating into the slot.
-  //
-  // The stack keeps its full height for the whole trip. Animating it down here was wrong
-  // twice over: in a flex column a shrinking stack drags its rows toward the top, so the
-  // finished rows ABOVE appeared to slide down to meet the closing card and then rise
-  // with it. Nothing but the card should move until the next step arrives, and the stack
-  // gives up its held height at the handover, under the next step's own entrance.
-  const TRAVEL = 620;
-  const glide = card.animate(
-    [
-      { transform: `translateY(${midlineOffset}px)` },
-      { transform: `translateY(${midlineOffset + lift}px)` },
-    ],
-    { duration: TRAVEL, easing: "cubic-bezier(.22, .61, .18, 1)", fill: "both" },
-  );
-  try { await glide.finished; } catch { /* re-rendered under us */ }
-
-  // Hand over to the real stack, drawn with the row already where the card came to rest.
-  // The rows above have not moved and must not: the only change is that the next step is
-  // now in the stack, which is what the released height makes room for. Easing that
-  // release means the space closes as the next card fades in, rather than snapping shut
-  // a frame before it.
-  card.style.willChange = "";
-  card.classList.remove("travelling");
-  const heldHeight = stack.getBoundingClientRect().height;
-
-  // Rebuild BEFORE releasing the pinned height. Releasing first leaves a frame where the
-  // travelling card is still absolute and the stack has no in-flow children at all, so it
-  // collapses to nothing and everything above it reflows: the flash that showed on the
-  // FIRST step, the only one with no finished rows left holding the stack open.
-  await renderSetupStep({ settle: id });
-  stack.getAnimations().forEach((a) => a.cancel());
-  stack.style.height = "";
-  const settledHeight = stack.getBoundingClientRect().height;
-  if (Math.abs(settledHeight - heldHeight) > 1 && stack.animate) {
-    stack.animate(
-      [{ height: heldHeight + "px" }, { height: settledHeight + "px" }],
-      { duration: 420, easing: "cubic-bezier(.22, .61, .18, 1)" },
-    );
-  }
   setupAnimating = false;
-  // Now the rail can catch up with what this step connected. Doing it here rather than
-  // inside the key row keeps its four IPC round-trips and icon toggles off the screen
-  // while the card is still moving.
+  // (5) the rail catches up only now: refreshRailActivation resolves four IPC round-trips
+  // and then toggles icon visibility, which reads as a flash if it lands mid-movement.
   refreshRailActivation();
 }
 

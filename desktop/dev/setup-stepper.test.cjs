@@ -50,87 +50,54 @@ ok(/doneBtn\.hidden = !!nextSetupStep\(\)/.test(render),
   "Done only appears once every step is answered");
 
 // ---- Answering a step is two movements, not a swap --------------------------
-// The card closes around its own midline (so it shuts like a door, not by the bottom
-// riding up to a fixed top), then glides up into the slot it will rest in. Both are
-// measured first, so the card lands exactly where the rebuilt stack draws it.
+// The mechanism lives in closeAndTravel (shared, so Get Designing can use it); the step
+// supplies the measurements. See docs/close-and-travel.md for why each rule exists.
+const travel = shell.slice(shell.indexOf("async function closeAndTravel"), shell.indexOf("let setupAnimating"));
 const finish = shell.slice(shell.indexOf("async function finishSetupStep"), shell.indexOf("/**\n * The top of the slot"));
-ok(/measureDoneRow\(id, stack\)/.test(finish),
-  "the closed size is measured from a real row, not guessed");
-ok(/setupRestingTop\(id, stack/.test(finish),
-  "and so is the slot it travels to");
-// Phase 1: the midline holds still while the height goes.
-ok(/const midlineOffset = \(box\.height - to\.height\) \/ 2/.test(finish),
+
+// (1) out of the flow BEFORE the close, or there is no open space left to cross.
+ok(travel.indexOf('position: "absolute"') < travel.indexOf("const close = card.animate"),
+  "the card leaves the flow before closing, not after");
+// (2) the destination is measured after that reflow.
+ok(/const rest = typeof restTop === "function" \? restTop\(\) : restTop/.test(travel),
+  "the destination may be measured lazily, after the rows below have closed up");
+ok(/restTop: \(\) =>/.test(finish), "and the step measures it that way");
+// The close holds the midline still.
+ok(/const midlineOffset = \(box\.height - toHeight\) \/ 2/.test(travel),
   "the close offsets by half the height lost, which keeps the midline fixed");
-ok(/transform: `translateY\(\$\{midlineOffset\}px\)`/.test(finish),
-  "and the close animates to exactly that offset");
-// Phase 2: from that midline up to the slot, and the lift accounts for the offset.
-ok(/const lift = restTop - \(startTop \+ midlineOffset\)/.test(finish),
-  "the lift is measured from where the close leaves the card, not from where it started");
-ok(/translateY\(\$\{midlineOffset \+ lift\}px\)/.test(finish),
-  "the travel ends on the resting slot");
-ok(finish.indexOf("await close.finished") < finish.indexOf("const glide"),
+ok(/const lift = rest - \(startTop \+ midlineOffset\)/.test(travel),
+  "and the lift is measured from where the close leaves it");
+ok(travel.indexOf("await close.finished") < travel.indexOf("const glide"),
   "the travel begins only once the close has finished");
-// It must leave the flow BEFORE the close, not after. Going absolute afterwards meant
-// the flow pulled everything up while the card was still shrinking, so by the time it
-// travelled there was no open space left to float through.
-ok(/card\.style\.position = "absolute"/.test(finish) && /card\.style\.width = box\.width/.test(finish),
-  "it lifts out of the flow for the trip, with its width pinned first");
-ok(finish.indexOf('card.style.position = "absolute"') < finish.indexOf("const close = card.animate"),
-  "and it does so BEFORE closing, so the space it floats through is already open");
-ok(finish.indexOf("const restTop") > finish.indexOf('card.style.position = "absolute"'),
-  "the destination is measured after the stack has reflowed without it");
-// Nothing under the stack may jump while the card is out of flow.
-ok(/stack\.style\.height = stackBox\.height/.test(finish),
-  "the stack holds its height, so what sits below it does not jump");
-// The stack must NOT shrink during the travel: in a flex column that drags the finished
-// rows above toward the top, which read as them sliding down to meet the closing card
-// and then rising with it. Only the card moves until the next step arrives.
-const travelBlock = finish.slice(finish.indexOf("const TRAVEL"), finish.indexOf("Hand over to the real stack"));
-ok(!/stack\.animate\(/.test(travelBlock),
-  "the stack keeps its full height for the trip: nothing above the card may move");
-// It gives that height up at the handover instead, under the next step's own entrance.
-const handover = finish.slice(finish.indexOf("Hand over to the real stack"));
-ok(/stack\.animate\(/.test(handover),
-  "the held height is released as the next step arrives, not snapped away before it");
-ok(/heldHeight/.test(handover) && /settledHeight/.test(handover),
-  "and it eases between the measured before and after, not a guess");
-// Order matters here. Releasing the pin before the rebuild leaves one frame where the
-// travelling card is still absolute and the stack has NO in-flow children, so it
-// collapses to nothing and everything above it reflows. That showed as a flash on the
-// first step, the only one with no finished rows left to hold the stack open.
-ok(handover.indexOf("await renderSetupStep") < handover.indexOf('stack.style.height = ""'),
-  "the stack is rebuilt BEFORE its held height is released, or the first step flashes");
-// The held-open geometry has to be pinned before the animation holding it is dropped.
-ok(finish.indexOf("card.style.height = to.height") < finish.indexOf("card.getAnimations().forEach"),
-  "the closed geometry is pinned before the close animation is cancelled (or it flashes open)");
-// Slower than it was: the point of this pass.
-const closeMs = +(finish.match(/const CLOSE = (\d+)/) || [])[1];
-const travelMs = +(finish.match(/const TRAVEL = (\d+)/) || [])[1];
+// (3) the container holds its height, and is never animated down mid-trip.
+const trip = travel.slice(travel.indexOf("const close = card.animate"), travel.indexOf("const heldHeight"));
+ok(!/container\.animate\(/.test(trip),
+  "the container keeps its height for the trip: nothing above the card may move");
+// (4) rebuild, THEN release.
+const handover = travel.slice(travel.indexOf("const heldHeight"));
+ok(handover.indexOf("await rebuild()") < handover.indexOf('container.style.height = ""'),
+  "the list is rebuilt BEFORE the held height is released, or the first card flashes");
+ok(/container\.animate\(/.test(handover), "and the release eases into the settled size");
+// (5) expensive side effects wait for the landing.
+ok(finish.lastIndexOf("refreshRailActivation()") > finish.indexOf("closeAndTravel"),
+  "the rail is refreshed only after the movement");
+// Reduced motion, and a guard against a second click.
+ok(/prefers-reduced-motion/.test(travel), "none of it runs for reduced motion");
+ok(/return false/.test(travel) && /if \(!moved\)/.test(finish),
+  "and the caller has a plain fallback when it does not run");
+ok(/if \(setupAnimating\) return/.test(finish), "a second click during the transition cannot race the first");
+// Timings: quick close, longer arrival.
+const closeMs = +(travel.match(/closeMs = (\d+)/) || [])[1];
+const travelMs = +(travel.match(/travelMs = (\d+)/) || [])[1];
 ok(closeMs >= 200 && closeMs <= 400, `the close is quick but not a snap (${closeMs}ms)`);
 ok(travelMs >= 450, `the travel decelerates into place rather than darting (${travelMs}ms)`);
 ok(travelMs > closeMs, "and the arrival takes longer than the close");
-ok(/prefers-reduced-motion/.test(finish), "none of it runs for reduced motion");
-// The rail must not repaint mid-movement. refreshRailActivation resolves four IPC calls
-// and then toggles icon visibility, which lands as a flash if it arrives while the card
-// is still travelling. The key rows therefore leave it to the host, and the host does it
-// once the animation is over.
-ok(finish.lastIndexOf("refreshRailActivation()") > finish.indexOf("await glide.finished"),
-  "the rail is refreshed only after the card has landed");
-for (const [fn, where] of [["claudeKeySection", "the Claude row"], ["licenseSection", "the licence rows"]]) {
-  const body = shell.slice(shell.indexOf(`async function ${fn}(`), shell.indexOf(`async function ${fn}(`) + 4000);
-  const save = body.slice(body.indexOf("if (res.ok)"), body.indexOf("} else {"));
-  checks++;
-  assert.ok(!/^\s*refreshRailActivation\(\);/m.test(save.split("onConnected")[0]),
-    `${where} must not refresh the rail before handing back to its host`);
-}
-ok(/if \(setupAnimating\) return/.test(finish), "a second click during the transition cannot race the first");
 // The measurement must not disturb what the designer is looking at.
 const mStart = shell.indexOf("function measureDoneRow");
 const measure = shell.slice(mStart, shell.indexOf("\n}", mStart));
 ok(/visibility:hidden/.test(measure) && /left:-9999px/.test(measure),
   "the row is measured off-screen, so the real stack never flickers");
 ok(/ghost\.remove\(\)/.test(measure), "and the measuring clone is removed again");
-// The slot is computed from the live stack, so a spacing change moves the target with it.
 const rest = shell.slice(shell.indexOf("function setupRestingTop"), shell.indexOf("function setupRestingTop") + 700);
 ok(/rowGap|gap/.test(rest), "the slot accounts for the stack's own gap");
 ok(/if \(step\.id === id\) break/.test(rest), "counting only the rows that sit above it");

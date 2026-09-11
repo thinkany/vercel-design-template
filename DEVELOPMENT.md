@@ -44,6 +44,15 @@ The old `project/` worktree (scaffold-only on `main`) is retired.
   with `git checkout` once electron-builder is done (see below), so uncommitted edits to
   those files would be lost. The stripper refuses to start on a dirty tree for that reason.
 
+## Shared UI movements
+
+`closeAndTravel()` (`desktop/shell.js`) is the answer-a-card movement: the card closes
+around its own midline, then floats up into the summary row's slot. The first-run key
+steps use it, and the Get Designing intake is the next candidate.
+[docs/close-and-travel.md](docs/close-and-travel.md) has the five ordering rules it
+encodes, each of which was a visible bug first, plus the geometry and how to measure
+both ends. Read it before reusing or editing the movement.
+
 ## Developer menu (unpackaged only)
 
 `npm run desktop` adds a **Developer** menu that never ships in a DMG. Besides the
