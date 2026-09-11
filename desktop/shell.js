@@ -1302,6 +1302,25 @@ const SETUP_STEPS = [
   },
 ];
 
+/** One answered step, as the quiet row it rests at: name, state, and a way back in. */
+function buildSetupDoneRow(step, answered) {
+  const box = document.createElement("div");
+  box.className = "setup-step setup-done-row";
+  const t = document.createElement("div");
+  t.className = "setup-step-title";
+  t.textContent = step.title();
+  const chip = document.createElement("span");
+  chip.className = "setup-chip " + (answered === "connected" ? "connected" : "skipped");
+  chip.textContent = answered === "connected" ? COPY.setupGate.connected : COPY.setupGate.skipped;
+  const back = document.createElement("button");
+  back.type = "button";
+  back.className = "setup-reopen";
+  back.textContent = COPY.setupGate.reopen;
+  back.addEventListener("click", () => { setupOpenStep = step.id; renderSetupStep(); });
+  box.append(t, chip, back);
+  return box;
+}
+
 /** Read what is already connected, so a part-done setup resumes where it left off. */
 async function readSetupState() {
   const st = {};
@@ -1317,7 +1336,7 @@ function nextSetupStep() {
   return SETUP_STEPS.find((s) => !setupState[s.id]) || null;
 }
 
-async function renderSetupStep() {
+async function renderSetupStep({ settle = null } = {}) {
   const stack = el("setup-stack");
   if (!stack || !setupState) return;
   stack.innerHTML = "";
@@ -1326,9 +1345,9 @@ async function renderSetupStep() {
     const answered = setupState[step.id];
     const isLive = live && live.id === step.id;
     if (!answered && !isLive) continue; // steps below the live one do not exist yet
-    const box = document.createElement("div");
-    box.className = "setup-step" + (isLive ? " live" : " setup-done-row");
     if (isLive) {
+      const box = document.createElement("div");
+      box.className = "setup-step live";
       const t = document.createElement("div");
       t.className = "setup-step-title";
       t.textContent = step.title();
@@ -1352,21 +1371,19 @@ async function renderSetupStep() {
         actions.appendChild(skip);
         box.appendChild(actions);
       }
-      fadeSlideIn(box, { dy: 14, duration: 360 });
+      // The next step follows the row that just settled rather than arriving with it, so
+      // the eye finishes one beat before the next begins. A first paint has nothing to
+      // wait for, so it comes straight in.
+      fadeSlideIn(box, { dy: 16, duration: 420, delay: settle ? 200 : 0 });
     } else {
-      const t = document.createElement("div");
-      t.className = "setup-step-title";
-      t.textContent = step.title();
-      const chip = document.createElement("span");
-      chip.className = "setup-chip " + (answered === "connected" ? "connected" : "skipped");
-      chip.textContent = answered === "connected" ? COPY.setupGate.connected : COPY.setupGate.skipped;
-      const back = document.createElement("button");
-      back.type = "button";
-      back.className = "setup-reopen";
-      back.textContent = COPY.setupGate.reopen;
-      back.addEventListener("click", () => { setupOpenStep = step.id; renderSetupStep(); });
-      box.append(t, chip, back);
-      stack.appendChild(box);
+      const row = buildSetupDoneRow(step, answered);
+      stack.appendChild(row);
+      // The row this turn just produced settles into place: it arrives at the size the
+      // card shrank to, so only its contents fade up.
+      if (settle === step.id) {
+        anim(row, [{ opacity: 0, transform: "translateY(-4px)" }, { opacity: 1, transform: "translateY(0)" }],
+          { duration: 300, delay: 40 });
+      }
     }
   }
   // Every step answered → the way out.
@@ -1374,15 +1391,77 @@ async function renderSetupStep() {
   if (doneBtn) doneBtn.hidden = !!nextSetupStep();
 }
 
-function finishSetupStep(id, how) {
+/**
+ * A step is answered: shrink the open card down to the size of the done-row it becomes,
+ * swap in that row, let it settle, then bring the next step up beneath it.
+ *
+ * The snap this replaces was jarring because three things changed at once. Here they
+ * take turns: the card collapses to exactly the height its summary will occupy (so
+ * nothing below jumps), the summary fades in at that size, and only then does the next
+ * step arrive. Respects prefers-reduced-motion by doing none of it.
+ */
+let setupAnimating = false;
+async function finishSetupStep(id, how) {
+  if (setupAnimating) return; // a second click during the transition would race the first
   setupState[id] = how || (setupState[id] || "skipped");
   if (setupOpenStep === id) setupOpenStep = null;
-  renderSetupStep();
+
+  const stack = el("setup-stack");
+  const card = stack && stack.querySelector(".setup-step.live");
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!card || reduce || !card.animate) { await renderSetupStep(); return; }
+  setupAnimating = true;
+
+  // Measure where it is going: render the finished stack off-screen and read the height
+  // of the row this card becomes, so the shrink lands on the real number rather than a
+  // guess that would need correcting afterwards.
+  const cardCs = getComputedStyle(card);
+  const from = { height: card.getBoundingClientRect().height, padding: cardCs.padding, borderColor: cardCs.borderTopColor };
+  const to = measureDoneRow(id, stack);
+
+  card.style.overflow = "hidden";
+  // Padding and the live card's emphasis travel with the height, so it lands looking
+  // exactly like the row that replaces it rather than snapping to it at the end.
+  const shrink = card.animate(
+    [
+      { height: from.height + "px", padding: from.padding, borderColor: from.borderColor, boxShadow: cardCs.boxShadow },
+      { height: to.height + "px", padding: to.padding, borderColor: to.borderColor, boxShadow: "0 0 0 rgba(0,0,0,0)" },
+    ],
+    { duration: 300, easing: INTAKE_EASE, fill: "both" },
+  );
+  // The card's contents fade as it closes, so text never squashes against the edges.
+  for (const c of card.children) {
+    c.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease-out", fill: "both" });
+  }
+  try { await shrink.finished; } catch { /* cancelled by a re-render */ }
+
+  await renderSetupStep({ settle: id });
+  setupAnimating = false;
+}
+
+/**
+ * Where the done-row for `id` will rest: its height, padding and border. Built in a
+ * hidden clone of the stack so the real one never flickers, and read from the laid-out
+ * element so the animation never restates numbers the stylesheet owns.
+ */
+function measureDoneRow(id, stack) {
+  const ghost = document.createElement("div");
+  ghost.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;left:-9999px;top:0;";
+  ghost.style.width = stack.getBoundingClientRect().width + "px";
+  ghost.className = stack.className;
+  const row = buildSetupDoneRow(SETUP_STEPS.find((x) => x.id === id), setupState[id]);
+  ghost.appendChild(row);
+  document.body.appendChild(ghost);
+  const cs = getComputedStyle(row);
+  const out = { height: row.getBoundingClientRect().height || 44, padding: cs.padding, borderColor: cs.borderTopColor };
+  ghost.remove();
+  return out;
 }
 
 /** Enter the setup screen (first run only, or a dev walk-through). */
 async function showSetup() {
   setupOpenStep = null;
+  setupAnimating = false; // a re-entry mid-transition must not stay locked
   setupState = await readSetupState();
   showStage("setup");
   await renderSetupStep();

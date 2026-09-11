@@ -33,10 +33,33 @@ for (const id of ["figma", "research", "media"]) {
 const render = shell.slice(shell.indexOf("async function renderSetupStep"), shell.indexOf("function finishSetupStep"));
 ok(/if \(!answered && !isLive\) continue;/.test(render),
   "steps below the live one are not rendered at all (not merely disabled)");
-ok(/setup-done-row/.test(render), "an answered step collapses to a done-row");
-ok(/COPY\.setupGate\.reopen/.test(render), "a done step can be reopened");
+const doneRow = shell.slice(shell.indexOf("function buildSetupDoneRow"), shell.indexOf("/** Read what is already connected"));
+ok(/setup-done-row/.test(doneRow), "an answered step collapses to a done-row");
+ok(/COPY\.setupGate\.reopen/.test(doneRow), "a done step can be reopened");
+ok(/buildSetupDoneRow\(step, answered\)/.test(render), "and the render uses that one builder");
 ok(/doneBtn\.hidden = !!nextSetupStep\(\)/.test(render),
   "Done only appears once every step is answered");
+
+// ---- Answering a step is a sequence, not a swap -----------------------------
+// The card shrinks to the size of the row it becomes, that row settles, and only then
+// does the next step arrive. Three beats, so nothing changes underneath the eye at once.
+const finish = shell.slice(shell.indexOf("async function finishSetupStep"), shell.indexOf("/**\n * Where the done-row"));
+ok(/measureDoneRow\(id, stack\)/.test(finish),
+  "the shrink lands on the row's real height, measured, not guessed");
+ok(/height: to\.height \+ "px", padding: to\.padding/.test(finish),
+  "padding and border travel with the height, so it lands looking like the row");
+ok(/await shrink\.finished/.test(finish) && finish.indexOf("await shrink.finished") < finish.indexOf("renderSetupStep({ settle: id })"),
+  "the stack is only rebuilt once the shrink has finished");
+ok(/prefers-reduced-motion/.test(finish), "and none of it runs for reduced motion");
+ok(/if \(setupAnimating\) return/.test(finish), "a second click during the transition cannot race the first");
+ok(/delay: settle \? 200 : 0/.test(render),
+  "the next step follows the settled row rather than arriving with it");
+// The measurement must not disturb what the designer is looking at.
+const mStart = shell.indexOf("function measureDoneRow");
+const measure = shell.slice(mStart, shell.indexOf("\n}", mStart));
+ok(/visibility:hidden/.test(measure) && /left:-9999px/.test(measure),
+  "the row is measured off-screen, so the real stack never flickers");
+ok(/ghost\.remove\(\)/.test(measure), "and the measuring clone is removed again");
 // The skip affordance exists only on optional steps.
 ok(/if \(!step\.required\)[\s\S]{0,400}setup-skip/.test(render), "only optional steps offer Skip");
 
