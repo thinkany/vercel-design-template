@@ -50,7 +50,13 @@ function readFile(p) {
   try { return fs.readFileSync(p, "utf8"); } catch { return ""; }
 }
 
-/** Ordered nav items from src/app/pages.ts: [{ id, name }]. */
+/**
+ * Ordered nav items from src/app/pages.ts: [{ id, name }].
+ *
+ * Home is excluded, matching the header: the logo is the home link, so home is a
+ * page but never a nav item. A check that expected it would fail every correct
+ * header.
+ */
 function expectedItems(projectDir) {
   const src = readFile(path.join(projectDir, "src", "app", "pages.ts"));
   const body = src.split("designPages")[1] || "";
@@ -59,7 +65,7 @@ function expectedItems(projectDir) {
   for (const line of body.split("\n")) {
     const clean = line.replace(/\/\/.*$/, "");
     const m = clean.match(/\{\s*id:\s*["']([^"']+)["'][^}]*?name:\s*["']([^"']+)["']/);
-    if (m) items.push({ id: m[1], name: m[2] });
+    if (m && m[1] !== "home") items.push({ id: m[1], name: m[2] });
     if (/^\s*\]/.test(clean) && items.length) break;
   }
   return items;

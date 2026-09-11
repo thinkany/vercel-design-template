@@ -3762,8 +3762,58 @@ ipcMain.handle("intake:designPrompt", async () => {
   // The header's STRUCTURE goes in as data before the build, so the turn inherits a
   // standing header rather than instructions for making one.
   if (intakeBrief && currentProject) seedHeaderConfig(currentProject, intakeBrief.menuLayout);
+  // …and so does its ARCHITECTURE: the brief becomes this client's pages + menus, so
+  // the nav never shows the template's clothing-shop starter content. One cheap call,
+  // awaited (the build must not start on a half-written menu.ts), but never fatal.
+  if (intakeBrief && currentProject) await seedMenuContent(currentProject, intakeBrief);
   return { prompt: buildDesignPrompt(intakeBrief) };
 });
+
+/**
+ * Write the site's navigation from the brief: pages.ts (the items) + menu.ts (what
+ * each one opens), in this client's own domain language.
+ *
+ * WHY A MODEL CALL AND NOT A TABLE. The structure is code's job and now is; the
+ * WORDS are not derivable. "Residential / Commercial / Heritage" for an architecture
+ * practice, its practice areas for a law firm: no lookup table reaches that, and the
+ * alternative is what we had, a clothing shop's menu on every site. One Haiku call
+ * at the handoff (the narrate:line / seo-fill pattern) is the cheapest place to buy
+ * it, and it lands as DATA the designer edits, not as instructions a build re-derives.
+ *
+ * Never fatal and never blocking beyond its own timeout: no key, a refusal, a
+ * timeout or a junk reply all leave the scaffold's files exactly as they were, and
+ * the build proceeds with the starter menu it has always had.
+ */
+async function seedMenuContent(dir, brief) {
+  const cfg = MENU_LAYOUT_CONFIG[brief && brief.menuLayout];
+  // Without a picked layout the header keeps its defaults, and seeding pages from a
+  // brief the designer never confirmed would presume more than we know.
+  if (!cfg || !process.env.ANTHROPIC_API_KEY) return { ok: false, reason: "skipped" };
+  const SEED = require("./menu-seed.cjs");
+  const { system, user } = SEED.prompt(brief, cfg.menuKind);
+  try {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk"); // precedent: seo-fill
+    const client = new Anthropic({ timeout: 30_000, maxRetries: 1 });
+    const msg = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1500,
+      system,
+      messages: [{ role: "user", content: user }],
+      output_config: { format: { type: "json_schema", schema: SEED.SCHEMA } },
+    });
+    const text = (msg.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+    const { items } = SEED.clean(JSON.parse(text), cfg.menuKind);
+    // No usable items → leave the scaffold alone rather than write an empty nav.
+    if (!items.length) return { ok: false, reason: "no items" };
+    fs.writeFileSync(path.join(dir, "src", "app", "pages.ts"), SEED.renderPagesTs(items));
+    fs.writeFileSync(path.join(dir, "src", "app", "menu.ts"), SEED.renderMenuTs(items));
+    appLog.write("info", "menu", `nav seeded from the brief: ${items.map((i) => i.name).join(", ")} (${cfg.menuKind})`);
+    return { ok: true, items };
+  } catch (e) {
+    appLog.write("info", "menu", `nav not seeded (${e.message}); the starter menu stands`);
+    return { ok: false, error: e.message };
+  }
+}
 
 // Design-variety is a licensed add-on (Rob 2026-08-17) sharing Research's license tier:
 // one licensed key unlocks both. Unlicensed → nothing samples, no block is injected, and

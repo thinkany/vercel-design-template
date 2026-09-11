@@ -258,6 +258,15 @@ routing (`?v={id}&about`), rendering, the nav link, and Figma export. No
 `App.tsx` edit. Full-bleed landing with no Header/Footer? add `chrome={false}` to
 `<DesignSurface>`.
 
+**`pages.ts` usually arrives SEEDED.** The app writes the site's architecture from
+the brief before your turn (the pages a visitor expects for this client, with
+`menu.ts` populated to match), so the header's nav is right from the first frame.
+Every seeded row starts `component: "Home"` as a placeholder. So when you build a
+page, **update its existing row's `component`** rather than adding a second row for
+it; add a new row only for a page the seed didn't anticipate, and delete a row (and
+its `menu.ts` entry) for one the design genuinely shouldn't have. A row still
+pointing at `"Home"` at the end of the build is a page you haven't built yet.
+
 ## 3b. Read only what you EDIT, the rest is already inlined
 
 The shape of the scaffold's shared files is captured in this doc, so **don't re-Read

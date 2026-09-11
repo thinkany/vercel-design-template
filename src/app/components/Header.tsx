@@ -159,7 +159,7 @@ function MobileDrawer({
   skin, config, onNavigate,
 }: { skin: HeaderSkin; config: HeaderConfig; onNavigate: (page: string) => void }) {
   const { open, setOpen } = useMenuState();
-  const pages = designPages;
+  const pages = navPages(designPages);
   const left = config.menuSide === "left";
   const off = left ? "-translate-x-full" : "translate-x-full";
 
@@ -352,6 +352,13 @@ function NavLinks({
   );
 }
 
+/**
+ * The pages the NAV shows. Home is deliberately excluded: the logo is the home
+ * link, and a separate "Home" item reads dated (the same rule /design states). It
+ * still exists in pages.ts as a page, it just isn't a nav item.
+ */
+const navPages = (pages: typeof designPages) => pages.filter((p) => p.id !== "home");
+
 /** Split n links evenly around a centered logo; an odd count puts the extra on the right. */
 function splitLinks<T>(items: T[]): [T[], T[]] {
   const left = Math.floor(items.length / 2);
@@ -362,7 +369,7 @@ function splitLinks<T>(items: T[]): [T[], T[]] {
 
 export function Header({ onNavigate }: { onNavigate: (page: string) => void }) {
   const { open, setOpen, activeItem, setActiveItem } = useMenuState();
-  const pages = designPages;
+  const pages = navPages(designPages);
   const vid = getVariationId();
   const config = resolveData<HeaderConfig>(vid, "headerConfig", baseHeaderConfig);
   const skin = resolveData<HeaderSkin>(vid, "headerSkin", baseHeaderSkin);

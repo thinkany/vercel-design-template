@@ -1,12 +1,12 @@
 // ©2026 thinkany llc. All rights reserved.
-// TOOL GUARD TEST — `node desktop/tool-guard.test.cjs`. No framework: the guard is
+// TOOL GUARD TEST — `node desktop/dev/tool-guard.test.cjs`. No framework: the guard is
 // pure and synchronous, so a table of (tool, input, expected) is the whole harness.
 // Every row is a real shape an agent turn produces. A false positive costs one
 // retry; a miss costs a machine, or (for the header rows) a drifted menu.
 const assert = require("node:assert");
 const os = require("node:os");
 const path = require("node:path");
-const { guardToolUse } = require("./tool-guard.cjs");
+const { guardToolUse } = require("../tool-guard.cjs");
 
 const PROJ = path.join(os.tmpdir(), "ta-guard-test-project");
 const HOME = os.homedir();
