@@ -7929,7 +7929,10 @@ async function renderSite(body) {
     const wrap = siteEl("div"); body.appendChild(wrap); // full width: the Forms fold holds two columns
     renderSiteForms(wrap, ctx, refresh);
   } else if (siteRailState.tab === "media") {
-    await renderSiteMedia(body);
+    // Its own host, like the other single-panel tabs: the Images | Video | Files
+    // switcher clears and repaints this element, and the tab row above must survive it.
+    const wrap = siteEl("div"); body.appendChild(wrap);
+    await renderSiteMedia(wrap);
   } else if (siteRailState.tab === "blocks") {
     const wrap = siteEl("div", "site-single"); body.appendChild(wrap);
     wrap.appendChild(renderSiteBlocks(data));
