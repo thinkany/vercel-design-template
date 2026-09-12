@@ -119,6 +119,10 @@ export function Dashboard() {
         justifyContent: "space-between",
         padding: "0 40px",
       }}>
+        {/* "Designed by {company}". Hidden for someone using the app just for
+            themselves until a company name exists; the empty div keeps the buttons
+            on the right (the header is space-between). */}
+        {siteConfig.hideCompanyLine ? <div /> : (
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{
             fontSize: 11,
@@ -139,6 +143,7 @@ export function Dashboard() {
             {siteConfig.companyName}
           </span>
         </div>
+        )}
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {/* Sign Out clears the preview-gate cookies — only meaningful on the deployed
@@ -171,8 +176,9 @@ export function Dashboard() {
           {/* Brand This Project — shown only while the project is UNBRANDED (a designer
               who used "Get Designing" skipped /setup-project). Runs /setup-project in the
               app chat via the window.open("tacmd:…") → preview:open-url command bridge.
-              Dev + admin only (branding is an in-app action; no chat on the Vercel deploy). */}
-          {!siteConfig.isCompanyBranded && isAdmin && import.meta.env.DEV && (
+              Dev + admin only (branding is an in-app action; no chat on the Vercel deploy).
+              Not offered to someone using the app just for themselves. */}
+          {!siteConfig.isCompanyBranded && !siteConfig.hideCompanyLine && isAdmin && import.meta.env.DEV && (
           <button
             onClick={() => window.open("tacmd:brand-company")}
             style={{

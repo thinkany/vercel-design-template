@@ -680,8 +680,10 @@
       }
       .disc-collapse:hover .lbl { max-width: 160px; opacity: 1; margin-right: 5px; }
       .panelbtn:disabled { opacity: .5; cursor: default; }
-      .badge { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-      .badge.ok { background: #e6f7ef; color: #0a7; }
+      /* The status pill on a drawer row. "ok" wears the same dark-green fill as a fold's
+         Connected note (.site-acc-state) so every key reads as connected the same way. */
+      .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 600; letter-spacing: .02em; }
+      .badge.ok { background: #1f3d2b; color: #6ee7a0; }
       .badge.off { background: #fdecea; color: #c0261e; }
       .muted { color: #666666; font-size: 12px; margin-top: 8px; }
 

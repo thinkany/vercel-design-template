@@ -17,6 +17,11 @@ const rawProject = (import.meta.env.VITE_PROJECT_NAME ?? "").trim();
 // path (e.g. "/images/logo.svg", served at the site root) or blank. When set, the
 // header/footer render it in place of the text wordmark.
 const rawLogo = (import.meta.env.VITE_BRAND_LOGO ?? "").trim();
+// How the studio app is used, written by the app itself ("personal" | "company",
+// blank when unknown). Someone designing for themselves has no agency to credit, so
+// the dashboard drops the "Designed by" line and the Brand button until a company
+// name is actually set.
+const rawUsage = (import.meta.env.VITE_APP_USAGE ?? "").trim();
 
 // The template is considered "branded" once a client name has been provided.
 const isBranded = rawClient.length > 0;
@@ -37,6 +42,11 @@ export const siteConfig = {
    * Get-Designing brief already provides. Drives "Brand This Project".
    */
   isCompanyBranded,
+  /**
+   * True when the app is used "just for me" and no company name has been set: the
+   * dashboard header then shows neither "Designed by" nor "Brand This Project".
+   */
+  hideCompanyLine: rawUsage === "personal" && !isCompanyBranded,
   /** Client name. Falls back to a placeholder only while fully unbranded. */
   clientName: rawClient || PLACEHOLDER_CLIENT,
   /**

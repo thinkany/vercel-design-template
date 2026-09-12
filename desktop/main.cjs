@@ -570,6 +570,26 @@ function upsertProjectEnv(dir, key, value) {
   fs.writeFileSync(envPath, env);
 }
 
+// How the app is used, mirrored into the open project's .env as VITE_APP_USAGE so the
+// scaffold's dashboard can read it (personal hides the "Designed by" line and the Brand
+// button until a company name exists). Only "personal" is ever written; company and
+// unknown both blank the key, so a company install never dirties a project's .env.
+// Written only when it differs: Vite restarts on every .env change.
+function usageMode() {
+  return loadUiState().usage === "personal" ? "personal" : "";
+}
+function syncUsageEnv(dir) {
+  if (!dir) return;
+  try {
+    const want = usageMode();
+    if ((readProjectEnv(dir).VITE_APP_USAGE || "") !== want) upsertProjectEnv(dir, "VITE_APP_USAGE", want);
+  } catch { /* env write best-effort */ }
+}
+function setUsage(usage) {
+  setUiState({ usage });
+  syncUsageEnv(currentProject);
+}
+
 // Save an uploaded brand logo ({ filename, mime, b64 }) into the open project's
 // public/images and wire it into .env (VITE_BRAND_LOGO) so the scaffold's header/
 // footer render it automatically. Returns a light { src, filename } descriptor for
@@ -1303,6 +1323,7 @@ function viteLaunch(projectDir) {
 
 function startViteFor(projectDir) {
   stopVite();
+  syncUsageEnv(projectDir); // before the spawn, so Vite reads the right mode on its first start
   return new Promise((resolve, reject) => {
     const launch = viteLaunch(projectDir);
     viteProc = spawn(launch.cmd, launch.args, {
@@ -4380,7 +4401,7 @@ ipcMain.handle("usage:set", (_e, { usage } = {}) => {
   // Rehearsing: the choice is answered for this walk-through only, never written, so the
   // real one (and whether the Company Profile shows) is exactly as it was afterwards.
   if (rehearsing()) return { ok: true, usage, rehearsed: true };
-  setUiState({ usage });
+  setUsage(usage);
   return { ok: true, usage };
 });
 ipcMain.handle("narrate:get", () => ({ enabled: narrateEnabled() }));
@@ -5540,7 +5561,7 @@ ipcMain.handle("company:apply", async (_event, form) => {
     const { buildCompanyProfile, runUnpack } = await companyProfileEngine();
     const profile = buildCompanyProfile(form || {});
     const res = await runUnpack({ project: currentProject, profile });
-    setUiState({ usage: "company" }); // an uploaded profile turns the Company Profile on
+    setUsage("company"); // an uploaded profile turns the Company Profile on
     return { ok: true, applied: res.applied, manualSteps: res.manualSteps, summary: res.summary };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -5617,7 +5638,7 @@ ipcMain.handle("company:saveDefaultFields", async (_e, form) => {
       } catch {}
     }
     fs.writeFileSync(defaultCompanyProfilePath(), JSON.stringify(profile, null, 2));
-    setUiState({ usage: "company" }); // a created profile turns the Company Profile on
+    setUsage("company"); // a created profile turns the Company Profile on
     return { ok: true, companyName: profile.companyName };
   } catch (e) {
     return { ok: false, error: `Could not save the profile: ${e.message}` };
@@ -5634,7 +5655,7 @@ ipcMain.handle("company:saveDefault", async () => {
       try { fs.unlinkSync(defaultCompanyProfilePath()); } catch {}
       return { ok: false, error: "This project has no company name set yet — set up the company first, then save it as your default." };
     }
-    setUiState({ usage: "company" }); // a saved profile turns the Company Profile on
+    setUsage("company"); // a saved profile turns the Company Profile on
     return { ok: true, companyName: name };
   } catch (e) {
     return { ok: false, error: `Could not save the profile: ${e.message}` };
