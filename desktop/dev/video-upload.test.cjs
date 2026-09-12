@@ -18,10 +18,12 @@ const ok = (c, m) => { checks++; assert.ok(c, m); };
 ok(/function videoDir\(dir\) \{ return path\.join\(dir, "public", "video"\); \}/.test(main),
   "clips live in public/video");
 ok(/kind === "video" \? videoDir\(dir\)/.test(main), "the media helpers know that third kind");
-// .mp4 used to be a DOCUMENT, which is where an uploaded clip would have landed.
+// A clip can be BOTH: a download (public/files, reached by a link) and something the
+// site plays (public/video, reached by a video field). The extension sets overlap on
+// purpose; what matters is that the VIDEO import path never writes to files.
 const fileExt = main.match(/const FILE_EXT = new Set\(\[([^\]]*)\]\)/)[1];
-ok(!/"\.mp4"/.test(fileExt), "mp4 is no longer a document: it would have gone to public/files");
-ok(!/"\.mov"/.test(fileExt), "nor is mov");
+ok(/"\.mp4"/.test(fileExt), "mp4 stays a document type: a clip someone downloads is a file");
+ok(/"\.pdf"/.test(fileExt), "alongside the real documents");
 const videoExt = main.match(/const VIDEO_EXT = new Set\(\[([^\]]*)\]\)/)[1];
 for (const e of ['".mp4"', '".mov"', '".webm"']) ok(videoExt.includes(e), `${e} is accepted as video`);
 
@@ -35,6 +37,8 @@ ok(/posterError: r\.ok \? null : r\.error/.test(imp), "a failed grab is reported
 ok(/added\.push\(\{/.test(imp) && !/if \(!r\.ok\) continue/.test(imp),
   "and the clip still imports, so the field can ask for a poster");
 ok(/bytes:/.test(imp), "the weight comes back, so a heavy clip can be flagged");
+ok(/videoDir\(currentProject\)/.test(imp) && !/filesDir\(/.test(imp),
+  "the video import writes to public/video and never to public/files");
 
 // ---- The field always offers a manual poster --------------------------------
 const field = shell.slice(shell.indexOf('} else if (f.kind === "video") {'), shell.indexOf('} else if (f.kind === "link") {'));

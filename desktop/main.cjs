@@ -3076,7 +3076,10 @@ app.on("will-quit", () => { try { phoneUpload.stopServer(); } catch {} });
 const MEDIA_EXT = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".svg"]);
 // Files (documents) live beside the images, in public/files, served at /files/<name>:
 // copied as they are, never converted. Their tags key as "files/<rel>" in media.json.
-const FILE_EXT = new Set([".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".csv", ".txt", ".zip", ".mp3", ".m4a", ".wav"]);
+// Documents and downloads. Video is here too: a clip someone DOWNLOADS is a file, and
+// removing it stranded that use. A clip the site PLAYS is a different thing and lives in
+// public/video (VIDEO_EXT below), reached through a video field rather than a link.
+const FILE_EXT = new Set([".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".csv", ".txt", ".zip", ".mp3", ".m4a", ".wav", ".mp4", ".mov", ".m4v"]);
 // Video the site plays, as opposed to a video someone downloads. MP4 only for the site:
 // it is the one container every browser plays without a second encode. MOV and WebM are
 // accepted on the way IN and kept as they are, so a designer's own clip is never refused.
