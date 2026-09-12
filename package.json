@@ -144,6 +144,8 @@
       "!desktop/intake/lenses.cjs",
       "!desktop/skills/**",
       "!desktop/dev/**",
+      "!desktop/build/lens-gallery/examples/**",
+      "!desktop/build/lens-gallery/out/**",
       "!**/@anthropic-ai/claude-agent-sdk-darwin-arm64/**",
       "!**/@anthropic-ai/claude-agent-sdk-darwin-x64/**"
     ],
