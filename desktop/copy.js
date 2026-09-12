@@ -952,6 +952,7 @@ window.COPY = {
     videoPosterFailed: "The clip is in, but no still could be read from it. Add a poster below.",
     videoHeavy: (mb) => `This clip is about ${mb} MB, which is heavy for a page to load. Keep it if it earns that, or swap in a shorter one.`,
     videoPosterLabel: "Poster still",
+    videoPosterDropHint: "Drop a poster image here, or click to choose one",
     linkLabel: "Label",
     linkHref: "Address",
     listHint: "One per line.",
@@ -1235,8 +1236,9 @@ window.COPY = {
       dropReplace: "Drop or click to replace",
       chooseExisting: "Choose from project images",
       // The video half of the picker: the same dialog, pointed at public/video.
-      titleVideo: "Choose a video",
+      titleVideo: "Video",
       chooseExistingVideo: "Choose from project video",
+      useVideo: "Use this video",
       uploadVideo: "Add video",
       uploadVideoNote: "MP4 plays everywhere. A poster still is taken from the clip when it is added.",
       emptyVideo: "No video in this project yet. Add one to get started.",

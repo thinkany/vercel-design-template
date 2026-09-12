@@ -4751,6 +4751,15 @@ function sitePropsEditor(value, onChange, depth = 0, ctx = {}, at = "") {
         }));
       }
       box.appendChild(wrap);
+    } else if (v && typeof v === "object" && "src" in v && ("poster" in v || (meta && meta.kind === "video"))) {
+      // A video-shaped prop ({ src, poster, alt }): the clip control, which uploads a clip
+      // and takes its poster, or picks one already in the project. The poster is what tells
+      // it apart from an image, the same test block-schema.cjs uses to name the kind.
+      box.appendChild(siteVideoControl(v, (next) => {
+        if (next) { value[key].src = next.src; value[key].poster = next.poster; value[key].alt = next.alt; }
+        else { value[key].src = ""; value[key].poster = ""; }
+        onChange();
+      }, { label }));
     } else if (v && typeof v === "object" && "src" in v) {
       // An image-shaped prop ({ src, alt }): the picker, never a typed path.
       box.appendChild(siteImageControl(v, (next) => { if (next) { value[key].src = next.src; value[key].alt = next.alt; } else { value[key].src = ""; } onChange(); }, { label }));
@@ -5126,103 +5135,8 @@ function siteTypeFieldControl(f, value, onChange, ctx) {
     wrap.appendChild(siteImageControl(cur, (next) => { cur = next; change(); }));
     get = () => cur;
   } else if (f.kind === "video") {
-    // A clip and the poster still that stands in for it, edited together.
-    //
-    // Uploading a clip derives its poster automatically, so the common path is one drop
-    // and done. The poster control is ALWAYS shown, not just when that fails: an
-    // auto-grabbed frame is a reasonable guess and often not the still a designer would
-    // have chosen, and this is where they say so.
-    let cur = {
-      src: (value && value.src) || "",
-      poster: (value && value.poster) || "",
-      alt: (value && value.alt) || "",
-    };
-    const emit = () => change();
-
-    const clipRow = siteEl("div", "site-kv");
-    clipRow.appendChild(siteEl("div", "k", S.videoClipLabel));
-    const zone = document.createElement("label");
-    zone.className = "site-img-zone site-video-zone";
-    const hint = siteEl("div", "site-img-hint");
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.m4v";
-    input.style.display = "none";
-    zone.append(hint, input);
-    clipRow.appendChild(zone);
-    const links = siteEl("div", "site-img-links");
-    const chooseLink = siteEl("button", "site-link", COPY.site.media.chooseExistingVideo);
-    chooseLink.type = "button";
-    const clearLink = siteEl("button", "site-link danger", COPY.site.media.clear);
-    clearLink.type = "button";
-    links.append(chooseLink, clearLink);
-    clipRow.appendChild(links);
-    const note = siteEl("div", "sess-desc");
-    clipRow.appendChild(note);
-    wrap.appendChild(clipRow);
-
-    // The poster, always present and always replaceable.
-    let posterCtl = null;
-    const paintPoster = () => {
-      if (posterCtl) posterCtl.remove();
-      posterCtl = siteImageControl(
-        cur.poster ? { src: cur.poster, alt: cur.alt } : "",
-        (next) => { cur.poster = (next && next.src) || ""; cur.alt = (next && next.alt) || ""; emit(); paint(); },
-        { label: S.videoPosterLabel },
-      );
-      wrap.appendChild(posterCtl);
-    };
-
-    const paint = () => {
-      hint.textContent = cur.src ? `${cur.src.split("/").pop()} ${S.videoReplace}` : S.videoDropHint;
-      zone.classList.toggle("has-image", !!cur.src);
-      clearLink.hidden = !cur.src;
-      // Say plainly when a clip has no still yet: it would be blank for reduced motion
-      // and in the Figma export, and the fix is the control directly below.
-      note.textContent = cur.src && !cur.poster ? S.videoNeedsPoster : S.videoClipHint;
-      note.classList.toggle("site-warn", !!(cur.src && !cur.poster));
-    };
-
-    const take = async (result) => {
-      if (!result || !result.ok) { hint.textContent = (result && result.error) || COPY.common.couldNotSave; return; }
-      const v = (result.added || [])[0];
-      if (!v) { paint(); return; }
-      cur.src = v.url;
-      if (v.poster) cur.poster = v.poster;
-      paint();
-      paintPoster();
-      emit();
-      // A clip heavier than the guide is the designer's call, but never a silent one.
-      if (v.bytes && v.bytes > 8 * 1024 * 1024) note.textContent = S.videoHeavy(Math.round(v.bytes / 1048576));
-      else if (!v.poster && v.posterError) note.textContent = S.videoPosterFailed;
-    };
-
-    const importFiles = async (files) => {
-      const paths = Array.from(files || []).map((f_) => { try { return window.desktop.pathForFile(f_); } catch { return null; } }).filter(Boolean);
-      if (!paths.length) return;
-      hint.textContent = COPY.site.media.importing;
-      take(await window.desktop.importVideo(paths).catch((e) => ({ ok: false, error: String(e) })));
-    };
-    input.addEventListener("change", () => { importFiles(input.files); input.value = ""; });
-    zone.addEventListener("click", (e) => { e.preventDefault(); window.desktop.uploadVideo().then(take).catch(() => {}); });
-    ["dragenter", "dragover"].forEach((t) => zone.addEventListener(t, (e) => { e.preventDefault(); zone.classList.add("drag"); }));
-    ["dragleave", "drop"].forEach((t) => zone.addEventListener(t, (e) => { e.preventDefault(); zone.classList.remove("drag"); }));
-    zone.addEventListener("drop", (e) => importFiles(e.dataTransfer && e.dataTransfer.files));
-    chooseLink.addEventListener("click", async () => {
-      const it = await openMediaPicker(cur.src || null, { kind: "video" });
-      if (!it || !it.url) return;
-      cur.src = it.url;
-      // A clip in the library was imported with its poster beside it, under the same
-      // stem. Adopt it, so choosing an existing clip is as complete as uploading one.
-      const guess = it.url.replace(/\.[^.]+$/, ".poster.jpg");
-      const lib = await window.desktop.listMedia("video").catch(() => []);
-      if (lib.some((x) => x.url === guess)) cur.poster = guess;
-      paint(); paintPoster(); emit();
-    });
-    clearLink.addEventListener("click", () => { cur.src = ""; paint(); emit(); });
-
-    paint();
-    paintPoster();
+    let cur = { src: (value && value.src) || "", poster: (value && value.poster) || "", alt: (value && value.alt) || "" };
+    wrap.appendChild(siteVideoControl(cur, (next) => { cur = next || { src: "", poster: "", alt: "" }; change(); }, { bare: true }));
     // A clip with no poster is not a usable value: the still is what reduced motion, the
     // Figma export and the pre-play moment all show.
     get = () => (cur.src && cur.poster ? { src: cur.src, poster: cur.poster, alt: cur.alt } : "");
@@ -6206,7 +6120,7 @@ function openMediaPicker(current, { kind = "image" } = {}) {
     const upBtn = siteEl("button", "panelbtn", isVideo ? M.uploadVideo : M.upload); upBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
     const phoneBtn = siteEl("button", "panelbtn", M.fromPhone); phoneBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
     phoneBtn.hidden = isVideo; // the phone path sends photos
-    const useBtn = siteEl("button", "panelbtn primary", M.use); useBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;"; useBtn.disabled = true;
+    const useBtn = siteEl("button", "panelbtn primary", isVideo ? M.useVideo : M.use); useBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;"; useBtn.disabled = true;
     mediapickBar.append(filterIn, upBtn, phoneBtn, useBtn);
     let phone = null; // the open phone panel, if any (rendered at the top of the body by paint)
     upBtn.title = M.uploadNote;
@@ -6402,7 +6316,116 @@ function siteRichEditor(markdown, onChange, { compact } = {}) {
  * { src, alt } (or a string path for legacy props); onChange(next) receives
  * { src, alt } or "" when cleared.
  */
-function siteImageControl(value, onChange, { label, noAlt, raw, accept } = {}) {
+/**
+ * The image field: a drop zone, a picker, an alt box. `dropHint` lets a caller say what
+ * the image IS when "an image" would be vague: a video field's poster is a still of that
+ * clip, not any picture, and the zone is the place to say so.
+ */
+/**
+ * The video field: a clip and the poster still that stands in for it, edited together.
+ * Used by page blocks (a { src, poster, alt } prop) and by a content type's video field.
+ *
+ * Uploading a clip derives its poster, so the common path is one drop and done. The
+ * poster control is ALWAYS shown, not only when that fails: an auto-grabbed frame is a
+ * reasonable guess and often not the still a designer would have chosen.
+ */
+function siteVideoControl(value, onChange, { label, bare = false } = {}) {
+  const S = COPY.site;
+  const M = COPY.site.media;
+  const wrap = siteEl("div", bare ? "" : "site-kv");
+  if (label) wrap.appendChild(siteEl("div", "k", label));
+  const cur = {
+    src: (value && value.src) || "",
+    poster: (value && value.poster) || "",
+    alt: (value && value.alt) || "",
+  };
+  const emit = () => onChange({ ...cur });
+
+  const clipRow = siteEl("div", "site-kv");
+  clipRow.appendChild(siteEl("div", "k", S.videoClipLabel));
+  const zone = document.createElement("label");
+  zone.className = "site-img-zone site-video-zone";
+  const hint = siteEl("div", "site-img-hint");
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.m4v";
+  input.style.display = "none";
+  zone.append(hint, input);
+  clipRow.appendChild(zone);
+  const links = siteEl("div", "site-img-links");
+  const chooseLink = siteEl("button", "site-link", M.chooseExistingVideo);
+  chooseLink.type = "button";
+  const clearLink = siteEl("button", "site-link danger", M.clear);
+  clearLink.type = "button";
+  links.append(chooseLink, clearLink);
+  clipRow.appendChild(links);
+  const note = siteEl("div", "sess-desc");
+  clipRow.appendChild(note);
+  wrap.appendChild(clipRow);
+
+  let posterCtl = null;
+  const paintPoster = () => {
+    if (posterCtl) posterCtl.remove();
+    posterCtl = siteImageControl(
+      cur.poster ? { src: cur.poster, alt: cur.alt } : "",
+      (next) => { cur.poster = (next && next.src) || ""; cur.alt = (next && next.alt) || ""; emit(); paint(); },
+      { label: S.videoPosterLabel, dropHint: S.videoPosterDropHint },
+    );
+    wrap.appendChild(posterCtl);
+  };
+
+  const paint = () => {
+    hint.textContent = cur.src ? `${cur.src.split("/").pop()} ${S.videoReplace}` : S.videoDropHint;
+    zone.classList.toggle("has-image", !!cur.src);
+    clearLink.hidden = !cur.src;
+    // Say plainly when a clip has no still yet: it would be blank for reduced motion and
+    // in the Figma export, and the fix is the control directly below.
+    note.textContent = cur.src && !cur.poster ? S.videoNeedsPoster : S.videoClipHint;
+    note.classList.toggle("site-warn", !!(cur.src && !cur.poster));
+  };
+
+  const take = (result) => {
+    if (!result || !result.ok) { hint.textContent = (result && result.error) || COPY.common.couldNotSave; return; }
+    const v = (result.added || [])[0];
+    if (!v) { paint(); return; }
+    cur.src = v.url;
+    if (v.poster) cur.poster = v.poster;
+    paint(); paintPoster(); emit();
+    // A clip heavier than the guide is the designer's call, but never a silent one.
+    if (v.bytes && v.bytes > 8 * 1024 * 1024) note.textContent = S.videoHeavy(Math.round(v.bytes / 1048576));
+    else if (!v.poster && v.posterError) note.textContent = S.videoPosterFailed;
+  };
+
+  const importFiles = async (files) => {
+    const paths = Array.from(files || []).map((f) => { try { return window.desktop.pathForFile(f); } catch { return null; } }).filter(Boolean);
+    if (!paths.length) return;
+    hint.textContent = M.importing;
+    take(await window.desktop.importVideo(paths).catch((e) => ({ ok: false, error: String(e) })));
+  };
+  input.addEventListener("change", () => { importFiles(input.files); input.value = ""; });
+  zone.addEventListener("click", (e) => { e.preventDefault(); window.desktop.uploadVideo().then(take).catch(() => {}); });
+  ["dragenter", "dragover"].forEach((t) => zone.addEventListener(t, (e) => { e.preventDefault(); zone.classList.add("drag"); }));
+  ["dragleave", "drop"].forEach((t) => zone.addEventListener(t, (e) => { e.preventDefault(); zone.classList.remove("drag"); }));
+  zone.addEventListener("drop", (e) => importFiles(e.dataTransfer && e.dataTransfer.files));
+  chooseLink.addEventListener("click", async () => {
+    const it = await openMediaPicker(cur.src || null, { kind: "video" });
+    if (!it || !it.url) return;
+    cur.src = it.url;
+    // A clip in the library was imported with its poster beside it, under the same stem.
+    // Adopt it, so choosing an existing clip is as complete as uploading one.
+    const guess = it.url.replace(/\.[^.]+$/, ".poster.jpg");
+    const lib = await window.desktop.listMedia("video").catch(() => []);
+    if (lib.some((x) => x.url === guess)) cur.poster = guess;
+    paint(); paintPoster(); emit();
+  });
+  clearLink.addEventListener("click", () => { cur.src = ""; paint(); emit(); });
+
+  paint();
+  paintPoster();
+  return wrap;
+}
+
+function siteImageControl(value, onChange, { label, noAlt, raw, accept, dropHint } = {}) {
   const M = COPY.site.media;
   let cur = typeof value === "string" ? { src: value, alt: "" } : (value && typeof value === "object" ? { src: value.src || "", alt: value.alt || "" } : { src: "", alt: "" });
   const wrap = siteEl("div", "site-kv");
@@ -6429,7 +6452,7 @@ function siteImageControl(value, onChange, { label, noAlt, raw, accept } = {}) {
     const file = cur.src ? (/^https?:/.test(cur.src) ? cur.src : siteMediaFileUrl(cur.src)) : null;
     if (cur.src && file) { preview.src = file; preview.style.display = "block"; }
     else { preview.removeAttribute("src"); preview.style.display = "none"; }
-    hint.textContent = cur.src ? (cur.src.split("/").pop() + " · " + M.dropReplace) : M.dropHint;
+    hint.textContent = cur.src ? (cur.src.split("/").pop() + " · " + M.dropReplace) : (dropHint || M.dropHint);
     zone.classList.toggle("has-image", !!cur.src);
     removeLink.hidden = !cur.src;
   };

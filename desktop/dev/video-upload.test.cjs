@@ -41,7 +41,9 @@ ok(/videoDir\(currentProject\)/.test(imp) && !/filesDir\(/.test(imp),
   "the video import writes to public/video and never to public/files");
 
 // ---- The field always offers a manual poster --------------------------------
-const field = shell.slice(shell.indexOf('} else if (f.kind === "video") {'), shell.indexOf('} else if (f.kind === "link") {'));
+// The control is shared: page blocks and content types both render it, so the checks
+// below read the one implementation rather than either caller.
+const field = shell.slice(shell.indexOf("function siteVideoControl"), shell.indexOf("function siteImageControl"));
 ok(/const paintPoster = \(\) => \{/.test(field) && /paintPoster\(\);/.test(field),
   "the poster control is always rendered, not only when the grab failed");
 ok(/window\.desktop\.uploadVideo\(\)/.test(field), "a clip can be chosen from a dialog");
@@ -49,8 +51,20 @@ ok(/window\.desktop\.importVideo\(paths\)/.test(field), "and dropped onto the fi
 ok(/videoNeedsPoster/.test(field), "a clip with no poster says so plainly");
 ok(/videoHeavy/.test(field), "and a heavy clip is flagged rather than landing silently");
 // The value is only usable with both halves.
-ok(/get = \(\) => \(cur\.src && cur\.poster \?/.test(field),
+// The content-type field wraps the shared control and refuses a half value.
+const typeField = shell.slice(shell.indexOf('} else if (f.kind === "video") {'), shell.indexOf('} else if (f.kind === "link") {'));
+ok(/get = \(\) => \(cur\.src && cur\.poster \?/.test(typeField),
   "a clip with no poster is not a usable field value");
+ok(/siteVideoControl\(/.test(typeField), "and it renders the shared control rather than its own copy");
+
+// Page blocks get the same control: a { src, poster } prop must not fall through to the
+// image branch, which is what showed an image drop zone inside a Video block.
+const props = shell.slice(shell.indexOf("function sitePropsEditor"), shell.indexOf("function sitePropsEditor") + 12000);
+const vIdx = props.indexOf('"poster" in v');
+const iIdx = props.indexOf('An image-shaped prop');
+ok(vIdx > -1, "the block editor has a video branch");
+ok(vIdx < iIdx, "and tests for video BEFORE image, or every clip renders as a picture");
+ok(/siteVideoControl\(v,/.test(props), "using the same control the field does");
 
 // ---- Wiring -----------------------------------------------------------------
 const preload = fs.readFileSync(path.join(__dirname, "..", "preload.cjs"), "utf8");
