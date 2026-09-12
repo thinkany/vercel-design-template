@@ -1,6 +1,6 @@
 # Forms (a Forms tab in the site builder)
 
-**Status:** spec'd 2026-09-04 from Rob's brief and answers. P1 (define and place) BUILT and app-tested 2026-09-04. P2 (deliver) BUILT 2026-09-04: api/forms.js + site/src/lib/forms-providers.mjs (Resend, Postmark, SendGrid), Delivery card (provider, from, key in userData, Send a test), FORMS_* env vars set or cleared on site publish, includeFiles in the site vercel.json; verified by a mocked handler test, site build and type check; not yet app-tested or live-published. P3 not started. reCAPTCHA keys moved to P3 with the verification.
+**Status:** spec'd 2026-09-04 from Rob's brief and answers. P1 (define and place) BUILT and app-tested 2026-09-04. P2 (deliver) BUILT 2026-09-04: api/forms.js + site/src/lib/forms-providers.mjs (Resend, Postmark, SendGrid), Delivery card (provider, from, key in userData, Send a test), FORMS_* env vars set or cleared on site publish, includeFiles in the site vercel.json; verified by a mocked handler test, site build and type check; not yet app-tested or live-published. P3 not started. reCAPTCHA keys moved to P3 with the verification; **2026-09-12: P3 spam protection is Cloudflare Turnstile, not reCAPTCHA, with the app creating the widget per site from one API token, see [turnstile-spec.md](turnstile-spec.md).** P4 (CRM sync, Mailchimp first) added 2026-09-12 as a follow-on after P3, NOT built.
 
 ## Goal
 
@@ -182,7 +182,9 @@ provider key never touches derive.
 ## Out of scope (v1)
 
 File uploads, a submissions inbox in the app, conditional logic, multi-step
-forms, radio groups (select covers them), storing submissions anywhere.
+forms, radio groups (select covers them), storing submissions anywhere. A CRM
+destination is out of v1 too, but it is specced as the P4 follow-on below
+rather than ruled out.
 
 ## Phases
 
@@ -192,11 +194,41 @@ forms, radio groups (select covers them), storing submissions anywhere.
   userData, env vars on publish, "Send a test".
 - **P3 Capture and protect**: promote-blocks form capture, reCAPTCHA v3, the
   relay endpoint on derive and its license.
+- **P4 CRM sync (follow-on, after P3)**: a submission can also land in a list CRM
+  (Mailchimp first). Not a fourth `FORMS_PROVIDER`: `send()` is a transactional
+  mail verb (`to`, `subject`, `html`) and a CRM's operation is an audience upsert
+  (`PUT /3.0/lists/{id}/members/{hash}` with merge fields and tags), so it gets
+  its own `site/src/lib/forms-crm.mjs` with a `subscribe()`. Shape:
+  - **Email stays the system of record.** The sync runs in `api/forms.js` *after*
+    `send()` succeeds, wrapped in its own try/catch that logs and swallows. A
+    Mailchimp outage must never show the visitor an error or cost the client a
+    lead, and it must not add latency before the thank-you.
+  - **Per-form and opt-in**, as `mailchimp: { listId, emailField, tags,
+    consentField }` in `content/forms/<id>.json`, so it inherits the existing
+    `includeFiles` bundling. A contact form does not quietly join a mailing list.
+  - **Consent is explicit**: `status: "pending"` (double opt-in) unless the form
+    has a ticked `consentField`, which makes `"subscribed"` defensible. Same class
+    of defect as a reCAPTCHA toggle wired to nothing: never ship a switch that
+    subscribes people with no consent path.
+  - **Key plumbing** reuses the `siteEnv` seam (`main.cjs` builds it,
+    `publish.cjs` sets or deletes each key): `MAILCHIMP_KEY`, `MAILCHIMP_LIST_ID`.
+    Mailchimp keys carry a datacenter suffix (`...-us21`) that the base URL must
+    match, so parse it off the key rather than asking for a second field, and fail
+    in the app's Delivery card at setup, not at request time on the live site.
+  - **Ordering note**: P3's reCAPTCHA should land first. With a CRM attached, spam
+    stops being junk email and starts polluting the client's audience and their
+    paid contact count. Double opt-in is the floor if P4 ever ships first.
+  - Mailchimp *Transactional* (ex-Mandrill) is a different product and would be a
+    genuine peer in `send()`, roughly six lines. Out of scope here, and not what
+    "a CRM like Mailchimp" means. Mailchimp's embedded signup form (browser posts
+    straight to them, no key, no function) stays the option for a pure newsletter
+    field, at the cost of their markup and no server-side validation.
 
 ## Files
 
 - `content/forms/*.json`, `content/site.json` (`forms`): data.
 - `api/forms.js`, `api/_providers/*.js`: the endpoint (CORE).
+- `site/src/lib/forms-crm.mjs`: the CRM `subscribe()` (P4, CORE, not built).
 - `site/src/lib/blocks.ts` (`formRef`), `site/src/lib/form-client.ts`,
   `site/src/lib/forms-dev.mjs`: rendering and dev (CORE).
 - `site/blocks/Form.tsx`: the generic block (designer-owned, from a template).
