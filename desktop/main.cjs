@@ -3364,14 +3364,15 @@ ipcMain.handle("media:meta", () => (currentProject ? { meta: readMediaMeta(curre
 // Folders are per kind: images use `_tags` and the image keys; files use `_fileTags` and
 // the "files/…" keys, so the two libraries never share a folder.
 function kindOfKey(k) { return k.startsWith("files/") ? "file" : k.startsWith("video/") ? "video" : "image"; }
-function tagListKey(kind) { return kind === "file" ? "_fileTags" : "_tags"; }
+// Each library keeps its own folders: a tag never crosses between them.
+function tagListKey(kind) { return kind === "file" ? "_fileTags" : kind === "video" ? "_videoTags" : "_tags"; }
 function allMediaTags(dir, kind = "image") {
   const meta = readMediaMeta(dir); const out = new Map();
   for (const t of cleanTags(meta[tagListKey(kind)])) out.set(t.toLowerCase(), t);
   for (const [k, v] of Object.entries(meta)) { if (k.startsWith("_") || !v || typeof v !== "object" || kindOfKey(k) !== kind) continue; for (const t of cleanTags(v.tags)) if (!out.has(t.toLowerCase())) out.set(t.toLowerCase(), t); }
   return Array.from(out.values()).sort((a, b) => a.localeCompare(b));
 }
-const kindOf = (kind) => (kind === "file" ? "file" : "image");
+const kindOf = (kind) => (kind === "file" || kind === "video" ? kind : "image");
 ipcMain.handle("media:tags", (_e, { kind } = {}) => (currentProject ? { tags: allMediaTags(currentProject, kindOf(kind)) } : { tags: [] }));
 ipcMain.handle("media:addTag", (_e, { name, kind } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
@@ -3422,7 +3423,8 @@ ipcMain.handle("media:rename", (_e, { rel, name, kind } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (!validRel(rel)) return { ok: false, error: "Bad path." };
-  const k = kind === "file" ? "file" : "image"; const kindDir = mediaKindDir(currentProject, k); const urlBase = k === "file" ? "/files/" : "/images/";
+  const k = kindOf(kind); const kindDir = mediaKindDir(currentProject, k);
+  const urlBase = k === "file" ? "/files/" : k === "video" ? "/video/" : "/images/";
   const from = path.join(kindDir, rel);
   if (!fs.existsSync(from)) return { ok: false, error: "That file is gone." };
   const ext = path.extname(rel).toLowerCase();
@@ -3447,8 +3449,18 @@ ipcMain.handle("media:delete", (_e, { rel, kind } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   if (!validRel(rel)) return { ok: false, error: "Bad path." };
-  const k = kind === "file" ? "file" : "image";
-  try { trash.moveToTrash(currentProject, path.join(mediaKindDir(currentProject, k), rel), { kind: k, title: path.basename(rel), meta: { rel } }); return { ok: true, trashed: true }; } catch (e) { return { ok: false, error: e.message }; }
+  const k = kindOf(kind);
+  try {
+    const dir = mediaKindDir(currentProject, k);
+    trash.moveToTrash(currentProject, path.join(dir, rel), { kind: k, title: path.basename(rel), meta: { rel } });
+    // A clip's poster goes with it: it is part of the clip, and left behind it would be
+    // an orphan nothing lists.
+    if (k === "video") {
+      const poster = path.join(dir, rel.replace(/\.[^.]+$/, ".poster.jpg"));
+      if (fs.existsSync(poster)) { try { fs.unlinkSync(poster); } catch { /* best effort */ } }
+    }
+    return { ok: true, trashed: true };
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 
 // ---- Site IPC ----------------------------------------------------------------

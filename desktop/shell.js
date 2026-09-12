@@ -5866,6 +5866,19 @@ function mediaTile(it, { selected = false, onSelect, onOpen, onRenamed, onDelete
   const tile = siteEl("div", "media-tile" + (selected ? " active" : "")); tile.tabIndex = 0; tile.setAttribute("role", "button");
   let img;
   if (it.kind === "file") { img = siteEl("div", "file-badge"); img.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6"/></svg>'; img.appendChild(siteEl("span", "ext", it.ext || "")); }
+  else if (it.kind === "video") {
+    // A clip cannot be its own thumbnail: show the poster that was taken for it, and mark
+    // the tile so it reads as video rather than a still.
+    img = siteEl("div", "media-video-thumb");
+    const still = document.createElement("img");
+    still.src = String(it.file).replace(/\.[^.]+$/, ".poster.jpg");
+    still.alt = it.name; still.loading = "lazy";
+    // No poster beside it (a clip added before this, or one whose grab failed): the
+    // badge alone, rather than a broken image.
+    still.addEventListener("error", () => { still.remove(); img.classList.add("no-poster"); });
+    img.appendChild(still);
+    img.appendChild(siteEl("span", "media-play", "")); // the play mark, drawn in CSS
+  }
   else { img = document.createElement("img"); img.src = it.file; img.alt = it.name; img.loading = "lazy"; }
   const meta = siteEl("div", "media-meta");
   const nameEl = siteEl("div", "", it.name);
@@ -6028,9 +6041,11 @@ async function renderSiteMedia(body) {
   const M = COPY.site.media; const F = M.folders;
   // Images | Files: two libraries, each with its own folders (tags never cross).
   if (!siteRailState.mediaKind) siteRailState.mediaKind = "image";
-  const kind = siteRailState.mediaKind; const isFiles = kind === "file";
+  const kind = siteRailState.mediaKind;
+  const isFiles = kind === "file"; const isVideo = kind === "video";
   const kinds = siteEl("div", "media-kinds in-column"); kinds.dataset.tour = "cms-media-kinds"; // walkthrough anchors
-  ["image", "file"].forEach((k) => { const b = document.createElement("button"); b.type = "button"; b.className = k === kind ? "on" : ""; b.textContent = COPY.site.mediaKinds[k]; b.addEventListener("click", () => { if (k === kind) return; siteRailState.mediaKind = k; siteRailState.mediaFolder = null; body.innerHTML = ""; renderSiteMedia(body); }); kinds.appendChild(b); });
+  // Images | Video | Files: video sits between them, nearer the images it stands in for.
+  ["image", "video", "file"].forEach((k) => { const b = document.createElement("button"); b.type = "button"; b.className = k === kind ? "on" : ""; b.textContent = COPY.site.mediaKinds[k]; b.addEventListener("click", () => { if (k === kind) return; siteRailState.mediaKind = k; siteRailState.mediaFolder = null; body.innerHTML = ""; renderSiteMedia(body); }); kinds.appendChild(b); });
   const cols = siteEl("div", "site-cols"); const left = siteEl("div"); const right = siteEl("div", "site-detail"); cols.append(left, right); body.appendChild(cols);
   left.dataset.tour = "cms-media-folders";
   // Top line of the left column: Images | Files on the left, the Image Settings gear at the
@@ -6102,27 +6117,27 @@ async function renderSiteMedia(body) {
   };
   const paintFolders = () => {
     folderHost.innerHTML = "";
-    folderHost.appendChild(folderRow(null, isFiles ? F.allFiles : F.all, items.length));
+    folderHost.appendChild(folderRow(null, isFiles ? F.allFiles : isVideo ? F.allVideo : F.all, items.length));
     folderHost.appendChild(folderRow("__untagged", F.untagged, items.filter((it) => !(it.tags || []).length).length));
     tags.forEach((t) => folderHost.appendChild(folderRow(t, t, items.filter((it) => (it.tags || []).some((x) => same(x, t))).length, { tag: t })));
   };
 
   // ── Library ──
-  right.appendChild(siteEl("div", "sess-desc", isFiles ? COPY.site.mediaFilesDesc : COPY.site.mediaTabDesc));
+  right.appendChild(siteEl("div", "sess-desc", isFiles ? COPY.site.mediaFilesDesc : isVideo ? COPY.site.mediaVideoDesc : COPY.site.mediaTabDesc));
   const bar = siteEl("div", "site-media-bar"); bar.dataset.tour = "cms-media-bar";
   const filterIn = document.createElement("input"); filterIn.className = "field"; filterIn.placeholder = M.filter; filterIn.style.marginBottom = "0";
-  const upBtn = siteEl("button", "panelbtn", isFiles ? M.uploadFiles : M.upload); upBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+  const upBtn = siteEl("button", "panelbtn", isFiles ? M.uploadFiles : isVideo ? M.uploadVideo : M.upload); upBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
   const phoneBtn = siteEl("button", "panelbtn", M.fromPhone); phoneBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;"; phoneBtn.hidden = isFiles; // photos only
   const filterWrap = siteSearchField(filterIn); filterWrap.style.flex = "1";
   bar.append(filterWrap, upBtn, phoneBtn); right.appendChild(bar);
-  const note = siteEl("div", "sess-desc", isFiles ? M.uploadFilesNote : M.uploadNote); right.appendChild(note);
+  const note = siteEl("div", "sess-desc", isFiles ? M.uploadFilesNote : isVideo ? M.uploadVideoNote : M.uploadNote); right.appendChild(note);
   const phoneHost = siteEl("div"); right.appendChild(phoneHost);
   const gridHost = siteEl("div"); gridHost.dataset.tour = "cms-media-grid"; right.appendChild(gridHost);
   const paintGrid = () => {
     gridHost.innerHTML = "";
-    if (!items.length) { gridHost.appendChild(siteEl("div", "muted", isFiles ? M.emptyFiles : M.empty)); return; }
+    if (!items.length) { gridHost.appendChild(siteEl("div", "muted", isFiles ? M.emptyFiles : isVideo ? M.emptyVideo : M.empty)); return; }
     const shown = items.filter(inFolder).filter((it) => !filter || it.name.toLowerCase().includes(filter) || (it.tags || []).some((t) => t.toLowerCase().includes(filter)));
-    if (!shown.length) { gridHost.appendChild(siteEl("div", "sess-desc", siteRailState.mediaFolder ? F.emptyFolder : (isFiles ? M.emptyFiles : M.empty))); return; }
+    if (!shown.length) { gridHost.appendChild(siteEl("div", "sess-desc", siteRailState.mediaFolder ? F.emptyFolder : (isFiles ? M.emptyFiles : isVideo ? M.emptyVideo : M.empty))); return; }
     const grid = siteEl("div", "media-grid");
     shown.forEach((it) => {
       const tile = mediaTile(it, {
@@ -6138,11 +6153,18 @@ async function renderSiteMedia(body) {
     gridHost.appendChild(grid);
   };
   const loadTags = async () => { tags = ((await window.desktop.getMediaTags(kind).catch(() => ({ tags: [] }))).tags) || []; if (siteRailState.mediaFolder && siteRailState.mediaFolder !== "__untagged" && !tags.some((t) => same(t, siteRailState.mediaFolder))) siteRailState.mediaFolder = null; };
-  const load = async () => { items = await window.desktop.listMedia(kind).catch(() => []); if (!isFiles) mediaIndex = items; await loadTags(); paintFolders(); paintGrid(); };
+  const load = async () => {
+    items = await window.desktop.listMedia(kind).catch(() => []);
+    // A clip's poster sits beside it in public/video. It is part of the clip, not a
+    // separate thing to tag or delete, so the library lists the clips only.
+    if (isVideo) items = items.filter((it) => !/\.poster\.[a-z0-9]+$/i.test(it.name));
+    if (kind === "image") mediaIndex = items; // the thumbnail index image fields read
+    await loadTags(); paintFolders(); paintGrid();
+  };
   filterIn.addEventListener("input", () => { filter = filterIn.value.trim().toLowerCase(); paintGrid(); });
   upBtn.addEventListener("click", async () => {
     const label = upBtn.textContent; upBtn.disabled = true; upBtn.textContent = M.uploading;
-    const r = await (isFiles ? window.desktop.uploadFiles() : window.desktop.uploadMedia());
+    const r = await (isFiles ? window.desktop.uploadFiles() : isVideo ? window.desktop.uploadVideo() : window.desktop.uploadMedia());
     upBtn.disabled = false; upBtn.textContent = label;
     if (r && r.ok && r.added && r.added.length) await load();
   });

@@ -433,8 +433,9 @@ window.COPY = {
     },
     tabs: { pages: "Pages", posts: "Posts", types: "Types", forms: "Forms", media: "Media", blocks: "Blocks", nav: "Navigation", settings: "Settings" },
     mediaTabDesc: "Every image in the project, the same library the image fields pick from. Hover an image to rename or delete it.",
+    mediaVideoDesc: "The clips this site plays. Each one keeps the poster still taken when it was added, which is what shows before it starts and for visitors who ask for less motion.",
     mediaFilesDesc: "Documents and downloads for the site: PDFs, spreadsheets, decks, archives, audio and video. Link to one from any menu or link field.",
-    mediaKinds: { image: "Images", file: "Files" },
+    mediaKinds: { image: "Images", video: "Video", file: "Files" },
     // "Build the site from this design": the one chat-driven step between designing and
     // running the site (/promote-blocks), started from a button here and in Publish.
     build: {
@@ -1178,6 +1179,7 @@ window.COPY = {
         heading: "Folders",
         desc: "Folders are the tags: an image sits in every folder it's tagged with. Drag an image onto a folder to file it.",
         all: "All images",
+        allVideo: "All video",
         allFiles: "All files",
         untagged: "Untagged",
         add: "New folder",
