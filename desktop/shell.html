@@ -434,7 +434,15 @@
       /* CMS tabs: the same look as the publish help tabs, inside the drawer body. */
       /* Outlined tabs above a solid black rule: light gray outline at rest, black when
          selected. (The list/editor divider below stays the subdued gray.) */
-      .site-tabs { display: flex; gap: 6px; margin: -2px 0 16px; padding-bottom: 10px; border-bottom: 1px solid #111; }
+      /* The CMS tabs stay put while the panel under them scrolls. Without this, filtering
+         the media library to a folder shrinks the grid, the scroll container keeps its
+         scrollTop, and the tabs end up scrolled off the top: they look like they have
+         vanished, and only closing and reopening the drawer brings them back. */
+      .site-tabs {
+        display: flex; gap: 6px; margin: -2px 0 16px; padding: 8px 0 10px;
+        border-bottom: 1px solid #111;
+        position: sticky; top: -16px; z-index: 3; background: #fff;
+      }
       .site-tab { border: 1px solid #ececf1; border-radius: 6px; background: #fff; cursor: pointer; padding: 7px 12px; font-size: 13px; font-weight: 600; color: #68686e; transition: color .15s linear, border-color .15s linear; }
       .site-tab:hover { color: #333; border-color: #cfcfd6; }
       .site-tab.active { color: #17171b; border-color: #111; }
