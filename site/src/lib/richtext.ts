@@ -2,10 +2,13 @@
 /**
  * Markdown → HTML for `richtext` block props (CORE). The CMS editor writes the
  * markdown subset this renders: paragraphs, headings, bold / italic / strike,
- * links, images, bullet and numbered lists, quotes, code, dividers. Text is
+ * links, images, bullet and numbered lists, quotes, code, dividers, and a video
+ * (a YouTube / Vimeo address on a line of its own, see embed.ts). Text is
  * escaped first, so content can't inject markup; no dependency, so a promoted
  * site renders rich copy without adding a package.
  */
+import { videoEmbed, embedHtml } from "./embed";
+
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 function inline(s: string): string {
@@ -34,6 +37,7 @@ function sanitizeAligned(html: string): string {
     .replace(/\son\w+="[^"]*"/gi, "");
 }
 
+const bareUrl = (s: string) => { let m: RegExpMatchArray | null; if ((m = s.match(/^<(\S+)>$/))) return m[1]; if ((m = s.match(/^\[(\S+)\]\((\S+)\)$/)) && m[1] === m[2]) return m[2]; return s; };
 const LIST = /^\s*(?:[-*+]|\d+[.)])\s+/;
 const BLOCK_START = /^(?:#{1,6}\s|>\s?|```|(?:-{3,}|\*{3,}|_{3,})\s*$)/;
 
@@ -76,7 +80,12 @@ export function renderMarkdown(md: string | undefined | null): string {
     }
     const buf: string[] = [];
     while (i < lines.length && lines[i].trim() && !BLOCK_START.test(lines[i]) && !LIST.test(lines[i])) buf.push(lines[i++]);
-    out.push(`<p>${inline(buf.join("\n"))}</p>`);
+    // A video address alone on its line is the video, the way WordPress treats a pasted
+    // link. The file keeps the plain URL; the editor writes and reads it the same way.
+    // The address may also arrive as an autolink, <url> or [url](url), when the editor's
+    // Link extension got to a paste first; the video is the same.
+    const video = buf.length === 1 ? videoEmbed(bareUrl(buf[0].trim())) : null;
+    out.push(video ? embedHtml(video) : `<p>${inline(buf.join("\n"))}</p>`);
   }
   return out.join("\n");
 }

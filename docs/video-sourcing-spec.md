@@ -578,3 +578,27 @@ silently; and a field with no poster is not a usable value.
   galleries, no chapters, no trimming or in-app editing.
 - **Audio.** Every clip this feature places is muted. A design that needs sound is a
   designer's deliberate hand-build, not FPO.
+
+## Hosted video: a YouTube / Vimeo address as `src` (added 2026-09-11)
+
+The video value stays `{ src, poster, alt }`; a hosted video is that value with the
+address in `src`. One parser, `site/src/lib/embed.ts` (CORE, shared with the rich-text
+embed and the app's editor bundle), decides what is an address and builds the player URL.
+
+- **Renderers**: `src/app/components/VideoFigure.tsx`, its promoted copy under
+  `site/blocks/lib/`, and the built-in Video block render the host's player in the clip's
+  place. A hosted video is always content: the host's controls, started by the visitor,
+  never autoplay (the `controls` prop is moot for it). YouTube's thumbnail stands in for
+  an empty poster; Vimeo has none to borrow.
+- **Player parameters**: YouTube `rel=0&controls=1&playsinline=1&iv_load_policy=3` on the
+  nocookie host (rel=0 now only keeps end-screen suggestions to the same channel; YouTube
+  removed the off switch in 2018; `modestbranding` and `showinfo` are dead parameters).
+  Vimeo `dnt=1&title=0&byline=0&portrait=0&playsinline=1`; its end screen has no player
+  parameter, it is set on the video in Vimeo's settings.
+- **Motion contract**: the player gets `ta-video-embed`: reduced motion keeps it, only the
+  Figma capture hides it and shows the still (`motion.css`).
+- **CMS**: the video control has an "Or a YouTube / Vimeo video" address field beside the
+  drop zone; the zone names the video, the note says whether a poster is still needed. A
+  content-type video field accepts an address without a poster.
+- `<VideoBackground>` does not take an address: a background is always a clip.
+- Tests: `desktop/dev/video-embed-render.test.cjs` (server-renders all three components).

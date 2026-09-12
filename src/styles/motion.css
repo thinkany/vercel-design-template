@@ -137,3 +137,12 @@
 [data-capture-ready] .ta-video-clip {
   display: none;
 }
+/* A hosted video (a YouTube / Vimeo address as `src`) is the host's player, content the
+   visitor starts with its controls, never motion: reduced motion keeps it, and only the
+   Figma capture swaps it for the still, since an <iframe> serialises as an empty box. */
+.ta-video-embed {
+  z-index: 1;
+}
+[data-capture-ready] .ta-video-embed {
+  display: none;
+}

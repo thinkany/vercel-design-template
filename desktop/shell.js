@@ -5138,8 +5138,10 @@ function siteTypeFieldControl(f, value, onChange, ctx) {
     let cur = { src: (value && value.src) || "", poster: (value && value.poster) || "", alt: (value && value.alt) || "" };
     wrap.appendChild(siteVideoControl(cur, (next) => { cur = next || { src: "", poster: "", alt: "" }; change(); }, { bare: true }));
     // A clip with no poster is not a usable value: the still is what reduced motion, the
-    // Figma export and the pre-play moment all show.
-    get = () => (cur.src && cur.poster ? { src: cur.src, poster: cur.poster, alt: cur.alt } : "");
+    // Figma export and the pre-play moment all show. A YouTube / Vimeo address is: the
+    // host's player shows itself (and YouTube lends its own still).
+    const isEmbed = (u) => !!(u && window.TAEditor && window.TAEditor.videoEmbed && window.TAEditor.videoEmbed(u));
+    get = () => (cur.src && (cur.poster || isEmbed(cur.src)) ? { src: cur.src, poster: cur.poster, alt: cur.alt } : "");
   } else if (f.kind === "link") {
     const lab = document.createElement("input"); lab.className = "field"; lab.placeholder = S.linkLabel; lab.value = (value && value.label) || "";
     const href = document.createElement("input"); href.className = "field"; href.placeholder = S.linkHref; href.value = (value && value.href) || ""; href.setAttribute("list", siteLinkListId()); href.autocomplete = "off";
@@ -6184,6 +6186,7 @@ const EDITOR_ICONS = {
   code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
   link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
   image: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+  video: '<path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/>',
   rule: '<path d="M5 12h14"/>',
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
   redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"/>',
@@ -6227,7 +6230,7 @@ function siteRichEditor(markdown, onChange, { compact } = {}) {
     ask.innerHTML = ""; ask.hidden = false;
     ask.appendChild(siteEl("span", "k", label));
     const inp = document.createElement("input"); inp.className = "field"; inp.placeholder = placeholder || ""; inp.value = value || "";
-    const ok = siteMini(apply, () => { onApply(inp.value.trim()); hideAsk(); });
+    const ok = siteMini(apply, () => { if (onApply(inp.value.trim()) === false) return; hideAsk(); }); // false = the ask stays (re-shown with a hint)
     const no = siteMini(E.cancel, () => { hideAsk(); editor.commands.focus(); });
     ask.append(inp, ok);
     if (extra) ask.appendChild(siteMini(extra.label, () => { extra.run(); hideAsk(); }, { danger: true }));
@@ -6278,6 +6281,20 @@ function siteRichEditor(markdown, onChange, { compact } = {}) {
     if (!it || !it.url) { editor.commands.focus(); return; }
     showAsk({ label: E.altAsk, placeholder: E.altPlaceholder, value: "", apply: E.altApply, onApply: (alt) => chain().setImage({ src: it.url, alt }).run() });
   }, () => editor.isActive("image"));
+  // Video: paste a YouTube or Vimeo link anywhere in the text and it embeds on its own
+  // (the editor's paste handler); this is the same thing as a button, for whoever looks
+  // for one. A link that isn't a video keeps the ask open with a hint.
+  btn("video", E.video, () => {
+    const askVideo = (value, bad) => showAsk({
+      label: bad ? E.videoBad : E.videoAsk, placeholder: E.videoPlaceholder, value, apply: E.videoApply,
+      onApply: (url) => {
+        if (!url) return;
+        if (!(window.TAEditor.videoEmbed && window.TAEditor.videoEmbed(url))) { askVideo(url, true); return false; }
+        chain().setVideoEmbed({ url }).run();
+      },
+    });
+    askVideo("", false);
+  }, () => editor.isActive("videoEmbed"));
   btn("rule", E.rule, () => chain().setHorizontalRule().run(), () => false);
   sep();
   // Alignment: paragraphs and headings by text-align; a selected image by its own attribute.
@@ -6359,9 +6376,17 @@ function siteVideoControl(value, onChange, { label, bare = false } = {}) {
   clearLink.type = "button";
   links.append(chooseLink, clearLink);
   clipRow.appendChild(links);
+  // Or a video that lives on YouTube / Vimeo: the address goes in `src` as it is, and the
+  // components render the host's player in the clip's place (site/src/lib/embed.ts).
+  const linkRow = siteEl("div", "site-kv");
+  linkRow.appendChild(siteEl("div", "k", S.videoLinkLabel));
+  const linkIn = document.createElement("input"); linkIn.className = "field"; linkIn.placeholder = S.videoLinkPlaceholder; linkIn.style.marginBottom = "0";
+  linkRow.appendChild(linkIn);
+  clipRow.appendChild(linkRow);
   const note = siteEl("div", "sess-desc");
   clipRow.appendChild(note);
   wrap.appendChild(clipRow);
+  const embedOf = (u) => (u && window.TAEditor && window.TAEditor.videoEmbed ? window.TAEditor.videoEmbed(u) : null);
 
   let posterCtl = null;
   const paintPoster = () => {
@@ -6375,14 +6400,27 @@ function siteVideoControl(value, onChange, { label, bare = false } = {}) {
   };
 
   const paint = () => {
-    hint.textContent = cur.src ? `${cur.src.split("/").pop()} ${S.videoReplace}` : S.videoDropHint;
+    const e = embedOf(cur.src);
+    hint.textContent = e ? `${e.title} · ${cur.src}` : cur.src ? `${cur.src.split("/").pop()} ${S.videoReplace}` : S.videoDropHint;
     zone.classList.toggle("has-image", !!cur.src);
     clearLink.hidden = !cur.src;
+    if (document.activeElement !== linkIn) linkIn.value = e ? cur.src : "";
     // Say plainly when a clip has no still yet: it would be blank for reduced motion and
-    // in the Figma export, and the fix is the control directly below.
-    note.textContent = cur.src && !cur.poster ? S.videoNeedsPoster : S.videoClipHint;
-    note.classList.toggle("site-warn", !!(cur.src && !cur.poster));
+    // in the Figma export, and the fix is the control directly below. A YouTube video
+    // brings its own still; a Vimeo one does not.
+    const needs = !!(cur.src && !cur.poster && (!e || e.provider === "vimeo"));
+    note.textContent = e ? (e.provider === "youtube" ? S.videoEmbedYoutubeHint : S.videoEmbedVimeoHint) : cur.src && !cur.poster ? S.videoNeedsPoster : S.videoClipHint;
+    note.classList.toggle("site-warn", needs);
   };
+  const takeLink = () => {
+    const v = linkIn.value.trim();
+    if (!v) { if (embedOf(cur.src)) { cur.src = ""; paint(); emit(); } return; } // cleared the address: the embed goes
+    if (!embedOf(v)) { note.textContent = S.videoLinkBad; note.classList.add("site-warn"); return; }
+    if (v === cur.src) return;
+    cur.src = v; paint(); emit();
+  };
+  linkIn.addEventListener("change", takeLink);
+  linkIn.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); takeLink(); } });
 
   const take = (result) => {
     if (!result || !result.ok) { hint.textContent = (result && result.error) || COPY.common.couldNotSave; return; }

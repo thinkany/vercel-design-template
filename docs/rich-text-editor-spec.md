@@ -73,6 +73,25 @@ enforces. No base64, no external URLs pasted silently (a pasted URL becomes a li
 A "Markdown" toggle under the editor shows the textarea with the raw markdown, for the
 rare fix the toolbar can't make (and for trust: the designer can always see the file).
 
+## Video embeds (added 2026-09-11)
+
+The WordPress move: paste a YouTube or Vimeo link and the player appears in place.
+
+- **On disk** the embed is the bare address on a line of its own, nothing more. Any
+  markdown renderer still shows a link; ours (`site/src/lib/richtext.ts`) renders the
+  player, a 16:9 `<div class="ta-embed">` holding a privacy-host iframe
+  (youtube-nocookie.com, player.vimeo.com with `dnt=1`).
+- **One parser**, `site/src/lib/embed.ts` (CORE), decides what counts as a video address
+  (watch / youtu.be / shorts / embed / live; vimeo.com and player.vimeo.com, unlisted
+  hash kept). The editor bundle imports that same file, so the two sides can't drift.
+- **In the editor** a `videoEmbed` atom node shows a still with a play badge (YouTube's
+  own thumbnail; a labelled card for Vimeo), not the player: YouTube refuses to play in
+  a page served from file://, which the app's renderer is (error 153). Clicks select the
+  node; it plays on the site. It arrives three ways: a paste whose text is only such an address
+  (its handler runs before Link's, and steps aside when text is selected, since that
+  paste means "link this"); the toolbar's video button (asks for the address, keeps
+  asking on a non-video one); or reading a file whose paragraph is only the address.
+
 ## Not in scope
 
 Collaborative editing, comments, version history (git is the history), embedding blocks

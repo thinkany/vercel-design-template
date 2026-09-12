@@ -153,7 +153,9 @@ section's `data-block` in the design.
    string and never the `image` fragment. The `poster` key is what tells the CMS the
    field is video, and the still is load-bearing (reduced motion, the Figma export, the
    moment before the first frame). A section built with `<VideoBackground>` or
-   `<VideoFigure>` promotes with its clip AND poster paths as one `video` prop.
+   `<VideoFigure>` promotes with its clip AND poster paths as one `video` prop. A
+   `src` that is a YouTube / Vimeo address stays exactly that (the fragment carries it),
+   and the promoted block keeps rendering the embedded player.
 11. **Shared prop fragments** come from `site/blocks/lib/schema.ts` (`image`, `video`,
    `link`, `anchor`); extend that file rather than redefining shapes per block.
 

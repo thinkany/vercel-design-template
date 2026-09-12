@@ -15,6 +15,7 @@
  *         uploads a clip (deriving the poster) or picks one already in the library.
  */
 import type React from "react";
+import { videoEmbed, embedFrameProps } from "./embed";
 import { z } from "astro/zod";
 import { defineBlock, formRef, richtext, type BlockDef } from "./blocks";
 import { Rich } from "./Rich";
@@ -206,8 +207,14 @@ const videoProps = z.object({
 
 function Video({ id, heading, video, width, ratio, controls }: z.infer<typeof videoProps>) {
   const src = (video && video.src) || "";
-  const poster = (video && video.poster) || "";
   const label = (video && video.alt) || heading || "";
+  // A YouTube / Vimeo address is the same block with the host's player in the clip's
+  // place (see VideoFigure). A hosted video is always content: the visitor starts it,
+  // with the host's controls, whatever `controls` says. YouTube's own thumbnail stands
+  // in for a missing poster.
+  const embed = videoEmbed(src);
+  const poster = (video && video.poster) || (embed && embed.thumb) || "";
+  const content = controls || !!embed;
   if (!src && !poster) return null; // nothing chosen yet: draw nothing rather than a black box
   return (
     <section id={id} data-block="video" className={width === "full" ? "w-full" : "w-full max-w-5xl mx-auto px-6"}>
@@ -216,12 +223,17 @@ function Video({ id, heading, video, width, ratio, controls }: z.infer<typeof vi
         {poster ? (
           <img
             src={poster}
-            alt={controls && label ? label : ""}
+            alt={content && label ? label : ""}
             className="ta-video-still absolute inset-0 h-full w-full object-cover"
-            aria-hidden={controls ? undefined : "true"}
+            aria-hidden={content ? undefined : "true"}
           />
         ) : null}
-        {src ? (
+        {embed ? (
+          <iframe
+            {...embedFrameProps(embed, { title: label })}
+            className="ta-video-embed absolute inset-0 h-full w-full border-0"
+          />
+        ) : src ? (
           <video
             className="ta-video-clip absolute inset-0 h-full w-full object-cover"
             src={src}

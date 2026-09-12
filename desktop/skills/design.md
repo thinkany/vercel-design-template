@@ -574,6 +574,12 @@ from `@/app/components/VideoBackground` and `@/app/components/VideoFigure`.
   `controls` ONLY when the clip carries meaning, and then give it a `label`: that makes it
   focusable, operable and announced.
 - Both obey the anchored two-column rule (rule 7) exactly as an image does.
+- **A YouTube or Vimeo address works as `src`** on `<VideoFigure>` (a client's existing
+  video, from the brief or a reference): the figure renders the host's player in the
+  clip's place. A hosted video is always CONTENT: the visitor starts it, with the host's
+  controls, never autoplay, so give it a `label`. It is not texture, and it cannot be.
+  YouTube brings its own still when `poster` is empty; a Vimeo address, like a clip,
+  needs a poster. Not for `<VideoBackground>`: a background is always a clip.
 
 Both render the poster AND the clip, and `motion.css` decides which shows, so reduced
 motion and the Figma capture get the still automatically. Don't add your own guard.
