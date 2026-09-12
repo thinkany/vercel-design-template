@@ -1815,9 +1815,19 @@ async function openModal(kind) {
     void modal.offsetWidth; // commit the closed transform, then transition to open
     modal.classList.add("open");
   }
+  // Every open claims the body. A render that awaits (the CMS reads its content first)
+  // can be overtaken by the next open, which clears the body underneath it; when the
+  // slow one resumes it appends into a body that is no longer its own, or finishes after
+  // the newer one and leaves a half-built panel. Each CMS tab click re-opens this drawer
+  // (refresh() → openModal("site")), so two quick clicks did exactly that, and the tab
+  // row went missing until the drawer was closed and reopened by hand.
+  modalBody.dataset.gen = String(++modalRenderGen);
   modalRender = render(modalBody);
   await modalRender;
 }
+let modalRenderGen = 0;
+/** True while `body` is still the render that claimed it (see openModal). */
+function bodyIsCurrent(body, gen) { return body.dataset.gen === String(gen); }
 // The in-flight (or last) drawer render, so a caller that finds the drawer already
 // open can wait for its body instead of re-rendering into it (a second concurrent
 // openModal would append a duplicate set of rows).
@@ -7769,7 +7779,9 @@ function siteAccordionize(wrap) {
 
 async function renderSite(body) {
   destroyLiveEditors();
+  const gen = Number(body.dataset.gen || 0); // this render's claim on the body
   const data = await window.desktop.getSiteContent().catch(() => ({ ready: false, reason: "no-project", pages: [], blocks: [], site: { nav: [], footerLinks: [] } }));
+  if (!bodyIsCurrent(body, gen)) return; // a newer open cleared the body while we read
   const refresh = () => { if (RAILS.site.classList.contains("active")) openModal("site"); };
   // Empty states sit on one card, centred in the drawer, not as lines edge to edge.
   const emptyCard = (why) => {
@@ -7817,6 +7829,9 @@ async function renderSite(body) {
   // ── Tabs: Pages · Posts · Types · Forms · Blocks · Navigation · Settings ──
   // Off per project until the Settings switch is on: only Settings is reachable then.
   const cms = await window.desktop.getCmsSettings().catch(() => ({ media: { quality: 55, maxWidth: 2400 }, defaults: { media: { quality: 55, maxWidth: 2400 } }, enabled: false }));
+  // Last read before anything is drawn: if a newer open claimed the body while these
+  // eight round-trips ran, stop here rather than building into someone else's panel.
+  if (!bodyIsCurrent(body, gen)) return;
   siteFolds = { ...((cms.ui && cms.ui.folds) || {}) };
   const TABS = ["pages", "posts", "types", "forms", "media", "blocks", "nav", "settings"];
   if (!TABS.includes(siteRailState.tab)) siteRailState.tab = "pages";

@@ -61,4 +61,31 @@ for (const name of FOLD_BUILDERS) {
     `${name}() still builds a site-acc head (if not, update FOLD_BUILDERS)`);
 }
 
+// ---- A superseded drawer render must not write into the body -----------------
+// Every CMS tab click re-opens the drawer (refresh() → openModal("site")), and renderSite
+// makes eight IPC reads before it appends anything. Two quick clicks leave the slower
+// render resuming into a body the newer one has cleared: it either wipes what the newer
+// one drew or appends a second copy beside it, and the tab row goes with it.
+const openModal = src.slice(src.indexOf("async function openModal"), src.indexOf("let modalRenderGen"));
+ok(/modalBody\.dataset\.gen = String\(\+\+modalRenderGen\)/.test(openModal),
+  "each open claims the body with a generation");
+ok(/function bodyIsCurrent\(body, gen\)/.test(src), "and there is a way to ask if a render still owns it");
+const rsStart = src.indexOf("async function renderSite(body)");
+const rs = src.slice(rsStart, src.indexOf("\nasync function ", rsStart + 10));
+ok(/const gen = Number\(body\.dataset\.gen \|\| 0\)/.test(rs), "renderSite reads its claim before awaiting");
+ok((rs.match(/if \(!bodyIsCurrent\(body, gen\)\) return;/g) || []).length >= 2,
+  "and checks it again after its reads, before it builds");
+// The guard has to come after the LAST read, so nothing is built on stale data. (The
+// first appendChild in this function is inside a helper that is only called later, so
+// position alone would not tell us; the reads are what matter.)
+// The render's OWN reads are the top-level `const x = await window.desktop.…` lines;
+// the awaits further down belong to click handlers and run long after this returns.
+const ownReads = [...rs.matchAll(/^  const \w+ = await window\.desktop\./gm)].map((m) => m.index);
+const lastGuard = rs.lastIndexOf("if (!bodyIsCurrent(body, gen)) return;");
+ok(ownReads.length >= 6, `renderSite still front-loads its reads (found ${ownReads.length})`);
+ok(lastGuard > ownReads[ownReads.length - 1],
+  "the final guard sits after the last of them, before the panel is built");
+ok(/const tabs = siteEl\("div", "site-tabs"\)/.test(rs.slice(lastGuard)),
+  "and the tab row is built after it, so a superseded render never draws one");
+
 console.log(`renderer-scope: ${checks} checks pass.`);
