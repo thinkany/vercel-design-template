@@ -1780,6 +1780,7 @@ const PANELS = {
 };
 
 function closeModal() {
+  siteEditGuard = null; // nothing to guard once the drawer is gone
   Object.values(RAILS).forEach((b) => b.classList.remove("active"));
   if (typeof hideRecLoupe === "function") hideRecLoupe(); // no loupe left floating over the app
   if (modal.hidden) return;
@@ -1789,7 +1790,26 @@ function closeModal() {
   // Hide after the slide-out finishes — unless it was reopened in the meantime.
   setTimeout(() => { if (!modal.classList.contains("open")) modal.hidden = true; }, 240);
 }
+// Unsaved CMS edits. The editor that holds them registers here (siteGuardEdits, from the
+// page, post, entry, type and form editors), and leaving by any route the drawer offers,
+// another tab or row, the X, Escape, another rail, asks first: OK leaves and drops the
+// edits, Cancel stays. A successful save and the Cancel-revert button clear the guard
+// before they re-render, so neither asks. Closing the app or switching projects is not
+// covered, on purpose.
+let siteEditGuard = null;
+function siteGuardEdits(isDirty) { siteEditGuard = { isDirty }; }
+async function siteLeaveOk() {
+  if (!siteEditGuard || !siteEditGuard.isDirty()) return true;
+  const ok = await askConfirm({ title: COPY.site.leaveTitle, message: COPY.site.leaveMessage, okLabel: COPY.site.leaveOk });
+  if (ok) siteEditGuard = null;
+  return ok;
+}
+/** The X, Escape and the rail toggle: the routes a person takes to close the drawer. */
+async function closeModalGuarded() { if (!(await siteLeaveOk())) return; closeModal(); }
+
 async function openModal(kind) {
+  if (!(await siteLeaveOk())) return; // unsaved edits in the open CMS editor: asked, and stayed
+  siteEditGuard = null; // whatever renders next registers its own
   // A drawer opening ends an on-page review walk (Art Director / Accessibility bar).
   if (adReview) exitAdReview();
   if (typeof a11yReview !== "undefined" && a11yReview) exitA11yReview();
@@ -1840,7 +1860,7 @@ async function ensureModal(kind) {
 // Rail click: if this panel's drawer is already open, close it; else open/switch.
 function toggleModal(kind) {
   const alreadyOpen = !modal.hidden && modal.classList.contains("open") && RAILS[kind].classList.contains("active");
-  if (alreadyOpen) closeModal();
+  if (alreadyOpen) closeModalGuarded();
   else openModal(kind);
 }
 
@@ -2472,10 +2492,10 @@ railCollapse.addEventListener("click", () => {
   }
 });
 applySidebarCollapsed(); // restore the remembered state on load
-modalClose.addEventListener("click", closeModal);
-modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+modalClose.addEventListener("click", closeModalGuarded);
+modal.addEventListener("click", (e) => { if (e.target === modal) closeModalGuarded(); }); // the backdrop is a close too
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !modal.hidden) closeModal();
+  if (e.key === "Escape" && !modal.hidden && confirmEl.hidden) closeModalGuarded(); // Escape on the dialog itself is the dialog's
 });
 
 // --- Help: the project's commands ---
@@ -4499,6 +4519,7 @@ function siteCancelBtn(refresh, kind) {
   const b = siteEl("button", "panelbtn outline", COPY.site.cancelEdits); b.type = "button"; b.disabled = true; b.style.margin = "0"; b.title = COPY.site.cancelEditsTip;
   b.addEventListener("click", async () => {
     if (!(await askConfirm({ title: COPY.site.revertTitle, message: COPY.site.revertConfirm(kind || COPY.site.kindPage), okLabel: COPY.site.revertOk, danger: true }))) return;
+    siteEditGuard = null; // reverting is leaving on purpose: no second question
     refresh();
   });
   return b;
@@ -4800,6 +4821,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
   // Working copy; Save writes it. Deep-cloned so a cancelled edit changes nothing.
   const draft = JSON.parse(JSON.stringify({ title: page.title, slug: page.id === "home" ? page.slug : (page.slug || siteSlugOf(page.title) || page.id), parent: page.parent || null, seo: page.seo || {}, blocks: page.blocks || [] }));
   let dirty = false;
+  siteGuardEdits(() => dirty); // leaving with edits asks (see siteLeaveOk)
   let cancelBtn = null;
   const markDirty = () => { dirty = true; saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
   const body = siteEl("div"); body.style.marginTop = "10px";
@@ -5039,8 +5061,9 @@ function renderSitePost(post, refresh) {
   card.appendChild(h);
   const slugOf = siteSlugOf;
   const draft = JSON.parse(JSON.stringify({ title: post.title, slug: post.slug || slugOf(post.title) || post.id, date: post.date, description: post.description, image: post.image, tags: post.tags || [], draft: !!post.draft, seo: post.seo || {}, body: post.body || "" }));
-  let saveBtn, cancelBtn;
-  const dirty = () => { saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
+  let saveBtn, cancelBtn, edited = false;
+  const dirty = () => { edited = true; saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
+  siteGuardEdits(() => edited); // leaving with edits asks (see siteLeaveOk)
   // Sections, as pages have: Post settings, Content, SEO (last).
   const pf = siteFold(S.postSettings, "post:settings"); pf.sec.dataset.tour = "cms-post-settings"; card.appendChild(pf.sec);
   const t = siteField(S.pageTitle, draft.title); pf.body.appendChild(t.wrap);
@@ -5088,7 +5111,7 @@ function renderSitePost(post, refresh) {
     const label = btn.textContent; btn.disabled = true; btn.textContent = S.saving;
     const res = await window.desktop.saveSitePost(post.id, { ...draft, draft: asDraft });
     btn.textContent = label;
-    if (res && res.ok) { siteFlash(actions, S.saved); refresh(); }
+    if (res && res.ok) { edited = false; siteFlash(actions, S.saved); refresh(); }
     else { btn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
   };
   saveBtn = siteEl("button", "panelbtn primary", draft.draft ? S.saveDraft : S.savePost); saveBtn.disabled = true; saveBtn.style.margin = "0";
@@ -5179,7 +5202,8 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   h.append(siteEl("div", "site-page-title", entry.title), siteEl("div", "site-page-slug", `${type.path}/${entry.slug || entry.id}`));
   h.querySelector(".site-page-title").style.fontSize = "15px";
   card.appendChild(h);
-  let saveBtn, cancelBtn; const dirty = () => { saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
+  let saveBtn, cancelBtn, edited = false; const dirty = () => { edited = true; saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
+  siteGuardEdits(() => edited); // leaving with edits asks (see siteLeaveOk)
   const foldKey = "entry"; // one open/closed state for every entry of every type
 
   // The same shape as a page: settings, content, blocks, then SEO last.
@@ -5239,7 +5263,7 @@ function renderSiteEntry(type, entry, ctx, refresh) {
     if (ownCb.checked) data.blocks = ownBlocks;
     const res = await window.desktop.saveSiteEntry(type.key, entry.id, data);
     btn.textContent = label;
-    if (res && res.ok) { siteFlash(actions, S.saved); refresh(); }
+    if (res && res.ok) { edited = false; siteFlash(actions, S.saved); refresh(); }
     else { btn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
   };
   saveBtn = siteEl("button", "panelbtn primary", isDraft ? S.saveEntryDraft : S.saveEntry); saveBtn.disabled = true; saveBtn.style.margin = "0";
@@ -5311,7 +5335,8 @@ function renderSiteTypeEditor(type, ctx, refresh) {
   const draft = JSON.parse(JSON.stringify({ key: type.key || "", label: type.label || "", singular: type.singular || "", path: type.path || "", fields: type.fields || [], template: type.template || [], index: type.index || null }));
   const card = siteEl("div");
   card.appendChild(siteEl("div", "site-page-title", isNew ? S.addType : S.editType + ": " + type.label)).style.cssText = "font-size:15px;margin-bottom:10px;";
-  let saveBtn, cancelBtn; const dirty = () => { saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
+  let saveBtn, cancelBtn, edited = false; const dirty = () => { edited = true; saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
+  siteGuardEdits(() => edited); // leaving with edits asks (see siteLeaveOk)
   const slug = (s) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const foldKey = "type"; // shared by every content type
 
@@ -5392,7 +5417,7 @@ function renderSiteTypeEditor(type, ctx, refresh) {
     const out = { key: draft.key || slug(lab.input.value), label: lab.input.value, singular: sing.input.value, path: pth.input.value.trim() ? pathValue() : ("/" + (draft.key || slug(lab.input.value))), fields: draft.fields, template: draft.template };
     if (ixCb.checked) out.index = { title: ixT.input.value, description: ixD.input.value };
     const res = await window.desktop.saveSiteType(out);
-    if (res && res.ok) { siteRailState.selected = { kind: "type", id: res.type.key }; siteFlash(actions, S.saved); refresh(); }
+    if (res && res.ok) { edited = false; siteRailState.selected = { kind: "type", id: res.type.key }; siteFlash(actions, S.saved); refresh(); }
     else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
   });
   cancelBtn = siteCancelBtn(refresh, S.kindType); if (isNew) cancelBtn.disabled = false; // a new, unsaved type: Cancel discards it
@@ -5603,7 +5628,8 @@ function renderSiteFormEditor(form, ctx, refresh) {
   const slug = (t) => String(t || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const card = siteEl("div");
   card.appendChild(siteEl("div", "site-page-title", S.editForm + ": " + form.name)).style.cssText = "font-size:15px;margin-bottom:10px;";
-  let saveBtn, cancelBtn; const dirty = () => { saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
+  let saveBtn, cancelBtn, edited = false; const dirty = () => { edited = true; saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
+  siteGuardEdits(() => edited); // leaving with edits asks (see siteLeaveOk)
   const name = siteField(S.formName, draft.name); name.input.addEventListener("input", dirty); card.appendChild(name.wrap);
 
   // Sections: Fields open by default, the rest folded until opened once (remembered per project).
@@ -5731,7 +5757,7 @@ function renderSiteFormEditor(form, ctx, refresh) {
       recipients: rcp.input.value, replyTo: rt.input.value, replyToField: rtf.value, recaptcha: rcCb.checked,
     };
     const res = await window.desktop.saveSiteForm(out);
-    if (res && res.ok) { siteRailState.selected = { kind: "form", id: res.form.id }; siteFlash(actions, S.saved); refresh(); }
+    if (res && res.ok) { edited = false; siteRailState.selected = { kind: "form", id: res.form.id }; siteFlash(actions, S.saved); refresh(); }
     else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
   });
   cancelBtn = siteCancelBtn(refresh, S.kindForm);
