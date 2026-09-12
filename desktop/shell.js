@@ -4327,6 +4327,10 @@ function sitePrefixField(labelText, prefix, value, { hint, placeholder } = {}) {
   if (hint) wrap.appendChild(siteEl("div", "sess-desc", hint));
   return { wrap, input, lead };
 }
+/** A double-click on a row's bar (anywhere but a button or a field) runs `toggle`. */
+function siteDblClickToggle(row, toggle) {
+  row.addEventListener("dblclick", (e) => { if (e.target.closest("button, input, select, textarea, a, label")) return; e.preventDefault(); toggle(); });
+}
 function siteMini(label, onClick, { danger, title, disabled } = {}) {
   const b = siteEl("button", "site-mini" + (danger ? " danger" : ""), label);
   b.type = "button";
@@ -4860,6 +4864,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
         siteMini(siteRailState.expanded[ek] ? COPY.site.hideContent : COPY.site.editContent, () => { siteRailState.expanded[ek] = !siteRailState.expanded[ek]; paintBlocks(); }),
         siteTrashBtn(() => { draft.blocks.splice(i, 1); markDirty(); paintBlocks(); }, COPY.site.removeBlock),
       );
+      siteDblClickToggle(row, () => { siteRailState.expanded[ek] = !siteRailState.expanded[ek]; paintBlocks(); }); // the bar itself opens and closes it
       blockList.appendChild(row);
       if (siteRailState.expanded[ek]) {
         // Older content may lack fields the block accepts: fill them from the defaults.
@@ -5274,6 +5279,7 @@ function siteBlocksEditor(list, blocks, onChange, stateKey) {
         siteMini(siteRailState.expanded[ek] ? S.hideContent : S.editContent, () => { siteRailState.expanded[ek] = !siteRailState.expanded[ek]; paint(); }),
         siteTrashBtn(() => { list.splice(i, 1); onChange(); paint(); }, S.removeBlock),
       );
+      siteDblClickToggle(row, () => { siteRailState.expanded[ek] = !siteRailState.expanded[ek]; paint(); });
       host.appendChild(row);
       if (siteRailState.expanded[ek]) {
         const dflt = (def && def.defaults) || {};
