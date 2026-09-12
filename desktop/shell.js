@@ -1057,9 +1057,12 @@ const OPEN_LOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 // see it once at their next launch). Personal hides the Company Profile rail icon + drawer and
 // the Publish drawer's company messaging, until a profile is created or uploaded.
 let appUsage = null;
+// Company is the assumption; only an explicit "personal" answer takes the company
+// features away (an install that has not answered yet, or an old one, behaves as a company).
+const usageIsPersonal = () => appUsage === "personal";
 async function applyUsage() {
   try { appUsage = (await window.desktop.getUsage()).usage; } catch {} // main flips it to company when a profile is saved
-  const show = appUsage === "company";
+  const show = !usageIsPersonal();
   setRailVisible(railCompany, show, !railAnimated);
   if (!show && railCompany.classList.contains("active")) closeModal(); // the drawer can’t outlive its icon
 }
@@ -3890,7 +3893,7 @@ async function renderPublish(body) {
   // name + logo to the client; if it isn't set, offer to add it before publishing
   // (still optional). Shown whether or not Vercel is connected.
   const proj = await window.desktop.getProjectStatus();
-  if (appUsage === "company" && proj.hasProject && !((proj.company || "").trim())) {
+  if (!usageIsPersonal() && proj.hasProject && !((proj.company || "").trim())) {
     const wrap = document.createElement("div");
     wrap.style.cssText = "margin: 6px 0 18px;";
     const rule = document.createElement("div");
@@ -3927,16 +3930,17 @@ async function renderPublish(body) {
     const note = document.createElement("div"); note.className = "sess-desc"; note.style.margin = "0 0 14px";
     const paintPick = () => {
       pick.innerHTML = "";
+      const current = usageIsPersonal() ? "personal" : "company"; // unanswered reads as company
       for (const [u, text] of [["personal", P.personal], ["company", P.company]]) {
         const b = siteMini(text, async () => {
-          if (appUsage === u) return;
+          if (current === u) return;
           try { await window.desktop.setUsage(u); } catch {}
           appUsage = u; await applyUsage(); openModal("publish");
         });
-        b.classList.toggle("on", appUsage === u);
+        b.classList.toggle("on", current === u);
         pick.appendChild(b);
       }
-      note.textContent = appUsage === "company" ? P.companyNote : P.personalNote;
+      note.textContent = usageIsPersonal() ? P.personalNote : P.companyNote;
     };
     paintPick();
     const info = document.createElement("div");
