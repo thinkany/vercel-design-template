@@ -254,11 +254,22 @@ function splitItems(items: Item[]): [Item[], Item[]] {
   return [items.slice(0, left), items.slice(left)];
 }
 
-export function Header({ siteName, logos, nav }: Props) {
+/** The CMS Navigation tab's live preview drives the menu from outside (never set on the site). */
+type Preview = { open: string | null; mode: "desktop" | "mobile"; tick: number };
+
+export function Header({ siteName, logos, nav, preview }: Props & { preview?: Preview }) {
   const [active, setActive] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string[]>([]);
   const items = nav || [];
+
+  // The item being edited opens: on desktop its panel, on mobile the drawer with that
+  // item expanded. `tick` re-applies it after a hover-out or a re-render closed it.
+  useEffect(() => {
+    if (!preview) return;
+    if (preview.mode === "mobile") { setActive(null); setOpen(true); setExpanded(preview.open ? [preview.open] : []); }
+    else { setOpen(false); setActive(preview.open); }
+  }, [preview?.open, preview?.mode, preview?.tick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

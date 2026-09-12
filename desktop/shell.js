@@ -4347,6 +4347,23 @@ function sitePrefixField(labelText, prefix, value, { hint, placeholder } = {}) {
   if (hint) wrap.appendChild(siteEl("div", "sess-desc", hint));
   return { wrap, input, lead };
 }
+/**
+ * A fold chevron at the front of a list row: `has` says the row holds children (else a
+ * spacer keeps titles aligned). `folded()` reads the state, `onToggle(open)` sets it;
+ * the click never selects the row. Returns a paint() to re-read the state.
+ */
+function siteTreeChevron(row, has, folded, onToggle, { collapseTip, expandTip } = {}) {
+  // After the grip when the row has one, as in the menu editor: grip, chevron, title.
+  const grip = row.querySelector(".site-grip");
+  const put = (el) => row.insertBefore(el, grip ? grip.nextSibling : row.firstChild);
+  if (!has) { put(siteEl("span", "site-tree-spacer")); return () => {}; }
+  const chev = siteEl("button", "site-nav-chev"); chev.type = "button";
+  chev.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>';
+  const paint = () => { const f = folded(); chev.classList.toggle("folded", f); chev.title = f ? (expandTip || "") : (collapseTip || ""); chev.setAttribute("aria-label", chev.title); chev.setAttribute("aria-expanded", String(!f)); };
+  chev.addEventListener("click", (e) => { e.stopPropagation(); onToggle(folded()); paint(); });
+  put(chev); paint();
+  return paint;
+}
 /** A double-click on a row's bar (anywhere but a button or a field) runs `toggle`. */
 function siteDblClickToggle(row, toggle) {
   row.addEventListener("dblclick", (e) => { if (e.target.closest("button, input, select, textarea, a, label")) return; e.preventDefault(); toggle(); });
@@ -4586,7 +4603,7 @@ function siteAlternateSide(list, props, def) {
 // blockpreview mode, fed the draft props (debounced) as the designer edits. Desktop
 // renders at 1280px scaled to the pane (zoom), Mobile at 390px.
 let siteDesignId = null; // the pinned design, from site:content
-function siteBlockPreview(type, getProps, { onExpand } = {}) {
+function siteBlockPreview(type, getProps, { onExpand, onMode } = {}) {
   const el = siteEl("div", "site-block-preview");
   const bar = siteEl("div", "site-block-preview-bar");
   const stage = siteEl("div", "site-block-preview-stage");
@@ -4608,11 +4625,12 @@ function siteBlockPreview(type, getProps, { onExpand } = {}) {
   const push = () => { clearTimeout(timer); timer = setTimeout(send, 150); };
   wv.addEventListener("dom-ready", () => { ready = true; fit(); send(); });
   wv.addEventListener("did-finish-load", () => { ready = true; fit(); send(); });
-  const mk = (m, label) => { const b = siteEl("button", "site-mini" + (mode === m ? " on" : ""), label); b.type = "button"; b.addEventListener("click", () => { mode = m; bar.querySelectorAll(".site-mini").forEach((x) => x.classList.toggle("on", x === b)); fit(); }); return b; };
+  const mk = (m, label) => { const b = siteEl("button", "site-mini" + (mode === m ? " on" : ""), label); b.type = "button"; b.addEventListener("click", () => { mode = m; if (onMode) onMode(m); bar.querySelectorAll(".site-mini").forEach((x) => x.classList.toggle("on", x === b)); fit(); }); return b; };
   bar.append(mk("desktop", COPY.site.previewDesktop), mk("mobile", COPY.site.previewMobile));
   if (onExpand) { const ex = siteMini(COPY.site.previewExpand, onExpand, { title: COPY.site.previewExpandTip }); ex.style.marginLeft = "auto"; bar.appendChild(ex); }
   window.addEventListener("resize", fit);
-  return { el, push, fit };
+  const exec = (js) => { if (!ready) return; try { wv.executeJavaScript(js); } catch {} };
+  return { el, push, fit, exec, mode: () => mode };
 }
 
 // The block editor expanded into its own overlay: fields in a column on the left, the
@@ -5445,6 +5463,12 @@ function renderSiteTypesList(left, right, ctx, refresh) {
     row.addEventListener("click", () => { siteRailState.selected = { kind: "type", id: t.key }; refresh(); });
     left.appendChild(row);
     const list = siteEl("div"); list.style.cssText = "margin:0 0 6px 14px;";
+    // A type folds its entries (remembered per type); the type holding the open entry
+    // always shows them.
+    const holdsOpen = !!(sel && sel.kind === "entry" && sel.id.split("/")[0] === t.key);
+    let unfolded = holdsOpen || siteFoldGet(`types:${t.key}`, true);
+    list.hidden = !unfolded;
+    siteTreeChevron(row, true, () => !unfolded, (wasFolded) => { unfolded = wasFolded; siteFoldSet(`types:${t.key}`, unfolded); list.hidden = !unfolded; }, { collapseTip: S.typeCollapse, expandTip: S.typeExpand });
     const entryStatus = (ctx.entries[t.key] || []).length ? siteStatusBar({ host: list, kind: "entry", typeKey: t.key, items: ctx.entries[t.key] || [], refresh, filterKey: `entries:${t.key}` }) : null;
     (ctx.entries[t.key] || []).forEach((e) => {
       const er = siteEl("div", "site-list-row" + (sel && sel.kind === "entry" && sel.id === t.key + "/" + e.id ? " active" : ""));
@@ -6714,7 +6738,10 @@ function siteNavDraggable(row, { item, kind, owners = [], reorder, nest, repaint
 // Remove a dragged thing from wherever it sits in the nav draft (by identity).
 let siteNavRemove = () => {};
 
-function renderSiteNav(site, refresh, options = [], megaMenu = false) {
+// The header names an item by its label (or address), the way the site's Header does,
+// so the editor can ask the preview to open exactly that item's panel.
+function siteNavItemId(it, i) { return String(it.label || it.href || "").replace(/^[/#]+/, "").replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || `item-${i}`; }
+function renderSiteNav(site, refresh, options = [], megaMenu = false, { onDraft, onFocusItem } = {}) {
   const wrap = siteEl("div");
   const hf = siteFold(COPY.site.navHeading, "nav:header"); hf.sec.dataset.tour = "cms-nav-header"; wrap.appendChild(hf.sec);
   hf.body.appendChild(siteEl("div", "sess-desc", site.manageNav === false ? COPY.site.navAuto : COPY.site.navDesc));
@@ -6737,7 +6764,8 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
     if (res && res.ok) { site.nav = res.site.nav; site.footerLinks = res.site.footerLinks; site.legal = res.site.legal; setStatus(COPY.site.saved); setTimeout(() => { if (status.textContent === COPY.site.saved) setStatus(""); }, 1800); }
     else setStatus((res && res.error) || "Couldn't save.", true);
   };
-  const dirty = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 600); };
+  const dirty = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 600); if (onDraft) onDraft(draft); };
+  if (onDraft) onDraft(draft); // the preview starts from the draft, not the last save
   siteNavRemove = (x) => {
     const pull = (arr) => { const i = arr.indexOf(x); if (i >= 0) { arr.splice(i, 1); return true; } return false; };
     if (pull(draft.nav) || pull(draft.footerLinks) || pull(draft.legal.links)) return;
@@ -6771,64 +6799,152 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false) {
     };
     href.addEventListener("input", updHeading);
     let paintCols = null; // set below when this item can hold mega-menu panels
-    if (withSub && megaMenu && dnd && dnd.kind === "item") { // panels are a header thing
-      const addPanel = siteMini(COPY.site.addColumn, () => { l.columns = Array.isArray(l.columns) ? l.columns : []; l.columns.push({ heading: "", links: [] }); dirty(); if (paintCols) paintCols(); }, { title: COPY.site.addColumnTip });
-      row.appendChild(addPanel);
-    }
+    const canPanel = withSub && megaMenu && dnd && dnd.kind === "item"; // panels are a header thing
     row.appendChild(siteTrashBtn(() => { arr.splice(i, 1); dirty(); paint(); }, COPY.site.removeItem));
     const out = siteEl("div", "site-nav-out");
     out.appendChild(row);
+    // Editing anything under a header item (its row, a sub-link, a panel, the promo)
+    // opens that item in the preview.
+    if (onFocusItem && dnd && dnd.kind === "item") { const ask = () => onFocusItem(l, i); out.addEventListener("focusin", ask); out.addEventListener("click", ask); }
     if (withSub) {
       l.links = Array.isArray(l.links) ? l.links : [];
-      const sub = siteEl("div"); sub.style.cssText = "margin:0 0 6px 14px;";
-      const paintSub = () => { updHeading(); sub.innerHTML = ""; if (l.links.length) sub.appendChild(siteEl("div", "sess-desc", COPY.site.subLinks)); l.links.forEach((s, j) => sub.appendChild(linkRow(s, l.links, j, paintSub, false, dnd && { kind: "link", owners: [l], reorder: { kinds: ["link", "item"], target: () => l.links }, nest: null, repaint: dnd.repaint }))); sub.appendChild(siteMini(COPY.site.addSubLink, () => { l.links.push({ label: "", href: l.href || "" }); dirty(); paintSub(); })); };
+      const kids = siteEl("div", "site-nav-kids"); // the item's sub-links and panels
+      const sub = siteEl("div", "site-nav-sub");
+      // A top-level item folds: the chevron beside its grip hides everything under it.
+      // Remembered per item.
+      let updKids = () => {};
+      if (dnd && (dnd.kind === "item" || dnd.kind === "footer")) {
+        const foldKey = `nav-item:${dnd.kind}:${l.label || l.href || i}`;
+        const chev = siteEl("button", "site-nav-chev"); chev.type = "button";
+        chev.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>';
+        row.insertBefore(chev, lab); row.classList.add("has-chev");
+        const setFolded = (folded) => {
+          kids.hidden = folded; out.classList.toggle("collapsed", folded);
+          chev.title = folded ? COPY.site.itemExpand : COPY.site.itemCollapse; chev.setAttribute("aria-label", chev.title); chev.setAttribute("aria-expanded", String(!folded));
+          updKids();
+        };
+        updKids = () => { out.classList.toggle("has-kids", !kids.hidden && l.links.length + (l.columns || []).length > 0); };
+        chev.addEventListener("click", () => { const now = !kids.hidden; siteFoldSet(foldKey, !now); setFolded(now); });
+        setFolded(!siteFoldGet(foldKey, true));
+      }
+      const paintSub = () => {
+        updHeading(); sub.innerHTML = "";
+        if (l.links.length) sub.appendChild(siteEl("div", "sess-desc", COPY.site.subLinks));
+        l.links.forEach((s, j) => sub.appendChild(linkRow(s, l.links, j, paintSub, false, dnd && { kind: "link", owners: [l], reorder: { kinds: ["link", "item"], target: () => l.links }, nest: null, repaint: dnd.repaint })));
+        // "+ Sub-link" and, for a mega menu, "+ Panel" side by side: both add under this item.
+        const adds = siteEl("div", "site-nav-adds");
+        adds.appendChild(siteMini(COPY.site.addSubLink, () => { l.links.push({ label: "", href: l.href || "" }); dirty(); paintSub(); }));
+        if (canPanel) {
+          adds.appendChild(siteMini(COPY.site.addColumn, () => { l.columns = Array.isArray(l.columns) ? l.columns : []; l.columns.push({ heading: "", links: [] }); dirty(); if (paintCols) paintCols(); }, { title: COPY.site.addColumnTip }));
+          // One promo tile per menu: the header renders the first column that has one.
+          const hasPromo = (l.columns || []).some((c) => c.feature && typeof c.feature === "object");
+          if (!hasPromo) adds.appendChild(siteMini(COPY.site.addPromo, () => { l.columns = Array.isArray(l.columns) ? l.columns : []; l.columns.push({ links: [], feature: {} }); dirty(); if (paintCols) paintCols(); paintSub(); }, { title: COPY.site.addPromoTip }));
+        }
+        sub.appendChild(adds);
+        updKids();
+      };
       paintSub(); updHeading();
-      out.appendChild(sub);
+      kids.appendChild(sub);
       // Mega menu: columns under this item (only when the header renders them).
       if (megaMenu && dnd && dnd.kind === "item") {
         l.columns = Array.isArray(l.columns) ? l.columns : [];
-        const cols = siteEl("div"); cols.style.cssText = "margin:0 0 6px 14px;";
+        const cols = siteEl("div", "site-nav-panels");
         paintCols = () => {
           cols.innerHTML = "";
+          splitLegacy(l);
           if (l.columns.length) cols.appendChild(siteEl("div", "sess-desc", COPY.site.columns));
           l.columns.forEach((c, k) => cols.appendChild(columnBox(c, l, k, dnd.repaint)));
+          updKids();
         };
         paintCols();
-        out.appendChild(cols);
+        kids.appendChild(cols);
       }
+      out.appendChild(kids);
+      updKids();
     }
     return out;
   };
-  // One mega-menu column: heading, its links, an optional feature panel.
+  // One mega-menu column. Two kinds share the shape: a LINK PANEL (heading + links) and
+  // the PROMO TILE, a column whose `feature` holds an image, title, text and link. The
+  // site renders a column with a feature as the featured panel and drops its links, so
+  // the editor shows the two as different panels rather than folding a feature into every
+  // one. A column is a promo tile when `feature` is present.
+  const promoHas = (f) => !!(f && typeof f === "object" && (f.title || f.text || (f.image && f.image.src) || (f.link && f.link.href)));
+  const isPromo = (c) => !!(c.feature && typeof c.feature === "object");
+  // A column from the old editor that carries BOTH links and a filled promo: the site
+  // only ever showed the promo, so its links were lost. Split it once into two panels.
+  const splitLegacy = (item) => {
+    const cols = item.columns; let changed = false;
+    for (let i = 0; i < cols.length; i++) {
+      const c = cols[i];
+      if (!promoHas(c.feature)) { if (c.feature && !promoHas(c.feature)) { delete c.feature; changed = true; } continue; }
+      if ((c.links || []).length || (c.heading || "").trim()) { cols.splice(i + 1, 0, { links: [], feature: c.feature }); delete c.feature; changed = true; i++; }
+    }
+    if (changed) dirty();
+  };
   const columnBox = (c, item, k, repaint) => {
     c.links = Array.isArray(c.links) ? c.links : [];
+    if (isPromo(c)) return promoBox(c, item, k, repaint);
     const box = siteEl("div", "site-nav-col");
     const head = siteEl("div", "site-nav-row col");
+    // Fold the panel to its heading row; remembered per panel (by its item and position).
+    const foldKey = `nav-panel:${item.label || item.href || ""}:${k}`;
+    const chev = siteEl("button", "site-nav-chev"); chev.type = "button";
+    chev.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>';
     const hd = document.createElement("input"); hd.className = "field"; hd.placeholder = COPY.site.columnHeading; hd.value = c.heading || "";
     hd.addEventListener("input", () => { c.heading = hd.value; dirty(); });
-    head.append(hd, siteTrashBtn(() => { item.columns.splice(k, 1); dirty(); repaint(); }, COPY.site.removeColumn));
+    const count = siteEl("span", "site-nav-count");
+    head.append(chev, hd, count, siteTrashBtn(() => { item.columns.splice(k, 1); dirty(); repaint(); }, COPY.site.removeColumn));
+    const inner = siteEl("div"); // everything under the heading row
+    const setFolded = (folded) => {
+      box.classList.toggle("collapsed", folded); inner.hidden = folded;
+      chev.title = folded ? COPY.site.panelExpand : COPY.site.panelCollapse; chev.setAttribute("aria-label", chev.title); chev.setAttribute("aria-expanded", String(!folded));
+      count.textContent = folded ? COPY.site.panelLinkCount(c.links.length) : "";
+    };
+    chev.addEventListener("click", () => { const now = !box.classList.contains("collapsed"); siteFoldSet(foldKey, !now); setFolded(now); });
     siteNavDraggable(head, { item: c, kind: "column", owners: [item], reorder: { kinds: ["column"], target: () => item.columns }, nest: { into: () => c.links }, repaint, dirty });
-    box.appendChild(head);
-    const linksHost = siteEl("div"); linksHost.style.cssText = "margin:0 0 6px 14px;";
+    box.appendChild(head); box.appendChild(inner);
+    const linksHost = siteEl("div", "site-nav-links");
     const paintLinks = () => {
       linksHost.innerHTML = "";
       c.links.forEach((s, j) => linksHost.appendChild(linkRow(s, c.links, j, paintLinks, false, { kind: "link", owners: [item, c], reorder: { kinds: ["link", "item"], target: () => c.links }, nest: null, repaint })));
       linksHost.appendChild(siteMini(COPY.site.addLink, () => { c.links.push({ label: "", href: "/" }); dirty(); paintLinks(); }));
     };
-    paintLinks(); box.appendChild(linksHost);
-    // Feature panel (image, title, text, link), folded by default.
-    const f = siteFold(COPY.site.columnFeature, "nav-feature"); f.body.style.paddingLeft = "14px";
-    c.feature = c.feature && typeof c.feature === "object" ? c.feature : {};
-    const ft = siteField(COPY.site.featureTitle, c.feature.title); ft.input.addEventListener("input", () => { c.feature.title = ft.input.value; dirty(); }); f.body.appendChild(ft.wrap);
-    const fx = siteField(COPY.site.featureText, c.feature.text, { textarea: true }); fx.input.addEventListener("input", () => { c.feature.text = fx.input.value; dirty(); }); f.body.appendChild(fx.wrap);
-    f.body.appendChild(siteImageControl(c.feature.image, (next) => { c.feature.image = next ? { src: next.src, alt: next.alt } : undefined; dirty(); }, { label: COPY.site.featureImage }));
+    paintLinks(); inner.appendChild(linksHost);
+    setFolded(!siteFoldGet(foldKey, true));
+    return box;
+  };
+  // The promo tile: image, title, text, link. Its own panel, named, no heading or links.
+  const promoBox = (c, item, k, repaint) => {
+    const box = siteEl("div", "site-nav-col promo");
+    const head = siteEl("div", "site-nav-row col");
+    const foldKey = `nav-promo:${item.label || item.href || ""}`;
+    const chev = siteEl("button", "site-nav-chev"); chev.type = "button";
+    chev.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>';
+    const name = siteEl("div", "site-nav-promo-name", COPY.site.columnFeature);
+    const count = siteEl("span", "site-nav-count");
+    head.append(chev, name, count, siteTrashBtn(() => { item.columns.splice(k, 1); dirty(); repaint(); }, COPY.site.removePromo));
+    // Not draggable: the header renders the promo in its own slot after the link panels,
+    // so its place in the list changes nothing on the site.
+    const body = siteEl("div", "site-nav-promo-body");
+    const f = c.feature;
+    const ft = siteField(COPY.site.featureTitle, f.title); ft.input.addEventListener("input", () => { f.title = ft.input.value; dirty(); }); body.appendChild(ft.wrap);
+    const fx = siteField(COPY.site.featureText, f.text, { textarea: true }); fx.input.addEventListener("input", () => { f.text = fx.input.value; dirty(); }); body.appendChild(fx.wrap);
+    body.appendChild(siteImageControl(f.image, (next) => { f.image = next ? { src: next.src, alt: next.alt } : undefined; dirty(); }, { label: COPY.site.featureImage }));
     const fl = siteEl("div", "site-nav-row"); fl.style.gridTemplateColumns = "1fr 1fr";
-    const fll = document.createElement("input"); fll.className = "field"; fll.placeholder = COPY.site.navLabel; fll.value = (c.feature.link && c.feature.link.label) || "";
-    const flh = document.createElement("input"); flh.className = "field"; flh.placeholder = COPY.site.navHref; flh.value = (c.feature.link && c.feature.link.href) || ""; flh.setAttribute("list", listId);
-    const setLink = () => { c.feature.link = flh.value.trim() ? { label: fll.value, href: flh.value } : undefined; dirty(); };
+    const fll = document.createElement("input"); fll.className = "field"; fll.placeholder = COPY.site.navLabel; fll.value = (f.link && f.link.label) || "";
+    const flh = document.createElement("input"); flh.className = "field"; flh.placeholder = COPY.site.navHref; flh.value = (f.link && f.link.href) || ""; flh.setAttribute("list", listId);
+    const setLink = () => { f.link = flh.value.trim() ? { label: fll.value, href: flh.value } : undefined; dirty(); };
     fll.addEventListener("input", setLink); flh.addEventListener("input", setLink);
-    fl.append(fll, flh); f.body.appendChild(siteEl("div", "k", COPY.site.featureLink)); f.body.appendChild(fl);
-    box.appendChild(f.sec);
+    fl.append(fll, flh); body.appendChild(siteEl("div", "k", COPY.site.featureLink)); body.appendChild(fl);
+    box.append(head, body);
+    const setFolded = (folded) => {
+      box.classList.toggle("collapsed", folded); body.hidden = folded;
+      chev.title = folded ? COPY.site.panelExpand : COPY.site.panelCollapse; chev.setAttribute("aria-label", chev.title); chev.setAttribute("aria-expanded", String(!folded));
+      count.textContent = folded ? (f.title || COPY.site.promoEmpty) : "";
+    };
+    chev.addEventListener("click", () => { const now = !box.classList.contains("collapsed"); siteFoldSet(foldKey, !now); setFolded(now); });
+    setFolded(!siteFoldGet(foldKey, true));
     return box;
   };
   const navList = siteEl("div");
@@ -7145,7 +7261,9 @@ function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }
   const filters = siteRailState.statusFilter || (siteRailState.statusFilter = {});
   const cur = () => filters[filterKey] || "all";
   const rows = []; // { id, draft, row, box }
-  const visible = (it) => cur() === "all" || (cur() === "draft" ? !!it.draft : !it.draft);
+  // A row folded away under its parent (the page tree's chevrons) stays hidden whatever
+  // the status filter says; the filter paints the rows' display, so it must know.
+  const visible = (it) => !(it.row && it.row.dataset.folded) && (cur() === "all" || (cur() === "draft" ? !!it.draft : !it.draft));
   // the collapsed section
   const foldKey = `filter:${filterKey}`;
   const sec = siteEl("div", "site-acc" + (siteFoldGet(foldKey, false) ? " open" : "")); sec.style.margin = "0 0 8px";
@@ -7211,6 +7329,7 @@ function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }
   if (siteRailState.lastStatusNote && siteRailState.lastStatusNote.key === siteSelection.key) { note.textContent = siteRailState.lastStatusNote.text; siteRailState.lastStatusNote = null; if (bodyEl.hidden) { bodyEl.hidden = false; sec.classList.add("open"); head.setAttribute("aria-expanded", "true"); } }
   bodyEl.appendChild(note);
   return {
+    paint: () => paintRows(), // re-read every row's visibility (a fold changed)
     // Call for each row: adds the checkbox (not for home) and registers it with the filter.
     rowBox(row, it) {
       // The box sits at the right edge, so the row keeps its look and the grabber stays on the left.
@@ -7929,12 +8048,10 @@ async function renderSite(body) {
   const TABS = ["pages", "posts", "types", "forms", "media", "blocks", "nav", "settings"];
   if (!TABS.includes(siteRailState.tab)) siteRailState.tab = "pages";
   if (!cms.enabled) siteRailState.tab = "settings";
-  const counts = { pages: data.pages.length, posts: posts.length, types: ctx.types.length, forms: siteForms.length, media: mediaIndex.length, blocks: data.blocks.length };
   el("modal-info").hidden = !cms.enabled; // the CMS walkthrough "i" in the header (site is ready here)
   const tabs = siteEl("div", "site-tabs"); tabs.dataset.tour = "cms-tabs";
   TABS.forEach((t) => {
     const b = siteEl("button", "site-tab" + (siteRailState.tab === t ? " active" : ""), COPY.site.tabs[t]); b.type = "button"; b.dataset.tour = "cms-tab-" + t;
-    if (counts[t] != null) b.appendChild(siteEl("span", "count", String(counts[t])));
     if (!cms.enabled && t !== "settings") b.disabled = true;
     b.addEventListener("click", () => { siteRailState.tab = t; siteRailState.query = ""; siteRailState.listMode = null; refresh(); });
     tabs.appendChild(b);
@@ -7976,16 +8093,25 @@ async function renderSite(body) {
     // A tree: children indented under their parent (home first, then by title). Drag a
     // page onto another to nest it; drop between pages to sit at that level.
     const kids = (pid) => data.pages.filter((p) => (p.parent || null) === pid && p.id !== "home").sort((a, b) => ((a.order ?? 1e9) - (b.order ?? 1e9)) || a.title.localeCompare(b.title));
+    // A parent folds the pages under it (remembered per page, folded in place so the list
+    // keeps its scroll). The chain above the open page always shows, whatever is remembered.
+    const above = new Set(); { let p = cur && data.pages.find((x) => x.id === cur.id); while (p && p.parent) { above.add(p.parent); p = data.pages.find((x) => x.id === p.parent); } }
+    const folded = (p) => !above.has(p.id) && !siteFoldGet(`pages:${p.id}`, true);
+    const rowOf = new Map();
+    const syncTree = (pid = null, hidden = false) => { kids(pid).forEach((p) => { const r = rowOf.get(p.id); if (r) { if (hidden) r.dataset.folded = "1"; else delete r.dataset.folded; } syncTree(p.id, hidden || folded(p)); }); if (pid === null) pageStatus.paint(); };
     const walk = (pid, depth) => kids(pid).forEach((p) => { pageRow(p, depth); walk(p.id, depth + 1); });
     const pageRow = (p, depth) => {
       const row = listRow(p.title, (p.id === "home" ? COPY.site.homeSlug : "/" + (p.route || p.slug || p.id)) + (p.draft ? "  ·  " + COPY.site.draftTag : ""), cur && cur.id === p.id, () => openItem("page", p.id));
       row.style.marginLeft = depth * PAGE_INDENT + "px";
       sitePageDraggable(row, p, data.pages, refresh, depth);
       pageStatus.rowBox(row, p);
+      siteTreeChevron(row, kids(p.id).length > 0, () => folded(p), (wasFolded) => { above.delete(p.id); siteFoldSet(`pages:${p.id}`, wasFolded); syncTree(); }, { collapseTip: COPY.site.treeCollapse, expandTip: COPY.site.treeExpand });
+      rowOf.set(p.id, row);
       left.appendChild(row);
     };
     const home = data.pages.find((p) => p.id === "home"); if (home) pageRow(home, 0);
     walk(null, 0);
+    syncTree();
     const curPage = cur && data.pages.find((p) => p.id === cur.id);
     sitePreviewPath = curPage && curPage.id !== "home" ? "/" + (curPage.route || curPage.slug || curPage.id) : "/";
     renderSitePage.pages = data.pages; // for the parent picker
@@ -8030,8 +8156,20 @@ async function renderSite(body) {
     const wrap = siteEl("div", "site-single"); body.appendChild(wrap);
     wrap.appendChild(renderSiteBlocks(data));
   } else if (siteRailState.tab === "nav") {
-    const wrap = siteEl("div", "site-single"); body.appendChild(wrap);
-    wrap.appendChild(renderSiteNav(data.site, refresh, siteLinkOptions(data, posts, ctx), !!data.megaMenu));
+    // The menu editor on the left; the site's own header on the right, live from the
+    // draft, with the item being edited open in it (docs/menu-spec.md).
+    const cols = siteEl("div", "site-cols nav"); const left = siteEl("div"); const right = siteEl("div", "site-detail"); cols.append(left, right); body.appendChild(cols);
+    let navDraft = null; let focused = null; // the top-level item being edited, and its index
+    const openFocused = () => { if (!focused) return; preview.exec(`window.__taOpenMenu && window.__taOpenMenu(${JSON.stringify(siteNavItemId(focused.item, focused.index))}, ${JSON.stringify(preview.mode())})`); };
+    const preview = siteBlockPreview("header", () => ({ nav: navDraft || data.site.nav || [] }), { onMode: openFocused });
+    right.appendChild(preview.el);
+    right.appendChild(siteEl("div", "sess-desc", COPY.site.navPreviewHint));
+    left.appendChild(renderSiteNav(data.site, refresh, siteLinkOptions(data, posts, ctx), !!data.megaMenu, {
+      // Every change re-opens the item: a renamed item has a new id, and the header
+      // closes its panel on a hover-out; the editor keeps it in view either way.
+      onDraft: (d) => { navDraft = d.nav; preview.push(); setTimeout(openFocused, 200); },
+      onFocusItem: (item, index) => { focused = { item, index }; openFocused(); },
+    }));
   } else {
     await renderSiteSettings(body, data, cms);
   }

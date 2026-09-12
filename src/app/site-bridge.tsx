@@ -197,6 +197,12 @@ export function SitePage({ pageId, onNavigate, view, setView, orientation, setOr
  * the designer types; the block re-renders from them through its own schema, so
  * what shows is exactly what the site would build. A `props` query param (JSON)
  * seeds it, for testing. No chrome, no neighbours: the block at container width.
+ *
+ * `blockpreview=header` is the site's HEADER (chrome.ts), for the Navigation tab: the
+ * editor pushes `{ nav }` and the site name and logos come from the site itself, as
+ * they do on a page. `window.__taOpenMenu(id, mode)` opens one item (desktop: its
+ * panel; mobile: the drawer with it expanded) through the header's `preview` prop, so
+ * the editor can point at the item being edited and keep it open while typing.
  */
 export function BlockPreview({ type }: { type: string }) {
   const [props, setProps] = useState<AnyRecord | null>(() => {
@@ -210,16 +216,30 @@ export function BlockPreview({ type }: { type: string }) {
     return () => { delete w.__taSetBlockProps; };
   }, []);
   useEffect(() => { if (enhanceForms) enhanceForms(document, { preview: true }); });
-  const def = blocks[type];
-  if (!def) return <BridgeNote text={`Unknown block "${type}"`} />;
+  const isHeader = type === "header";
+  const [menuOpen, setMenuOpen] = useState<{ open: string | null; mode: "desktop" | "mobile"; tick: number } | null>(null);
+  useEffect(() => {
+    if (!isHeader) return;
+    const w = window as unknown as { __taOpenMenu?: (id: string | null, mode?: string) => void };
+    w.__taOpenMenu = (id, mode) => setMenuOpen((p) => ({ open: id || null, mode: mode === "mobile" ? "mobile" : "desktop", tick: (p ? p.tick : 0) + 1 }));
+    return () => { delete w.__taOpenMenu; };
+  }, [isHeader]);
+  const def = isHeader ? chromeMod.chrome?.header : blocks[type];
+  if (!def) return <BridgeNote text={isHeader ? "This site has no header block to preview." : `Unknown block "${type}"`} />;
   if (!props) return null;
-  const parsed = def.props.safeParse(props);
+  let full: AnyRecord = props;
+  if (isHeader) {
+    const logos = resolveLogos ? resolveLogos(site.logos, siteConfig.logo || undefined, (site.seo && site.seo.siteName) || siteConfig.clientName) : { header: siteConfig.logo || undefined, wordmark: siteConfig.clientName };
+    full = { siteName: siteConfig.clientName, logo: logos.header, logos, ...props, nav: ((props.nav as AnyRecord[]) || []).map((l) => ({ links: [], ...l })) };
+  }
+  const parsed = def.props.safeParse(full);
   if (!parsed.success) {
     const issues = (parsed.error?.issues || []).map((x) => `${x.path.join(".") || "(root)"}: ${x.message}`).join("; ");
     return <BridgeNote text={`This block needs more content (${issues})`} />;
   }
   const Block = def.component;
-  return <div className="@container w-full bg-ta-surface"><Block {...(parsed.data as AnyRecord)} /></div>;
+  const extra = isHeader && menuOpen ? { preview: menuOpen } : {};
+  return <div className="@container w-full bg-ta-surface"><Block {...(parsed.data as AnyRecord)} {...extra} /></div>;
 }
 
 // A quiet in-surface notice for content the site build would reject too.

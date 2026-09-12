@@ -286,3 +286,19 @@ merely correct. P3 removes the second rewrite. P5 is polish.
 - **Figma export.** Menu blocks export per open state today (`Menu — {Item}`). The
   configured header keeps the same `data-block` markers, so nothing changes, but the
   export should be re-run in P1's test to prove it.
+
+## Part 4. The Navigation tab previews the real header (added 2026-09-12)
+
+The CMS Navigation tab is two columns: the menu editor on the left, the site's own
+header on the right, live. The preview is the block editor's webview
+(`/?v=<design>&blockpreview=header`): `site-bridge.tsx` renders the chrome's header
+block with the site name and logos the site would use and the `nav` the editor pushes
+on every change (`window.__taSetBlockProps({ nav })`, before autosave lands). Clicking
+or focusing an item in the editor calls `window.__taOpenMenu(id, mode)`: on desktop a
+bubbling mouseover on the item's `[data-menu-item]` trigger (the hover that opens it),
+on mobile the drawer. The id is the header's own `itemId` (label, else address,
+slugified), mirrored as `siteNavItemId` in the renderer. Same Desktop / Mobile toggle
+as a block preview. Not a wireframe on purpose: the header's placement, split, mega
+columns, promo panel and skin are rendered by the code that ships, so the preview
+cannot drift from the site. The footer is not a chrome block (`Footer = null`), so it
+has no preview.

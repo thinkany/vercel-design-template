@@ -446,7 +446,6 @@
       .site-tab { border: 1px solid #ececf1; border-radius: 6px; background: #fff; cursor: pointer; padding: 7px 12px; font-size: 13px; font-weight: 600; color: #68686e; transition: color .15s linear, border-color .15s linear; }
       .site-tab:hover { color: #333; border-color: #cfcfd6; }
       .site-tab.active { color: #17171b; border-color: #111; }
-      .site-tab .count { font-weight: 500; color: #b0b0b8; margin-left: 4px; font-size: 11px; }
       .site-tab:disabled { color: #c4c4cc; border-color: #f0f0f4; cursor: default; }
       /* Settings sections: a heading row that folds its content; state remembered per project. */
       .site-acc { border-top: 1px solid #ececf1; }
@@ -477,7 +476,6 @@
       #modal-card[data-panel="site"] .toggle-row input[type="checkbox"]:checked { background: #111; }
       #modal-card[data-panel="site"] .toggle-row input[type="checkbox"]:checked::after { background: #fff; transform: translateX(16px); }
       #modal-card[data-panel="site"] .toggle-row input[type="checkbox"]:disabled { opacity: .4; cursor: default; }
-      .site-tab:disabled .count { color: #d4d4da; }
       /* The on/off switch: 1px outline; off = white with a black knob, on = black with a white knob. */
       .ta-switch { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 4px 0; cursor: pointer; }
       .ta-switch .k { font-size: 13px; font-weight: 600; color: #17171b; }
@@ -1144,7 +1142,7 @@
       .ta-editor-foot { display: flex; justify-content: flex-end; padding: 4px 6px; border-top: 1px solid #eee; background: #fafafa; }
       .site-item { border: 1px dashed #e2e2e8; border-radius: 8px; padding: 8px; margin-bottom: 6px; }
       .site-item-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 11px; color: #737373; }
-      .site-nav-row { display: grid; grid-template-columns: auto 1fr 1fr; grid-auto-flow: column; grid-auto-columns: auto; gap: 6px; align-items: center; margin-bottom: 6px; border-radius: 6px; }
+      .site-nav-row { display: grid; grid-template-columns: auto minmax(0, 3fr) minmax(0, 2fr); grid-auto-flow: column; grid-auto-columns: auto; gap: 6px; align-items: center; margin-bottom: 6px; border-radius: 6px; }
       .site-nav-row .site-mini { white-space: nowrap; }
       .site-nav-row .site-grip { margin-right: 0; }
       .site-nav-row.dragging, .site-nav-out.dragging { opacity: .4; }
@@ -1226,8 +1224,48 @@
       .site-sep:hover { border-color: #111; }
       .site-sep.on { border-color: #111; background: #111; color: #fff; }
       .site-code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; min-height: 84px; resize: vertical; white-space: pre; }
-      .site-nav-col { border: 1px dashed #e2e2e8; border-radius: 8px; padding: 8px 8px 4px; margin: 0 0 8px; }
-      .site-nav-row.col { grid-template-columns: auto 1fr; }
+      .site-nav-col { border: 1px solid #e2e2e8; border-radius: 8px; padding: 8px 8px 4px; margin: 0 0 8px; }
+      .site-nav-col.collapsed { padding-bottom: 8px; }
+      .site-nav-col.collapsed .site-nav-row.col { margin-bottom: 0; }
+      /* The panels of a menu item sit on a rail under it, deeper than its sub-links, so
+         they read as belonging to that item. */
+      /* Children sit under their parent's chevron: the grip (12px) plus the row gap (6px). */
+      .site-nav-sub { margin: 0 0 6px 18px; }
+      .site-nav-panels { margin: 0 0 8px 18px; padding-left: 10px; border-left: 2px solid #e2e2e8; }
+      /* Room under an item's children, so the next item never reads as one of them. */
+      .site-nav-out.has-kids { margin-bottom: 30px; }
+      .site-nav-row.has-chev { grid-template-columns: auto auto minmax(0, 3fr) minmax(0, 2fr); }
+      /* Navigation: the editor takes the width it needs, the header preview the rest. */
+      .site-cols.nav { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+      .site-cols.nav .site-block-preview-stage { height: 440px; }
+      /* The preview stays in view while a long menu scrolls: its column stretches to the
+         editor's height (a sticky box can only travel within its parent), and it pins
+         just under the drawer's sticky tab row. */
+      .site-cols.nav > .site-detail { align-self: stretch; }
+      .site-cols.nav .site-block-preview { top: 52px; }
+      /* The add buttons start under the parent's text field (grip, gap, chevron, gap = 44px
+         from the row's edge; the sub-links host already provides 18px of that). */
+      .site-nav-adds { display: flex; gap: 6px; align-items: center; margin-left: 26px; }
+      /* A panel folds to its heading row: the chevron turns, the count says what's inside. */
+      .site-nav-row.col { grid-template-columns: auto auto 1fr; }
+      .site-nav-chev { width: 20px; height: 20px; border: 0; background: transparent; cursor: pointer; color: #777; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; }
+      .site-nav-chev:hover { background: #eee; color: #111; }
+      .site-nav-chev svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .15s linear; transform: rotate(90deg); }
+      .site-nav-col.collapsed .site-nav-chev svg { transform: rotate(0deg); }
+      .site-nav-count { font-size: 11px; color: #8a8a90; white-space: nowrap; }
+      /* The same chevron folds a list row (a page with children, a type with entries). */
+      .site-nav-chev.folded svg { transform: rotate(0deg); }
+      .site-list-row[hidden] { display: none; } /* the class sets display: flex, which would beat `hidden` */
+      .site-list-row .site-nav-chev { flex: none; margin-left: -1px; }
+      .site-list-row .site-grip { margin-right: 0; } /* grip to chevron: 7px, half the row gap plus the grip's old margin */
+      .site-list-row .site-tree-spacer { flex: none; width: 16px; }
+      /* The promo tile is a panel of its own: a fixed name where a link panel has its heading. */
+      .site-nav-col.promo { background: #fafafb; }
+      /* No grip (it cannot move): the chevron sits where the other panels' chevrons sit. */
+      .site-nav-col.promo .site-nav-row.col { grid-template-columns: auto 1fr; padding-left: 18px; }
+      .site-nav-promo-name { font-size: 12.5px; font-weight: 600; color: #1a1a1a; padding: 0 2px; }
+      .site-nav-promo-body { padding: 4px 0 0 18px; }
+      .site-nav-col .site-nav-links { margin: 0 0 6px 18px; }
       .site-nav-row.is-heading .field:first-of-type { font-weight: 600; }
       .site-nav-row .field { margin-bottom: 0; }
       .site-saved { font-size: 11.5px; color: #1f8a4c; margin-left: 8px; }
