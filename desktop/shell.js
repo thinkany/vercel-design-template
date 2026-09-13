@@ -1385,6 +1385,10 @@ async function renderSetupStep({ settle = null } = {}) {
       const bodyEl = document.createElement("div");
       bodyEl.className = "setup-step-body";
       box.appendChild(bodyEl);
+      // Invisible until it is whole: render() waits on a status round-trip before the
+      // body exists, and a card that paints at full opacity with only its title, then
+      // snaps to zero for the fade below, reads as a flash.
+      box.style.opacity = "0";
       stack.appendChild(box);
       const done = (how) => finishSetupStep(step.id, how);
       try { await step.render(bodyEl, done); } catch (e) { d.textContent = String(e); }
@@ -1400,7 +1404,11 @@ async function renderSetupStep({ settle = null } = {}) {
         box.appendChild(actions);
       }
       // The next step rises once the row above has come to rest, so the eye finishes one
-      // movement before the next begins. A first paint has nothing to wait for.
+      // movement before the next begins. A first paint has nothing to wait for. The inline
+      // opacity goes in the same frame the fade starts (its first keyframe holds zero
+      // through the delay), and must not linger: closeAndTravel cancels the card's
+      // animations later, which would drop it back to that inline zero mid-flight.
+      box.style.opacity = "";
       fadeSlideIn(box, { dy: 18, duration: 520, delay: settle ? 90 : 0 });
     } else {
       const row = buildSetupDoneRow(step, answered);
