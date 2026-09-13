@@ -17,9 +17,9 @@ export async function getStaticPaths() {
   const pages = await getCollection("pages");
   const taken = new Set(pages.map((p) => "/" + pageRoute(p, pages)));
   const out: { params: { type: string }; props: Record<string, unknown> }[] = types
-    .filter((t) => t.index && !taken.has(t.path))
+    .filter((t) => t.index && !t.dataOnly && !taken.has(t.path))
     .map((t) => ({ params: { type: t.path.replace(/^\//, "") }, props: { type: t } }));
-  if (!taken.has("/" + blogPath) && !types.some((t) => t.path.replace(/^\//, "") === blogPath)) out.push({ params: { type: blogPath }, props: { blog: true } });
+  if (!taken.has("/" + blogPath) && !types.some((t) => !t.dataOnly && t.path.replace(/^\//, "") === blogPath)) out.push({ params: { type: blogPath }, props: { blog: true } });
   return out;
 }
 

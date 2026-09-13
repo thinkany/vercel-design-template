@@ -1756,7 +1756,9 @@ function readSiteContent(dir) {
     pages, posts, ...(() => {
       const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {}, builtins: {} };
       const names = site.blockNames && typeof site.blockNames === "object" ? site.blockNames : {};
-      const all = [...readBlockRegistry(dir), ...Object.values(ib.builtins || {})];
+      // The Types block appears once there is a content type for it to show.
+      const hasTypes = readTypes(dir).length > 0;
+      const all = [...readBlockRegistry(dir), ...Object.values(ib.builtins || {}).filter((b) => b.key !== "types" || hasTypes)];
       return {
         // `name` is what the CMS shows (the designer's display name when set); originalName is the block's own.
         blocks: all.map((b) => ({ ...b, originalName: b.name, name: (typeof names[b.key] === "string" && names[b.key].trim()) || b.name, defaults: ib.defaults[b.key] || {}, templates: ib.templates[b.key] || {}, fields: (ib.fields && ib.fields[b.key]) || {}, needsDesign: !!b.needsDesign, wp: b.wp || null, labels: (site.blockFieldLabels && site.blockFieldLabels[b.key]) || {} })),
@@ -2066,7 +2068,7 @@ ipcMain.handle("site:setBlogPath", (_e, { path: raw } = {}) => {
   const page = Object.values(byId).find((q) => q.id !== "home" && !q.parent && q.slug === next);
   if (page) return { ok: false, error: `The page "${page.title}" already lives at /${next}. Choose another name, or move that page.` };
   const types = (readJsonFile(path.join(siteContentDir(currentProject), "types.json")) || {}).types || [];
-  if (types.some((t) => String(t.path || "").replace(/^\/+/, "") === next)) return { ok: false, error: `A content type already uses /${next}.` };
+  if (types.some((t) => !t.dataOnly && String(t.path || "").replace(/^\/+/, "") === next)) return { ok: false, error: `A content type already uses /${next}.` };
   const p = path.join(siteContentDir(currentProject), "site.json");
   const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
   const prev = blogPathOf(cur);
@@ -2771,7 +2773,9 @@ ipcMain.handle("site:deletePost", (_e, { id } = {}) => {
 // Designer-defined types, declared as data and rendered by the site's generic
 // routes (site/src/pages/[type]). The CMS edits the declarations and the entries;
 // the site build validates entries against the fields.
-const TYPE_FIELD_KINDS = ["text", "textarea", "richtext", "number", "boolean", "date", "image", "select", "list", "link", "reference"];
+// "tags" is a set of labels an entry carries; its vocabulary is whatever the entries of THIS
+// type use under THIS field, so two types with a "Product group" tag field never share values.
+const TYPE_FIELD_KINDS = ["text", "textarea", "richtext", "number", "boolean", "date", "image", "select", "list", "link", "reference", "tags"];
 function typesFile(dir) { return path.join(siteContentDir(dir), "types.json"); }
 function readTypes(dir) {
   const j = readJsonFile(typesFile(dir));
@@ -2804,6 +2808,9 @@ function cleanType(t) {
   }
   const template = (Array.isArray(t.template) ? t.template : []).filter((b) => b && typeof b.type === "string").map((b) => ({ type: b.type, props: b.props && typeof b.props === "object" ? b.props : {} }));
   const out = { key, label, ...(t.singular ? { singular: String(t.singular).trim() } : {}), path: pathv, fields, template };
+  // Data only: the type's entries feed other content (a Reference field, a block) and get
+  // no page of their own. The path stays so switching back keeps it; an index makes no sense.
+  if (t.dataOnly) { out.dataOnly = true; return { type: out }; }
   if (t.index) out.index = { ...(t.index.title ? { title: String(t.index.title).trim() } : {}), ...(t.index.description ? { description: String(t.index.description).trim() } : {}) };
   return { type: out };
 }
@@ -2852,6 +2859,12 @@ ipcMain.handle("site:saveEntry", (_e, { key, id, data } = {}) => {
   const t = readTypes(currentProject).find((x) => x.key === key);
   if (!t) return { ok: false, error: "Unknown type." };
   const doc = { title: data.title.trim(), slug: slugifyId(data.slug || id) || id, ...(data.draft ? { draft: true } : {}) };
+  // When it was made and last saved: the Entries block orders by these when the type
+  // has no date field. `created` survives from the file on disk.
+  const prevDoc = readJsonFile(entryFile(currentProject, key, id)) || {};
+  const now = new Date().toISOString();
+  doc.created = typeof prevDoc.created === "string" && prevDoc.created ? prevDoc.created : now;
+  doc.updated = now;
   if (data.seo && typeof data.seo === "object") { doc.seo = {}; for (const [k, v] of Object.entries(data.seo)) if (v !== "" && v != null && v !== false) doc.seo[k] = v; if (!Object.keys(doc.seo).length) delete doc.seo; }
   for (const f of t.fields) {
     let v = data[f.key];
@@ -2859,6 +2872,7 @@ ipcMain.handle("site:saveEntry", (_e, { key, id, data } = {}) => {
     if (f.kind === "number") { v = Number(v); if (Number.isNaN(v)) continue; }
     else if (f.kind === "boolean") v = !!v;
     else if (f.kind === "list") v = (Array.isArray(v) ? v : String(v).split("\n")).map((x) => String(x).trim()).filter(Boolean);
+    else if (f.kind === "tags") { v = cleanTags(v); if (!v.length) continue; }
     else if (f.kind === "image") { if (!v.src) continue; v = { src: String(v.src).trim(), alt: String(v.alt || "").trim() }; }
     else if (f.kind === "link") { if (!v.href) continue; v = { label: String(v.label || "").trim(), href: String(v.href).trim() }; }
     else v = String(v);
@@ -2875,7 +2889,7 @@ ipcMain.handle("site:createEntry", (_e, { key, title } = {}) => {
   const t = String(title || "").trim(); if (!t) return { ok: false, error: "Give it a title." };
   let id = slugifyId(t) || "entry"; const base = id; let n = 2;
   while (fs.existsSync(entryFile(currentProject, key, id))) id = `${base}-${n++}`;
-  const doc = { title: t, slug: id, draft: true };
+  const doc = { title: t, slug: id, draft: true, created: new Date().toISOString() };
   try { fs.mkdirSync(entryDir(currentProject, key), { recursive: true }); fs.writeFileSync(entryFile(currentProject, key, id), JSON.stringify(doc, null, 2) + "\n"); return { ok: true, entry: { id, ...doc } }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
@@ -4513,7 +4527,7 @@ ipcMain.handle("seo:fillAll", async (_e, { rewrite } = {}) => {
       payload: { kind: "post", title: p.title, route: `/${blog}/${p.slug || p.id}`, description: p.description, body: p.body, tags: p.tags, date: p.date, image: p.image, seo: p.seo || {} },
       write: (seo) => { const f = postFile(dir, p.id); const cur = parseFrontmatter(readTextSafe(f)); cur.data.seo = seo; fs.writeFileSync(f, serializeFrontmatter(cur.data, cur.unknown) + "\n" + cur.body.replace(/^\s*\n/, "")); },
     });
-    for (const t of readTypes(dir)) for (const e of readEntries(dir, t.key)) targets.push({
+    for (const t of readTypes(dir)) for (const e of (t.dataOnly ? [] : readEntries(dir, t.key))) targets.push({ // data-only entries have no page to optimise
       kind: "entry", title: e.title, seo: e.seo || {},
       payload: { kind: "entry", typeLabel: t.singular || t.label, title: e.title, route: `${t.path}/${e.slug || e.id}`, fields: (t.fields || []).map((f) => ({ label: f.label, kind: f.kind, value: e[f.key] })), blocks: Array.isArray(e.blocks) ? e.blocks : null, seo: e.seo || {} },
       write: (seo) => { const f = entryFile(dir, t.key, e.id); const doc = readJsonFile(f); if (!doc) throw new Error("entry file missing"); doc.seo = seo; fs.writeFileSync(f, JSON.stringify(doc, null, 2) + "\n"); },

@@ -3419,6 +3419,17 @@ function licensesFold(host, { title, tourId, storeKey, openDefault = false, reme
     i.innerHTML = svg;
     n.appendChild(i);
   }
+  if (note) n.appendChild(siteEl("span", "", note));
+  // Whether this one is already set up, shown beside what it offers so a shut section
+  // tells the whole story. Set later too, when a key validates while the fold is open.
+  const state = siteEl("span", "site-acc-state");
+  state.hidden = true;
+  n.appendChild(state);
+  fold.setFoldState = (text) => {
+    state.textContent = text || "";
+    state.hidden = !text;
+  };
+  head.appendChild(n);
   head.addEventListener("click", () => {
     const now = fold.hidden; siteReveal(fold, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now));
     if (remember) { try { localStorage.setItem(storeKey, now ? "1" : "0"); } catch {} }
@@ -3478,17 +3489,6 @@ async function renderLicenses(body) {
     extraRows: async (host) => {
       const u = await window.desktop.getImageUsage();
       host.appendChild(setRow(COPY.licenses.imageUsageMonthLabel, COPY.licenses.imageUsageMonth(u.pexels)));
-  if (note) n.appendChild(siteEl("span", "", note));
-  // Whether this one is already set up, shown beside what it offers so a shut section
-  // tells the whole story. Set later too, when a key validates while the fold is open.
-  const state = siteEl("span", "site-acc-state");
-  state.hidden = true;
-  n.appendChild(state);
-  fold.setFoldState = (text) => {
-    state.textContent = text || "";
-    state.hidden = !text;
-  };
-  head.appendChild(n);
     },
   });
 
@@ -4799,6 +4799,8 @@ function openBlockEditModal({ title, type, props, ctx, onChange, onSave, canSave
 // ({ templates, fields }): list-item templates and field kinds by dotted path.
 // Without it the value's shape decides; the build validates either way.
 function sitePropsEditor(value, onChange, depth = 0, ctx = {}, at = "") {
+  // A block with a form of its own (the built-in Entries block) instead of the generic walk.
+  if (depth === 0 && ctx.editor === "entries") return siteEntriesBlockEditor(value, onChange);
   const templates = ctx.templates || {};
   const fields = ctx.fields || {};
   const box = siteEl("div", depth ? "" : "site-props");
@@ -5042,7 +5044,7 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
         b.props = { ...JSON.parse(JSON.stringify(dflt)), ...(b.props || {}) };
         // Fields left, the block as designed right, live (docs/block-editor-preview-spec.md).
         const edit = siteEl("div", "site-block-edit");
-        const ctx = { templates: (def && def.templates) || {}, fields: (def && def.fields) || {}, labels: (def && def.labels) || {} };
+        const ctx = { templates: (def && def.templates) || {}, fields: (def && def.fields) || {}, labels: (def && def.labels) || {}, editor: siteBlockEditorKind(def) };
         const preview = siteBlockPreview(b.type, () => b.props, {
           onExpand: () => openBlockEditModal({
             title: def ? def.name : b.type, type: b.type, props: b.props, ctx,
@@ -5283,7 +5285,14 @@ function renderSitePost(post, refresh) {
 // a designer's type gets a proper editor without any code.
 
 // One field's control, by kind. Returns { wrap, get } where get() reads the value.
-function siteTypeFieldControl(f, value, onChange, ctx) {
+// The values a tags field offers: every tag the entries of THIS type carry under THIS
+// field. Nothing crosses types, so two types with a "Product group" field keep their own.
+function siteTypeTagVocab(ctx, typeKey, fieldKey) {
+  const seen = new Map();
+  for (const e of (ctx && ctx.entries && ctx.entries[typeKey]) || []) for (const t of Array.isArray(e[fieldKey]) ? e[fieldKey] : []) { const k = String(t).toLowerCase(); if (!seen.has(k)) seen.set(k, String(t)); }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b));
+}
+function siteTypeFieldControl(f, value, onChange, ctx, typeKey, typeLabel) {
   const S = COPY.site;
   const wrap = siteEl("div", "site-kv");
   wrap.appendChild(siteEl("div", "k", f.label + (f.required ? " *" : "")));
@@ -5323,6 +5332,11 @@ function siteTypeFieldControl(f, value, onChange, ctx) {
     const href = document.createElement("input"); href.className = "field"; href.placeholder = S.linkHref; href.value = (value && value.href) || ""; href.setAttribute("list", siteLinkListId()); href.autocomplete = "off";
     lab.addEventListener("input", change); href.addEventListener("input", change); wrap.append(lab, href);
     get = () => (href.value.trim() ? { label: lab.value.trim(), href: href.value.trim() } : "");
+  } else if (f.kind === "tags") {
+    // The same combo as a post's tags, fed only this type's vocabulary for this field.
+    const combo = tagCombo({ tags: Array.isArray(value) ? value : [], allTags: siteTypeTagVocab(ctx, typeKey, f.key), onChange: change, label: f.label + (f.required ? " *" : ""), hint: S.entryTagsHint((typeLabel || S.kindEntry + "s").toLowerCase()), noTags: S.entryNoTags });
+    wrap.innerHTML = ""; wrap.className = ""; wrap.appendChild(combo.wrap);
+    get = () => combo.get();
   } else if (f.kind === "list") {
     const ta = document.createElement("textarea"); ta.className = "field"; ta.value = Array.isArray(value) ? value.join("\n") : ""; ta.placeholder = S.listHint;
     ta.addEventListener("input", change); wrap.appendChild(ta);
@@ -5347,7 +5361,7 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   const S = COPY.site;
   const card = siteEl("div");
   const h = siteEl("div"); h.style.cssText = "display:flex;align-items:baseline;gap:10px;margin-bottom:10px;";
-  h.append(siteEl("div", "site-page-title", entry.title), siteEl("div", "site-page-slug", `${type.path}/${entry.slug || entry.id}`));
+  h.append(siteEl("div", "site-page-title", entry.title), siteEl("div", "site-page-slug", type.dataOnly ? S.dataOnlyTag : `${type.path}/${entry.slug || entry.id}`));
   h.querySelector(".site-page-title").style.fontSize = "15px";
   card.appendChild(h);
   let saveBtn, cancelBtn, edited = false; const dirty = () => { edited = true; saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
@@ -5359,16 +5373,18 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   const t = siteField(S.pageTitle, entry.title); ps.body.appendChild(t.wrap);
   // Permalink as pages and posts have it: the title's slug until it's edited by hand.
   const sl = sitePrefixField(S.pageSlug, `${type.path}/`, entry.slug || siteSlugOf(entry.title) || entry.id, { hint: S.pageSlugHint }); ps.body.appendChild(sl.wrap);
+  if (type.dataOnly) sl.wrap.hidden = true; // no page, so no address to edit (the slug still names the entry)
   if (entry.slug && entry.slug !== siteSlugOf(entry.title)) sl.input.dataset.touched = "1";
   t.input.addEventListener("input", () => { if (!sl.input.dataset.touched) sl.input.value = siteSlugOf(t.input.value); dirty(); });
   sl.input.addEventListener("input", () => { sl.input.dataset.touched = "1"; dirty(); });
 
   const cf = siteFold(S.entryFieldsHeading, foldKey + ":fields"); card.appendChild(cf.sec);
   if (!type.fields.length) cf.body.appendChild(siteEl("div", "sess-desc", S.fieldsDesc));
-  const controls = type.fields.map((f) => { const c = siteTypeFieldControl(f, entry[f.key], dirty, ctx); cf.body.appendChild(c.wrap); return [f.key, c.get]; });
+  const controls = type.fields.map((f) => { const c = siteTypeFieldControl(f, entry[f.key], dirty, ctx, type.key, type.label); cf.body.appendChild(c.wrap); return [f.key, c.get]; });
 
   // Own blocks (a landing page) instead of the template.
   const bf = siteFold(S.blocksHeading, foldKey + ":blocks"); card.appendChild(bf.sec);
+  if (type.dataOnly) bf.sec.hidden = true; // nothing renders a data-only entry
   const blocksDraft = Array.isArray(entry.blocks) ? JSON.parse(JSON.stringify(entry.blocks)) : null;
   const own = siteEl("label", "toggle-row"); const ownCb = document.createElement("input"); ownCb.type = "checkbox"; ownCb.checked = !!blocksDraft;
   own.append(ownCb, siteEl("span", "", S.entryOwnBlocks)); bf.body.appendChild(own);
@@ -5385,6 +5401,7 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   // SEO: the full set pages and posts carry, last.
   const seo = JSON.parse(JSON.stringify(entry.seo || {}));
   const sf = siteFold(S.seoHeading, foldKey + ":seo"); card.appendChild(sf.sec);
+  if (type.dataOnly) sf.sec.hidden = true; // no page, nothing to optimise
   sf.body.appendChild(siteSeoFill({
     payload: () => ({ kind: "entry", typeLabel: type.singular || type.label, title: t.input.value, route: `${type.path}/${sl.input.value || entry.id}`, fields: type.fields.map((f, i) => ({ label: f.label, kind: f.kind, value: controls[i][1]() })), blocks: ownCb.checked ? ownBlocks : null, seo }),
     apply: (s) => { siteSeoApply(seo, s); st.input.value = seo.title || ""; sd.input.value = seo.description || ""; kp.input.value = seo.keyphrase || ""; jta.value = seo.jsonld || ""; paintImg(); dirty(); },
@@ -5456,7 +5473,7 @@ function siteBlocksEditor(list, blocks, onChange, stateKey) {
       if (siteRailState.expanded[ek]) {
         const dflt = (def && def.defaults) || {};
         b.props = { ...JSON.parse(JSON.stringify(dflt)), ...(b.props || {}) };
-        host.appendChild(sitePropsEditor(b.props, onChange, 0, { templates: (def && def.templates) || {}, fields: (def && def.fields) || {}, labels: (def && def.labels) || {} }));
+        host.appendChild(sitePropsEditor(b.props, onChange, 0, { templates: (def && def.templates) || {}, fields: (def && def.fields) || {}, labels: (def && def.labels) || {}, editor: siteBlockEditorKind(def) }));
       }
     });
     if (blocks.length) {
@@ -5480,7 +5497,7 @@ function siteBlocksEditor(list, blocks, onChange, stateKey) {
 function renderSiteTypeEditor(type, ctx, refresh) {
   const S = COPY.site;
   const isNew = !type.key;
-  const draft = JSON.parse(JSON.stringify({ key: type.key || "", label: type.label || "", singular: type.singular || "", path: type.path || "", fields: type.fields || [], template: type.template || [], index: type.index || null }));
+  const draft = JSON.parse(JSON.stringify({ key: type.key || "", label: type.label || "", singular: type.singular || "", path: type.path || "", dataOnly: !!type.dataOnly, fields: type.fields || [], template: type.template || [], index: type.index || null }));
   const card = siteEl("div");
   card.appendChild(siteEl("div", "site-page-title", isNew ? S.addType : S.editType + ": " + type.label)).style.cssText = "font-size:15px;margin-bottom:10px;";
   let saveBtn, cancelBtn, edited = false; const dirty = () => { edited = true; saveBtn.disabled = false; if (cancelBtn) cancelBtn.disabled = false; };
@@ -5492,6 +5509,10 @@ function renderSiteTypeEditor(type, ctx, refresh) {
   const settings = siteFold(S.typeSettingsHeading, foldKey + ":settings"); settings.sec.dataset.tour = "cms-type-settings"; card.appendChild(settings.sec);
   const lab = siteField(S.typeLabel, draft.label); settings.body.appendChild(lab.wrap);
   const sing = siteField(S.typeSingular, draft.singular); settings.body.appendChild(sing.wrap);
+  // Data only: no page per entry, so the address, the index and the template fold away.
+  const dor = siteEl("label", "toggle-row"); const doCb = document.createElement("input"); doCb.type = "checkbox"; doCb.checked = !!draft.dataOnly;
+  dor.append(doCb, siteEl("span", "", S.typeDataOnly)); settings.body.appendChild(dor);
+  settings.body.appendChild(siteEl("div", "sess-desc", S.typeDataOnlyHint));
   const pth = sitePrefixField(S.typePath, (ctx.siteUrl || COPY.site.siteUrlPlaceholder) + "/", String(draft.path || "").replace(/^\/+/, ""), { hint: S.typePathHint }); settings.body.appendChild(pth.wrap);
   lab.input.addEventListener("input", () => { dirty(); if (isNew) { draft.key = slug(lab.input.value); if (!pth.input.dataset.touched) pth.input.value = draft.key; } });
   pth.input.addEventListener("input", () => { pth.input.dataset.touched = "1"; dirty(); });
@@ -5504,6 +5525,9 @@ function renderSiteTypeEditor(type, ctx, refresh) {
   ixT.input.addEventListener("input", dirty); ixD.input.addEventListener("input", dirty);
   const paintIx = () => { ixHost.innerHTML = ""; if (ixCb.checked) ixHost.append(ixT.wrap, ixD.wrap); };
   ixCb.addEventListener("change", () => { dirty(); paintIx(); }); paintIx();
+  let tplSec = null; // the template fold, once built below
+  const paintDataOnly = () => { const on = doCb.checked; pth.wrap.hidden = on; ix.hidden = on; ixHost.hidden = on; if (tplSec) tplSec.hidden = on; };
+  doCb.addEventListener("change", () => { dirty(); paintDataOnly(); });
 
   // Fields: each one collapsible (open by default, remembered while this editor lives)
   // and draggable to reorder; the trash can removes it.
@@ -5542,6 +5566,7 @@ function renderSiteTypeEditor(type, ctx, refresh) {
       const paintExtra = () => {
         extra.innerHTML = "";
         if (kind.value === "select") { const op = document.createElement("input"); op.className = "field"; op.placeholder = S.fieldOptions; op.value = (f.options || []).join(", "); op.style.marginTop = "6px"; op.addEventListener("input", () => { f.options = op.value.split(",").map((x) => x.trim()).filter(Boolean); dirty(); }); extra.appendChild(op); }
+        if (kind.value === "tags") { const n = siteEl("div", "sess-desc", S.fieldTagsHint); n.style.marginTop = "6px"; extra.appendChild(n); }
         if (kind.value === "reference") { const rf = document.createElement("select"); rf.className = "field"; rf.style.marginTop = "6px"; const o0 = document.createElement("option"); o0.value = ""; o0.textContent = S.fieldReference; rf.appendChild(o0); ctx.types.forEach((t) => { if (t.key !== draft.key) { const o = document.createElement("option"); o.value = t.key; o.textContent = t.label; rf.appendChild(o); } }); rf.value = f.reference || ""; rf.addEventListener("change", () => { f.reference = rf.value; dirty(); }); extra.appendChild(rf); }
       };
       kind.addEventListener("change", () => { f.kind = kind.value; retitle(); dirty(); paintExtra(); });
@@ -5557,13 +5582,15 @@ function renderSiteTypeEditor(type, ctx, refresh) {
   const tpl = siteFold(S.templateHeading, foldKey + ":template"); tpl.sec.dataset.tour = "cms-type-template"; card.appendChild(tpl.sec);
   tpl.body.appendChild(siteEl("div", "sess-desc", S.templateDesc));
   tpl.body.appendChild(siteBlocksEditor(draft.template, ctx.blocks, dirty, "type:" + (draft.key || "new")));
+  tplSec = tpl.sec; paintDataOnly();
 
   const actions = siteEl("div", "site-actions"); actions.dataset.tour = "cms-type-actions";
   saveBtn = siteEl("button", "panelbtn primary", S.saveType); saveBtn.disabled = !isNew; saveBtn.style.margin = "0";
   saveBtn.addEventListener("click", async () => {
     saveBtn.disabled = true;
     const out = { key: draft.key || slug(lab.input.value), label: lab.input.value, singular: sing.input.value, path: pth.input.value.trim() ? pathValue() : ("/" + (draft.key || slug(lab.input.value))), fields: draft.fields, template: draft.template };
-    if (ixCb.checked) out.index = { title: ixT.input.value, description: ixD.input.value };
+    if (doCb.checked) out.dataOnly = true;
+    else if (ixCb.checked) out.index = { title: ixT.input.value, description: ixD.input.value };
     const res = await window.desktop.saveSiteType(out);
     if (res && res.ok) { edited = false; siteRailState.selected = { kind: "type", id: res.type.key }; siteFlash(actions, S.saved); refresh(); }
     else { saveBtn.disabled = false; const e = siteEl("div", "muted", (res && res.error) || "Couldn't save."); e.style.color = "#e5484d"; actions.appendChild(e); }
@@ -5589,7 +5616,7 @@ function renderSiteTypesList(left, right, ctx, refresh) {
   left.appendChild(siteEl("div", "sess-desc", S.typesDesc));
   ctx.types.forEach((t) => {
     const row = siteEl("div", "site-list-row" + (sel && sel.kind === "type" && sel.id === t.key ? " active" : "")); row.dataset.tour = "cms-type-row";
-    row.append(siteEl("div", "site-page-title", t.label), siteEl("div", "site-page-slug", S.entries((ctx.entries[t.key] || []).length)));
+    row.append(siteEl("div", "site-page-title", t.label), siteEl("div", "site-page-slug", S.entries((ctx.entries[t.key] || []).length) + (t.dataOnly ? "  ·  " + S.dataOnlyTag : "")));
     row.addEventListener("click", () => { siteRailState.selected = { kind: "type", id: t.key }; refresh(); });
     left.appendChild(row);
     const list = siteEl("div"); list.style.cssText = "margin:0 0 6px 14px;";
@@ -5599,11 +5626,11 @@ function renderSiteTypesList(left, right, ctx, refresh) {
     let unfolded = holdsOpen || siteFoldGet(`types:${t.key}`, true);
     list.hidden = !unfolded;
     siteTreeChevron(row, true, () => !unfolded, (wasFolded) => { unfolded = wasFolded; siteFoldSet(`types:${t.key}`, unfolded); list.hidden = !unfolded; }, { collapseTip: S.typeCollapse, expandTip: S.typeExpand });
-    const entryStatus = (ctx.entries[t.key] || []).length ? siteStatusBar({ host: list, kind: "entry", typeKey: t.key, items: ctx.entries[t.key] || [], refresh, filterKey: `entries:${t.key}` }) : null;
+    const entryStatus = (ctx.entries[t.key] || []).length ? siteStatusBar({ host: list, kind: "entry", typeKey: t.key, items: ctx.entries[t.key] || [], refresh, filterKey: `entries:${t.key}`, tagFields: t.fields.filter((f) => f.kind === "tags") }) : null;
     (ctx.entries[t.key] || []).forEach((e) => {
       const er = siteEl("div", "site-list-row" + (sel && sel.kind === "entry" && sel.id === t.key + "/" + e.id ? " active" : ""));
       er.style.padding = "6px 10px";
-      er.append(siteEl("div", "site-page-title", e.title), siteEl("div", "site-page-slug", "/" + (e.slug || e.id) + (e.draft ? "  ·  " + S.draftTag : "")));
+      er.append(siteEl("div", "site-page-title", e.title), siteEl("div", "site-page-slug", [t.dataOnly ? "" : "/" + (e.slug || e.id), e.draft ? S.draftTag : ""].filter(Boolean).join("  ·  ")));
       er.addEventListener("click", () => { siteRailState.selected = { kind: "entry", id: t.key + "/" + e.id }; refresh(); });
       if (entryStatus) entryStatus.rowBox(er, e);
       list.appendChild(er);
@@ -5634,6 +5661,135 @@ function renderSiteTypesList(left, right, ctx, refresh) {
 // reaches a page through the built-in Form block (or a promoted block with a form
 // field); "Used on" is computed here from the pages' blocks and the field kinds.
 let siteForms = []; // for the props editor's form picker (set when the drawer renders)
+let siteTypes = []; let siteEntries = {}; // the Entries block's editor reads these (set with siteForms)
+
+// Which built-in block gets a form of its own instead of the generic props walk.
+function siteBlockEditorKind(def) { return def && def.builtin && def.key === "types" ? "entries" : null; }
+
+// The Types block's editor. Listing: which types, how many, paging, and (with two or
+// more types) the Tag/Type filter. Picker: specific entries, repeatable, in order. Then
+// how an entry with a page links. Writes straight into the block's props; every change
+// calls onChange.
+function siteEntriesBlockEditor(props, onChange) {
+  const E = COPY.site.entriesBlock;
+  const box = siteEl("div");
+  const dataTypes = siteTypes; // every content type; a data-only one just links nowhere
+  if (!Array.isArray(props.types)) props.types = [];
+  if (!Array.isArray(props.picks)) props.picks = [];
+  if (props.mode !== "picker") props.mode = "listing";
+
+  const hf = siteField(E.heading, props.heading || ""); hf.input.addEventListener("input", () => { props.heading = hf.input.value; onChange(); }); box.appendChild(hf.wrap);
+
+  // Listing or picker: a segmented switch like the two-column blocks' Image left / right.
+  const mk = siteEl("div", "site-kv"); mk.appendChild(siteEl("div", "k", E.mode));
+  const seg = siteEl("div", "site-side");
+  const opt = (val, text) => {
+    const b = siteEl("button", "site-side-opt" + (props.mode === val ? " on" : "")); b.type = "button"; b.innerHTML = `<span>${text}</span>`;
+    b.addEventListener("click", () => { props.mode = val; seg.querySelectorAll(".site-side-opt").forEach((x) => x.classList.toggle("on", x === b)); paintMode(); onChange(); });
+    return b;
+  };
+  seg.append(opt("listing", E.listing), opt("picker", E.picker)); mk.appendChild(seg); box.appendChild(mk);
+
+  const listingHost = siteEl("div"); const pickerHost = siteEl("div"); box.append(listingHost, pickerHost);
+  const paintMode = () => { listingHost.hidden = props.mode !== "listing"; pickerHost.hidden = props.mode !== "picker"; };
+
+  // ── Listing ──
+  if (!dataTypes.length) listingHost.appendChild(siteEl("div", "sess-desc", E.noTypes));
+  else {
+    const tk = siteEl("div", "site-kv"); tk.appendChild(siteEl("div", "k", E.types));
+    // Only data-only types are offered; keep the chosen ones in the types' own order.
+    props.types = props.types.filter((k) => dataTypes.some((t) => t.key === k));
+    let filterRow, filterCb, filterHint;
+    const paintFilter = () => {
+      const two = props.types.length > 1;
+      filterCb.disabled = !two;
+      if (!two && props.filter) { props.filter = false; filterCb.checked = false; }
+      filterRow.style.opacity = two ? "" : ".5";
+      filterHint.textContent = two ? E.filterHint : E.filterNeedsTwo;
+    };
+    dataTypes.forEach((t) => {
+      const row = siteEl("label", "toggle-row"); const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = props.types.includes(t.key);
+      cb.addEventListener("change", () => { props.types = dataTypes.map((x) => x.key).filter((k) => (k === t.key ? cb.checked : props.types.includes(k))); paintFilter(); onChange(); });
+      row.append(cb, siteEl("span", "", t.label)); tk.appendChild(row);
+    });
+    tk.appendChild(siteEl("div", "sess-desc", E.typesHint)); listingHost.appendChild(tk);
+
+    const lim = siteField(E.limit, props.limit == null ? 12 : props.limit, { type: "number", hint: E.limitHint });
+    lim.input.min = "0"; lim.input.addEventListener("input", () => { props.limit = Math.max(0, Number(lim.input.value) || 0); onChange(); }); listingHost.appendChild(lim.wrap);
+
+    const pg = siteEl("label", "toggle-row"); const pgCb = document.createElement("input"); pgCb.type = "checkbox"; pgCb.checked = !!props.paginate;
+    pg.append(pgCb, siteEl("span", "", E.paginate)); listingHost.appendChild(pg);
+    const pp = siteField(E.perPage, props.perPage || 6, { type: "number" }); pp.input.min = "1";
+    pp.input.addEventListener("input", () => { props.perPage = Math.max(1, Number(pp.input.value) || 1); onChange(); }); listingHost.appendChild(pp.wrap);
+    // Paging decides how many show, so the cap steps aside while it is on.
+    const paintPaging = () => { pp.wrap.hidden = !pgCb.checked; lim.wrap.hidden = pgCb.checked; };
+    pgCb.addEventListener("change", () => { props.paginate = pgCb.checked; paintPaging(); onChange(); }); paintPaging();
+
+    filterRow = siteEl("label", "toggle-row"); filterCb = document.createElement("input"); filterCb.type = "checkbox"; filterCb.checked = !!props.filter;
+    filterCb.addEventListener("change", () => { props.filter = filterCb.checked; onChange(); });
+    filterRow.append(filterCb, siteEl("span", "", E.filter)); listingHost.appendChild(filterRow);
+    filterHint = siteEl("div", "sess-desc"); listingHost.appendChild(filterHint);
+    paintFilter();
+  }
+
+  // ── Picker ──
+  const pk = siteEl("div", "site-kv"); pk.appendChild(siteEl("div", "k", E.picks)); pk.appendChild(siteEl("div", "sess-desc", E.picksHint));
+  const rows = siteEl("div"); pk.appendChild(rows); pickerHost.appendChild(pk);
+  const paintPicks = () => {
+    rows.innerHTML = "";
+    if (!dataTypes.length) { rows.appendChild(siteEl("div", "sess-desc", E.noTypes)); return; }
+    props.picks.forEach((pick, i) => {
+      const item = siteEl("div", "site-item");
+      const head = siteEl("div", "site-item-head"); head.appendChild(siteEl("span", "", COPY.site.listItem(i + 1)));
+      const acts = siteEl("span"); acts.style.cssText = "display:inline-flex;gap:4px;";
+      acts.append(
+        siteMini("↑", () => { [props.picks[i - 1], props.picks[i]] = [props.picks[i], props.picks[i - 1]]; onChange(); paintPicks(); }, { disabled: i === 0, title: COPY.site.moveUp }),
+        siteMini("↓", () => { [props.picks[i + 1], props.picks[i]] = [props.picks[i], props.picks[i + 1]]; onChange(); paintPicks(); }, { disabled: i === props.picks.length - 1, title: COPY.site.moveDown }),
+        siteTrashBtn(() => { props.picks.splice(i, 1); onChange(); paintPicks(); }, COPY.site.removeItem),
+      );
+      head.appendChild(acts); item.appendChild(head);
+      const grid = siteEl("div"); grid.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:6px;";
+      const ts = document.createElement("select"); ts.className = "field"; ts.style.marginBottom = "0";
+      const t0 = document.createElement("option"); t0.value = ""; t0.textContent = E.pickType; ts.appendChild(t0);
+      dataTypes.forEach((t) => { const o = document.createElement("option"); o.value = t.key; o.textContent = t.singular || t.label; ts.appendChild(o); });
+      ts.value = pick.type || "";
+      const es = document.createElement("select"); es.className = "field"; es.style.marginBottom = "0";
+      const paintEntries = () => {
+        es.innerHTML = "";
+        const e0 = document.createElement("option"); e0.value = ""; e0.textContent = E.pickEntry; es.appendChild(e0);
+        const list = (pick.type && siteEntries[pick.type]) || [];
+        // A draft is picked like any other but shows nowhere until it is published, so say so.
+        list.forEach((e) => { const o = document.createElement("option"); o.value = e.id; o.textContent = e.title + (e.draft ? "  ·  " + COPY.site.draftTag : ""); es.appendChild(o); });
+        // A pick whose entry is gone stays visible as missing, never silently cleared.
+        if (pick.entry && !list.some((e) => e.id === pick.entry)) { const o = document.createElement("option"); o.value = pick.entry; o.textContent = E.pickMissing(pick.entry); es.appendChild(o); }
+        es.value = pick.entry || ""; es.disabled = !pick.type;
+      };
+      ts.addEventListener("change", () => { pick.type = ts.value; pick.entry = ""; paintEntries(); onChange(); });
+      es.addEventListener("change", () => { pick.entry = es.value; onChange(); });
+      paintEntries();
+      grid.append(ts, es); item.appendChild(grid); rows.appendChild(item);
+    });
+    rows.appendChild(siteMini(E.addPick, () => { props.picks.push({ type: dataTypes.length === 1 ? dataTypes[0].key : "", entry: "" }); onChange(); paintPicks(); }));
+  };
+  paintPicks();
+  paintMode();
+
+  // ── The link, for entries whose type has a page ──
+  if (props.linkStyle !== "more") props.linkStyle = "card";
+  const lk = siteEl("div", "site-kv"); lk.appendChild(siteEl("div", "k", E.linkStyle));
+  const lseg = siteEl("div", "site-side");
+  const lopt = (val, text) => {
+    const b = siteEl("button", "site-side-opt" + (props.linkStyle === val ? " on" : "")); b.type = "button"; b.innerHTML = `<span>${text}</span>`;
+    b.addEventListener("click", () => { props.linkStyle = val; lseg.querySelectorAll(".site-side-opt").forEach((x) => x.classList.toggle("on", x === b)); paintLink(); onChange(); });
+    return b;
+  };
+  lseg.append(lopt("card", E.linkCard), lopt("more", E.linkMore)); lk.appendChild(lseg); box.appendChild(lk);
+  const ll = siteField(E.linkLabel, props.linkLabel || "", { placeholder: "Read more" }); ll.input.addEventListener("input", () => { props.linkLabel = ll.input.value; onChange(); }); box.appendChild(ll.wrap);
+  box.appendChild(siteEl("div", "sess-desc", E.linkHint));
+  const paintLink = () => { ll.wrap.hidden = props.linkStyle !== "more"; };
+  paintLink();
+  return box;
+}
 function siteFormUsage(form, ctx) {
   const byKey = Object.fromEntries((ctx.blocks || []).map((b) => [b.key, b]));
   const get = (obj, dotted) => dotted.split(".").reduce((o, k) => (o && typeof o === "object" ? o[k] : undefined), obj);
@@ -6811,6 +6967,7 @@ function siteLinkOptions(data, posts, ctx) {
   posts.filter((p) => !p.draft).forEach((p) => out.push({ group: "posts", label: p.title, href: blog + "/" + (p.slug || p.id) }));
   (ctx.files || []).forEach((f) => out.push({ group: "files", label: f.name, href: f.url }));
   ctx.types.forEach((t) => {
+    if (t.dataOnly) return; // no addresses to link to
     if (t.index) out.push({ group: "indexes", label: t.label, href: t.path });
     (ctx.entries[t.key] || []).forEach((e) => out.push({ group: "types", label: `${e.title} (${t.singular || t.label})`, href: `${t.path}/${e.slug || e.id}` }));
   });
@@ -7385,15 +7542,23 @@ function siteRowTip(row, text) {
 // Unpublish selected. Each row gets a checkbox from rowBox(); the filter shows and
 // hides rows by inline display (a row's own layout is flex, so `hidden` alone won't).
 let siteSelection = { key: null, ids: new Set() };
-function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }) {
+function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey, tagFields = [] }) {
   const S = COPY.site;
   if (siteSelection.key !== `${kind}:${typeKey || ""}`) siteSelection = { key: `${kind}:${typeKey || ""}`, ids: new Set() };
   const filters = siteRailState.statusFilter || (siteRailState.statusFilter = {});
   const cur = () => filters[filterKey] || "all";
-  const rows = []; // { id, draft, row, box }
+  // A type's tags fields each add a filter of their own (one chosen value, or none),
+  // remembered per list like the status. A value that no entry carries any more is dropped.
+  const tagFilters = siteRailState.tagFilter || (siteRailState.tagFilter = {});
+  const tf = tagFilters[filterKey] || (tagFilters[filterKey] = {});
+  const sameTag = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+  const tagValues = (f) => { const seen = new Map(); items.forEach((it) => (Array.isArray(it[f.key]) ? it[f.key] : []).forEach((t) => { const k = String(t).toLowerCase(); const e = seen.get(k) || { name: String(t), count: 0 }; e.count++; seen.set(k, e); })); return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name)); };
+  tagFields.forEach((f) => { if (tf[f.key] && !tagValues(f).some((v) => sameTag(v.name, tf[f.key]))) delete tf[f.key]; });
+  const tagsPass = (data) => tagFields.every((f) => !tf[f.key] || (Array.isArray(data[f.key]) && data[f.key].some((t) => sameTag(t, tf[f.key]))));
+  const rows = []; // { id, draft, row, box, data }
   // A row folded away under its parent (the page tree's chevrons) stays hidden whatever
   // the status filter says; the filter paints the rows' display, so it must know.
-  const visible = (it) => !(it.row && it.row.dataset.folded) && (cur() === "all" || (cur() === "draft" ? !!it.draft : !it.draft));
+  const visible = (it) => !(it.row && it.row.dataset.folded) && (cur() === "all" || (cur() === "draft" ? !!it.draft : !it.draft)) && tagsPass(it.data || it);
   // the collapsed section
   const foldKey = `filter:${filterKey}`;
   const sec = siteEl("div", "site-acc" + (siteFoldGet(foldKey, false) ? " open" : "")); sec.style.margin = "0 0 8px";
@@ -7411,9 +7576,11 @@ function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }
   const filterNote = siteEl("div", "sess-desc"); filterNote.style.cssText = "margin:0 0 6px;font-weight:500;";
   // Shown only while the section is closed and a filter is on; placed before the first row once it is in the column.
   const paintNote = () => {
-    const k = cur(); const show = k !== "all" && bodyEl.hidden;
+    const k = cur();
+    const active = [...(k !== "all" ? [S.statusFilter[k]] : []), ...tagFields.filter((f) => tf[f.key]).map((f) => `${f.label}: ${tf[f.key]}`)];
+    const show = active.length > 0 && bodyEl.hidden;
     if (!filterNote.parentNode && rows[0] && rows[0].row.parentNode) rows[0].row.parentNode.insertBefore(filterNote, rows[0].row);
-    filterNote.textContent = show ? S.filteredNote(S.statusFilter[k]) : ""; filterNote.style.display = show ? "" : "none";
+    filterNote.textContent = show ? S.filteredNote(active.join(" · ")) : ""; filterNote.style.display = show ? "" : "none";
   };
   const paintRows = () => { rows.forEach((r) => { r.row.style.display = visible(r) ? "flex" : "none"; }); paintNote(); paintCount(); };
   // The pills: the chosen one is black on white's opposite, so the state reads at a glance.
@@ -7424,6 +7591,21 @@ function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }
     pills.appendChild(b);
   }
   bar.appendChild(pills);
+  // One pill row per tags field: "Product group:  All | Widgets 3 | Gadgets 2". Only this
+  // type's values appear, since the items are only this type's entries.
+  const tagBars = tagFields.map((f) => {
+    const tb = siteEl("div"); tb.style.cssText = "display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 8px;";
+    const lbl = siteEl("span", "sess-desc", f.label + ":"); lbl.style.margin = "0";
+    const tp = siteEl("div"); tp.style.cssText = "display:flex;gap:4px;flex-wrap:wrap;";
+    const choices = [{ name: null, label: S.statusFilter.all }, ...tagValues(f).map((v) => ({ name: v.name, label: `${v.name} ${v.count}` }))];
+    choices.forEach((c) => {
+      const b = siteEl("button", "site-mini", c.label); b.type = "button"; setOn(b, c.name === null ? !tf[f.key] : !!tf[f.key] && sameTag(tf[f.key], c.name));
+      b.addEventListener("click", () => { if (c.name === null) delete tf[f.key]; else tf[f.key] = c.name; tp.querySelectorAll(".site-mini").forEach((x) => setOn(x, x === b)); paintRows(); });
+      tp.appendChild(b);
+    });
+    tb.append(lbl, tp);
+    return tb;
+  });
   // A span, not a label: the drawer styles labels as block rows. Clicking the text toggles the box.
   const allWrap = siteEl("span"); allWrap.style.cssText = "display:flex;align-items:center;gap:6px;margin-left:8px;cursor:pointer;height:20px;";
   const allBox = document.createElement("input"); allBox.type = "checkbox"; allBox.title = S.selectAll; allBox.style.cssText = "margin:0;width:14px;height:14px;flex:none;display:block;";
@@ -7456,6 +7638,7 @@ function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }
   pub.addEventListener("click", () => act(true)); unpub.addEventListener("click", () => act(false));
   bar.append(allWrap, pub, unpub);
   bodyEl.appendChild(bar);
+  tagBars.forEach((tb) => bodyEl.appendChild(tb));
   if (siteRailState.lastStatusNote && siteRailState.lastStatusNote.key === siteSelection.key) { note.textContent = siteRailState.lastStatusNote.text; siteRailState.lastStatusNote = null; if (bodyEl.hidden) { bodyEl.hidden = false; sec.classList.add("open"); head.setAttribute("aria-expanded", "true"); } }
   bodyEl.appendChild(note);
   return {
@@ -7474,7 +7657,7 @@ function siteStatusBar({ host, kind, typeKey = null, items, refresh, filterKey }
       if (slug) { siteRowTip(row, slug.textContent.replace(/\s+·\s+/g, " · ")); slug.remove(); }
       const text = siteEl("div"); text.style.cssText = "flex:1;min-width:0;"; Array.from(row.childNodes).filter((n) => n !== grip).forEach((n) => text.appendChild(n));
       row.append(text, box); row.style.alignItems = "center";
-      rows.push({ id: it.id, draft: !!it.draft, row, box });
+      rows.push({ id: it.id, draft: !!it.draft, row, box, data: it });
       row.style.display = visible(it) ? "flex" : "none";
       if (rows.length === 1) requestAnimationFrame(paintNote); // the row joins the column right after this call
       paintCount();
@@ -8157,6 +8340,7 @@ async function renderSite(body) {
   const typesData = await window.desktop.getSiteTypes().catch(() => ({ types: [], entries: {} }));
   const formsData = await window.desktop.getSiteForms().catch(() => ({ forms: [] }));
   siteForms = formsData.forms || []; // the props editor's form picker reads this
+  siteTypes = typesData.types || []; siteEntries = typesData.entries || {}; // the Entries block's editor reads these
   const delivery = await window.desktop.getFormsDelivery().catch(() => ({ provider: "", from: "", hasKey: false, ready: false }));
   const configured = data.site && data.site.url && !/example\.com/.test(data.site.url) ? data.site.url : null;
   const siteUrl = (data.liveUrl || configured || COPY.site.siteUrlPlaceholder).replace(/\/$/, "");
@@ -8269,8 +8453,8 @@ async function renderSite(body) {
   } else if (siteRailState.tab === "types") {
     const { left, right } = two();
     left.dataset.tour = "cms-type-list"; // walkthrough anchors
-    if (sel && sel.kind === "entry") { const [k, id] = sel.id.split("/"); const t = ctx.types.find((x) => x.key === k); const e = t && (ctx.entries[k] || []).find((x) => x.id === id); sitePreviewPath = t && e ? `${t.path}/${e.slug || e.id}` : "/"; }
-    else if (sel && sel.kind === "type") { const t = ctx.types.find((x) => x.key === sel.id); sitePreviewPath = t && t.index ? t.path : "/"; }
+    if (sel && sel.kind === "entry") { const [k, id] = sel.id.split("/"); const t = ctx.types.find((x) => x.key === k); const e = t && (ctx.entries[k] || []).find((x) => x.id === id); sitePreviewPath = t && e && !t.dataOnly ? `${t.path}/${e.slug || e.id}` : "/"; }
+    else if (sel && sel.kind === "type") { const t = ctx.types.find((x) => x.key === sel.id); sitePreviewPath = t && t.index && !t.dataOnly ? t.path : "/"; }
     else sitePreviewPath = "/";
     renderSiteTypesList(left, right, ctx, refresh);
   } else if (siteRailState.tab === "forms") {

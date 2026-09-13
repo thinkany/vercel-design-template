@@ -9,7 +9,8 @@ import { z, type ZodTypeAny } from "astro/zod";
 import { blockInstance } from "./blocks";
 import { seoFields } from "./seo";
 
-export const FIELD_KINDS = ["text", "textarea", "richtext", "number", "boolean", "date", "image", "select", "list", "link", "reference"] as const;
+// "tags": a set of labels; the vocabulary is scoped to the type and field it is on.
+export const FIELD_KINDS = ["text", "textarea", "richtext", "number", "boolean", "date", "image", "select", "list", "link", "reference", "tags"] as const;
 export type FieldKind = (typeof FIELD_KINDS)[number];
 
 export const fieldDef = z.object({
@@ -34,6 +35,9 @@ export const typeDef = z.object({
   singular: z.string().optional(),
   /** URL path for the type ("/products"); entries live at "<path>/<slug>". */
   path: z.string().regex(/^\/[a-z0-9-]*$/),
+  /** Data only: no page per entry and no index. Entries exist for other content to use
+   *  (a Reference field, a block); the path is kept but nothing is built at it. */
+  dataOnly: z.boolean().default(false),
   fields: z.array(fieldDef).default([]),
   /** Blocks rendering an entry, with {{field}} bindings in string props. */
   template: z.array(blockInstance).default([]),
@@ -51,6 +55,7 @@ export function fieldSchema(f: FieldDef): ZodTypeAny {
     case "number": s = z.number(); break;
     case "boolean": s = z.boolean(); break;
     case "list": s = z.array(z.string()); break;
+    case "tags": s = z.array(z.string()); break;
     case "link": s = z.object({ label: z.string(), href: z.string() }); break;
     case "image": s = z.object({ src: z.string(), alt: z.string().default("") }); break;
     case "select": s = f.options && f.options.length ? z.enum(f.options as [string, ...string[]]) : z.string(); break;
@@ -69,6 +74,10 @@ export function entrySchema(t: TypeDef) {
     slug: z.string().optional(),
     /** A draft is previewed in dev and left out of the published site. */
     draft: z.boolean().default(false),
+    /** Set by the CMS: when the entry was made and last saved (ISO). The Entries block
+     *  orders by the type's first date field, else by `created`. */
+    created: z.string().optional(),
+    updated: z.string().optional(),
     seo: seoFields.default({}),
     /** Own blocks (a landing page); when present the type's template is not used. */
     blocks: z.array(blockInstance).optional(),

@@ -13,6 +13,11 @@
  *   video A clip with its poster still. Here so a site can carry video without a
  *         designer having to design a block for it first: the CMS's video field
  *         uploads a clip (deriving the poster) or picks one already in the library.
+ *   types Entries of the content types (site/src/lib/entries.ts): a listing of one
+ *         or more types (newest first, optional paging, an optional Tag/Type filter
+ *         when more than one type is listed) or hand-picked entries. A type with a
+ *         page links each card to it (the whole card, or a "Read more" line). The
+ *         filter and pager are site/src/lib/entries-client.ts, from Base.astro.
  */
 import type React from "react";
 import { videoEmbed, embedFrameProps } from "./embed";
@@ -20,6 +25,7 @@ import { z } from "astro/zod";
 import { defineBlock, formRef, richtext, type BlockDef } from "./blocks";
 import { Rich } from "./Rich";
 import { formById, pageRouteOf, FORM_UI, type FormDef, type FormField } from "./forms";
+import { entriesOf, entryById, byDateDesc, types as contentTypes, ENTRIES_UI, type Entry } from "./entries";
 
 const codeProps = z.object({
   /** For you: what this snippet is (shown in the CMS, not on the page). */
@@ -254,6 +260,148 @@ function Video({ id, heading, video, width, ratio, controls }: z.infer<typeof vi
   );
 }
 
+// Types: the content types' entries on a page. Listing mode takes one or more types
+// (ordered newest first, so several types interleave by date), a cap, an optional
+// pager, and, when more than one type is listed, an optional Tag/Type filter. Picker
+// mode is specific entries in the order picked. An entry of a type with a page links
+// to it: the whole card, or a "Read more" line whose words the editor sets. A
+// data-only entry links nowhere. The CMS edits this block with its own form
+// (desktop/shell.js siteEntriesBlockEditor).
+const entriesProps = z.object({
+  heading: z.string().default(""),
+  /** listing = from the chosen types; picker = the chosen entries. */
+  mode: z.enum(["listing", "picker"]).default("listing"),
+  /** Listing: the type keys to draw from. */
+  types: z.array(z.string()).default([]),
+  /** Listing, without paging: how many at most (0 = all). Ignored when paginate is on. */
+  limit: z.number().int().min(0).default(12),
+  paginate: z.boolean().default(false),
+  perPage: z.number().int().min(1).default(6),
+  /** Listing, more than one type: let visitors filter by type or tag. */
+  filter: z.boolean().default(false),
+  /** Picker: the entries, in order. */
+  picks: z.array(z.object({ type: z.string().default(""), entry: z.string().default("") })).default([]),
+  /** For entries that have a page: the whole card is the link, or a line under it. */
+  linkStyle: z.enum(["card", "more"]).default("card"),
+  linkLabel: z.string().default(""),
+});
+
+const PILL = "font-ta-sans text-[12px] tracking-[0.04em] text-ta-body border border-ta-ink/25 rounded-full px-3 py-[6px] bg-transparent cursor-pointer hover:border-ta-ink aria-pressed:bg-ta-ink aria-pressed:text-ta-surface aria-pressed:border-ta-ink";
+const PAGER_BTN = "font-ta-sans text-[12px] tracking-[0.08em] uppercase text-ta-ink border border-ta-ink/25 rounded-[3px] px-4 py-2 bg-transparent cursor-pointer hover:border-ta-ink";
+const PAGER_NUM = "font-ta-sans text-[13px] text-ta-ink min-w-[36px] h-[36px] rounded-[3px] border border-transparent bg-transparent cursor-pointer hover:border-ta-ink/25";
+const PAGER_NUM_ON = "font-ta-sans text-[13px] text-ta-surface min-w-[36px] h-[36px] rounded-[3px] border border-ta-ink bg-ta-ink cursor-default";
+
+function entryDate(s: string): string {
+  if (!s) return "";
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? s : d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
+}
+/** The tags an entry carries, as filter keys ("<type>:<value>", so two types' tags never merge) with their labels. */
+function entryTags(e: Entry): { key: string; label: string }[] {
+  const out: { key: string; label: string }[] = [];
+  for (const f of e.type.fields) if (f.kind === "tags") for (const v of (Array.isArray(e.data[f.key]) ? (e.data[f.key] as string[]) : [])) out.push({ key: `${e.type.key}:${v}`, label: v });
+  return out;
+}
+
+/** One entry as a card: image, type and date, title, summary, tags, and, for a type with a
+ *  page, the link to it (the card itself, or a "Read more" line). Reused by promoted blocks. */
+export function EntryCard({ entry, showType, linkStyle = "card", linkLabel = "" }: { entry: Entry; showType?: boolean; linkStyle?: "card" | "more"; linkLabel?: string }) {
+  const t = entry.type;
+  const href = t.dataOnly ? null : `${t.path}/${(entry.data.slug as string | undefined) || entry.id}`;
+  const imageField = t.fields.find((f) => f.kind === "image");
+  const summaryField = t.fields.find((f) => f.kind === "textarea" || f.kind === "text");
+  const img = imageField ? (entry.data[imageField.key] as { src: string; alt?: string } | undefined) : undefined;
+  const summary = summaryField ? (entry.data[summaryField.key] as string | undefined) : undefined;
+  const tags = entryTags(entry);
+  const date = entryDate(entry.date);
+  const body = (
+    <>
+      {img?.src && <img src={img.src} alt={img.alt || ""} className="w-full aspect-[4/3] object-cover rounded-[3px] mb-4" />}
+      {(showType || date) && (
+        <div className="font-ta-sans text-[11px] tracking-[0.14em] uppercase text-ta-muted mb-2">
+          {showType ? (t.singular || t.label) : ""}{showType && date ? " · " : ""}{date}
+          {entry.data.draft && <span className="ml-3 align-middle rounded-full bg-ta-ink px-2 py-[2px] text-[10px] text-ta-surface">Draft</span>}
+        </div>
+      )}
+      <h3 className="font-ta-display text-[22px] font-normal text-ta-ink leading-[1.15] mb-2">{entry.data.title}</h3>
+      {summary && <p className="font-ta-sans text-[15px] text-ta-body leading-[1.6] m-0">{summary}</p>}
+      {tags.length > 0 && (
+        <ul className="list-none p-0 m-0 mt-3 flex flex-wrap gap-2">
+          {tags.map((x) => <li key={x.key} className="font-ta-sans text-[11px] text-ta-body border border-ta-ink/20 rounded-full px-2.5 py-[3px]">{x.label}</li>)}
+        </ul>
+      )}
+    </>
+  );
+  return (
+    <li data-ta-entry="" data-ta-type={t.key} data-ta-tags={tags.map((x) => x.key).join("|") || undefined}>
+      {href && linkStyle === "card" ? (
+        <a href={href} className="no-underline block">{body}</a>
+      ) : (
+        <>
+          {body}
+          {href && <a href={href} className="inline-block mt-3 font-ta-sans text-[12px] font-medium tracking-[0.1em] uppercase text-ta-primary no-underline hover:underline">{linkLabel || ENTRIES_UI.readMore}</a>}
+        </>
+      )}
+    </li>
+  );
+}
+
+function Entries(p: z.infer<typeof entriesProps>) {
+  const listing = p.mode !== "picker";
+  const multi = listing && p.types.length > 1;
+  let items: Entry[];
+  if (listing) {
+    items = p.types.flatMap((k) => entriesOf(k));
+    if (multi) items.sort(byDateDesc);
+    // Paging shows everything, a page at a time; the cap applies only to a single run.
+    if (p.limit > 0 && !p.paginate) items = items.slice(0, p.limit);
+  } else {
+    items = p.picks.map((x) => entryById(x.type, x.entry)).filter((e): e is Entry => !!e);
+  }
+  const filter = multi && p.filter;
+  const perPage = listing && p.paginate ? p.perPage : 0;
+  // The filter's pills: every type shown, then every tag value carried, scoped to its
+  // type. A value two types both use is told apart by its type in the label.
+  const typesShown = [...new Map(items.map((e) => [e.type.key, e.type])).values()];
+  const tagPills = new Map<string, { label: string; type: string }>();
+  for (const e of items) for (const x of entryTags(e)) if (!tagPills.has(x.key)) tagPills.set(x.key, { label: x.label, type: e.type.singular || e.type.label });
+  const labelCounts: Record<string, number> = {};
+  for (const v of tagPills.values()) labelCounts[v.label.toLowerCase()] = (labelCounts[v.label.toLowerCase()] || 0) + 1;
+  const showType = listing ? p.types.length > 1 : typesShown.length > 1;
+  return (
+    <section data-block="types" data-ta-entries="" data-ta-per-page={perPage || undefined} className="w-full bg-ta-surface px-8 py-20">
+      <div className="mx-auto w-full max-w-[1160px]">
+        {p.heading && <h2 className="font-ta-display text-[clamp(28px,4vw,40px)] font-normal text-ta-ink mb-8 leading-[1.1] tracking-[-0.02em]">{p.heading}</h2>}
+        {items.length === 0 ? (
+          <div className="font-ta-sans text-[14px] text-ta-muted border border-dashed border-ta-ink/25 rounded-[3px] px-4 py-3">{contentTypes.length ? ENTRIES_UI.none : ENTRIES_UI.noTypes}</div>
+        ) : (
+          <>
+            {filter && (
+              <div data-ta-entries-filter="" className="flex flex-wrap gap-2 mb-8">
+                <button type="button" data-ta-filter="" aria-pressed="true" className={PILL}>{ENTRIES_UI.all}</button>
+                {typesShown.map((t) => <button key={t.key} type="button" data-ta-filter={`type:${t.key}`} aria-pressed="false" className={PILL}>{t.label}</button>)}
+                {[...tagPills.entries()].map(([key, v]) => <button key={key} type="button" data-ta-filter={`tag:${key}`} aria-pressed="false" className={PILL}>{labelCounts[v.label.toLowerCase()] > 1 ? `${v.label} · ${v.type}` : v.label}</button>)}
+              </div>
+            )}
+            <ul className="list-none p-0 m-0 grid gap-8 @lg:grid-cols-3">
+              {items.map((e) => <EntryCard key={`${e.type.key}/${e.id}`} entry={e} showType={showType} linkStyle={p.linkStyle} linkLabel={p.linkLabel} />)}
+            </ul>
+            {filter && <p data-ta-entries-empty="" hidden className="font-ta-sans text-[14px] text-ta-muted mt-4">{ENTRIES_UI.empty}</p>}
+            {perPage > 0 && (
+              <nav data-ta-entries-pager="" hidden aria-label="Pages" className="flex items-center justify-center gap-2 mt-10">
+                {/* Previous · 1 2 3 · Next; the numbers are filled in by the client script (entries-client.ts). */}
+                <button type="button" data-ta-pager-prev="" hidden className={PAGER_BTN}>{ENTRIES_UI.prev}</button>
+                <span data-ta-pager-pages="" data-ta-pager-class={PAGER_NUM} data-ta-pager-current-class={PAGER_NUM_ON} className="inline-flex items-center gap-1" />
+                <button type="button" data-ta-pager-next="" hidden className={PAGER_BTN}>{ENTRIES_UI.next}</button>
+              </nav>
+            )}
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export const builtinBlocks: Record<string, BlockDef> = {
   table: defineBlock({
     name: "Table",
@@ -278,6 +426,12 @@ export const builtinBlocks: Record<string, BlockDef> = {
     description: "A video with its poster still. Upload a clip and the still is taken for you, or pick one already in the library.",
     props: videoProps,
     component: Video,
+  }),
+  types: defineBlock({
+    name: "Types",
+    description: "Entries from your content types: a listing (newest first, with optional paging and a Tag/Type filter) or hand-picked entries. Types with a page link each card to it.",
+    props: entriesProps,
+    component: Entries,
   }),
 };
 

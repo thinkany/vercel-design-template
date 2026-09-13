@@ -134,6 +134,12 @@ const faviconType = /\.svg$/i.test(favicon) ? "image/svg+xml" : /\.png$/i.test(f
       import { enhanceForms } from "../lib/form-client";
       enhanceForms(document);
     </script>
+    <script>
+      // Entries blocks (site/src/lib/entries-client.ts): the Tag/Type filter and the
+      // pager. Without JS every entry shows.
+      import { enhanceEntries } from "../lib/entries-client";
+      enhanceEntries(document);
+    </script>
     <Fragment set:html={extra("bodyEnd")} />
   </body>
 </html>

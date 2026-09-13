@@ -41,6 +41,9 @@ const builtinFiles = import.meta.glob("../../site/src/lib/builtin-blocks.tsx", {
 // site/src/lib/form-client.ts → the forms' submit behaviour, in preview mode here (never sends).
 const formClientFiles = import.meta.glob("../../site/src/lib/form-client.ts", { eager: true }) as Record<string, { enhanceForms?: (root: ParentNode, opts?: { preview?: boolean }) => void }>;
 const enhanceForms = (Object.values(formClientFiles)[0] || {}).enhanceForms;
+// site/src/lib/entries-client.ts → the Entries block's filter pills and pager.
+const entriesClientFiles = import.meta.glob("../../site/src/lib/entries-client.ts", { eager: true }) as Record<string, { enhanceEntries?: (root: ParentNode) => void }>;
+const enhanceEntries = (Object.values(entriesClientFiles)[0] || {}).enhanceEntries;
 const blocks: Record<string, BlockDef> = { ...((Object.values(builtinFiles)[0] || {}).builtinBlocks || {}), ...((Object.values(registryFiles)[0] || {}).blocks || {}) };
 const chromeMod: ChromeModule = Object.values(chromeFiles)[0] || {};
 
@@ -178,7 +181,7 @@ export function SitePage({ pageId, onNavigate, view, setView, orientation, setOr
   });
 
   // Forms on the page submit into their preview state (the design surface has no endpoint).
-  useEffect(() => { if (enhanceForms) enhanceForms(document, { preview: true }); });
+  useEffect(() => { if (enhanceForms) enhanceForms(document, { preview: true }); if (enhanceEntries) enhanceEntries(document); });
 
   return (
     <DesignSurface view={view} setView={setView} orientation={orientation} setOrientation={setOrientation} capture={capture} onNavigate={onNavigate} chrome={false}>
@@ -215,7 +218,7 @@ export function BlockPreview({ type }: { type: string }) {
     w.__taSetBlockProps = (p) => setProps(p && typeof p === "object" ? { ...p } : null);
     return () => { delete w.__taSetBlockProps; };
   }, []);
-  useEffect(() => { if (enhanceForms) enhanceForms(document, { preview: true }); });
+  useEffect(() => { if (enhanceForms) enhanceForms(document, { preview: true }); if (enhanceEntries) enhanceEntries(document); });
   const isHeader = type === "header";
   const [menuOpen, setMenuOpen] = useState<{ open: string | null; mode: "desktop" | "mobile"; tick: number } | null>(null);
   useEffect(() => {
