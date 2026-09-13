@@ -1434,6 +1434,10 @@ window.COPY = {
           title: "Desktop, tablet, phone",
           body: "The toggle at the top of the preview switches device frames. It is one design reflowing, not three copies, so a change you make shows in every frame.",
         },
+    findTitle: "Find a project",
+    findDesc: "Search every project you have opened here, by client or project name.",
+    findPlaceholder: "Client or project name…",
+    findNoMatch: "No project matches that.",
         chat: {
           title: "Edit by asking",
           body: "Describe what you want in plain words: a warmer palette, a taller hero, a different photo, a section moved up. Each request edits this design in place, and small asks come back quickly.",

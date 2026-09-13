@@ -2812,6 +2812,8 @@ async function renderProjects(body) {
   body.appendChild(setRow("Folder", proj.path || "None"));
 
   // ── Recent projects — one click back into a project you had open. ──
+  // The newest five only; the rest are a search away (below Create or switch).
+  const RECENT_SHOWN = 5;
   const recents = await window.desktop.getRecentProjects();
   if (recents && recents.length) {
     const sep = document.createElement("div");
@@ -2828,34 +2830,7 @@ async function renderProjects(body) {
 
     const list = document.createElement("div");
     list.className = "sesslist";
-    recents.forEach((r) => {
-      const row = document.createElement("div");
-      row.className = "sessrow";
-      const open = document.createElement("button");
-      open.className = "sessrow-open";
-      open.title = r.path;
-
-      // Client name → project name → path (folder names aren't reliable IDs).
-      const primary = r.client || r.project || r.name;
-      const nm = document.createElement("div");
-      nm.className = "sess-title";
-      nm.textContent = primary;
-      open.appendChild(nm);
-      if (r.client && r.project && r.project !== r.client) {
-        const sub = document.createElement("div");
-        sub.className = "recent-sub";
-        sub.textContent = r.project;
-        open.appendChild(sub);
-      }
-      const pth = document.createElement("div");
-      pth.className = "recent-path";
-      pth.textContent = r.path;
-      open.appendChild(pth);
-
-      open.addEventListener("click", () => openRecentProject(r.path));
-      row.appendChild(open);
-      list.appendChild(row);
-    });
+    recents.slice(0, RECENT_SHOWN).forEach((r) => list.appendChild(recentProjectRow(r)));
     body.appendChild(list);
   }
 
@@ -2884,6 +2859,89 @@ async function renderProjects(body) {
   switchBtn.addEventListener("click", switchToExisting);
   btnRow.append(createBtn, switchBtn);
   body.appendChild(btnRow);
+
+  // ── Find a project — search everything the app remembers opening, by client or
+  // project name (folder names aren't reliable IDs). Filters as you type; the matches
+  // render as the same rows as Recent projects. Always present, even before the app
+  // remembers a second project, so the drawer reads the same every time. ──
+  {
+    // The open project is not in the set: it is already named at the top of the drawer.
+    const known = recents || [];
+    const fsep = document.createElement("div");
+    fsep.className = "drawer-sep";
+    body.appendChild(fsep);
+    const fl = document.createElement("div");
+    fl.className = "sess-label";
+    fl.textContent = COPY.project.findTitle;
+    body.appendChild(fl);
+    const fd = document.createElement("div");
+    fd.className = "sess-desc";
+    fd.textContent = COPY.project.findDesc;
+    body.appendChild(fd);
+
+    const search = document.createElement("input");
+    search.className = "field";
+    search.placeholder = COPY.project.findPlaceholder;
+    search.autocomplete = "off";
+    search.setAttribute("aria-label", COPY.project.findTitle);
+    // The field's own bottom margin would tell the wrapper's magnifier to centre on a
+    // taller box; the wrapper carries the spacing instead.
+    search.style.marginBottom = "0";
+    const searchWrap = siteSearchField(search);
+    searchWrap.style.marginBottom = "10px";
+    body.appendChild(searchWrap);
+
+    const results = document.createElement("div");
+    results.className = "sesslist";
+    body.appendChild(results);
+    const none = document.createElement("div");
+    none.className = "muted";
+    none.style.marginTop = "0";
+    none.textContent = COPY.project.findNoMatch;
+    none.hidden = true;
+    body.appendChild(none);
+
+    const paint = () => {
+      const q = search.value.trim().toLowerCase();
+      results.innerHTML = "";
+      if (!q) { none.hidden = true; return; }
+      const hits = known.filter((r) => [r.client, r.project, r.name].some((v) => v && v.toLowerCase().includes(q)));
+      hits.forEach((r) => results.appendChild(recentProjectRow(r)));
+      none.hidden = hits.length > 0;
+    };
+    search.addEventListener("input", paint);
+  }
+}
+
+// One project row (client name, then project name, then the folder path), used by the
+// Recent projects list and the project search alike. Click opens it.
+function recentProjectRow(r) {
+  const row = document.createElement("div");
+  row.className = "sessrow";
+  const open = document.createElement("button");
+  open.className = "sessrow-open";
+  open.title = r.path;
+
+  // Client name → project name → path (folder names aren't reliable IDs).
+  const primary = r.client || r.project || r.name;
+  const nm = document.createElement("div");
+  nm.className = "sess-title";
+  nm.textContent = primary;
+  open.appendChild(nm);
+  if (r.client && r.project && r.project !== r.client) {
+    const sub = document.createElement("div");
+    sub.className = "recent-sub";
+    sub.textContent = r.project;
+    open.appendChild(sub);
+  }
+  const pth = document.createElement("div");
+  pth.className = "recent-path";
+  pth.textContent = r.path;
+  open.appendChild(pth);
+
+  open.addEventListener("click", () => openRecentProject(r.path));
+  row.appendChild(open);
+  return row;
 }
 
 // Boot the workspace from a create/open/openPath result, with a clean slate for the

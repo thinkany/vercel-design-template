@@ -763,10 +763,12 @@ function saveProjectPath(p) {
   addRecentProject(p);
 }
 // Most-recently-opened list (for the Switch Projects drawer). Newest first, deduped.
+// Long enough that the drawer's project search has a real set to look through: it
+// shows only the newest five, but searches every one it remembers.
 function addRecentProject(dir) {
   if (!dir) return;
   const prev = (loadUiState().recentProjects || []).filter((x) => x && x !== dir);
-  setUiState({ recentProjects: [dir, ...prev].slice(0, 8) });
+  setUiState({ recentProjects: [dir, ...prev].slice(0, 40) });
 }
 // Read a project's identity from its committed .env (folder names aren't reliable
 // identifiers). Returns { client, project } (either may be empty).
@@ -5741,12 +5743,12 @@ ipcMain.handle("project:open", async () => {
   return { ok: true, path: dir, name: path.basename(dir), ...readProjectMeta(dir), viteUrl, siteUrl };
 });
 
-// The last few opened projects, excluding the current one, pruned to those that
-// still exist and look like projects. Cap at 5 for the drawer.
+// Every remembered project, newest first, excluding the current one, pruned to those
+// that still exist and look like projects. The drawer lists the newest five and
+// searches the rest by client or project name.
 ipcMain.handle("projects:recent", () => {
   return (loadUiState().recentProjects || [])
     .filter((p) => p && p !== currentProject && fs.existsSync(p) && fs.existsSync(path.join(p, "package.json")))
-    .slice(0, 5)
     .map((p) => ({ path: p, name: path.basename(p), ...readProjectMeta(p) }));
 });
 
