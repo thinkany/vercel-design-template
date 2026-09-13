@@ -1196,7 +1196,9 @@ const SETUP_STEP_DEFS = [
     required: true,
     title: () => COPY.setupGate.claudeTitle,
     desc: () => COPY.setupGate.claudeDesc,
-    also: () => COPY.setupGate.claudeAlso,
+    // The "your key lets the studio talk to Claude" line opens the fold rather than
+    // standing alone under the description, so the card stays short until asked.
+    more: () => ({ title: COPY.setupGate.moreTitle, html: COPY.setupGate.claudeMoreHtml }),
     status: () => window.desktop.getKeyStatus().then((k) => !!(k && k.hasKey)),
     render: (host, done) => claudeKeySection(host, { noLabel: true, noDesc: true, onConnected: () => done("connected") }),
   },
@@ -1381,6 +1383,20 @@ async function renderSetupStep({ settle = null } = {}) {
         a.className = "setup-step-also";
         a.textContent = step.also();
         box.appendChild(a);
+      }
+      // A collapsed "More Information" fold (the same fold the media libraries use) for
+      // anything longer than the description: where the key comes from, what it costs.
+      // Shut on every walk-through, and above the field so it is read before pasting.
+      if (step.more) {
+        const { title, html } = step.more();
+        const shelf = document.createElement("div");
+        shelf.className = "setup-libs setup-more";
+        box.appendChild(shelf);
+        const fold = licensesFold(shelf, { title, storeKey: `ta-setup-more-${step.id}`, openDefault: false, remember: false });
+        const text = document.createElement("div");
+        text.className = "muted setup-more-text";
+        text.innerHTML = html; // trusted COPY html with links
+        fold.appendChild(text);
       }
       const bodyEl = document.createElement("div");
       bodyEl.className = "setup-step-body";

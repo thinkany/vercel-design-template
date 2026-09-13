@@ -1331,7 +1331,15 @@ window.COPY = {
     skip: "Skip this step",
     claudeTitle: "Claude API key",
     claudeDesc: "This studio is powered by Anthropic\u2019s Claude AI using your own API key. Once you add your key, you\u2019re good to go; everything else on this screen is optional.",
-    claudeAlso: "Your Anthropic API key is what lets the studio talk to Claude securely using your account.",
+    // A collapsed fold under the description: where the key comes from, for a designer
+    // who has never made one. The intro line above opens it.
+    moreTitle: "More Information",
+    claudeMoreHtml: "Your Anthropic API key is what lets the studio talk to Claude securely using your account.<br><br>" +
+      "<b>To get a key:</b><br>1. Create an Anthropic account at <a href=\"https://console.anthropic.com/\" target=\"_blank\" rel=\"noopener\">console.anthropic.com</a> and confirm it from the email Anthropic sends.<br>" +
+      "2. Under <i>Billing</i>, add a payment method or buy credits. The key is billed to your Anthropic account as the studio uses it.<br>" +
+      "3. Open <a href=\"https://console.anthropic.com/settings/keys\" target=\"_blank\" rel=\"noopener\">console.anthropic.com/settings/keys</a>, choose <i>Create Key</i> and give it a name (thinkany design, for example).<br>" +
+      "4. Copy the key straight away, since the console shows it only once, and paste it below.<br><br>" +
+      "It is stored encrypted on this Mac and never leaves it except to reach Anthropic.",
     figmaTitle: "Figma export",
     figmaDesc: "Export your finished design directly into Figma as a fully editable file, not a flat image. Text, colors, and spacing come through as real styles and organized layers, so designers can keep refining in Figma or hand off clean, production-ready files to developers.",
     researchTitle: "Design research & site building",
