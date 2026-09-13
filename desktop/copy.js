@@ -1350,7 +1350,17 @@ window.COPY = {
     researchAlso: "This key also unlocks the site builder, which turns an approved design into a publishable website with pages, posts and media.",
     mediaTitle: "Photos & Video",
     mediaDesc: "Add optional free stock image and video libraries so your build can automatically find visuals that match your design description and download them with proper photographer credit.",
-    mediaOrder: "If you supply keys for each service provider, the build will search Unsplash first, then Pexels, then Pixabay. For videos, it will search Pexels first, then Pixabay. You can connect any or all of these services; the build will use whichever are connected and still have requests available. If no video libraries are connected, your designs will simply use still images only.",
+    // Behind the lifesaver on the Photos & Video card (the order text used to sit under
+    // the description; as a help card it is there when wanted and out of the way otherwise).
+    mediaHelpTitle: "How a build uses these libraries",
+    mediaHelpHtml: `
+    <div class="iref-help-head">
+      <div class="iref-help-title">How a build uses these libraries</div>
+      <button type="button" class="iref-help-x" aria-label="Close">✕</button>
+    </div>
+    <p>If you supply keys for each service provider, the build will search Unsplash first, then Pexels, then Pixabay. For videos, it will search Pexels first, then Pixabay.</p>
+    <p>You can connect any or all of these services; the build will use whichever are connected and still have requests available. If no video libraries are connected, your designs will simply use still images only.</p>
+  `,
     // Shown beside each library's name, and readable while its section is folded shut.
     offersImages: "Photos",
     offersBoth: "Photos & Video",

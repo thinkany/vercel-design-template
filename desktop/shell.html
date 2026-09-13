@@ -2109,7 +2109,15 @@
          three sets of "how to get a key" steps don't land on the designer together */
       /* the longer explanation above the three libraries: a little more leading and a
          clear gap beneath, so it reads as an intro rather than crowding the first fold */
-      .setup-media-note { font-size: 12px; color: #6b6b76; margin: 2px 0 18px; line-height: 1.6; }
+      /* a step's title row when it carries a help lifesaver on the right */
+      .setup-step-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .setup-step-head .row-help { margin-right: -2px; border-radius: 50%; }
+      @keyframes setup-help-pulse {
+        0%, 100% { background: transparent; box-shadow: 0 0 0 0 rgba(17,17,17,0); color: #74747a; }
+        45% { background: #f1f1f5; box-shadow: 0 0 0 5px rgba(17,17,17,.08); color: #111; }
+      }
+      .setup-step-help.pulse { animation: setup-help-pulse 1.15s ease-in-out 3; }
+      @media (prefers-reduced-motion: reduce) { .setup-step-help.pulse { animation: none; } }
       .setup-libs { border-top: 1px solid #ececf1; }
       .setup-libs .site-acc { border-top: 0; border-bottom: 1px solid #ececf1; }
       .setup-libs .site-acc-head { padding: 13px 2px; }

@@ -1183,6 +1183,7 @@ window.desktop.onViteReady((url) => {
 let setupState = null; // { claude: "connected"|null, figma: "connected"|"skipped"|null, ... }
 let setupOpenStep = null; // a done step the designer reopened
 let setupMorePulsed = false; // the first "More Information" bar of a walk-through pulses once
+let setupHelpPulsed = false; // and the first help lifesaver, the same way
 
 // The order the designer meets them. Claude first (nothing runs without it), then the
 // two licences, then the photo/video libraries last (optional extras, and the one step
@@ -1237,6 +1238,7 @@ const SETUP_STEP_DEFS = [
     id: "media",
     title: () => COPY.setupGate.mediaTitle,
     desc: () => COPY.setupGate.mediaDesc,
+    help: () => ({ title: COPY.setupGate.mediaHelpTitle, html: COPY.setupGate.mediaHelpHtml }),
     // The one step that shows several fields at once: these are alternatives to each
     // other, not a sequence, and asking for them one at a time would read as nagging.
     status: async () => {
@@ -1246,10 +1248,6 @@ const SETUP_STEP_DEFS = [
       return !!((u && u.hasLicense) || (p && p.hasLicense) || (x && x.hasLicense));
     },
     render: async (host, done) => {
-      const note = document.createElement("div");
-      note.className = "setup-media-note";
-      note.textContent = COPY.setupGate.mediaOrder;
-      host.appendChild(note);
       const S = COPY.setupGate;
       const libs = [
         { id: "unsplash", label: COPY.licenses.unsplashLabel, steps: COPY.licenses.unsplashStepsHtml,
@@ -1373,10 +1371,29 @@ async function renderSetupStep({ settle = null } = {}) {
       const t = document.createElement("div");
       t.className = "setup-step-title";
       t.textContent = step.title();
+      // A step with a help card carries the lifesaver on its title row, the way the
+      // Figma drawer's export scope does; it opens the same overlay.
+      let helpBtn = null;
+      if (step.help) {
+        const { title: helpTitle, html: helpHtml } = step.help();
+        helpBtn = document.createElement("button");
+        helpBtn.type = "button";
+        helpBtn.className = "row-help setup-step-help";
+        helpBtn.title = helpTitle;
+        helpBtn.setAttribute("aria-label", helpTitle);
+        helpBtn.innerHTML = HELP_BUOY_SVG;
+        helpBtn.addEventListener("click", () => openHelpOverlay(helpHtml));
+        const head = document.createElement("div");
+        head.className = "setup-step-head";
+        head.append(t, helpBtn);
+        box.appendChild(head);
+      } else {
+        box.appendChild(t);
+      }
       const d = document.createElement("div");
       d.className = "setup-step-desc";
       d.textContent = step.desc();
-      box.append(t, d);
+      box.appendChild(d);
       // A second, quieter line for anything else the same key unlocks, so a step never
       // hides something a designer would miss by skipping it.
       if (step.also) {
@@ -1432,13 +1449,15 @@ async function renderSetupStep({ settle = null } = {}) {
       // The first fold bar a walk-through shows pulses a few times once its card has
       // landed, so the designer learns the bar is there; the cards after it do not.
       // Opening it, or reaching the end of the pulse, leaves the bar still.
-      if (moreHead && !setupMorePulsed) {
-        setupMorePulsed = true;
-        const still = () => moreHead.classList.remove("pulse");
-        moreHead.addEventListener("animationend", still, { once: true });
-        moreHead.addEventListener("click", still, { once: true });
-        (arrive && arrive.finished ? arrive.finished : Promise.resolve()).then(() => { if (moreHead.isConnected) moreHead.classList.add("pulse"); }).catch(() => {});
-      }
+      const pulseOnceLanded = (target) => {
+        const still = () => target.classList.remove("pulse");
+        target.addEventListener("animationend", still, { once: true });
+        target.addEventListener("click", still, { once: true });
+        (arrive && arrive.finished ? arrive.finished : Promise.resolve()).then(() => { if (target.isConnected) target.classList.add("pulse"); }).catch(() => {});
+      };
+      if (moreHead && !setupMorePulsed) { setupMorePulsed = true; pulseOnceLanded(moreHead); }
+      // The first help lifesaver of a walk-through (Photos & Video) pulses the same way.
+      if (helpBtn && !setupHelpPulsed) { setupHelpPulsed = true; pulseOnceLanded(helpBtn); }
     } else {
       const row = buildSetupDoneRow(step, answered);
       stack.appendChild(row);
@@ -1663,6 +1682,7 @@ function measureDoneRow(id, stack) {
 async function showSetup() {
   setupOpenStep = null;
   setupMorePulsed = false; // each walk-through gets its one pulse
+  setupHelpPulsed = false;
   setupAnimating = false; // a re-entry mid-transition must not stay locked
   const stack = el("setup-stack");
   if (stack) { stack.getAnimations().forEach((a) => a.cancel()); stack.style.height = ""; }
