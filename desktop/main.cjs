@@ -316,11 +316,13 @@ function storePexelsKey(key) {
 function removeStoredPexelsKey() { try { fs.unlinkSync(pexelsKeyFilePath()); } catch { /* already gone */ } }
 async function validatePexelsKey(key) {
   try {
-    // A SINGLE-RESOURCE endpoint, not /v1/search. Verified against the live API
-    // 2026-09-11: Pexels serves search results to any Authorization header at all, so
-    // validating there accepted every string a designer could type and only failed later,
-    // mid-build. /v1/photos/<id> answers 401 for a key it does not know.
-    const res = await fetch("https://api.pexels.com/v1/photos/1", { headers: { Authorization: key } });
+    // Pexels sits behind Cloudflare with public caching (cache-control: public, an hour),
+    // and a cache HIT is served to any Authorization header at all, so a common request
+    // accepted every string a designer could type. The earlier fix (/v1/photos/1) missed
+    // the cache but that photo does not exist, so a GOOD key came back 404 and could not
+    // be saved. A unique query string bypasses the cache (verified 2026-09-12: cf=BYPASS,
+    // 401 for a bad key on every endpoint), and the curated feed always exists.
+    const res = await fetch(`https://api.pexels.com/v1/curated?per_page=1&_=${Date.now()}`, { headers: { Authorization: key } });
     noteImageHeaders("pexels", res);
     if (res.ok) return { ok: true };
     if (res.status === 401 || res.status === 403) return { ok: false, error: "Pexels rejected that API key." };
