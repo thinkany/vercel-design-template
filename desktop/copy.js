@@ -1335,10 +1335,10 @@ window.COPY = {
     // who has never made one. The intro line above opens it.
     moreTitle: "More Information",
     claudeMoreHtml: "Your Anthropic API key is what lets the studio talk to Claude securely using your account.<br><br>" +
-      "<b>To get a key:</b><br>1. Create an Anthropic account at <a href=\"https://console.anthropic.com/\" target=\"_blank\" rel=\"noopener\">console.anthropic.com</a> and confirm it from the email Anthropic sends.<br>" +
-      "2. Under <i>Billing</i>, add a payment method or buy credits. The key is billed to your Anthropic account as the studio uses it.<br>" +
-      "3. Open <a href=\"https://console.anthropic.com/settings/keys\" target=\"_blank\" rel=\"noopener\">console.anthropic.com/settings/keys</a>, choose <i>Create Key</i> and give it a name (thinkany design, for example).<br>" +
-      "4. Copy the key straight away, since the console shows it only once, and paste it below.<br><br>" +
+      "<b>To get a key:</b><ol class=\"key-steps\"><li>Create an Anthropic account at <a href=\"https://console.anthropic.com/\" target=\"_blank\" rel=\"noopener\">console.anthropic.com</a> and confirm it from the email Anthropic sends.</li>" +
+      "<li>Under <i>Billing</i>, add a payment method or buy credits. The key is billed to your Anthropic account as the studio uses it.</li>" +
+      "<li>Open <a href=\"https://console.anthropic.com/settings/keys\" target=\"_blank\" rel=\"noopener\">console.anthropic.com/settings/keys</a>, choose <i>Create Key</i> and give it a name (thinkany design, for example).</li>" +
+      "<li>Copy the key straight away, since the console shows it only once, and paste it below.</li></ol>" +
       "It is stored encrypted on this Mac and never leaves it except to reach Anthropic.",
     figmaTitle: "Figma export",
     figmaDesc: "Export your finished design directly into Figma as a fully editable file, not a flat image. Text, colors, and spacing come through as real styles and organized layers, so designers can keep refining in Figma or hand off clean, production-ready files to developers.",
@@ -1354,9 +1354,9 @@ window.COPY = {
     // Shown beside each library's name, and readable while its section is folded shut.
     offersImages: "Photos",
     offersBoth: "Photos & Video",
-    unsplashOffer: "The best-curated photo library of the three, and the first one a build searches. Photos only: it has no video.",
-    pexelsOffer: "Photos and video on one key, 200 requests an hour. The first library a build searches for footage.",
-    pixabayOffer: "Photos and video on one key, and the widest library of the three, though less curated. Searched last for both, so it catches what the others miss.",
+    unsplashOffer: "The highest\u2011quality, most carefully curated photo library of the three, and when activated it is the first place your build looks when searching for images that match your design\u2019s description. This service provides photos only and does not include video.",
+    pexelsOffer: "A versatile library that offers both photos and video under a single API key, with up to 200 requests per hour. It\u2019s the first place your build looks for videos, and it can also provide still images that match your design\u2019s description.",
+    pixabayOffer: "A large, all\u2011purpose library that offers both photos and video under a single API key, with the widest selection of the three services but lighter curation. Your build searches it last (if other services are active) for both images and footage, so it can pick up anything the other libraries didn\u2019t find.",
   },
 
   // ── Usage gate — the first screen on a new install, before the key ──────────
@@ -1922,8 +1922,8 @@ window.COPY = {
     figmaDesc: "Unlocks exporting your designs to Figma.",
     unsplashLabel: "Unsplash (optional)",
     unsplashDesc: "Your own Unsplash access key lets a build search the library for photos that fit the brief: free to use, credited to the photographer. Without it, images are found the plain way.",
-    unsplashStepsHtml: "<b>To get a key:</b><br>1. Create an Unsplash account and confirm it from the email Unsplash sends.<br>2. Open <a href=\"https://unsplash.com/oauth/applications\" target=\"_blank\" rel=\"noopener\">unsplash.com/oauth/applications</a>, choose <i>New Application</i> and agree to the terms.<br>" +
-      "3. Give it a name and a description (thinkany design, for example).<br>4. Copy its <b>Access Key</b> and paste it below.<br><br>" +
+    unsplashStepsHtml: "<b>To get a key:</b><ol class=\"key-steps\"><li>Create an Unsplash account and confirm it from the email Unsplash sends.</li><li>Open <a href=\"https://unsplash.com/oauth/applications\" target=\"_blank\" rel=\"noopener\">unsplash.com/oauth/applications</a>, choose <i>New Application</i> and agree to the terms.</li>" +
+      "<li>Give it a name and a description (thinkany design, for example).</li><li>Copy its <b>Access Key</b> and paste it below.</li></ol>" +
       "A new app allows 50 requests an hour; a build uses about two per photo, and the studio paces its calls and stops short of the limit.",
     imageUsageLabel: "This hour",
     imageUsage: (u) => u && u.limit ? `${u.requests} of ${u.limit} requests${typeof u.remaining === "number" ? `, ${u.remaining} left` : ""}, resets in ${u.resetsInMin} min` : "No requests yet",
@@ -1934,13 +1934,13 @@ window.COPY = {
     imageUsageMonth: (u) => u && u.limit ? `${u.limit - (typeof u.remaining === "number" ? u.remaining : u.limit)} of ${u.limit.toLocaleString()} requests used${typeof u.remaining === "number" ? `, ${u.remaining.toLocaleString()} left` : ""}` : "No requests yet",
     pexelsLabel: "Pexels (optional)",
     pexelsDesc: "A second photo library for builds, free to use with a link back to the photographer. With Unsplash also connected, a build uses whichever still has room this hour.",
-    pexelsStepsHtml: "<b>To get a key:</b><br>1. Create a Pexels account and confirm it from the email Pexels sends.<br>" +
-      "2. Visit <a href=\"https://www.pexels.com/api/key/\" target=\"_blank\" rel=\"noopener\">pexels.com/api/key</a> and copy your <b>API key</b>.<br>3. Paste it below.<br><br>" +
+    pexelsStepsHtml: "<b>To get a key:</b><ol class=\"key-steps\"><li>Create a Pexels account and confirm it from the email Pexels sends.</li>" +
+      "<li>Visit <a href=\"https://www.pexels.com/api/key/\" target=\"_blank\" rel=\"noopener\">pexels.com/api/key</a> and copy your <b>API key</b>.</li><li>Paste it below.</li></ol>" +
       "Pexels allows 200 requests an hour and 20,000 a month; a build uses about one per photo, and the studio paces its calls and stops short of the limit.",
     pixabayLabel: "Pixabay (optional)",
     pixabayDesc: "A third library, and the widest. One key covers photos AND video, so this is the simplest way to let a build use footage as well as stills.",
-    pixabayStepsHtml: "<b>To get a key:</b><br>1. Create a Pixabay account and confirm it from the email Pixabay sends.<br>" +
-      "2. Visit <a href=\"https://pixabay.com/api/docs/\" target=\"_blank\" rel=\"noopener\">pixabay.com/api/docs</a>; your <b>API key</b> is shown at the top once you are signed in.<br>3. Paste it below.<br><br>" +
+    pixabayStepsHtml: "<b>To get a key:</b><ol class=\"key-steps\"><li>Create a Pixabay account and confirm it from the email Pixabay sends.</li>" +
+      "<li>Visit <a href=\"https://pixabay.com/api/docs/\" target=\"_blank\" rel=\"noopener\">pixabay.com/api/docs</a>; your <b>API key</b> is shown at the top once you are signed in.</li><li>Paste it below.</li></ol>" +
       "Pixabay allows 100 requests a minute; the studio paces its calls and stops short of the limit.",
     videoGroup: "Video",
     videoNote: "Pexels and Pixabay also carry video, so a build can place a moving hero background or a clip in a content row. Unsplash is photos only. With no video library connected, designs stay stills only.",

@@ -1182,6 +1182,7 @@ window.desktop.onViteReady((url) => {
 // show the key, unplug it" and this screen is just another host for it.
 let setupState = null; // { claude: "connected"|null, figma: "connected"|"skipped"|null, ... }
 let setupOpenStep = null; // a done step the designer reopened
+let setupMorePulsed = false; // the first "More Information" bar of a walk-through pulses once
 
 // The order the designer meets them. Claude first (nothing runs without it), then the
 // two licences, then the photo/video libraries last (optional extras, and the one step
@@ -1387,6 +1388,7 @@ async function renderSetupStep({ settle = null } = {}) {
       // A collapsed "More Information" fold (the same fold the media libraries use) for
       // anything longer than the description: where the key comes from, what it costs.
       // Shut on every walk-through, and above the field so it is read before pasting.
+      let moreHead = null;
       if (step.more) {
         const { title, html } = step.more();
         const shelf = document.createElement("div");
@@ -1397,6 +1399,7 @@ async function renderSetupStep({ settle = null } = {}) {
         text.className = "muted setup-more-text";
         text.innerHTML = html; // trusted COPY html with links
         fold.appendChild(text);
+        moreHead = shelf.querySelector(".site-acc-head");
       }
       const bodyEl = document.createElement("div");
       bodyEl.className = "setup-step-body";
@@ -1425,7 +1428,17 @@ async function renderSetupStep({ settle = null } = {}) {
       // through the delay), and must not linger: closeAndTravel cancels the card's
       // animations later, which would drop it back to that inline zero mid-flight.
       box.style.opacity = "";
-      fadeSlideIn(box, { dy: 18, duration: 520, delay: settle ? 90 : 0 });
+      const arrive = fadeSlideIn(box, { dy: 18, duration: 520, delay: settle ? 90 : 0 });
+      // The first fold bar a walk-through shows pulses a few times once its card has
+      // landed, so the designer learns the bar is there; the cards after it do not.
+      // Opening it, or reaching the end of the pulse, leaves the bar still.
+      if (moreHead && !setupMorePulsed) {
+        setupMorePulsed = true;
+        const still = () => moreHead.classList.remove("pulse");
+        moreHead.addEventListener("animationend", still, { once: true });
+        moreHead.addEventListener("click", still, { once: true });
+        (arrive && arrive.finished ? arrive.finished : Promise.resolve()).then(() => { if (moreHead.isConnected) moreHead.classList.add("pulse"); }).catch(() => {});
+      }
     } else {
       const row = buildSetupDoneRow(step, answered);
       stack.appendChild(row);
@@ -1649,6 +1662,7 @@ function measureDoneRow(id, stack) {
 /** Enter the setup screen (first run only, or a dev walk-through). */
 async function showSetup() {
   setupOpenStep = null;
+  setupMorePulsed = false; // each walk-through gets its one pulse
   setupAnimating = false; // a re-entry mid-transition must not stay locked
   const stack = el("setup-stack");
   if (stack) { stack.getAnimations().forEach((a) => a.cancel()); stack.style.height = ""; }

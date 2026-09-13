@@ -2129,6 +2129,19 @@
       .setup-more .site-acc-body { padding-bottom: 14px; }
       .setup-more-text { font-size: 12px; line-height: 1.6; margin: 0; }
       .setup-more-text a { color: #111; }
+      /* the numbered "To get a key" steps (setup cards and the Keys drawer alike): set
+         apart from the prose around them by indent and by room above and below */
+      .key-steps { margin: 10px 0 12px; padding-left: 22px; }
+      .key-steps li { padding-left: 4px; }
+      .key-steps li + li { margin-top: 5px; }
+      /* a few soft pulses on the first fold bar a walk-through shows */
+      @keyframes setup-more-pulse {
+        0%, 100% { background: transparent; box-shadow: 0 0 0 0 rgba(17,17,17,0); }
+        45% { background: #f1f1f5; box-shadow: 0 0 0 4px rgba(17,17,17,.08); }
+      }
+      .setup-more .site-acc-head { border-radius: 8px; }
+      .setup-more .site-acc-head.pulse { animation: setup-more-pulse 1.15s ease-in-out 3; }
+      @media (prefers-reduced-motion: reduce) { .setup-more .site-acc-head.pulse { animation: none; } }
       #setup-done { margin-top: 20px; }
 
       /* a video field's drop zone: the image zone without the thumbnail, since a clip
