@@ -3213,10 +3213,14 @@ function revealField(placeholder) {
 }
 
 // --- Keys & Licenses panel: your API key + both app licenses, one place ---
-function licensesGroupHead(body, text) {
-  const h = document.createElement("div");
-  h.className = "drawer-sep";
-  body.appendChild(h);
+// A group heading in the Keys & Licenses drawer. The first group opens the drawer the
+// way every other drawer opens, with its label at the top, so `first` skips the divider.
+function licensesGroupHead(body, text, { first = false } = {}) {
+  if (!first) {
+    const h = document.createElement("div");
+    h.className = "drawer-sep";
+    body.appendChild(h);
+  }
   const l = document.createElement("div");
   l.className = "sess-label";
   l.textContent = text;
@@ -3348,31 +3352,19 @@ function licensesFold(host, { title, tourId, storeKey, openDefault = false, reme
   const fold = siteEl("div", "site-acc-body"); fold.hidden = !open;
   head.append(siteEl("span", "site-acc-chev"), siteEl("span", "site-acc-title", title));
   // A short note beside the title, readable while the fold is shut (the media libraries
-  // use it to say whether a key covers photos, video, or both).
-  if (note || noteIcons) {
-    const n = siteEl("span", "site-acc-note");
-    for (const svg of noteIcons || []) {
-      const i = siteEl("span", "site-acc-note-icon");
-      i.innerHTML = svg;
-      n.appendChild(i);
-    }
-    if (note) n.appendChild(siteEl("span", "", note));
-    // Whether this one is already set up, shown beside what it offers so a shut section
-    // tells the whole story. Set later too, when a key validates while the fold is open.
-    const state = siteEl("span", "site-acc-state");
-    state.hidden = true;
-    n.appendChild(state);
-    fold.setFoldState = (text) => {
-      state.textContent = text || "";
-      state.hidden = !text;
-    };
-    head.appendChild(n);
+  // use it to say whether a key covers photos, video, or both). Every fold gets the
+  // slot, note or not, so the Connected pill sits on the same line for every key and
+  // license rather than only on the ones with a note.
+  const n = siteEl("span", "site-acc-note");
+  for (const svg of noteIcons || []) {
+    const i = siteEl("span", "site-acc-note-icon");
+    i.innerHTML = svg;
+    n.appendChild(i);
   }
   head.addEventListener("click", () => {
     const now = fold.hidden; siteReveal(fold, now); sec.classList.toggle("open", now); head.setAttribute("aria-expanded", String(now));
     if (remember) { try { localStorage.setItem(storeKey, now ? "1" : "0"); } catch {} }
   });
-  if (!fold.setFoldState) fold.setFoldState = () => {}; // no note on this fold: nothing to show
   // A handle so a caller can fold this section away itself (the setup screen shuts a
   // library once its key validates). Hung on the returned body, which callers already hold.
   fold.closeFold = () => {
@@ -3389,9 +3381,11 @@ function licensesFold(host, { title, tourId, storeKey, openDefault = false, reme
 async function renderLicenses(body) {
   // Your keys — the Anthropic API key the studio runs on, then the optional photo
   // libraries. Each folds; the Claude key starts open until it's connected.
-  licensesGroupHead(body, COPY.licenses.keysGroup);
+  licensesGroupHead(body, COPY.licenses.keysGroup, { first: true });
   const keyStatus = await window.desktop.getKeyStatus().catch(() => null);
-  await claudeKeySection(licensesFold(body, { title: COPY.licenses.claudeLabel, tourId: "claude-key", storeKey: "ta-fold-claude-key", openDefault: !(keyStatus && keyStatus.hasKey) }), { noLabel: true });
+  const claudeFold = licensesFold(body, { title: COPY.licenses.claudeLabel, tourId: "claude-key", storeKey: "ta-fold-claude-key", openDefault: !(keyStatus && keyStatus.hasKey) });
+  claudeFold.setFoldState(keyStatus && keyStatus.hasKey ? COPY.setupGate.connected : "");
+  await claudeKeySection(claudeFold, { noLabel: true });
 
   // Optional: the designer's own Unsplash access key, so a build can search the
   // library for matching photos (free, attributed) instead of guessing image URLs.
@@ -3426,6 +3420,17 @@ async function renderLicenses(body) {
     extraRows: async (host) => {
       const u = await window.desktop.getImageUsage();
       host.appendChild(setRow(COPY.licenses.imageUsageMonthLabel, COPY.licenses.imageUsageMonth(u.pexels)));
+  if (note) n.appendChild(siteEl("span", "", note));
+  // Whether this one is already set up, shown beside what it offers so a shut section
+  // tells the whole story. Set later too, when a key validates while the fold is open.
+  const state = siteEl("span", "site-acc-state");
+  state.hidden = true;
+  n.appendChild(state);
+  fold.setFoldState = (text) => {
+    state.textContent = text || "";
+    state.hidden = !text;
+  };
+  head.appendChild(n);
     },
   });
 
@@ -3458,7 +3463,9 @@ async function renderLicenses(body) {
   // keys: open until connected, closed once it is, the choice remembered.
   licensesGroupHead(body, COPY.licenses.licensesGroup);
   const figmaStatus = await window.desktop.getLicenseStatus().catch(() => null);
-  await licenseSection(licensesFold(body, { title: COPY.licenses.figmaLabel, tourId: "figma-license", storeKey: "ta-fold-figma-license", openDefault: !(figmaStatus && figmaStatus.hasLicense) }), {
+  const figmaFold = licensesFold(body, { title: COPY.licenses.figmaLabel, tourId: "figma-license", storeKey: "ta-fold-figma-license", openDefault: !(figmaStatus && figmaStatus.hasLicense) });
+  figmaFold.setFoldState(figmaStatus && figmaStatus.hasLicense ? COPY.setupGate.connected : "");
+  await licenseSection(figmaFold, {
     noLabel: true,
     label: COPY.licenses.figmaLabel,
     desc: COPY.licenses.figmaDesc,
@@ -3468,7 +3475,9 @@ async function renderLicenses(body) {
   });
 
   const designStatus = await window.desktop.getDesignLicenseStatus().catch(() => null);
-  await licenseSection(licensesFold(body, { title: COPY.licenses.designLabel, tourId: "design-license", storeKey: "ta-fold-design-license", openDefault: !(designStatus && designStatus.hasLicense) }), {
+  const designFold = licensesFold(body, { title: COPY.licenses.designLabel, tourId: "design-license", storeKey: "ta-fold-design-license", openDefault: !(designStatus && designStatus.hasLicense) });
+  designFold.setFoldState(designStatus && designStatus.hasLicense ? COPY.setupGate.connected : "");
+  await licenseSection(designFold, {
     noLabel: true,
     label: COPY.licenses.designLabel,
     desc: COPY.licenses.designDesc,
