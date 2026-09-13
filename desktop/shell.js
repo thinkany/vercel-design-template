@@ -1184,10 +1184,11 @@ let setupState = null; // { claude: "connected"|null, figma: "connected"|"skippe
 let setupOpenStep = null; // a done step the designer reopened
 
 // The order the designer meets them. Claude first (nothing runs without it), then the
-// photo/video libraries, which are keys the designer supplies the same way and which the
-// Keys drawer already groups with it; the two licences follow. Declared separately from
-// the definitions below so reordering is a one-line change, not a block move.
-const SETUP_ORDER = ["claude", "media", "figma", "research"];
+// two licences, then the photo/video libraries last (optional extras, and the one step
+// with several fields). Each step appears only once the one above it is answered or
+// skipped (see renderSetupStep). Declared separately from the definitions below so
+// reordering is a one-line change, not a block move.
+const SETUP_ORDER = ["claude", "figma", "research", "media"];
 
 const SETUP_STEP_DEFS = [
   {
