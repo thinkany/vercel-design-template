@@ -36,6 +36,9 @@ interface Props {
    * `app`/`brand` projects never get the website chrome regardless.
    */
   chrome?: boolean;
+  /** Once the site is built: the view bar's "Edit …" button, opening the app's CMS on this item. */
+  onEdit?: () => void;
+  editLabel?: string;
   children: ReactNode;
 }
 
@@ -56,6 +59,8 @@ export function DesignSurface({
   bg = "var(--ta-surface)",
   onNavigate,
   chrome,
+  onEdit,
+  editLabel,
   children,
 }: Props) {
   // Global site chrome: website projects only, unless the page opts out.
@@ -123,6 +128,8 @@ export function DesignSurface({
         views={previewConfig.views}
         orientation={orientation}
         onRotate={toggleOrientation}
+        onEdit={onEdit}
+        editLabel={editLabel}
       />
       {view === "mobile" ? (
         <PhoneFrame bg={bg} orientation={orientation}>

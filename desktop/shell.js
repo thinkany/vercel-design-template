@@ -383,6 +383,7 @@ function buildPreviewWebview(tab) {
     if (e.channel === "feedback:submit") handleFeedbackSubmit(e.args[0]);
     else if (e.channel === "feedback:state") setFeedbackButton(!!e.args[0]);
     else if (e.channel === "reroll:request") startReroll(e.args[0]); // dashboard-card entry
+    else if (e.channel === "edit:request") openCmsEditor(e.args[0]); // "Edit Page" in the preview's view bar
   });
   // Tell the page (dashboard) whether design-variety is licensed, so a variation card can
   // show its "Try another direction" button.
@@ -2009,6 +2010,13 @@ async function ensureCmsTab(tab, selected = null) {
   else await openModal("site");
 }
 const ensureCmsHome = () => ensureCmsTab("pages", { kind: "page", id: "home" });
+// "Edit Page" (or Post / Entry) from the preview: slide the CMS open on that item's tab and editor.
+const CMS_TAB_FOR = { page: "pages", post: "posts", entry: "types" };
+async function openCmsEditor({ kind, id } = {}) {
+  const tab = CMS_TAB_FOR[kind];
+  if (!tab || !id) return;
+  await ensureCmsTab(tab, { kind, id });
+}
 const ensureCmsPosts = () => ensureCmsTab("posts"); // the first post is selected on its own
 // Types: nothing is selected by default, so open the first type (its row's click selects
 // it and re-renders) when a step needs the type editor.

@@ -16,6 +16,7 @@ import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } fro
 import { DesignSurface } from "./DesignSurface";
 import type { DesignPage } from "./pages.schema";
 import { siteConfig } from "@/config/site";
+import { copy } from "@/copy";
 const schemaFiles = import.meta.glob("../../site/src/lib/schema.ts", { eager: true }) as Record<string, { jsonLdText?: (i: unknown) => string }>;
 const jsonLdText = (Object.values(schemaFiles)[0] || {}).jsonLdText;
 
@@ -130,8 +131,20 @@ function applySeo(doc: PageDoc | null, pageId: string, pages: DesignPage[], bloc
   } else if (ld) ld.remove();
 }
 
+// Inside the app the preview's preload marks the document (data-ta-app on <html>, plus a
+// "ta-app" event); the view bar then offers "Edit Page", which asks the shell (a window
+// message the preload relays) to open the CMS on this page. Outside the app: no button.
+function useInApp() {
+  const read = () => typeof document !== "undefined" && document.documentElement.dataset.taApp === "1";
+  const [inApp, setInApp] = useState(read);
+  useEffect(() => { const on = () => setInApp(true); window.addEventListener("ta-app", on); if (read()) setInApp(true); return () => window.removeEventListener("ta-app", on); }, []);
+  return inApp;
+}
+
 export function SitePage({ pageId, onNavigate, view, setView, orientation, setOrientation, capture }: Props) {
   const doc = pageDoc(pageId);
+  const inApp = useInApp();
+  const onEdit = inApp ? () => { try { window.postMessage({ type: "ta-edit", kind: "page", id: pageId }, "*"); } catch { /* no host */ } } : undefined;
   const pages = sitePages();
   // Entities the page's blocks declare (a FAQ block's questions), merged like the site does.
   const blockLd = (doc?.blocks || []).flatMap((b) => { const def = blocks[b.type]; if (!def || !def.schema) return []; const parsed = def.props.safeParse(b.props || {}); if (!parsed.success || !parsed.data) return []; try { const s = def.schema(parsed.data); return Array.isArray(s) ? s : s ? [s] : []; } catch { return []; } });
@@ -184,7 +197,7 @@ export function SitePage({ pageId, onNavigate, view, setView, orientation, setOr
   useEffect(() => { if (enhanceForms) enhanceForms(document, { preview: true }); if (enhanceEntries) enhanceEntries(document); });
 
   return (
-    <DesignSurface view={view} setView={setView} orientation={orientation} setOrientation={setOrientation} capture={capture} onNavigate={onNavigate} chrome={false}>
+    <DesignSurface view={view} setView={setView} orientation={orientation} setOrientation={setOrientation} capture={capture} onNavigate={onNavigate} chrome={false} onEdit={onEdit} editLabel={copy.viewToggle.edit.page}>
       <div className="flex-1 flex flex-col w-full" onClickCapture={onClick}>
         {Header && <Header {...headerProps} />}
         <div className="flex-1">{doc ? rendered : <BridgeNote text={`No content page "${pageId}"`} />}</div>

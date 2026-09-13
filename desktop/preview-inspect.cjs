@@ -195,8 +195,16 @@ const { ipcRenderer } = require("electron");
     window.__taVarietyLicensed = !!on;
     window.dispatchEvent(new CustomEvent("ta-variety-licensed", { detail: !!on }));
   });
+  // The page knows it runs inside the app (the design surface offers "Edit Page" only here).
+  // Through the DOM, not a global: the preload's JS world is isolated from the page's, the
+  // document is shared. Marked as soon as the root element exists, plus an event for a
+  // page that rendered before the mark landed.
+  const markApp = () => { if (document.documentElement) { document.documentElement.dataset.taApp = "1"; window.dispatchEvent(new CustomEvent("ta-app")); return true; } return false; };
+  if (!markApp()) document.addEventListener("DOMContentLoaded", markApp, { once: true });
   window.addEventListener("message", (e) => {
     const d = e && e.data;
     if (d && d.type === "ta-reroll" && d.variationId) ipcRenderer.sendToHost("reroll:request", d.variationId);
+    // "Edit Page" in the preview's view bar: the shell opens the CMS on that item.
+    else if (d && d.type === "ta-edit" && d.kind && d.id) ipcRenderer.sendToHost("edit:request", { kind: String(d.kind), id: String(d.id) });
   });
 })();

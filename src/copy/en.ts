@@ -81,6 +81,8 @@ export const en = {
     rotate: "Rotate",
     rotateAria: "Rotate device",
     rotateTitle: (target: string) => `Rotate to ${target}`,
+    /** The pencil at the bar's left once the site is built: opens the CMS on this item. */
+    edit: { page: "Edit Page", post: "Edit Post", entry: "Edit Entry" },
   },
   imageCredits: {
     count: (n: number) => `${n} image${n > 1 ? "s" : ""} not free to reuse`,

@@ -22,6 +22,13 @@ const MobileIcon = () => (
   </svg>
 );
 
+const PencilIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+  </svg>
+);
+
 const RotateIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 12a9 9 0 1 1-2.64-6.36" />
@@ -51,9 +58,12 @@ interface ViewToggleProps {
   onRotate?: () => void;
   /** Inline style overrides for the bar wrapper */
   barStyle?: React.CSSProperties;
+  /** When set, an "Edit …" button with a pencil sits at the bar's left (the app's CMS opens on this item). */
+  onEdit?: () => void;
+  editLabel?: string;
 }
 
-export function ViewToggle({ view, onChange, views = ["desktop", "tablet", "mobile"], orientation = "portrait", onRotate, barStyle }: ViewToggleProps) {
+export function ViewToggle({ view, onChange, views = ["desktop", "tablet", "mobile"], orientation = "portrait", onRotate, barStyle, onEdit, editLabel }: ViewToggleProps) {
   const canRotate = view !== "desktop" && !!onRotate;
   return (
     <div
@@ -69,6 +79,30 @@ export function ViewToggle({ view, onChange, views = ["desktop", "tablet", "mobi
         ...barStyle,
       }}
     >
+      {onEdit && (
+        <button
+          onClick={onEdit}
+          data-edit-item // the app's tips can anchor on it
+          style={{
+            marginRight: "auto",
+            background: "transparent",
+            border: "1px solid rgba(0,0,0,0.2)",
+            color: "var(--admin-gray-dark)",
+            fontFamily: "var(--admin-font-body)",
+            fontSize: 12,
+            fontWeight: 500,
+            padding: "4px 12px",
+            cursor: "pointer",
+            borderRadius: 3,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          <PencilIcon />
+          {editLabel}
+        </button>
+      )}
       <span style={{ fontFamily: "var(--admin-font-body)", fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--admin-gray-mid)", marginRight: 6 }}>
         {copy.viewToggle.view}
       </span>
