@@ -3338,7 +3338,7 @@ function listMedia(dir, kind = "image") {
       const meta = mediaTags[mediaMetaKey(kind, r)];
       const credit = credits[e.name] || null;
       const urlRoot = isFile ? "files" : kind === "video" ? "video" : "images";
-      out.push({ kind, rel: r, name: e.name, ext: ext.slice(1), url: `/${urlRoot}/${r}`, file: pathToFileURL(abs).href, size, width, height, mtime, credit, tags: (meta && meta.tags) || [] });
+      out.push({ kind, rel: r, name: e.name, ext: ext.slice(1), url: `/${urlRoot}/${r}`, file: pathToFileURL(abs).href, size, width, height, mtime, credit, tags: (meta && meta.tags) || [], alt: (meta && meta.alt) || "" });
     }
   };
   walk(root, "");
@@ -3461,7 +3461,7 @@ const MEDIA_QUALITY = 55; // AVIF: ~55% smaller than WebP q82 on photos at this 
 const MEDIA_OUT_EXT = ".avif";
 // ---- CMS settings (per project) ----------------------------------------------
 function cmsSettingsPath(dir) { return path.join(dir, ".thinkany", "cms.json"); }
-function cmsDefaults() { return { media: { quality: MEDIA_QUALITY, maxWidth: MEDIA_MAX_WIDTH } }; }
+function cmsDefaults() { return { media: { quality: MEDIA_QUALITY, maxWidth: MEDIA_MAX_WIDTH, autoAlt: false } }; }
 function loadCmsSettings(dir) {
   const d = cmsDefaults();
   const j = dir ? readJsonFile(cmsSettingsPath(dir)) : null;
@@ -3469,6 +3469,7 @@ function loadCmsSettings(dir) {
     const q = Number(j.media.quality), w = Number(j.media.maxWidth);
     if (q >= 20 && q <= 95) d.media.quality = Math.round(q);
     if (w >= 800 && w <= 6000) d.media.maxWidth = Math.round(w);
+    d.media.autoAlt = j.media.autoAlt === true; // describe on upload (alt text), opt-in
   }
   // The site builder is ON by default; the Settings switch turns it off per project
   // (only Settings is reachable while off).
@@ -3484,6 +3485,7 @@ function saveCmsSettings(dir, patch) {
   const q = Number(next.media.quality), w = Number(next.media.maxWidth);
   next.media.quality = Math.min(95, Math.max(20, Math.round(Number.isFinite(q) ? q : MEDIA_QUALITY)));
   next.media.maxWidth = Math.min(6000, Math.max(800, Math.round(Number.isFinite(w) ? w : MEDIA_MAX_WIDTH)));
+  next.media.autoAlt = next.media.autoAlt === true;
   fs.mkdirSync(path.dirname(cmsSettingsPath(dir)), { recursive: true });
   fs.writeFileSync(cmsSettingsPath(dir), JSON.stringify(next, null, 2) + "\n");
   return next;
@@ -3534,7 +3536,23 @@ async function importMediaFiles(paths, { raw } = {}) {
       fs.copyFileSync(src, path.join(mediaDir(currentProject), name)); added.push(name);
     } catch (e) { return { ok: false, error: e.message, added: added.map((n) => `/images/${n}`) }; }
   }
-  return { ok: true, added: added.map((n) => `/images/${n}`) };
+  // Describe on upload (the Image Settings switch): each new image gets its alt text
+  // written now, three at a time, and saved with the file (content/media.json), so the
+  // field that took the upload and the library both show it as it lands. An image the
+  // call can't describe simply has no alt yet; the detail view's Describe can retry.
+  const alts = {};
+  if (settings.autoAlt && process.env.ANTHROPIC_API_KEY && added.length) {
+    const queue = [...added];
+    const worker = async () => {
+      while (queue.length) {
+        const rel = queue.shift();
+        const r = await describeImageAlt(currentProject, rel);
+        if (r.ok && r.alt) { setMediaAlt(currentProject, rel, r.alt); alts[`/images/${rel}`] = r.alt; }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(3, added.length) }, worker));
+  }
+  return { ok: true, added: added.map((n) => `/images/${n}`), alts };
 }
 ipcMain.handle("media:upload", async () => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
@@ -3566,7 +3584,7 @@ ipcMain.handle("media:import", (_e, { paths, raw } = {}) => {
   if (!list.length) return { ok: true, added: [] };
   return importMediaFiles(list, { raw: !!raw });
 });
-// Image metadata (tags for now) lives in content/media.json keyed by the image's path
+// Image metadata (tags, alt text) lives in content/media.json keyed by the image's path
 // under public/images. Uploaded with the site (harmless) so it can drive galleries later.
 function mediaMetaPath(dir) { return path.join(siteContentDir(dir), "media.json"); }
 function readMediaMeta(dir) { const j = readJsonFile(mediaMetaPath(dir)); return j && typeof j === "object" && !Array.isArray(j) ? j : {}; }
@@ -3618,6 +3636,76 @@ ipcMain.handle("media:deleteTag", (_e, { name, kind } = {}) => {
   for (const key of Object.keys(meta)) { const v = meta[key]; if (key.startsWith("_") || !v || !Array.isArray(v.tags) || kindOfKey(key) !== k) continue; v.tags = v.tags.filter((t) => !same(t, prev)); if (!v.tags.length) { delete v.tags; if (!Object.keys(v).length) delete meta[key]; } }
   try { writeMediaMeta(currentProject, meta); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
 });
+// The alt text kept with an image: what every block, post or field that picks it from
+// the library starts with (the picker hands it over; siteImageControl in shell.js).
+function cleanAlt(alt) { return String(alt == null ? "" : alt).replace(/\s+/g, " ").trim().slice(0, 300); }
+function setMediaAlt(dir, rel, alt) {
+  const key = mediaMetaKey("image", rel);
+  const meta = readMediaMeta(dir);
+  const clean = cleanAlt(alt);
+  if (clean) meta[key] = { ...(meta[key] || {}), alt: clean }; else if (meta[key]) { delete meta[key].alt; if (!Object.keys(meta[key]).length) delete meta[key]; }
+  writeMediaMeta(dir, meta);
+  return clean;
+}
+ipcMain.handle("media:setAlt", (_e, { rel, alt } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!validRel(rel)) return { ok: false, error: "Bad path." };
+  try { return { ok: true, alt: setMediaAlt(currentProject, rel, alt) }; } catch (e) { return { ok: false, error: e.message }; }
+});
+// Describe: one vision call that writes the alt text from the picture itself, saved with
+// the file. The Describe button in an image's detail view, and describe-on-upload.
+ipcMain.handle("media:describe", async (_e, { rel } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!validRel(rel)) return { ok: false, error: "Bad path." };
+  if (!process.env.ANTHROPIC_API_KEY) return { ok: false, reason: "no-key" };
+  const r = await describeImageAlt(currentProject, rel);
+  if (!r.ok) return r;
+  try { setMediaAlt(currentProject, rel, r.alt); } catch (e) { return { ok: false, error: e.message }; }
+  return r;
+});
+// ---- Alt text: one vision call per image (pure half: desktop/alt-text.cjs) ------
+// The API reads JPEG, PNG, GIF and WebP, not the AVIF uploads become nor SVG, so the
+// conversion worker renders a small JPEG of the file for the call and it is removed
+// after. Not an agent turn: nothing reaches the chat.
+async function describeImageAlt(dir, rel) {
+  if (!process.env.ANTHROPIC_API_KEY) return { ok: false, reason: "no-key" };
+  const abs = path.join(mediaDir(dir), rel);
+  if (!fs.existsSync(abs)) return { ok: false, error: "That file is gone." };
+  const ALT = require("./alt-text.cjs");
+  const tmp = path.join(app.getPath("temp"), `thinkany-alt-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
+  try {
+    const shot = await convertImage(abs, tmp, { maxWidth: ALT.VISION_WIDTH, quality: 80 });
+    if (!shot.ok) return { ok: false, error: shot.error || "Couldn't read the image." };
+    const data = fs.readFileSync(tmp).toString("base64");
+    const site = siteJsonOf(dir); const env = readProjectEnv(dir);
+    const ctx = { fileName: path.basename(rel), siteName: seoSettings(site.seo).siteName || env.VITE_CLIENT_NAME || "" };
+    const { default: Anthropic } = await import("@anthropic-ai/sdk"); // precedent: seoFillOne
+    const client = new Anthropic({ timeout: 60_000, maxRetries: 1 });
+    const msg = await client.beta.messages.create({
+      model: ALT.MODEL,
+      max_tokens: 300,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default", // a policy decline re-runs on a fallback model inside the same call
+      system: ALT.SYSTEM,
+      messages: [{ role: "user", content: [
+        { type: "image", source: { type: "base64", media_type: "image/jpeg", data } },
+        { type: "text", text: ALT.userText(ctx) },
+      ] }],
+      output_config: { effort: "low", format: { type: "json_schema", schema: ALT.SCHEMA } },
+    });
+    if (msg.stop_reason === "refusal") return { ok: false, error: "Claude declined to describe this image." };
+    const text = (msg.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+    let raw; try { raw = JSON.parse(text); } catch { return { ok: false, error: "The reply wasn't the JSON expected. Try again." }; }
+    const alt = ALT.clean(raw);
+    if (appLog.isEnabled()) appLog.write("info", "alt", `describe ${rel} via ${msg.model}: ${msg.usage ? `${msg.usage.input_tokens} in, ${msg.usage.output_tokens} out` : "no usage"}${alt ? "" : " (decorative)"}`);
+    return { ok: true, alt, decorative: raw.decorative === true };
+  } catch (e) {
+    const m = e && e.status ? `${e.status}: ${(e.error && e.error.error && e.error.error.message) || e.message}` : (e && e.message) || String(e);
+    return { ok: false, error: m };
+  } finally { try { fs.unlinkSync(tmp); } catch { /* never written */ } }
+}
 ipcMain.handle("media:setTags", (_e, { rel, tags, kind } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };

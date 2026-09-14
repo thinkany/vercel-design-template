@@ -2050,6 +2050,12 @@ async function ensureCmsType() {
   if (row) { row.click(); await modalRender; }
 }
 const cmsStep = (copy, id, placement, onEnter = ensureCmsHome) => ({ copy, onEnter, target: inDrawer(id), placement });
+// The Image Settings panel folds behind its gear; the describe-on-upload step opens it.
+async function ensureMediaSettings() {
+  await ensureCmsTab("media");
+  const gear = modalBody.querySelector('[data-tour="cms-media-settings"]');
+  if (gear && gear.getAttribute("aria-expanded") !== "true") { gear.click(); await new Promise((r) => setTimeout(r, 320)); }
+}
 // The About drawer lists the CMS walkthrough by tab; withTab stamps each step's tab.
 const withTab = (tab, steps) => steps.map((st) => ({ ...st, tab }));
 const CMS_TOUR_STEPS = [
@@ -2110,6 +2116,7 @@ const CMS_TOUR_STEPS = [
   cmsStep("mediaKinds", "cms-media-kinds", "bottom", () => ensureCmsTab("media")),
   cmsStep("mediaFolders", "cms-media-folders", "right", () => ensureCmsTab("media")),
   cmsStep("mediaSettings", "cms-media-settings", "right", () => ensureCmsTab("media")),
+  cmsStep("mediaAutoAlt", "cms-media-autoalt", "right", ensureMediaSettings),
   cmsStep("addFolder", "cms-add-folder", "bottom", () => ensureCmsTab("media")),
   cmsStep("mediaBar", "cms-media-bar", "bottom", () => ensureCmsTab("media")),
   cmsStep("mediaGrid", "cms-media-grid", "left", () => ensureCmsTab("media")),
@@ -4747,7 +4754,7 @@ function siteMini(label, onClick, { danger, title, disabled } = {}) {
 // pass in Settings passes its own `run` and `done` instead, and moves the working
 // text along with `row.progress(text)`.
 const ICON_AI = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M7.2 1.6c.2-.6 1-.6 1.2 0l1.3 3.6 3.6 1.3c.6.2.6 1 0 1.2L9.7 9l-1.3 3.6c-.2.6-1 .6-1.2 0L5.9 9 2.3 7.7c-.6-.2-.6-1 0-1.2l3.6-1.3z"/><path d="M12.6 10.2c.1-.3.5-.3.6 0l.5 1.3 1.3.5c.3.1.3.5 0 .6l-1.3.5-.5 1.3c-.1.3-.5.3-.6 0l-.5-1.3-1.3-.5c-.3-.1-.3-.5 0-.6l1.3-.5z"/></svg>';
-function siteSeoFill({ payload, apply, run, done, label, title }) {
+function siteSeoFill({ payload, apply, run, done, label, title, working: workingLabel }) {
   const S = COPY.site;
   const row = siteEl("div", "site-seo-fill");
   const btn = siteEl("button", "site-mini site-ai"); btn.type = "button"; btn.title = title || S.seoFillTitle;
@@ -4757,7 +4764,7 @@ function siteSeoFill({ payload, apply, run, done, label, title }) {
   idle();
   btn.addEventListener("click", async () => {
     btn.disabled = true; btn.classList.add("working");
-    btn.innerHTML = "<span class=\"ta-dots site-ai-dots\"><i></i><i></i><i></i></span>"; working.textContent = S.seoFillWorking; btn.prepend(working);
+    btn.innerHTML = "<span class=\"ta-dots site-ai-dots\"><i></i><i></i><i></i></span>"; working.textContent = workingLabel || S.seoFillWorking; btn.prepend(working);
     note.textContent = ""; note.style.color = "";
     let r; try { r = run ? await run() : await window.desktop.seoFill(payload()); } catch (e) { r = { ok: false, error: e.message }; }
     idle();
@@ -6563,9 +6570,9 @@ function tagCombo({ tags, allTags, onChange, label, hint, noTags }) {
   return { wrap, get: () => current };
 }
 
-// The image detail view (the Media tab): the picture large on the right, its details
-// and tags in a rail on the left. Tags autosave; rename is the tile's job.
-function openMediaDetail(it, { allTags, onTags, onClose } = {}) {
+// The image detail view (the Media tab): the picture large on the right, its details,
+// tags and alt text in a rail on the left. Tags and alt autosave; rename is the tile's job.
+function openMediaDetail(it, { allTags, onTags, onAlt, onClose } = {}) {
   const M = COPY.site.media; const D = M.detail;
   const ov = siteEl("div", "blockedit media-detail");
   const card = siteEl("div", "blockedit-card");
@@ -6597,6 +6604,31 @@ function openMediaDetail(it, { allTags, onTags, onClose } = {}) {
   }
   const combo = tagCombo({ tags: it.tags || [], allTags, onChange: async (tags) => { const r = await window.desktop.setMediaTags(it.rel, tags, it.kind); if (r && r.ok) { it.tags = r.tags; if (onTags) onTags(it); } } });
   fields.appendChild(combo.wrap);
+  // Alt text (images): what a screen reader says for the picture, kept with the file and
+  // carried into every block, post or field that picks it from the library. Saves as you
+  // type; Describe asks Claude to write it from the picture itself (media:describe).
+  if (it.kind === "image") {
+    const kv = siteEl("div", "site-kv media-alt");
+    kv.appendChild(siteEl("div", "k", D.alt));
+    const ta = document.createElement("textarea"); ta.className = "field"; ta.rows = 3; ta.placeholder = D.altPlaceholder; ta.value = it.alt || "";
+    kv.appendChild(ta);
+    const row = siteSeoFill({
+      label: D.describe, title: D.describeTitle, working: D.describing,
+      run: () => window.desktop.describeMedia(it.rel),
+      done: (r) => {
+        ta.value = r.alt || ""; it.alt = ta.value; if (onAlt) onAlt(it);
+        if (r.decorative && !r.alt) { row.note.textContent = D.decorative; } else siteFlash(row.note, D.described);
+      },
+    });
+    kv.appendChild(row);
+    kv.appendChild(siteEl("div", "sess-desc", D.altHint));
+    let timer = null;
+    ta.addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => { const r = await window.desktop.setMediaAlt(it.rel, ta.value); if (r && r.ok) { it.alt = r.alt; if (onAlt) onAlt(it); } }, 400);
+    });
+    fields.appendChild(kv);
+  }
   const pv = siteEl("div", "blockedit-preview");
   if (it.kind === "file") {
     // PDFs render inline (Chromium's viewer); anything else gets a type badge.
@@ -6932,7 +6964,8 @@ function siteRichEditor(markdown, onChange, { compact } = {}) {
   btn("image", E.image, async () => {
     const it = await openMediaPicker(null);
     if (!it || !it.url) { editor.commands.focus(); return; }
-    showAsk({ label: E.altAsk, placeholder: E.altPlaceholder, value: "", apply: E.altApply, onApply: (alt) => chain().setImage({ src: it.url, alt }).run() });
+    // The alt saved with the image (the Media tab) is the starting point; edit or accept.
+    showAsk({ label: E.altAsk, placeholder: E.altPlaceholder, value: it.alt || "", apply: E.altApply, onApply: (alt) => chain().setImage({ src: it.url, alt }).run() });
   }, () => editor.isActive("image"));
   // Video: paste a YouTube or Vimeo link anywhere in the text and it embeds on its own
   // (the editor's paste handler); this is the same thing as a button, for whoever looks
@@ -7156,14 +7189,18 @@ function siteImageControl(value, onChange, { label, noAlt, raw, accept, dropHint
     const r = await window.desktop.importMedia(paths, { raw: !!raw });
     if (r && r.ok && r.added && r.added.length) {
       mediaIndex = await window.desktop.listMedia().catch(() => mediaIndex);
-      cur = { src: r.added[0], alt: cur.alt }; paint(); emit();
+      // Described on the way in (the Image Settings switch): the alt lands with the file.
+      const src = r.added[0]; const described = r.alts && r.alts[src];
+      cur = { src, alt: described || cur.alt }; alt.value = cur.alt; paint(); emit();
     } else paint();
   };
   input.addEventListener("change", () => { importFiles(input.files); input.value = ""; });
   ["dragenter", "dragover"].forEach((t) => zone.addEventListener(t, (e) => { e.preventDefault(); zone.classList.add("drag"); }));
   ["dragleave", "drop"].forEach((t) => zone.addEventListener(t, (e) => { e.preventDefault(); zone.classList.remove("drag"); }));
   zone.addEventListener("drop", (e) => importFiles(e.dataTransfer && e.dataTransfer.files));
-  chooseLink.addEventListener("click", async () => { const it = await openMediaPicker(cur.src || null); if (it && it.url) { cur = { src: it.url, alt: cur.alt }; paint(); emit(); } });
+  // A pick from the library brings the alt saved with the image (its detail view in the
+  // Media tab); only an image without one keeps whatever was typed here.
+  chooseLink.addEventListener("click", async () => { const it = await openMediaPicker(cur.src || null); if (it && it.url) { cur = { src: it.url, alt: it.alt || cur.alt }; alt.value = cur.alt; paint(); emit(); } });
   removeLink.addEventListener("click", () => { cur = { src: "", alt: cur.alt }; paint(); emit(); });
   alt.addEventListener("input", () => { cur.alt = alt.value; emit(); });
   paint();
@@ -8009,7 +8046,12 @@ function siteImageSettings(st) {
   const q = rangeRow(S.quality, S.qualityHint, 20, 95, st.media.quality, (x) => String(x), (x) => save({ quality: x, maxWidth: Number(w.r.value) }));
   const w = rangeRow(S.maxWidth, S.maxWidthHint, 800, 6000, st.media.maxWidth, (x) => x + "px", (x) => save({ quality: Number(q.r.value), maxWidth: x }));
   w.r.step = "100";
-  wrap.append(q.kv, w.kv);
+  // Describe on upload: Claude writes each new image's alt text as it is added (opt-in;
+  // it spends the designer's own key). The walkthrough points at this row.
+  const auto = siteEl("div", "site-kv site-autoalt"); auto.dataset.tour = "cms-media-autoalt";
+  auto.appendChild(siteSwitch(S.autoAlt, !!st.media.autoAlt, (next) => save({ autoAlt: next })));
+  auto.appendChild(siteEl("div", "sess-desc", S.autoAltHint));
+  wrap.append(q.kv, w.kv, auto);
   const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:4px;";
   actions.appendChild(siteMini(S.reset, async () => {
     const d = st.defaults.media;

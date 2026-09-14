@@ -209,6 +209,8 @@ contextBridge.exposeInMainWorld("desktop", {
   renameMedia: (rel, name, kind) => ipcRenderer.invoke("media:rename", { rel, name, kind }),
   getMediaMeta: () => ipcRenderer.invoke("media:meta"),
   setMediaTags: (rel, tags, kind) => ipcRenderer.invoke("media:setTags", { rel, tags, kind }),
+  setMediaAlt: (rel, alt) => ipcRenderer.invoke("media:setAlt", { rel, alt }),
+  describeMedia: (rel) => ipcRenderer.invoke("media:describe", { rel }),
   getMediaTags: (kind) => ipcRenderer.invoke("media:tags", { kind }),
   addMediaTag: (name, kind) => ipcRenderer.invoke("media:addTag", { name, kind }),
   renameMediaTag: (from, to, kind) => ipcRenderer.invoke("media:renameTag", { from, to, kind }),

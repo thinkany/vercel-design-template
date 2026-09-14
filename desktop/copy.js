@@ -750,7 +750,7 @@ window.COPY = {
         title: "Settings",
         intro: "Options for this site.",
         sections: [
-          { h: "Images", items: ["Every image added through the site is optimized automatically (AVIF, scaled to the maximum width). SVG, GIF and AVIF files are kept as they are.", "<b>Quality</b>: lower is smaller. 55 suits photos; 70 or more suits illustrations and screenshots.", "<b>Maximum width</b>: larger images are scaled down on upload; smaller ones are never scaled up.", "Changes apply to new uploads; images already in the project are left alone."] },
+          { h: "Images", items: ["Every image added through the site is optimized automatically (AVIF, scaled to the maximum width). SVG, GIF and AVIF files are kept as they are.", "<b>Quality</b>: lower is smaller. 55 suits photos; 70 or more suits illustrations and screenshots.", "<b>Maximum width</b>: larger images are scaled down on upload; smaller ones are never scaled up.", "<b>Describe new images automatically</b>: Claude writes each added image's alt text (what a screen reader says; WCAG and Section 508) from the picture, saved with the file and carried into every block that uses it. Off until you turn it on; uses your own Claude key. Review or rewrite any image's alt in the Media tab.", "Changes apply to new uploads; images already in the project are left alone."] },
           { h: "Search engines: defaults", items: ["<b>Website Name</b> follows every page title (<i>Island Guide | Visit Hawaii</i>) and names the site on shared links; <b>Title Separator</b> is the mark between them.", "<b>Site Image</b> is the share image for any page or post without one of its own."] },
           { h: "Structured data", items: ["Every page carries structured data (JSON-LD) generated for it: the website and its publisher (from the <b>Structured data</b> group here), the page with its breadcrumbs, posts as articles, indexes as collections. Set the publisher type, name, logo, social profiles and, for a local business, phone, address and hours.", "A page or post can add its own block in its SEO section (<b>Custom schema</b>): an FAQ, an event, a product.", "It's in every version of the site, published and previews alike, so it can be reviewed in the page source or a validator."] },
           { h: "Search engines: visibility", items: ["<b>Discourage search engines</b> asks them to stay away (robots.txt, noindex on every page, no sitemap): for a site that isn't public yet.", "<b>Enable sitemap</b> builds the sitemap search engines read; off while search engines are discouraged.", "<b>Enable llms.txt</b> publishes a plain-text summary for AI assistants, generated from the site's pages and posts, or your own text."] },
@@ -771,6 +771,7 @@ window.COPY = {
         sections: [
           { h: "Image settings", items: ["The gear across from <b>Images | Files</b> opens the image optimization sliders: quality and the largest width for new uploads. They are the same settings as <b>Settings → Images</b>; change them in either place."] },
           { h: "Add images", items: ["<b>Add images…</b> picks files from your computer; <b>From your phone…</b> shows a code your phone scans to send photos over Wi‑Fi.", "Added images are optimised for the web automatically (AVIF, up to 2400px wide). SVG, GIF and AVIF files are kept as they are."] },
+          { h: "Alt text", items: ["Alt text is what a screen reader says for a picture, and what WCAG 2.1 and Section 508 ask of every image. Click an image and write it under its tags, or press <b>Describe with Claude</b> to have it written from the picture itself; it saves as you type.", "The text stays with the image: every block, post or field that picks the image from the library starts with it (the field can still be edited in place).", "<b>Describe new images automatically</b>, in the Image Settings gear, writes it on upload for every image added from then on. It's off until you turn it on, and uses your own Claude key, under a cent an image.", "Leave the alt empty only for a purely decorative image (a texture, a pattern): a screen reader then skips it."] },
           { h: "Files", items: ["Switch to <b>Files</b> for PDFs, spreadsheets, decks, CSV, text, ZIP, audio and video. <b>Add files…</b> copies them into the project as they are, served at <i>/files/name.pdf</i>.", "Files have their own folders and tags, rename and delete like images, and a detail view that previews PDFs.", "To use one, pick it from the <b>Files</b> group in any link field or menu item."] },
           { h: "Folders and tags", items: ["Folders are tags: an image sits in every folder it's tagged with, and <b>New folder</b> makes a tag. Drag an image onto a folder to file it, or click an image and add tags in its detail view; tags save as you add them.", "Rename or delete a folder from its hover controls; the change applies to every image carrying the tag, and deleting a folder never deletes images."] },
           { h: "Manage", items: ["Hover an image for <b>Rename</b> and <b>Delete</b>. A renamed image keeps its extension; a name already in use gets a number added, and every page using it is updated to match.", "Deleting moves the image to the Trash in Settings, restorable for 30 days. Pages using it show a broken image until it's restored or replaced.", "<b>Filter by name</b> narrows the grid."] },
@@ -1128,6 +1129,8 @@ window.COPY = {
       qualityHint: "AVIF quality, 20 to 95. Lower is smaller; 55 is a good default for photos, 70 or more for illustrations and screenshots.",
       maxWidth: "Maximum width",
       maxWidthHint: "Pixels. Larger images are scaled down to this on upload; smaller ones are never scaled up.",
+      autoAlt: "Describe new images automatically",
+      autoAltHint: "Alt text is what a screen reader says for a picture, and what WCAG and Section 508 ask of every image. With this on, Claude writes it from the picture as each image is added, saved with the file and carried into every block that uses it. Review it in the image's detail view. Uses your Claude key, under a cent an image.",
       reset: "Reset to defaults",
       saved: "Saved",
       searchHeading: "Search engines",
@@ -1293,6 +1296,14 @@ window.COPY = {
         addTag: (t) => `Add “${t}”`,
         removeTag: "Remove tag",
         noTags: "No tags yet.",
+        alt: "Alt text",
+        altPlaceholder: "What the picture shows, in one sentence",
+        altHint: "Saves as you type. Every block, post or field that picks this image from the library starts with this text. Leave it empty only for a purely decorative image.",
+        describe: "Describe with Claude",
+        describeTitle: "Write the alt text from the picture itself",
+        describing: "Looking at the picture",
+        described: "Written from the picture. Edit it if it misses something.",
+        decorative: "Claude read this as decorative (a texture or pattern with nothing to describe), so the alt stays empty. Type one if it does carry meaning.",
         close: "Done",
       },
       phone: {
@@ -1726,6 +1737,10 @@ window.COPY = {
           title: "Image settings",
           body: "The gear opens the image optimization sliders right here: quality and the largest width for new uploads. They’re the same settings as Settings, Images, so a change in either place applies to both.",
         },
+        mediaAutoAlt: {
+          title: "Alt text, written for you",
+          body: "Every image needs alt text: what a screen reader says for it, and what WCAG and Section 508 ask. Turn this on and Claude writes it from the picture as each image is added, saved with the file and carried into every block that uses it. It’s opt-in and uses your own Claude key. Any image’s alt can be read, rewritten or described on demand in its detail view.",
+        },
         addFolder: {
           title: "New folder",
           body: "Type a name and press New folder. Each library has its own folders; they never cross.",
@@ -1736,7 +1751,7 @@ window.COPY = {
         },
         mediaGrid: {
           title: "The library",
-          body: "Click an image to open it: its name, size, path, alt text and tags. Hover one to rename or delete it. Renaming updates every page that uses it; deleting sends it to the Trash under Settings, restorable for 30 days.",
+          body: "Click an image to open it: its name, size, path, tags and alt text, with Describe with Claude to write the alt from the picture. Hover one to rename or delete it. Renaming updates every page that uses it; deleting sends it to the Trash under Settings, restorable for 30 days.",
         },
         blocksTab: {
           title: "Blocks",
@@ -1772,7 +1787,7 @@ window.COPY = {
         },
         settingsImages: {
           title: "Images",
-          body: "How added images are optimized: the quality and the largest width. Applies to new uploads; images already in the library are left as they are.",
+          body: "How added images are optimized: the quality and the largest width, and whether Claude writes each new image’s alt text as it’s added. Applies to new uploads; images already in the library are left as they are.",
         },
         settingsSearch: {
           title: "Search engines",
