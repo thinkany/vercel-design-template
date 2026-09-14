@@ -3,7 +3,8 @@
 //
 // Given a NEW template source (a zip URL, a local zip, or an extracted dir) and a
 // TARGET project dir, it overlays files by tier from upgrade.manifest.json:
-//   CORE    → overwrite (default for everything not listed)
+//   CORE    → overwrite (default for everything not listed; an explicit `core` entry
+//             also wins over a keep glob it sits inside)
 //   KEEP    → never touched (designer-owned)
 //   REVIEW  → written to '<path>.upgrade-new' + flagged, never overwritten in place
 // The designer's own git diff is the safety net, so by default it refuses to run on
@@ -38,9 +39,11 @@ function globToRegExp(glob) {
   return new RegExp("^" + re + "$");
 }
 
-/** Classify a repo-relative path against the manifest. Default is 'core'. */
+/** Classify a repo-relative path against the manifest. Default is 'core'. An explicit
+ *  `core` entry wins over a keep glob it sits inside (a framework file in a designer tree). */
 export function classify(rel, manifest) {
   const anyMatch = (list) => (list || []).some((g) => globToRegExp(g).test(rel));
+  if (anyMatch(manifest.core)) return "core";
   if (anyMatch(manifest.keep)) return "keep";
   if (anyMatch(manifest.review)) return "review";
   return "core";

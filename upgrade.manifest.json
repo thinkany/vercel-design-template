@@ -1,5 +1,14 @@
 {
   "//": "Upgrade tiers for scripts/upgrade.mjs. The distributed zip contains the template's git-tracked source; the overlay decides each incoming file's fate by matching these globs. DEFAULT is CORE (overwrite). 'keep' files are NEVER written (designer-owned). 'review' files are written to a '<path>.upgrade-new' sidecar and flagged, never overwritten in place. Glob support: '**' (any depth), '*' (one segment), exact paths. Matched against the repo-relative POSIX path.",
+  "core": [
+    "site/blocks/lib/Header.tsx",
+    "site/blocks/lib/Parallax.tsx",
+    "site/blocks/lib/Reveal.tsx",
+    "site/blocks/lib/VideoBackground.tsx",
+    "site/blocks/lib/VideoFigure.tsx",
+    "site/blocks/lib/schema.ts"
+  ],
+  "coreOverrideNotes": "Framework files that live INSIDE a keep tree. Matched first, so they refresh like any CORE file even though site/blocks/** is the designer's. site/blocks/lib/Header.tsx renders the site header from the designer's header.config + header.skin + nav data and is never promoted or hand-edited (promote-blocks says so); the primitives beside it are the template's. The design's own kit in that folder (marks.tsx, textures) is NOT listed and stays keep.",
   "keep": [
     ".env",
     ".env.local",
@@ -29,7 +38,7 @@
     "src/app/footer.ts": "Designer's footer links + legal line (data), independent of the header menu.",
     "pnpm-lock.yaml": "Vercel builds from it with --no-frozen-lockfile, so new template deps still resolve; regenerating needs pnpm, so don't clobber.",
     "content/**": "The site's content: site.json (pinned design, URL, nav), pages, posts and any designer-defined types (collections.ts). Never touch.",
-    "site/blocks/**": "Blocks promoted from the designer's approved design + their registry (index.ts). site/src/** is CORE."
+    "site/blocks/**": "Blocks promoted from the designer's approved design + their registry (index.ts). site/src/** is CORE, and so are the framework files under site/blocks/lib/ listed in `core` above."
   },
   "review": [
     "package.json",
