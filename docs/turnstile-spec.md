@@ -1,6 +1,13 @@
 # Spam protection for forms: Cloudflare Turnstile, set up by the app
 
-**Status:** spec'd 2026-09-12 from Rob's direction. NOT built. Replaces the reCAPTCHA v3
+**Status:** spec'd 2026-09-12 from Rob's direction. **BUILT 2026-09-13** on
+`feature/unsplash-connect` (both phases: Protect and Manage), offline-tested
+(`desktop/dev/turnstile.test.cjs`, `desktop/dev/forms-turnstile.test.mjs`), not yet
+app-tested or published against a real Cloudflare account. Deviations from the text
+below: the widget is named `thinkany:<the site's Vercel project name>`; the publish
+row is its own step ("Spam protection") rather than a detail on the forms row; the
+Keys card reveals an Account ID field only when Cloudflare refuses to list accounts;
+the hand-pasted fallback also accepts a paste as the whole gesture (checked at once). Replaces the reCAPTCHA v3
 line item in [forms-spec.md](forms-spec.md) (P3): Turnstile only, no Google. The
 per-form `recaptcha` toggle that exists today is stored but wired to nothing; this is
 what wires it, renamed.
@@ -166,9 +173,11 @@ You do this once. You never need the Turnstile pages of the dashboard after this
 9. **Copy the token now.** Cloudflare shows it once. Paste it into the field here and
    click **Connect**. If you lose it, roll it from the API Tokens page and paste the
    new one.
-10. **Your account ID**, if the app asks for it: it is the long string of letters and
-    numbers in the dashboard's address after `dash.cloudflare.com/`, and it is shown
-    as **Account ID** on the right of any site's Overview page.
+10. **Your account ID** (always asked for: a Turnstile-only token can't look it up):
+    click the back arrow at the top of the profile page to return to the dashboard,
+    open **Account Security**, then **Turnstile**; the address bar reads
+    `dash.cloudflare.com/<account id>/turnstile`. Copy that string. It is also shown as
+    **Account ID** on the right of any site's Overview page.
 
 What the app does with it: at every publish it looks for this site's widget in your
 account, creates it if it is missing, keeps its hostnames in step with your custom
@@ -184,7 +193,8 @@ Intro: "No Cloudflare token connected, so the app can't make the widget for you.
 it by hand for this site and paste its two keys here. You will do this for each site
 you protect, and again if the site's domain changes."
 
-1. **Sign in to Cloudflare** and open **Turnstile** in the left column.
+1. **Sign in to Cloudflare** and, in the left column, open **Account Security**, then
+   **Turnstile**.
 2. Click **Add widget manually** (not Set up with Spin).
 3. **Widget name:** the site's name.
 4. **Hostnames:** add the site's address without `https://`, for example
@@ -232,8 +242,8 @@ widgets (one per site is what the hostname binding wants). Layer 3.
 - Cloudflare's widget limit and hostname-per-widget limit on the free plan: decides
   whether an agency with many client sites needs the paid plan, and what the limit
   error should suggest.
-- Whether a token scoped only to Turnstile Edit can list accounts. If not, the card
-  asks for the account id, which is easy to find: it is in the dashboard's URL after
-  `dash.cloudflare.com/` and on any site's Overview page (help step A10).
+- ~~Whether a token scoped only to Turnstile Edit can list accounts.~~ Settled live
+  2026-09-13: it cannot. The card asks for the Account ID from the start (step 6 of its
+  instructions), and a pasted token without it says so instead of failing.
 - Whether the `.vercel.app` preview hostname should be on the widget (yes by default,
   so the site works before a custom domain exists; confirm Cloudflare accepts it).

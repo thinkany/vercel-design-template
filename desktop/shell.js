@@ -1191,7 +1191,7 @@ let setupHelpPulsed = false; // and the first help lifesaver, the same way
 // with several fields). Each step appears only once the one above it is answered or
 // skipped (see renderSetupStep). Declared separately from the definitions below so
 // reordering is a one-line change, not a block move.
-const SETUP_ORDER = ["claude", "figma", "research", "media"];
+const SETUP_ORDER = ["claude", "figma", "research", "media", "turnstile"];
 
 const SETUP_STEP_DEFS = [
   {
@@ -1253,6 +1253,7 @@ const SETUP_STEP_DEFS = [
       const libs = [
         { id: "unsplash", label: COPY.licenses.unsplashLabel, steps: COPY.licenses.unsplashStepsHtml,
           offers: S.offersImages, icons: [PHOTO_SVG], blurb: S.unsplashOffer,
+          connect: unsplashConnectOpts(), // sign in with Unsplash; the pasted key folds beneath
           get: () => window.desktop.getUnsplashStatus(), save: (k) => window.desktop.saveUnsplashKey(k), clear: () => window.desktop.clearUnsplashKey() },
         { id: "pexels", label: COPY.licenses.pexelsLabel, steps: COPY.licenses.pexelsStepsHtml,
           offers: S.offersBoth, icons: [PHOTO_SVG, VIDEO_SVG], blurb: S.pexelsOffer,
@@ -1290,7 +1291,7 @@ const SETUP_STEP_DEFS = [
           const st = await lib.get().catch(() => null);
           fold.setFoldState(st && st.hasLicense ? COPY.setupGate.connected : "");
           await licenseSection(fold, {
-            noLabel: true, desc: lib.blurb, stepsHtml: lib.steps,
+            noLabel: true, desc: lib.blurb, stepsHtml: lib.steps, connect: lib.connect || null, keyShape: lib.id, // a key copied on the site fills itself in
             getStatus: lib.get, save: lib.save, clear: lib.clear,
             onConnected: async (res) => {
               await paintLib();
@@ -1315,6 +1316,27 @@ const SETUP_STEP_DEFS = [
         done((await mediaStep.status()) ? "connected" : "skipped");
       });
       host.appendChild(go);
+    },
+  },
+  {
+    // Cloudflare Turnstile: one API token, and the app makes each published site's
+    // spam-protection widget. Optional, like the libraries; the same row as the drawer's.
+    id: "turnstile",
+    title: () => COPY.setupGate.turnstileTitle,
+    desc: () => COPY.setupGate.turnstileDesc,
+    status: () => window.desktop.getTurnstileStatus().then((t) => !!(t && t.hasLicense)),
+    render: (host, done) => {
+      let accountId = "";
+      return licenseSection(host, {
+        noLabel: true,
+        stepsHtml: COPY.licenses.turnstileStepsHtml,
+        keyShape: "cloudflare",
+        extraField: { placeholder: COPY.licenses.turnstileAccountIdPlaceholder, required: true, keyShape: "cloudflareAccount", onInput: (v) => { accountId = v; } },
+        getStatus: () => window.desktop.getTurnstileStatus(),
+        save: (k) => window.desktop.saveTurnstileToken(k, accountId),
+        clear: () => window.desktop.clearTurnstileToken(),
+        onConnected: (res) => done(res ? "connected" : null),
+      });
     },
   },
 ];
@@ -3473,6 +3495,8 @@ async function renderLicenses(body) {
     label: COPY.licenses.unsplashLabel,
     desc: COPY.licenses.unsplashDesc,
     stepsHtml: COPY.licenses.unsplashStepsHtml,
+    connect: unsplashConnectOpts(), // one click first; the pasted key folds beneath
+    keyShape: "unsplash",
     getStatus: () => window.desktop.getUnsplashStatus(),
     save: (k) => window.desktop.saveUnsplashKey(k),
     clear: () => window.desktop.clearUnsplashKey(),
@@ -3491,6 +3515,7 @@ async function renderLicenses(body) {
     label: COPY.licenses.pexelsLabel,
     desc: COPY.licenses.pexelsDesc,
     stepsHtml: COPY.licenses.pexelsStepsHtml,
+    keyShape: "pexels", // copied on pexels.com → filled and checked on the way back
     getStatus: () => window.desktop.getPexelsStatus(),
     save: (k) => window.desktop.savePexelsKey(k),
     clear: () => window.desktop.clearPexelsKey(),
@@ -3509,6 +3534,7 @@ async function renderLicenses(body) {
     label: COPY.licenses.pixabayLabel,
     desc: COPY.licenses.pixabayDesc,
     stepsHtml: COPY.licenses.pixabayStepsHtml,
+    keyShape: "pixabay",
     getStatus: () => window.desktop.getPixabayStatus(),
     save: (k) => window.desktop.savePixabayKey(k),
     clear: () => window.desktop.clearPixabayKey(),
@@ -3518,12 +3544,40 @@ async function renderLicenses(body) {
     },
   });
 
-  // Which of those libraries can carry video, said once rather than in each row.
-  const vnote = document.createElement("div");
-  vnote.className = "muted";
-  vnote.style.cssText = "font-size:12px;margin:-2px 0 14px;";
-  vnote.textContent = COPY.licenses.videoNote;
-  body.appendChild(vnote);
+  // Which of those libraries can carry video, said once rather than in each row, and
+  // only while neither is connected: once one is, video is on and the note is noise.
+  const videoOn = await window.desktop.getVideoSources().then((v) => Array.isArray(v) && v.length > 0).catch(() => false);
+  if (!videoOn) {
+    const vnote = document.createElement("div");
+    vnote.className = "muted";
+    vnote.style.cssText = "font-size:12px;margin:-2px 0 14px;";
+    vnote.textContent = COPY.licenses.videoNote;
+    body.appendChild(vnote);
+  }
+
+  // Optional: a Cloudflare API token, so the app makes each published site's Turnstile
+  // widget (the forms' spam protection) instead of the designer doing it per site.
+  const turnstileStatus = await window.desktop.getTurnstileStatus().catch(() => null);
+  const turnstileFold = licensesFold(body, { title: COPY.licenses.turnstileLabel, tourId: "turnstile-token", storeKey: "ta-fold-turnstile" });
+  turnstileFold.setFoldState(turnstileStatus && turnstileStatus.hasLicense ? COPY.setupGate.connected : "");
+  let turnstileAccountId = "";
+  await licenseSection(turnstileFold, {
+    noLabel: true,
+    label: COPY.licenses.turnstileLabel,
+    desc: COPY.licenses.turnstileDesc,
+    stepsHtml: COPY.licenses.turnstileStepsHtml,
+    keyShape: "cloudflare", // copied on the API Tokens page → filled and checked on the way back
+    // A token that can't list accounts is asked for the account id, in a second field.
+    extraField: { placeholder: COPY.licenses.turnstileAccountIdPlaceholder, required: true, keyShape: "cloudflareAccount", onInput: (v) => { turnstileAccountId = v; } },
+    getStatus: () => window.desktop.getTurnstileStatus(),
+    save: (k) => window.desktop.saveTurnstileToken(k, turnstileAccountId),
+    clear: () => window.desktop.clearTurnstileToken(),
+    extraRows: async (host) => {
+      const st = await window.desktop.getTurnstileStatus().catch(() => null);
+      if (st && st.accountName) host.appendChild(setRow(COPY.licenses.turnstileAccountLabel, st.accountName));
+      const n = document.createElement("div"); n.className = "muted"; n.style.cssText = "font-size:12px;margin-top:8px;"; n.textContent = COPY.licenses.turnstileWidgetsNote; host.appendChild(n);
+    },
+  });
 
   // Licenses — the feature unlocks, in order: Figma, then Design. Each folds like the
   // keys: open until connected, closed once it is, the choice remembered.
@@ -3618,6 +3672,35 @@ async function claudeKeySection(body, { noLabel = false, onConnected = null, noD
   };
   saveBtn.addEventListener("click", doSave);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") doSave(); });
+  // A paste is the whole gesture: check it straight away, no Save press.
+  input.addEventListener("paste", () => setTimeout(() => { if (input.value.trim()) doSave(); }, 0));
+  // The clipboard watch, as the library rows have it. Anthropic offers no sign-in path
+  // for a third-party app (billing sits behind the key), so the paste is trimmed instead:
+  // a click on any console.anthropic.com link (the setup step's steps live outside this
+  // row, so listen document-wide) arms it, and on the way back into the window a key of
+  // Claude's shape on the clipboard is filled in and checked. Ten minutes, one fill.
+  let armed = 0;
+  const armOnConsoleLink = (e) => {
+    if (!document.contains(input)) { document.removeEventListener("click", armOnConsoleLink); return; }
+    const a = e.target.closest && e.target.closest("a[href]");
+    if (a && /console\.anthropic\.com/.test(a.href)) armed = Date.now();
+  };
+  // Leaving the app with this empty field in view arms it too (the Console may already be open).
+  const onBlur = () => { if (!document.contains(input)) { window.removeEventListener("blur", onBlur); return; } if (input.offsetParent !== null && !input.value.trim()) armed = Date.now(); };
+  window.addEventListener("blur", onBlur);
+  const onFocus = async () => {
+    if (!document.contains(input)) { window.removeEventListener("focus", onFocus); return; }
+    if (!armed || Date.now() - armed > 10 * 60 * 1000 || input.value.trim() || saveBtn.disabled) return;
+    const k = await window.desktop.readClipboardKey("claude").catch(() => null);
+    if (!k) return;
+    armed = 0;
+    input.value = k;
+    msg.textContent = COPY.licenses.fromClipboard;
+    msg.style.color = "";
+    doSave();
+  };
+  document.addEventListener("click", armOnConsoleLink);
+  window.addEventListener("focus", onFocus);
   body.append(wrap, saveBtn, msg);
 }
 
@@ -3640,13 +3723,15 @@ async function licenseSection(body, opts) {
     body.appendChild(d);
   }
   // How to get the key: shown only until one is connected (trusted COPY html with links).
-  if (opts.stepsHtml && !lic.hasLicense) {
+  // With a one-click connect on offer the steps move under "use your own key" below.
+  const stepsEl = () => {
     const st = document.createElement("div");
     st.className = "muted";
     st.style.cssText = "font-size:12px;margin:-4px 0 10px;";
     st.innerHTML = opts.stepsHtml;
-    body.appendChild(st);
-  }
+    return st;
+  };
+  if (opts.stepsHtml && !lic.hasLicense && !opts.connect) body.appendChild(stepsEl());
 
   body.appendChild(connStatusRow(COPY.licenses.status, lic.hasLicense, lic.hasLicense ? COPY.common.active : COPY.common.notSet, COPY.licenses.remove,
     async () => {
@@ -3658,11 +3743,31 @@ async function licenseSection(body, opts) {
 
   if (lic.hasLicense) {
     body.appendChild(setRow(COPY.licenses.keyLabel, `…${lic.hint || "????"}`));
+    // Which way it arrived, when the host offers both (an account sign-in or a pasted key).
+    if (opts.connect && lic.via) body.appendChild(setRow(opts.connect.howLabel, lic.via === "unsplash" ? opts.connect.viaAccount : opts.connect.viaOwn));
     if (opts.extraRows) { try { await opts.extraRows(body); } catch {} }
     return;
   }
 
   const { wrap, input } = revealField(COPY.licenses.pasteKey);
+  // A second, plain field some services need beside the key (an account id, say).
+  // Shown only when the save comes back asking for it (`needsAccountId`).
+  let extraInput = null;
+  if (opts.extraField) {
+    extraInput = document.createElement("input");
+    extraInput.className = "field";
+    extraInput.placeholder = opts.extraField.placeholder || "";
+    extraInput.autocomplete = "off";
+    extraInput.spellcheck = false;
+    extraInput.hidden = !opts.extraField.required; // a required one is asked for from the start
+    extraInput.addEventListener("input", () => opts.extraField.onInput && opts.extraField.onInput(extraInput.value.trim()));
+  }
+  // The key field, then the second field when there is one (appended together below:
+  // `wrap` is not in the page yet, so it cannot be inserted beside it here).
+  const fieldEls = extraInput ? [wrap, extraInput] : [wrap];
+  // With a required second field, the key alone is not enough to save: say what is
+  // missing (no error tone) and move the cursor there.
+  const extraMissing = () => !!(opts.extraField && opts.extraField.required && extraInput && !extraInput.value.trim());
   const saveBtn = document.createElement("button");
   saveBtn.className = "panelbtn primary";
   saveBtn.textContent = COPY.licenses.save;
@@ -3671,6 +3776,7 @@ async function licenseSection(body, opts) {
   const doSave = async () => {
     const key = input.value.trim();
     if (!key) return;
+    if (extraMissing()) { msg.textContent = opts.extraField.missing || COPY.licenses.needAccountId; msg.style.color = ""; extraInput.focus(); return; }
     saveBtn.disabled = true;
     saveBtn.textContent = COPY.licenses.validating;
     msg.textContent = "";
@@ -3688,11 +3794,120 @@ async function licenseSection(body, opts) {
       msg.style.color = "#e5484d";
       saveBtn.disabled = false;
       saveBtn.textContent = COPY.licenses.save;
+      if (res.needsAccountId && extraInput) { extraInput.hidden = false; extraInput.focus(); }
     }
   };
   saveBtn.addEventListener("click", doSave);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") doSave(); });
-  body.append(wrap, saveBtn, msg);
+  // A paste is the whole gesture: check it straight away, no Save press.
+  input.addEventListener("paste", () => setTimeout(() => { if (input.value.trim()) doSave(); }, 0));
+  if (extraInput) {
+    extraInput.addEventListener("keydown", (e) => { if (e.key === "Enter") doSave(); });
+    extraInput.addEventListener("paste", () => setTimeout(() => { if (extraInput.value.trim() && input.value.trim()) doSave(); }, 0));
+  }
+  // The clipboard watch. It arms when the designer leaves the app with this empty key
+  // field in view (they went to copy the key), or clicks a sign-up link in the steps;
+  // when the window regains focus the clipboard is read through main, which answers
+  // only with a key of this service's shape. A match lands in the field and is checked.
+  // Armed for ten minutes, one fill per arming.
+  let armed = 0;
+  const inView = (el) => !!el && document.contains(el) && el.offsetParent !== null && !el.value.trim();
+  const fieldInView = () => inView(input) || (extraInput && !extraInput.hidden && inView(extraInput));
+  const armOnLinks = (el) => el.addEventListener("click", (e) => { if (e.target.closest("a[href]")) armed = Date.now(); });
+  const onBlur = () => { if (!document.contains(input)) { window.removeEventListener("blur", onBlur); return; } if (opts.keyShape && fieldInView()) armed = Date.now(); };
+  window.addEventListener("blur", onBlur);
+  const onFocus = async () => {
+    if (!document.contains(input)) { window.removeEventListener("focus", onFocus); return; }
+    if (!opts.keyShape || !armed || Date.now() - armed > 10 * 60 * 1000 || saveBtn.disabled) return;
+    // The key first; once it is in, the second field (its own shape) the same way.
+    if (input.value.trim()) {
+      if (!extraMissing() || !opts.extraField.keyShape) return;
+      const a = await window.desktop.readClipboardKey(opts.extraField.keyShape).catch(() => null);
+      if (!a) return;
+      armed = 0;
+      extraInput.value = a;
+      if (opts.extraField.onInput) opts.extraField.onInput(a);
+      msg.textContent = COPY.licenses.fromClipboard;
+      msg.style.color = "";
+      doSave();
+      return;
+    }
+    const k = await window.desktop.readClipboardKey(opts.keyShape).catch(() => null);
+    if (!k) return;
+    armed = 0;
+    if (typeof revealOwnKey === "function") revealOwnKey();
+    input.value = k;
+    msg.textContent = COPY.licenses.fromClipboard;
+    msg.style.color = "";
+    doSave();
+  };
+  window.addEventListener("focus", onFocus);
+  let revealOwnKey = null;
+  if (!opts.connect) {
+    if (opts.stepsHtml && !lic.hasLicense) armOnLinks(body);
+    body.append(...fieldEls, saveBtn, msg);
+    return;
+  }
+
+  // The one-click path first: a sign-in in the browser that ends with the app holding a
+  // key of its own (Connect with Unsplash). The pasted key stays as the fallback, folded
+  // under a plain link with its how-to steps, for installs that can't or won't sign in.
+  const c = opts.connect;
+  const connectBtn = document.createElement("button");
+  connectBtn.className = "panelbtn primary";
+  connectBtn.textContent = c.label;
+  const connectHint = document.createElement("div");
+  connectHint.className = "muted";
+  connectHint.style.cssText = "font-size:12px;margin:6px 0 0;";
+  connectHint.textContent = c.hint;
+  const connectMsg = document.createElement("div");
+  connectMsg.className = "muted";
+  connectMsg.style.cssText = "font-size:12px;margin-top:6px;";
+  connectBtn.addEventListener("click", async () => {
+    connectBtn.disabled = true;
+    connectBtn.textContent = c.busy;
+    connectMsg.textContent = "";
+    connectMsg.style.color = "";
+    const res = await c.run();
+    if (res && res.ok) {
+      if (opts.onChange) opts.onChange();
+      if (opts.onConnected) opts.onConnected(res);
+      else { refreshRailActivation(); openModal("licenses"); }
+    } else {
+      connectMsg.textContent = (res && res.error) || c.couldNot;
+      connectMsg.style.color = "#e5484d";
+      connectBtn.disabled = false;
+      connectBtn.textContent = c.label;
+    }
+  });
+  const ownToggle = document.createElement("button");
+  ownToggle.type = "button";
+  ownToggle.className = "muted";
+  ownToggle.style.cssText = "background:none;border:0;padding:0;margin:14px 0 8px;font-size:12px;text-decoration:underline;cursor:pointer;color:inherit;display:block;";
+  ownToggle.textContent = c.ownToggle;
+  const ownFold = document.createElement("div");
+  ownFold.hidden = true;
+  ownToggle.addEventListener("click", () => {
+    ownFold.hidden = !ownFold.hidden;
+    ownToggle.textContent = ownFold.hidden ? c.ownToggle : c.ownHide;
+    if (!ownFold.hidden) input.focus();
+  });
+  revealOwnKey = () => { ownFold.hidden = false; ownToggle.textContent = c.ownHide; };
+  if (opts.stepsHtml) { ownFold.appendChild(stepsEl()); armOnLinks(ownFold); }
+  ownFold.append(...fieldEls, saveBtn, msg);
+  body.append(connectBtn, connectHint, connectMsg, ownToggle, ownFold);
+}
+
+// The Connect-with-Unsplash offer a licence row takes (`connect:`), copy-bound. Both
+// hosts (the Keys drawer and the setup walk-through) hand the same thing over.
+function unsplashConnectOpts() {
+  const L = COPY.licenses;
+  return {
+    label: L.unsplashConnect, busy: L.unsplashConnecting, hint: L.unsplashConnectHint, couldNot: L.unsplashCouldNotConnect,
+    ownToggle: L.unsplashOwnKeyToggle, ownHide: L.unsplashOwnKeyHide,
+    howLabel: L.unsplashHow, viaAccount: L.unsplashViaAccount, viaOwn: L.unsplashViaOwnKey,
+    run: () => window.desktop.connectUnsplash(),
+  };
 }
 
 // --- Publish: direct-to-Vercel (connect + one-click publish) ---
@@ -3715,7 +3930,7 @@ function publishProgressList(container) {
   const LABELS = { project: "Vercel project", env: "Preview gate", upload: "Uploading files", deploy: "Building on Vercel", domain: "Custom domain", ready: "Live", error: "Problem" };
   // The site publish shares the steps but not the gate: its env step sets the site
   // address, and it runs a local build check first.
-  const SITE_LABELS = { ...LABELS, env: "Site address", check: "Build check", images: "Images", forms: "Forms" };
+  const SITE_LABELS = { ...LABELS, env: "Site address", check: "Build check", images: "Images", forms: "Forms", protect: "Spam protection" };
   return (evt) => {
     const { step, status, detail } = evt;
     const labels = evt.target === "site" ? SITE_LABELS : LABELS;
@@ -4689,7 +4904,9 @@ function siteFlash(host, text) {
 // by name (image, photo, logo, background, icon…) or by value (a /images path or
 // an image file). A designer never types a path: these get the upload field.
 const IMAGE_KEY = /(image|img|photo|picture|logo|icon|background|cover|thumbnail|thumb|avatar|poster|banner|src)$/i;
-const IMAGE_VALUE = /^\/images\/|\.(avif|webp|png|jpe?g|gif|svg)(\?.*)?$/i;
+// A hotlinked Unsplash photo (scripts/find-images.mjs) has no file extension: its CDN
+// host is the tell.
+const IMAGE_VALUE = /^\/images\/|^https:\/\/images\.unsplash\.com\/|\.(avif|webp|png|jpe?g|gif|svg)(\?.*)?$/i;
 function siteLooksLikeImage(key, v, meta) {
   if (meta && meta.kind === "image") return true;
   if (meta && meta.kind && meta.kind !== "string") return false;
@@ -5910,6 +6127,81 @@ function renderFormsDelivery(delivery, hasForms) {
   return sec;
 }
 
+// Spam protection (Cloudflare Turnstile) for the site, beneath Delivery. With a token
+// connected there is nothing to do here but read: the app makes the widget at publish.
+// Without one, the hand-pasted fallback: the site key and the secret, the secret
+// checked against Cloudflare the moment it is saved.
+function renderFormsProtection(p) {
+  const P = COPY.site.protection;
+  const { sec, body } = siteFold(P.title, "forms:protection");
+  sec.dataset.tour = "cms-forms-protection";
+  sec.style.maxWidth = "720px";
+  body.appendChild(siteEl("div", "sess-desc", P.intro));
+  let saved = { ...p };
+  const status = siteEl("div", "sess-desc"); status.style.cssText = "margin:6px 0 10px;font-weight:500;";
+  body.appendChild(status);
+  const widgetLine = siteEl("div", "sess-desc"); body.appendChild(widgetLine);
+  const countLine = siteEl("div", "sess-desc"); body.appendChild(countLine);
+  // Not connected: a way to the Keys drawer to connect. Connected: a way there to manage
+  // it, and no manual keys on offer (the app makes the widget).
+  const openKeys = siteMini(P.openKeys, () => openModal("licenses")); openKeys.style.marginBottom = "10px"; body.appendChild(openKeys);
+  const manageBtn = siteMini(P.manage, () => openModal("licenses")); manageBtn.style.marginBottom = "10px"; body.appendChild(manageBtn);
+
+  // The fallback, folded under a link; open by default only when it is the path in use.
+  const ownToggle = siteMini(P.ownToggle, () => { own.hidden = !own.hidden; ownToggle.textContent = own.hidden ? P.ownToggle : P.ownHide; });
+  body.appendChild(ownToggle);
+  const own = siteEl("div"); body.appendChild(own);
+  own.appendChild(siteEl("div", "sess-desc", P.ownIntro));
+  const steps = siteEl("div", "sess-desc"); steps.innerHTML = P.ownStepsHtml; own.appendChild(steps);
+  const openCf = siteMini(P.openCloudflare, () => window.desktop.openExternal("https://dash.cloudflare.com/?to=/:account/turnstile")); openCf.style.marginBottom = "14px"; own.appendChild(openCf);
+  const sk = siteField(P.siteKey, p.siteKey || "", { placeholder: P.siteKeyPlaceholder }); own.appendChild(sk.wrap);
+  const secWrap = siteEl("div", "site-kv"); secWrap.appendChild(siteEl("div", "k", P.secret));
+  const secRow = siteEl("div"); secRow.style.cssText = "display:flex;gap:6px;align-items:center;";
+  const secret = document.createElement("input"); secret.className = "field"; secret.type = "password"; secret.autocomplete = "off"; secret.spellcheck = false; secret.style.marginBottom = "0";
+  let secretValue = null; // null = keep the saved one, "" = remove, else a new one
+  const removeSec = siteTrashBtn(() => { secretValue = ""; secret.value = ""; paint(); }, P.removeSecret);
+  secRow.append(secret, removeSec); secWrap.appendChild(secRow); own.appendChild(secWrap);
+  const actions = siteEl("div"); actions.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap;";
+  const saveBtn = siteEl("button", "panelbtn primary", P.save); saveBtn.style.margin = "0";
+  const note = siteEl("div", "muted"); note.style.cssText = "font-size:12px;";
+  actions.append(saveBtn, note); own.appendChild(actions);
+
+  const usingOwn = () => !saved.tokenConnected && !!(saved.siteKey && saved.hasSecret);
+  const changed = () => sk.input.value.trim() !== (saved.siteKey || "") || secretValue !== null;
+  const paint = () => {
+    status.textContent = !saved.protectedForms && !saved.tokenConnected && !usingOwn() ? P.statusOff
+      : saved.tokenConnected ? P.statusToken(saved.accountName) : usingOwn() ? P.statusOwn : P.statusNone;
+    status.style.color = saved.tokenConnected || usingOwn() || !saved.protectedForms ? "#17171b" : "#b45309";
+    widgetLine.textContent = saved.widget ? P.statusWidget(saved.widget.sitekey, saved.widget.hostnames) : "";
+    widgetLine.hidden = !saved.widget;
+    countLine.textContent = saved.protectedForms ? P.count(saved.protectedForms) : "";
+    countLine.hidden = !saved.protectedForms;
+    openKeys.hidden = saved.tokenConnected;
+    manageBtn.hidden = !saved.tokenConnected;
+    ownToggle.hidden = saved.tokenConnected;
+    if (saved.tokenConnected) { own.hidden = true; ownToggle.textContent = P.ownToggle; }
+    const showingSaved = secretValue === null && saved.hasSecret;
+    secret.placeholder = showingSaved ? P.secretSaved(saved.secretHint) : P.secretPlaceholder;
+    removeSec.hidden = !showingSaved;
+    saveBtn.disabled = !changed() || !sk.input.value.trim();
+  };
+  // Open the fallback where it is the path in use (no token, keys saved), shut otherwise.
+  own.hidden = !usingOwn();
+  ownToggle.textContent = own.hidden ? P.ownToggle : P.ownHide;
+  sk.input.addEventListener("input", paint);
+  secret.addEventListener("input", () => { secretValue = secret.value; paint(); });
+  // A pasted secret is checked and saved straight away, with the site key beside it.
+  secret.addEventListener("paste", () => setTimeout(() => { secretValue = secret.value; if (secret.value.trim() && sk.input.value.trim()) saveBtn.click(); else paint(); }, 0));
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true; note.textContent = secretValue && secretValue.trim() ? P.checking : ""; note.style.color = "";
+    const res = await window.desktop.saveFormsProtection(sk.input.value.trim(), secretValue);
+    if (res && res.ok) { saved = res; secretValue = null; secret.value = ""; note.textContent = ""; siteFlash(actions, P.saved); paint(); }
+    else { note.textContent = (res && res.error) || "Couldn't save."; note.style.color = "#e5484d"; saveBtn.disabled = false; }
+  });
+  paint();
+  return sec;
+}
+
 // The Forms tab: a collapsible Forms section (the list beside the selected form's
 // editor), then the Delivery section beneath it.
 function renderSiteForms(host, ctx, refresh) {
@@ -5936,6 +6228,7 @@ function renderSiteForms(host, ctx, refresh) {
   addRow.append(inp, btn); left.appendChild(addRow);
   if (cur) right.appendChild(renderSiteFormEditor(ctx.forms.find((f) => f.id === cur.id), ctx, refresh));
   host.appendChild(renderFormsDelivery(ctx.delivery || { provider: "", from: "", hasKey: false, ready: false }, ctx.forms.length > 0));
+  host.appendChild(renderFormsProtection(ctx.protection || { tokenConnected: false, siteKey: "", hasSecret: false, widget: null, protectedForms: 0 }));
 }
 function renderSiteFormEditor(form, ctx, refresh) {
   const S = COPY.site;
@@ -6041,7 +6334,7 @@ function renderSiteFormEditor(form, ctx, refresh) {
   const paintAfter = () => { afterHost.innerHTML = ""; afterHost.appendChild(mode.value === "page" ? pageWrap : msg.wrap); };
   mode.addEventListener("change", () => { dirty(); paintAfter(); }); paintAfter();
 
-  // Delivery for this form: recipients, reply-to, reply to the submitter, reCAPTCHA.
+  // Delivery for this form: recipients, reply-to, reply to the submitter, spam protection.
   deliveryFold.body.appendChild(siteEl("div", "sess-desc", S.formDeliveryDesc));
   const rcp = siteField(S.formRecipients, draft.recipients, { placeholder: S.formRecipientsPlaceholder, hint: S.formRecipientsHint }); rcp.input.addEventListener("input", dirty); deliveryFold.body.appendChild(rcp.wrap);
   const rt = siteField(S.formReplyTo, draft.replyTo, { placeholder: S.formReplyToPlaceholder, hint: S.formReplyToHint }); rt.input.addEventListener("input", dirty); deliveryFold.body.appendChild(rt.wrap);
@@ -6056,9 +6349,9 @@ function renderSiteFormEditor(form, ctx, refresh) {
   };
   rtf.addEventListener("change", () => { rtfValue = rtf.value; dirty(); }); paintReplyField();
   rtfWrap.appendChild(rtf); rtfWrap.appendChild(siteEl("div", "sess-desc", S.formReplyToFieldHint)); deliveryFold.body.appendChild(rtfWrap);
-  const rc = siteEl("label", "toggle-row"); const rcCb = document.createElement("input"); rcCb.type = "checkbox"; rcCb.checked = !!draft.recaptcha;
-  rcCb.addEventListener("change", dirty); rc.append(rcCb, siteEl("span", "", S.formRecaptcha)); deliveryFold.body.appendChild(rc);
-  deliveryFold.body.appendChild(siteEl("div", "sess-desc", S.formRecaptchaHint));
+  const rc = siteEl("label", "toggle-row"); const rcCb = document.createElement("input"); rcCb.type = "checkbox"; rcCb.checked = !!(draft.turnstile != null ? draft.turnstile : draft.recaptcha);
+  rcCb.addEventListener("change", dirty); rc.append(rcCb, siteEl("span", "", S.formTurnstile)); deliveryFold.body.appendChild(rc);
+  deliveryFold.body.appendChild(siteEl("div", "sess-desc", S.formTurnstileHint));
 
   // Where it's used
   const used = siteFormUsage(form, ctx);
@@ -6072,7 +6365,7 @@ function renderSiteFormEditor(form, ctx, refresh) {
     const out = {
       id: form.id, name: name.input.value, fields: draft.fields,
       submit: { label: sub.input.value }, after: { mode: mode.value, message: msg.value(), page: pageSel.value || null },
-      recipients: rcp.input.value, replyTo: rt.input.value, replyToField: rtf.value, recaptcha: rcCb.checked,
+      recipients: rcp.input.value, replyTo: rt.input.value, replyToField: rtf.value, turnstile: rcCb.checked,
     };
     const res = await window.desktop.saveSiteForm(out);
     if (res && res.ok) { edited = false; siteRailState.selected = { kind: "form", id: res.form.id }; siteFlash(actions, S.saved); refresh(); }
@@ -6840,7 +7133,9 @@ function siteImageControl(value, onChange, { label, noAlt, raw, accept, dropHint
     const file = cur.src ? (/^https?:/.test(cur.src) ? cur.src : siteMediaFileUrl(cur.src)) : null;
     if (cur.src && file) { preview.src = file; preview.style.display = "block"; }
     else { preview.removeAttribute("src"); preview.style.display = "none"; }
-    hint.textContent = cur.src ? (cur.src.split("/").pop() + " · " + M.dropReplace) : (dropHint || M.dropHint);
+    // A hotlinked photo (Unsplash) reads as its host rather than a long CDN query string.
+    const shown = cur.src && /^https?:/.test(cur.src) ? (() => { try { return new URL(cur.src).hostname; } catch { return cur.src; } })() : (cur.src || "").split("/").pop();
+    hint.textContent = cur.src ? (shown + " · " + M.dropReplace) : (dropHint || M.dropHint);
     zone.classList.toggle("has-image", !!cur.src);
     removeLink.hidden = !cur.src;
   };
@@ -8350,10 +8645,11 @@ async function renderSite(body) {
   siteForms = formsData.forms || []; // the props editor's form picker reads this
   siteTypes = typesData.types || []; siteEntries = typesData.entries || {}; // the Entries block's editor reads these
   const delivery = await window.desktop.getFormsDelivery().catch(() => ({ provider: "", from: "", hasKey: false, ready: false }));
+  const protection = await window.desktop.getFormsProtection().catch(() => ({ tokenConnected: false, accountName: "", siteKey: "", hasSecret: false, secretHint: null, widget: null, protectedForms: 0 }));
   const configured = data.site && data.site.url && !/example\.com/.test(data.site.url) ? data.site.url : null;
   const siteUrl = (data.liveUrl || configured || COPY.site.siteUrlPlaceholder).replace(/\/$/, "");
   const siteFiles = await window.desktop.listMedia("file").catch(() => []); // the link picker's Files group
-  const ctx = { types: typesData.types || [], entries: typesData.entries || {}, blocks: data.blocks, forms: siteForms, pages: data.pages, delivery, siteUrl, files: siteFiles };
+  const ctx = { types: typesData.types || [], entries: typesData.entries || {}, blocks: data.blocks, forms: siteForms, pages: data.pages, delivery, protection, siteUrl, files: siteFiles };
   siteLinkOptionsCache = siteLinkOptions(data, posts, ctx); siteLinkOptionsCache.stamp = String(Date.now());
   mediaIndex = await window.desktop.listMedia().catch(() => []); // thumbnails for image fields
   siteMarks = data.marks || {};

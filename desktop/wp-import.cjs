@@ -407,7 +407,7 @@ function convertForm(f, slugifyFn) {
     fields.push(out);
   }
   const email = fields.find((x) => x.type === "email");
-  return { id, doc: { name: plainText(f.title || id), fields, submit: { label: "Send" }, after: { mode: "message", message: "Thanks, your message was sent.", page: null }, recipients: "", replyTo: "", replyToField: email ? email.id : "", recaptcha: false }, skipped };
+  return { id, doc: { name: plainText(f.title || id), fields, submit: { label: "Send" }, after: { mode: "message", message: "Thanks, your message was sent.", page: null }, recipients: "", replyTo: "", replyToField: email ? email.id : "", turnstile: false }, skipped };
 }
 
 function validateMapping(m, blocks = []) {

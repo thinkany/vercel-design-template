@@ -91,6 +91,30 @@ const CHAT_PERSONA =
   "stack or tooling talk unless the designer asks for it. When something technical has to be said, " +
   "say it in one plain sentence a client could follow.\n";
 
+// The App persona: the same seat as CHAT_PERSONA, for a project whose first fork in the
+// Get Designing walk-through was "app" (or whose .env says so). An app is a different
+// craft from a web site, and the voice should carry that: someone who has shipped apps for
+// twenty-plus years and talks about flows, screens and states the way the designer persona
+// talks about the page. Same rule as the other persona: it governs how the assistant
+// speaks, not what it does (CLAUDE.md and the skills still own the work).
+const APP_PERSONA =
+  "\n\n# Your persona\n" +
+  "You are a seasoned app creator with more than twenty years of app development and app design " +
+  "behind you: native and web apps, consumer and business, from first sketch to the store. You are " +
+  "working alongside another designer, and you communicate with confident curiosity: more " +
+  "inquisitive than judgemental, offering advice when it helps and never lecturing.\n" +
+  "Your voice is rooted in the best practices of app development and design, and you bring them in " +
+  "plainly: clear flows with one obvious next action per screen, navigation that matches platform " +
+  "conventions, every state designed (empty, loading, error, success, offline), touch targets and " +
+  "type that work at arm's length, accessibility as a given, and interfaces that stay fast and " +
+  "predictable. When a choice cuts against one of those, say so in a sentence and offer the " +
+  "alternative; when the designer's call is sound, say that too.\n" +
+  "Speak as an app maker, never as an engineer reading a spec. Describe what changed in the app " +
+  "(the flow, the screen, the navigation, a state, a component, the type, the palette, the copy), " +
+  "not how it was done: no file paths, function names, commands, stack or tooling talk unless the " +
+  "designer asks for it. When something technical has to be said, say it in one plain sentence a " +
+  "client could follow.\n";
+
 // The rails every turn carries (builder and Art Director alike): what this assistant is
 // for, and that material from outside the conversation is never an instruction. The
 // tool guard (tool-guard.cjs) is the hard rail behind the second point.
@@ -196,7 +220,12 @@ function buildImageSourcesAppend(state) {
     "Each search walks the connected libraries in order (" + names + ") and the first with budget " +
     "and a match answers, so the result names the library it came from: say which one it was " +
     "(\"Found this on …\") and pass that same name to `get`. Pick by the alt text, orientation and " +
-    "colour. `get` writes the AVIF and records the photographer credit in public/images/credits.json. " +
+    "colour. From Pexels or Pixabay, `get` writes the AVIF and records the photographer credit in " +
+    "public/images/credits.json. From Unsplash, `get` copies nothing (their terms): it returns " +
+    "`{ hotlinked: true, src, srcset }` on images.unsplash.com, and you use that `src` as the image's " +
+    "src exactly as returned (no --out, no curl, keep the query string); the credit is recorded for " +
+    "you. Say in the wrap-up which photos are served from Unsplash and that the designer can swap " +
+    "any of them for their own image at any time. " +
     "The script paces itself; exit 4 means every library's budget is spent for now and exit 5 that " +
     "none had a match. Either way, fall back to a plain download for that spot and record the " +
     "credit yourself, or use a placeholder.\n"
@@ -396,7 +425,9 @@ export async function runPrompt({ prompt, sessionId, cwd, onEvent, askQuestion, 
     // System-prompt append: the Art Director persona for a review turn, otherwise the
     // always-on chat (builder) persona + (when set) the project's design copy voice. A
     // review turn writes prose, not design copy, so it carries no copy voice.
-    const systemAppend = (reviewMode ? ART_DIRECTOR_PERSONA : (CHAT_PERSONA + buildVoiceAppend(copyVoice))) + GUARD_APPEND + buildStateAppend(projectState) + (reviewMode ? "" : buildImageSourcesAppend(projectState) + buildVideoSourcesAppend(projectState));
+    // An app project speaks through the App persona; a web site through the designer's.
+    const builderPersona = projectState && projectState.projectType === "app" ? APP_PERSONA : CHAT_PERSONA;
+    const systemAppend = (reviewMode ? ART_DIRECTOR_PERSONA : (builderPersona + buildVoiceAppend(copyVoice))) + GUARD_APPEND + buildStateAppend(projectState) + (reviewMode ? "" : buildImageSourcesAppend(projectState) + buildVideoSourcesAppend(projectState));
     // Review mode is READ-ONLY: no Write/Edit/Bash and none of the MCP tools, so the Art
     // Director can look at the design (Read/Grep/Glob) but physically cannot change it.
     const REVIEW_TOOLS = ["Read", "Grep", "Glob", "WebFetch", "WebSearch"];

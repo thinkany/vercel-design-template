@@ -574,8 +574,8 @@ window.COPY = {
     formReplyToField: "Reply to the submitter",
     formReplyToFieldNone: "No, use the reply-to address",
     formReplyToFieldHint: "Pick the form’s email field so each reply goes straight back to the person who wrote.",
-    formRecaptcha: "Protect with Google reCAPTCHA v3",
-    formRecaptchaHint: "Invisible to visitors. Needs the site’s reCAPTCHA keys, which arrive with delivery; until then the choice is only remembered.",
+    formTurnstile: "Spam protection",
+    formTurnstileHint: "Cloudflare Turnstile: a small check the visitor completes without a puzzle. The hidden honeypot and the timing check stay on for every form regardless. Set up once for the site in Spam protection, below Delivery.",
     formUsedOn: "Used on",
     formUsedNowhere: "Not on any page yet. Add a Form block to a page and pick this form.",
     saveForm: "Save form",
@@ -613,6 +613,35 @@ window.COPY = {
       linkHint: "For entries of a type that has a page. Data-only entries link nowhere.",
     },
     // delivery (site level, the card at the top of the Forms tab)
+    protection: {
+      title: "Spam protection",
+      intro: "Cloudflare Turnstile keeps bots off the forms that have Spam protection on: a small check the visitor completes without a puzzle. One widget per site; the app makes it for you when a Cloudflare token is connected.",
+      statusToken: (account) => `Connected to Cloudflare${account ? ` as ${account}` : ""}. The site\u2019s widget is made and kept up to date at publish.`,
+      statusWidget: (sitekey, hosts) => `Widget ${sitekey.slice(0, 6)}\u2026 for ${hosts.join(", ")}.`,
+      statusOwn: "Using this site\u2019s own keys, pasted below.",
+      statusNone: "Not set up yet. Connect a Cloudflare token under Keys & Licenses (once, for every site), or paste this site\u2019s keys below.",
+      statusOff: "No form has Spam protection on yet. Turn it on per form under Delivery.",
+      count: (n) => `${n} form${n === 1 ? "" : "s"} with protection on.`,
+      openKeys: "Connect Cloudflare Turnstile",
+      manage: "Manage your Turnstile connection",
+      ownToggle: "Paste this site\u2019s keys yourself",
+      ownHide: "Hide the manual keys",
+      ownIntro: "No Cloudflare token connected, so the app can\u2019t make the widget for you. Make it by hand for this site and paste its two keys here. You will do this for each site you protect, and again if the site\u2019s domain changes.",
+      ownStepsHtml: "<ol class=\"key-steps\"><li>Sign in to Cloudflare and, in the left column, open <b>Account Security</b>, then <b>Turnstile</b>.</li><li>Click <b>Add widget manually</b> (not Set up with Spin).</li><li><b>Widget name:</b> the site\u2019s name.</li>" +
+        "<li><b>Hostnames:</b> the site\u2019s address without https://, for example client.com, and its Vercel address, for example client-site.vercel.app. Add www.client.com too if the site answers there. A hostname covers its subdomains.</li>" +
+        "<li><b>Widget mode:</b> Managed. Leave Pre-clearance off.</li><li>Click <b>Create</b>.</li><li>Cloudflare shows a <b>Site Key</b> and a <b>Secret Key</b>. Paste both here. The app checks the secret the moment you paste it.</li>" +
+        "<li>When the site\u2019s domain changes later, open the widget in Cloudflare, add the new hostname under Hostname management, and publish again.</li></ol>",
+      openCloudflare: "Open Cloudflare Turnstile",
+      siteKey: "Site key",
+      siteKeyPlaceholder: "0x4AAAAAAA\u2026",
+      secret: "Secret key",
+      secretPlaceholder: "Paste the secret key",
+      secretSaved: (hint) => `**********${hint}`,
+      removeSecret: "Remove secret",
+      save: "Save keys",
+      saved: "Saved",
+      checking: "Checking the secret\u2026",
+    },
     delivery: {
       title: "Delivery",
       intro: "How submissions reach the client: a transactional mail service you set up once for this site. The key stays in the app and goes to the site’s hosting at publish; it’s never written into the project.",
@@ -764,7 +793,8 @@ window.COPY = {
           { h: "Create a form", items: ["Type a name in <b>Add a form</b>. It starts with name, email and message; change anything.", "<b>Add a field</b> offers text, email, phone, long text, a choice list and a checkbox. Each has a label, a placeholder, help text and a required switch. Drag isn't needed: the arrows reorder.", "The field <b>id</b> is made from the label (lowercase, dashes) and is the name the value arrives under. Renaming it on a live form changes what the client's emails look like."] },
           { h: "Button and after", items: ["<b>Button text</b> is the submit button's label.", "<b>After submitting</b>: show a thank-you message in the form's place, or go to a page of the site (a thank-you page you made in Pages)."] },
           { h: "Delivery (the section below the forms)", items: ["Set up once per site, one step at a time: pick the <b>service</b> (Resend, Postmark or SendGrid), follow its steps to verify the client's domain and create a key, enter the <b>from address</b> at that domain, paste the <b>API key</b>, then <b>Send a test</b> to yourself.", "The key is kept by the app on this computer and set on the site's hosting when you publish. It never goes into the project folder.", "Until this is set up, a published form tells the visitor it isn't connected yet, and the publish log says so. The Site tab preview always shows the success state without sending."] },
-          { h: "Per form", items: ["<b>Send to</b>: the addresses that receive each submission, comma-separated.", "<b>Reply-to</b>: where a reply goes. Choose the form's email field to reply straight to the person who wrote; otherwise the address you enter is used (<i>noreply@</i> when replies shouldn't land anywhere).", "Every form carries a hidden honeypot field that bots fill in; those submissions are dropped. <b>reCAPTCHA v3</b> is an extra invisible check that needs the site's keys."] },
+          { h: "Per form", items: ["<b>Send to</b>: the addresses that receive each submission, comma-separated.", "<b>Reply-to</b>: where a reply goes. Choose the form's email field to reply straight to the person who wrote; otherwise the address you enter is used (<i>noreply@</i> when replies shouldn't land anywhere).", "Every form carries a hidden honeypot field that bots fill in, and a timing check; those submissions are dropped. <b>Spam protection</b> adds Cloudflare Turnstile on top, per form."] },
+          { h: "Spam protection (below Delivery)", items: ["<b>Cloudflare Turnstile</b>: a small check the visitor completes without a puzzle, no cookies, no badge. Turn it on per form under Delivery; set it up once for the site here.", "<b>With a Cloudflare token</b> (Keys &amp; Licenses → Cloudflare Turnstile): the app makes the site's widget at publish, keeps its hostnames in step with your domains, and puts the secret on the site's hosting. You never open the Turnstile pages of the dashboard.", "<b>Without one</b>: make the widget by hand in Cloudflare and paste its site key and secret here; the app checks the secret as you paste it. Do it again if the site's domain changes.", "Protection on but nothing set up: the site still publishes, forms still send, and the publish log says protection is missing. Never a silent switch."] },
           { h: "On a page", items: ["Add a <b>Form</b> block to any page and choose the form. The block has an optional heading and intro.", "The Site tab shows the form working: sending shows the thank-you state with a note that nothing was sent.", "<b>Used on</b> lists the pages a form is on. Deleting a form leaves those blocks empty until another is chosen."] },
         ],
       },
@@ -1382,6 +1412,8 @@ window.COPY = {
     // removes the CMS icon, and a designer who later wondered where it went would have
     // been misled by a step called "Design research".
     researchAlso: "This key also unlocks the site builder, which turns an approved design into a publishable website with pages, posts and media.",
+    turnstileTitle: "Spam protection for forms",
+    turnstileDesc: "Keep bots off the contact forms on every site you publish, with Cloudflare Turnstile: a small check the visitor completes without a puzzle, no cookies, no badge. Paste one API token from a free Cloudflare account and the app makes each site\u2019s widget for you at publish. Skip it and forms still send, with the built-in honeypot only; you can connect it later under Keys & Licenses.",
     mediaTitle: "Photos & Video",
     mediaDesc: "Add optional free stock image and video libraries so your build can automatically find visuals that match your design description and download them with proper photographer credit.",
     // Behind the lifesaver on the Photos & Video card (the order text used to sit under
@@ -1394,11 +1426,12 @@ window.COPY = {
     </div>
     <p>If you supply keys for each service provider, the build will search Unsplash first, then Pexels, then Pixabay. For videos, it will search Pexels first, then Pixabay.</p>
     <p>You can connect any or all of these services; the build will use whichever are connected and still have requests available. If no video libraries are connected, your designs will simply use still images only.</p>
+    <p>Unsplash asks that its photos are shown from Unsplash rather than copied, so a design's Unsplash photos load from unsplash.com and carry the photographer's credit. Pexels and Pixabay photos are downloaded into your project. Either way, every photo can be swapped for your own image whenever you like.</p>
   `,
     // Shown beside each library's name, and readable while its section is folded shut.
     offersImages: "Photos",
     offersBoth: "Photos & Video",
-    unsplashOffer: "The highest\u2011quality, most carefully curated photo library of the three, and when activated it is the first place your build looks when searching for images that match your design\u2019s description. This service provides photos only and does not include video.",
+    unsplashOffer: "The highest\u2011quality, most carefully curated photo library of the three, and when connected it is the first place your build looks when searching for images that match your design\u2019s description. One click signs you in with your Unsplash account. Unsplash photos are served from Unsplash rather than copied into your project (their terms); you can replace any of them with your own image at any time. This service provides photos only and does not include video.",
     pexelsOffer: "A versatile library that offers both photos and video under a single API key, with up to 200 requests per hour. It\u2019s the first place your build looks for videos, and it can also provide still images that match your design\u2019s description.",
     pixabayOffer: "A large, all\u2011purpose library that offers both photos and video under a single API key, with the widest selection of the three services but lighter curation. Your build searches it last (if other services are active) for both images and footage, so it can pick up anything the other libraries didn\u2019t find.",
   },
@@ -1663,7 +1696,7 @@ window.COPY = {
         },
         formDelivery: {
           title: "Who receives it",
-          body: "The addresses each submission goes to, the reply-to, and whether the visitor’s own email is used as the reply-to. Turn on reCAPTCHA here to keep bots out on top of the built-in honeypot.",
+          body: "The addresses each submission goes to, the reply-to, and whether the visitor’s own email is used as the reply-to. Turn on Spam protection here (Cloudflare Turnstile) to keep bots out on top of the built-in honeypot; set it up once for the site below Delivery.",
         },
         formActions: {
           title: "Save the form",
@@ -1808,7 +1841,7 @@ window.COPY = {
       },
       unsplashKey: {
         title: "Photo libraries, optional",
-        body: "Add your own Unsplash or Pexels key and a build searches the library for photos that match the brief, downloads them, and records the photographer credit. Both are free. Skip them and images are found the plain way.",
+        body: "Connect Unsplash with one click (sign in, click Allow) or add a Pexels or Pixabay key, and a build searches the library for photos that match the brief and records the photographer credit. All are free. Unsplash photos are served from Unsplash rather than copied into the project, and any photo can be replaced with your own. Skip them and images are found the plain way.",
       },
       closeDrawer: {
         title: "Closing a drawer",
@@ -1969,10 +2002,27 @@ window.COPY = {
     figmaLabel: "Figma Export",
     figmaDesc: "Unlocks exporting your designs to Figma.",
     unsplashLabel: "Unsplash (optional)",
-    unsplashDesc: "Your own Unsplash access key lets a build search the library for photos that fit the brief: free to use, credited to the photographer. Without it, images are found the plain way.",
-    unsplashStepsHtml: "<b>To get a key:</b><ol class=\"key-steps\"><li>Create an Unsplash account and confirm it from the email Unsplash sends.</li><li>Open <a href=\"https://unsplash.com/oauth/applications\" target=\"_blank\" rel=\"noopener\">unsplash.com/oauth/applications</a>, choose <i>New Application</i> and agree to the terms.</li>" +
+    unsplashDesc: "Sign in to Unsplash once and a build can search the library for photos that fit the brief: free to use, credited to the photographer. Unsplash photos are served from Unsplash rather than copied into your project (their terms), and you can replace any of them with your own image at any time. Without it, images are found the plain way.",
+    // The one-click path. Signing in through the browser hands the studio its own Unsplash
+    // application for this installation (3,000 requests an hour); no developer account,
+    // no key to copy.
+    unsplashConnect: "Connect with Unsplash",
+    unsplashConnecting: "Waiting for Unsplash\u2026",
+    unsplashConnectHint: "Opens unsplash.com in your browser. Sign in (or join, it\u2019s free), click Allow, and come back here.",
+    unsplashConnectedVia: "Connected through your Unsplash account.",
+    unsplashOwnKeyToggle: "Use your own access key instead",
+    unsplashOwnKeyHide: "Hide the access-key steps",
+    unsplashNeedsLicense: "Connecting with your Unsplash account is part of the Design license. Add that license first, or use your own access key below.",
+    unsplashCouldNotConnect: "Could not connect to Unsplash.",
+    unsplashHow: "Connected as",
+    unsplashViaAccount: "your Unsplash account",
+    unsplashViaOwnKey: "your own access key",
+    // The fallback: a developer key the designer registers themselves (what every
+    // connection was before Connect with Unsplash). Kept for the offline case and for
+    // installs without the Design license.
+    unsplashStepsHtml: "<b>To get a key yourself:</b><ol class=\"key-steps\"><li>Create an Unsplash account and confirm it from the email Unsplash sends.</li><li>Open <a href=\"https://unsplash.com/oauth/applications\" target=\"_blank\" rel=\"noopener\">unsplash.com/oauth/applications</a>, choose <i>New Application</i> and agree to the terms.</li>" +
       "<li>Give it a name and a description (thinkany design, for example).</li><li>Copy its <b>Access Key</b> and paste it below.</li></ol>" +
-      "A new app allows 50 requests an hour; a build uses about two per photo, and the studio paces its calls and stops short of the limit.",
+      "A new app of your own allows 50 requests an hour; a build uses about two per photo, and the studio paces its calls and stops short of the limit.",
     imageUsageLabel: "This hour",
     imageUsage: (u) => u && u.limit ? `${u.requests} of ${u.limit} requests${typeof u.remaining === "number" ? `, ${u.remaining} left` : ""}, resets in ${u.resetsInMin} min` : "No requests yet",
     // Pixabay's allowance is a rolling MINUTE, not an hour, so it gets its own row.
@@ -1990,12 +2040,26 @@ window.COPY = {
     pixabayStepsHtml: "<b>To get a key:</b><ol class=\"key-steps\"><li>Create a Pixabay account and confirm it from the email Pixabay sends.</li>" +
       "<li>Visit <a href=\"https://pixabay.com/api/docs/\" target=\"_blank\" rel=\"noopener\">pixabay.com/api/docs</a>; your <b>API key</b> is shown at the top once you are signed in.</li><li>Paste it below.</li></ol>" +
       "Pixabay allows 100 requests a minute; the studio paces its calls and stops short of the limit.",
+    // Cloudflare Turnstile: one API token, and the app makes the widget for each site.
+    turnstileLabel: "Cloudflare Turnstile (optional)",
+    turnstileDesc: "Spam protection for the forms on every site you publish. thinkany design creates and updates the Turnstile widget for each site; to let it, make one API token in your Cloudflare account and paste it here. You do this once, and you never need the Turnstile pages of the dashboard after this.",
+    turnstileStepsHtml: "<b>To make the token:</b><ol class=\"key-steps\"><li>Sign in at <a href=\"https://dash.cloudflare.com/\" target=\"_blank\" rel=\"noopener\">dash.cloudflare.com</a>. No account yet? Create a free one; the site does not have to be on Cloudflare for Turnstile to work.</li>" +
+      "<li>Click the person icon at the top right, then <b>My Profile</b>, then <b>API Tokens</b> in the left column, then <b>Create Token</b> (or go straight to <a href=\"https://dash.cloudflare.com/profile/api-tokens\" target=\"_blank\" rel=\"noopener\">the API Tokens page</a>).</li>" +
+      "<li>Scroll past the templates to <b>Create Custom Token</b> and click <b>Get started</b>. Name it something you will recognise, such as thinkany design.</li>" +
+      "<li>Under Permissions choose <b>Account</b>, then <b>Turnstile</b>, then <b>Edit</b>. Nothing else. Under Account Resources choose <b>Include</b> and your account.</li>" +
+      "<li>Click <b>Continue to summary</b>, check it reads Turnstile: Edit for your account, then <b>Create Token</b>. Cloudflare shows it once: copy it and paste it below.</li>" +
+      "<li>Copy your <b>Account ID</b> too: a token scoped to Turnstile alone can\u2019t look it up. In Cloudflare, click the <b>back arrow</b> at the top of the profile page to return to the dashboard, then in the left column open <b>Account Security</b> and click <b>Turnstile</b>. The address bar now reads dash.cloudflare.com/<i>your-account-id</i>/turnstile: copy that long string of letters and numbers and paste it below. (It is also shown as Account ID on the right of any site\u2019s Overview page.)</li></ol>",
+    turnstileAccountLabel: "Account",
+    turnstileAccountIdPlaceholder: "Account ID (32 letters and numbers)",
+    needAccountId: "Now paste your Account ID (step 6).",
+    turnstileWidgetsNote: "You can see the widgets the app made in the Cloudflare dashboard under Account Security, then Turnstile; they are named after the site. Do not click Set up with Spin or Add widget manually there; the app does that for you.",
     videoGroup: "Video",
     videoNote: "Pexels and Pixabay also carry video, so a build can place a moving hero background or a clip in a content row. Unsplash is photos only. With no video library connected, designs stay stills only.",
     status: "License",
     keyLabel: "Key",
     remove: "Remove license",
     pasteKey: "Paste your license key",
+    fromClipboard: "Found a key on your clipboard, checking it\u2026",
     save: "Save license",
     validating: "Validating…",
     couldNotSave: "Could not save the license.",

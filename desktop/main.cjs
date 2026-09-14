@@ -11,7 +11,8 @@
 // app itself. desktop/ lives only on the `electron` branch; the scaffolded
 // project comes from the clean `main` branch.
 
-const { app, BrowserWindow, ipcMain, safeStorage, shell, dialog, Menu, nativeImage } = require("electron");
+const { app, BrowserWindow, ipcMain, safeStorage, shell, dialog, Menu, nativeImage, clipboard } = require("electron");
+const turnstile = require("./turnstile.cjs"); // Cloudflare Turnstile: the site forms' spam protection
 
 // The package name is "@figma/my-make-file"; force the product name so the macOS
 // app menu (About / Hide / Quit …) and the About panel read "thinkany design".
@@ -32,6 +33,12 @@ const http = require("node:http");
 const VERCEL_CLIENT_ID = "cl_cREhcnsVM9e9YNFHHBAlZ0u9IoDIcjRP";
 const VERCEL_OAUTH_PORT = 9789;
 const VERCEL_REDIRECT_URI = `http://127.0.0.1:${VERCEL_OAUTH_PORT}/callback`;
+// Connect with Unsplash: the same loopback shape on its own port. The code exchange runs
+// on derive (the parent application's secret lives there, never here); this side opens
+// the authorize page, catches the callback, and stores the minted per-install key like a
+// pasted one. The redirect is registered on the parent application at Unsplash.
+const UNSPLASH_OAUTH_PORT = 9791;
+const UNSPLASH_REDIRECT_URI = `http://127.0.0.1:${UNSPLASH_OAUTH_PORT}/callback`;
 
 // ⚠ Pin userData to a STABLE id — never derive it from the display name.
 // Electron defaults userData to `<appData>/<app.getName()>`, so the setName above
@@ -261,6 +268,35 @@ function storeUnsplashKey(key) {
   fs.writeFileSync(unsplashKeyFilePath(), data);
 }
 function removeStoredUnsplashKey() { try { fs.unlinkSync(unsplashKeyFilePath()); } catch { /* already gone */ } }
+// How the Unsplash key arrived: through Connect with Unsplash (a child application minted
+// for this install, `via: "unsplash"`) or pasted by the designer. Non-secret, kept beside
+// the key so Keys & Licenses can say which, and a paste replaces it.
+function unsplashConnectFilePath() { return path.join(app.getPath("userData"), "unsplash-connect.json"); }
+function loadUnsplashConnect() { try { return JSON.parse(fs.readFileSync(unsplashConnectFilePath(), "utf8")) || {}; } catch { return {}; } }
+function saveUnsplashConnect(info) { try { fs.writeFileSync(unsplashConnectFilePath(), JSON.stringify(info || {}, null, 2)); } catch { /* best-effort */ } }
+function removeUnsplashConnect() { try { fs.unlinkSync(unsplashConnectFilePath()); } catch { /* already gone */ } }
+// The Cloudflare API token (Turnstile: Edit on the designer's account): optional, stored
+// like the library keys, injected as CLOUDFLARE_API_TOKEN. With it the app makes and
+// keeps each published site's Turnstile widget (desktop/turnstile.cjs); the account it
+// resolved to sits beside it, non-secret, so Keys & Licenses can name it.
+function turnstileTokenFilePath() { return path.join(app.getPath("userData"), "turnstile-token.enc"); }
+function loadStoredTurnstileToken() {
+  try {
+    const p = turnstileTokenFilePath();
+    if (!fs.existsSync(p)) return null;
+    const buf = fs.readFileSync(p);
+    return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(buf) : buf.toString("utf8");
+  } catch { return null; }
+}
+function storeTurnstileToken(key) {
+  const data = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(key) : Buffer.from(key, "utf8");
+  fs.writeFileSync(turnstileTokenFilePath(), data);
+}
+function removeStoredTurnstileToken() { try { fs.unlinkSync(turnstileTokenFilePath()); } catch { /* already gone */ } }
+function turnstileMetaFilePath() { return path.join(app.getPath("userData"), "turnstile.json"); }
+function loadTurnstileMeta() { try { return JSON.parse(fs.readFileSync(turnstileMetaFilePath(), "utf8")) || {}; } catch { return {}; } }
+function saveTurnstileMeta(m) { try { fs.writeFileSync(turnstileMetaFilePath(), JSON.stringify(m || {}, null, 2)); } catch { /* best-effort */ } }
+function removeTurnstileMeta() { try { fs.unlinkSync(turnstileMetaFilePath()); } catch { /* already gone */ } }
 // Where scripts/find-images.mjs logs its calls + each library's rate headers, app-wide
 // (the keys are app-wide), one entry per library, so Keys & Licenses can show the hour's usage.
 function imageUsageFilePath() { return path.join(app.getPath("userData"), "image-usage.json"); }
@@ -448,8 +484,8 @@ function b64url(buf) {
 }
 // The little page shown in the browser after the redirect, so the user knows to
 // return to the app.
-function oauthResultPage(ok, message) {
-  const title = ok ? "Connected to Vercel" : "Couldn't connect";
+function oauthResultPage(ok, message, service = "Vercel") {
+  const title = ok ? `Connected to ${service}` : "Couldn't connect";
   const body = ok ? "You can close this tab and return to thinkany design." : (message || "Something went wrong. Return to thinkany design and try again.");
   return `<!doctype html><meta charset="utf-8"><title>${title}</title><style>body{font:15px -apple-system,system-ui,sans-serif;color:#1a1a1a;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;background:#fafafa}.c{max-width:340px;text-align:center;padding:28px}h1{font-size:17px;margin:0 0 8px}p{color:#555;margin:0}</style><div class="c"><h1>${title}</h1><p>${body}</p></div>`;
 }
@@ -509,6 +545,86 @@ function runVercelOAuth() {
     server.on("error", (e) => finish({ ok: false, error: e.code === "EADDRINUSE" ? `Port ${VERCEL_OAUTH_PORT} is in use — close whatever is using it and try again.` : e.message }));
     server.listen(VERCEL_OAUTH_PORT, "127.0.0.1", () => { shell.openExternal(authUrl); });
     timer = setTimeout(() => finish({ ok: false, error: "Timed out waiting for authorization (5 min)." }), 5 * 60 * 1000);
+  });
+}
+
+// Connect with Unsplash. Unsplash's guidelines say an app must not send its users off to
+// register developer keys; the route for a desktop app is Dynamic Client Registration:
+// the designer signs in and clicks Allow, the browser lands on the loopback port with a
+// code, and derive (which holds the PARENT application's secret) exchanges that code and
+// registers a CHILD application for this install. Its client id is the access key,
+// stored and used exactly like a pasted one. Resolves { ok, accessKey, name } or
+// { ok:false, error }. UNSPLASH_CONNECT_ENDPOINT overrides the endpoint (tests, dev).
+function unsplashConnectEndpoint() {
+  if (process.env.UNSPLASH_CONNECT_ENDPOINT) return process.env.UNSPLASH_CONNECT_ENDPOINT;
+  return (process.env.DERIVE_ENDPOINT || "https://derive.thinkany.design/api/derive").replace(/\/api\/derive\/?$/, "/api/unsplash");
+}
+async function unsplashConnectPost(body) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const res = await fetch(unsplashConnectEndpoint(), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-license-key": (process.env.DESIGN_LICENSE_KEY || "").trim() },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    let j = null; try { j = await res.json(); } catch { /* not JSON */ }
+    if (!res.ok) throw new Error((j && j.error) || `thinkany answered ${res.status}.`);
+    return j || {};
+  } catch (e) {
+    throw new Error(e.name === "AbortError" ? "thinkany did not answer in time. Check your connection and try again." : e.message);
+  } finally { clearTimeout(t); }
+}
+async function runUnsplashConnect() {
+  const state = crypto.randomBytes(24).toString("hex");
+  let start;
+  try { start = await unsplashConnectPost({ op: "start", redirectUri: UNSPLASH_REDIRECT_URI, state }); }
+  catch (e) { return { ok: false, error: e.message }; }
+  if (!start || typeof start.url !== "string" || !/^https:\/\/unsplash\.com\//.test(start.url)) return { ok: false, error: "thinkany did not return an Unsplash sign-in address." };
+  const authUrl = start.url;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer = null;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { server.close(); } catch { /* already closing */ }
+      resolve(result);
+    };
+    const server = http.createServer(async (req, res) => {
+      let parsed;
+      try { parsed = new URL(req.url, UNSPLASH_REDIRECT_URI); } catch { res.writeHead(400); res.end(); return; }
+      if (parsed.pathname !== "/callback") { res.writeHead(404); res.end(); return; }
+      const code = parsed.searchParams.get("code");
+      const retState = parsed.searchParams.get("state");
+      const err = parsed.searchParams.get("error");
+      const errDesc = parsed.searchParams.get("error_description");
+      const reply = (ok, msg) => { res.writeHead(200, { "content-type": "text/html" }); res.end(oauthResultPage(ok, msg, "Unsplash")); };
+      if (err) {
+        const detail = errDesc ? `${err}: ${errDesc}` : err;
+        reply(false, detail);
+        return finish({ ok: false, error: err === "access_denied" ? "You didn't allow the connection on Unsplash. Try again whenever you like." : `Unsplash returned "${detail}".` });
+      }
+      // Unsplash echoes `state` (seen live 2026-09-13); a callback without this attempt's
+      // was not started here.
+      if (retState !== state) { reply(false, "State mismatch."); return finish({ ok: false, error: "The sign-in response didn't match this attempt (state mismatch). Try again." }); }
+      if (!code) { reply(false, "No authorization code was returned."); return finish({ ok: false, error: "Unsplash returned no authorization code." }); }
+      try {
+        const ex = await unsplashConnectPost({ op: "exchange", code, redirectUri: UNSPLASH_REDIRECT_URI, name: designerId().slice(0, 8) });
+        if (!ex.ok || !ex.accessKey) { reply(false, ex.error || "No key was issued."); return finish({ ok: false, error: ex.error || "Unsplash issued no key." }); }
+        reply(true, null);
+        finish({ ok: true, accessKey: String(ex.accessKey), name: ex.name || "" });
+      } catch (e) {
+        reply(false, e.message);
+        finish({ ok: false, error: e.message });
+      }
+    });
+    server.on("error", (e) => finish({ ok: false, error: e.code === "EADDRINUSE" ? `Port ${UNSPLASH_OAUTH_PORT} is in use. Close whatever is using it and try again.` : e.message }));
+    server.listen(UNSPLASH_OAUTH_PORT, "127.0.0.1", () => { shell.openExternal(authUrl); });
+    timer = setTimeout(() => finish({ ok: false, error: "Timed out waiting for Unsplash (5 min). Try again." }), 5 * 60 * 1000);
   });
 }
 
@@ -647,6 +763,14 @@ function gateEnvFor(dir) {
 // What the agent is told about where the design renders (agent.mjs buildStateAppend):
 // promoted or not, which design, and the block files it can edit.
 function projectStateForAgent(dir) {
+  // Web site or app: the project's .env once set up, else the walk-through's first fork
+  // (the intake runs before .env carries it). Picks the builder persona in agent.mjs.
+  let projectType = "website";
+  try {
+    const envType = String(readProjectEnv(dir).VITE_PROJECT_TYPE || "").trim().toLowerCase();
+    const briefType = String((typeof intakeBrief !== "undefined" && intakeBrief && intakeBrief.projectType) || "").trim().toLowerCase();
+    if ((envType || briefType) === "app") projectType = "app";
+  } catch { /* no .env yet */ }
   // The connected photo libraries (in the order the script prefers them).
   const imageSources = [];
   if ((process.env.UNSPLASH_ACCESS_KEY || "").trim()) imageSources.push("unsplash");
@@ -657,10 +781,10 @@ function projectStateForAgent(dir) {
   const videoSources = imageSources.filter((s) => s === "pexels" || s === "pixabay");
   try {
     const r = siteReady(dir);
-    if (!r.ready) return { promoted: false, imageSources, videoSources };
+    if (!r.ready) return { promoted: false, projectType, imageSources, videoSources };
     const blocks = fs.readdirSync(path.join(dir, "site", "blocks")).filter((f) => /^[A-Z].*\.tsx$/.test(f)).map((f) => `site/blocks/${f}`);
-    return { promoted: true, design: r.design, blocks, imageSources, videoSources };
-  } catch { return { promoted: false, imageSources, videoSources }; }
+    return { promoted: true, design: r.design, blocks, projectType, imageSources, videoSources };
+  } catch { return { promoted: false, projectType, imageSources, videoSources }; }
 }
 function siteReady(dir) {
   try {
@@ -1408,6 +1532,15 @@ function createWindow() {
       // narration pacing harness only when running unpackaged. Never present in a built app.
       additionalArguments: app.isPackaged ? [] : ["--ta-dev"],
     },
+  });
+  // A target="_blank" link in the app's own UI (the key cards' sign-up steps, the help
+  // panels) goes to the designer's browser. Left to Electron it opened a bare window with
+  // no address bar, which hid the one thing some steps ask them to copy from it (a
+  // Cloudflare Account ID lives in the dashboard's address). The preview's webviews keep
+  // their own handler above (a new app tab).
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) shell.openExternal(url);
+    return { action: "deny" };
   });
   // The renderer's console rides the app log too (Settings → Logging).
   mainWindow.webContents.on("console-message", function (event) {
@@ -2917,7 +3050,7 @@ function readForms(dir) {
   return files.map((f) => {
     const id = f.replace(/\.json$/, "");
     const d = readJsonFile(path.join(formsDir(dir), f)) || {};
-    return { ...d, id, name: d.name || id, fields: Array.isArray(d.fields) ? d.fields : [] };
+    return { ...d, id, name: d.name || id, fields: Array.isArray(d.fields) ? d.fields : [], turnstile: !!(d.turnstile != null ? d.turnstile : d.recaptcha) };
   });
 }
 // Shape-check a form (mirrors site/src/lib/forms.ts formDef). Field ids are slugs
@@ -2956,7 +3089,7 @@ function cleanForm(f) {
     name, fields,
     submit: { label: String((f.submit && f.submit.label) || "").trim() || "Submit" },
     after: { mode, message: String(after.message || "").trim() || FORM_DEFAULT_MESSAGE, page: mode === "page" ? page : null },
-    recipients: recipients.join(", "), replyTo, replyToField, recaptcha: !!f.recaptcha,
+    recipients: recipients.join(", "), replyTo, replyToField, turnstile: !!(f.turnstile != null ? f.turnstile : f.recaptcha),
     updated: new Date().toISOString(),
   };
   return { id, doc };
@@ -3033,6 +3166,47 @@ ipcMain.handle("forms:test", async (_e, { to } = {}) => {
     return { ok: true };
   } catch (e) { return { ok: false, error: e && e.message ? e.message : String(e) }; }
 });
+// Spam protection for this site's forms: the token (app-wide), the site key (site.json,
+// public), the secret (userData, per project), the widget the app made (.thinkany).
+function turnstileWidgetPath(dir) { return path.join(dir, ".thinkany", "turnstile.json"); }
+function writeSiteForms(dir, patch) {
+  const p = path.join(siteContentDir(dir), "site.json");
+  const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
+  const forms = cur.forms && typeof cur.forms === "object" ? cur.forms : {};
+  fs.writeFileSync(p, JSON.stringify({ ...cur, forms: { ...forms, ...patch } }, null, 2) + "\n");
+}
+function formsProtectionOf(dir) {
+  const f = siteJsonOf(dir).forms || {};
+  const secrets = loadFormsSecrets(dir);
+  const widget = readJsonFile(turnstileWidgetPath(dir)) || null;
+  const tokenConnected = !!(process.env.CLOUDFLARE_API_TOKEN || "").trim();
+  return {
+    tokenConnected, accountName: tokenConnected ? (loadTurnstileMeta().accountName || "") : "",
+    siteKey: typeof f.turnstileSiteKey === "string" ? f.turnstileSiteKey : "",
+    hasSecret: !!secrets.turnstileSecret, secretHint: secrets.turnstileSecret ? secrets.turnstileSecret.slice(-4) : null,
+    widget: widget && widget.sitekey ? { sitekey: widget.sitekey, hostnames: Array.isArray(widget.hostnames) ? widget.hostnames : [], updatedAt: widget.updatedAt || widget.createdAt || null } : null,
+    protectedForms: readForms(dir).filter((x) => x.turnstile).length,
+  };
+}
+const NO_PROTECTION = { tokenConnected: false, accountName: "", siteKey: "", hasSecret: false, secretHint: null, widget: null, protectedForms: 0 };
+ipcMain.handle("site:formsProtection", () => (currentProject ? formsProtectionOf(currentProject) : NO_PROTECTION));
+// The hand-pasted fallback. `secret` null keeps the stored one; "" removes it; a new one is
+// checked against Cloudflare before it is kept.
+ipcMain.handle("site:saveFormsProtection", async (_e, { siteKey, secret } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const sk = String(siteKey || "").trim();
+  if (sk && !/^[0-9A-Za-z_-]{10,80}$/.test(sk)) return { ok: false, error: "That doesn't look like a Turnstile site key." };
+  try {
+    if (typeof secret === "string" && secret.trim()) {
+      const v = await turnstile.verifySecret(secret.trim());
+      if (!v.ok) return v;
+    }
+    writeSiteForms(currentProject, { turnstileSiteKey: sk });
+    if (typeof secret === "string") { const sec = loadFormsSecrets(currentProject); if (secret.trim()) sec.turnstileSecret = secret.trim(); else delete sec.turnstileSecret; saveFormsSecrets(currentProject, sec); }
+    return { ok: true, ...formsProtectionOf(currentProject) };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
 ipcMain.handle("site:forms", () => ({ forms: currentProject ? readForms(currentProject) : [] }));
 // A new form starts as the common contact shape (name, email, message); every
 // part of it is editable.
@@ -3048,7 +3222,7 @@ ipcMain.handle("site:createForm", (_e, { name } = {}) => {
     fields: [field("name", "text", "Name", true), field("email", "email", "Email", true), field("message", "textarea", "Message", true)],
     submit: { label: "Send" },
     after: { mode: "message", message: FORM_DEFAULT_MESSAGE, page: null },
-    recipients: "", replyTo: "", replyToField: "email", recaptcha: false,
+    recipients: "", replyTo: "", replyToField: "email", turnstile: false,
     updated: new Date().toISOString(),
   };
   try { writeForm(currentProject, id, doc); return { ok: true, form: { id, ...doc } }; }
@@ -3581,6 +3755,37 @@ async function publishSite(event, token) {
       FORMS_FROM: delivery.ready ? delivery.from : "",
       FORMS_SITE_NAME: readProjectEnv(currentProject).VITE_CLIENT_NAME || "",
     } : null;
+    // Spam protection (Cloudflare Turnstile), once the site's address is known: with a
+    // token, the app makes or updates this site's widget for its hostnames, writes the
+    // public site key into content/site.json (ahead of the upload) and hands the secret
+    // to the site's env. Without one, this site's hand-pasted keys. Neither: the site
+    // publishes and forms send, and the row says protection is missing. Never silent.
+    const prepareSiteEnv = async ({ url, projectName: vercelName }) => {
+      const protection = formsProtectionOf(currentProject);
+      if (!protection.protectedForms) return { TURNSTILE_SECRET: "" }; // off everywhere: clear a stale secret
+      const hosts = [url, site.customDomain, site.url, siteJsonOf(currentProject).url].filter(Boolean);
+      const own = loadFormsSecrets(currentProject).turnstileSecret;
+      if (protection.tokenConnected) {
+        onProgress({ step: "protect", status: "run", detail: "Setting up Cloudflare Turnstile" });
+        try {
+          const meta = loadTurnstileMeta();
+          const w = await turnstile.ensureWidget({ token: process.env.CLOUDFLARE_API_TOKEN, accountId: meta.accountId, name: `thinkany:${vercelName || projectName}`, hostnames: hosts });
+          writeSiteForms(currentProject, { turnstileSiteKey: w.sitekey });
+          fs.mkdirSync(path.dirname(turnstileWidgetPath(currentProject)), { recursive: true });
+          const prev = readJsonFile(turnstileWidgetPath(currentProject)) || {};
+          fs.writeFileSync(turnstileWidgetPath(currentProject), JSON.stringify({ sitekey: w.sitekey, hostnames: w.hostnames, createdAt: prev.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() }, null, 2) + "\n");
+          onProgress({ step: "protect", status: "done", detail: `Spam protection on (Turnstile${w.created ? ", widget created" : w.updated ? ", hostnames updated" : ""}) for ${protection.protectedForms} form${protection.protectedForms === 1 ? "" : "s"}` });
+          return { TURNSTILE_SECRET: w.secret };
+        } catch (e) {
+          if (protection.siteKey && own) { onProgress({ step: "protect", status: "warn", detail: `Cloudflare said: ${e.message} Using this site's own keys instead.` }); return { TURNSTILE_SECRET: own }; }
+          onProgress({ step: "protect", status: "warn", detail: `Spam protection is on but Cloudflare said: ${e.message} Forms are sending without it.` });
+          return { TURNSTILE_SECRET: "" };
+        }
+      }
+      if (protection.siteKey && own) { onProgress({ step: "protect", status: "done", detail: `Spam protection on (Turnstile, this site's own keys) for ${protection.protectedForms} form${protection.protectedForms === 1 ? "" : "s"}` }); return { TURNSTILE_SECRET: own }; }
+      onProgress({ step: "protect", status: "warn", detail: "Spam protection is on but no Cloudflare token is connected; forms are sending without it (Keys & Licenses → Cloudflare Turnstile, or paste the site's keys under Forms → Spam protection)" });
+      return { TURNSTILE_SECRET: "" };
+    };
     const res = await vercel.publishProject({
       token,
       teamId: scope.teamId || null,
@@ -3588,6 +3793,7 @@ async function publishSite(event, token) {
       projectName,
       target: "site",
       siteEnv,
+      prepareSiteEnv,
       customDomain: site.customDomain || null,
       onProgress,
     });
@@ -4755,7 +4961,25 @@ ipcMain.handle("license:designClear", () => {
 // The optional Unsplash key (image sourcing).
 ipcMain.handle("unsplash:status", () => {
   const key = (process.env.UNSPLASH_ACCESS_KEY || "").trim();
-  return asFreshInstall({ hasLicense: !!key, hint: key ? key.slice(-4) : null });
+  const via = key ? (loadUnsplashConnect().via === "unsplash" ? "unsplash" : "own") : null;
+  return asFreshInstall({ hasLicense: !!key, hint: key ? key.slice(-4) : null, via });
+});
+// Connect with Unsplash: browser sign-in → a key of this install's own, minted through
+// derive (see runUnsplashConnect). Part of the Design license, since derive gates the
+// exchange on it; without that licence the pasted-key path still works.
+ipcMain.handle("unsplash:connect", async () => {
+  if (rehearsing()) return { ok: true, rehearsed: true }; // dev walkthrough: nothing is stored
+  if (!(process.env.DESIGN_LICENSE_KEY || "").trim()) return { ok: false, needsLicense: true, error: "Connecting with your Unsplash account is part of the Design license. Add that license first, or use your own access key." };
+  const r = await runUnsplashConnect();
+  if (!r.ok) return r;
+  // The minted key is checked the way a pasted one is, so a connection that reads
+  // Connected can actually search.
+  const v = await validateUnsplashKey(r.accessKey);
+  if (!v.ok) return { ok: false, error: `Unsplash issued a key, but it did not work: ${v.error}` };
+  try { storeUnsplashKey(r.accessKey); } catch (e) { return { ok: false, error: `Could not save the key: ${e.message}` }; }
+  process.env.UNSPLASH_ACCESS_KEY = r.accessKey;
+  saveUnsplashConnect({ via: "unsplash", name: r.name || "", connectedAt: new Date().toISOString() });
+  return { ok: true, name: r.name || "" };
 });
 ipcMain.handle("unsplash:save", async (_event, { key }) => {
   const k = (key || "").trim();
@@ -4769,15 +4993,63 @@ ipcMain.handle("unsplash:save", async (_event, { key }) => {
   if (!v.ok) return v;
   try { storeUnsplashKey(k); } catch (e) { return { ok: false, error: `Could not save the key: ${e.message}` }; }
   process.env.UNSPLASH_ACCESS_KEY = k;
+  removeUnsplashConnect(); // a pasted key is the designer's own
   return { ok: true };
 });
 ipcMain.handle("unsplash:clear", () => {
   if (rehearsing()) return { ok: true, rehearsed: true }; // dev walkthrough: nothing is really removed
   removeStoredUnsplashKey();
+  removeUnsplashConnect();
   delete process.env.UNSPLASH_ACCESS_KEY;
   return { ok: true };
 });
 ipcMain.handle("images:usage", () => readImageUsage());
+// The optional Cloudflare API token (Turnstile: Edit). Saving validates it: which account,
+// and can it see that account's widgets. A token that can't list accounts asks for the id.
+ipcMain.handle("turnstile:status", () => {
+  const t = (process.env.CLOUDFLARE_API_TOKEN || "").trim();
+  const m = loadTurnstileMeta();
+  return asFreshInstall({ hasLicense: !!t, hint: t ? t.slice(-4) : null, accountName: t ? (m.accountName || "") : "", accountId: t ? (m.accountId || "") : "" });
+});
+ipcMain.handle("turnstile:save", async (_event, { key, accountId } = {}) => {
+  const k = (key || "").trim();
+  if (!k) return { ok: false, error: "Paste the Cloudflare API token first." };
+  if (rehearsing()) return { ok: true, rehearsed: true }; // dev walkthrough: nothing is stored
+  const v = await turnstile.validateToken(k, { accountId: String(accountId || "").trim() });
+  if (!v.ok) return v;
+  try { storeTurnstileToken(k); } catch (e) { return { ok: false, error: `Could not save the token: ${e.message}` }; }
+  process.env.CLOUDFLARE_API_TOKEN = k;
+  saveTurnstileMeta({ accountId: v.accountId, accountName: v.accountName || "", checkedAt: new Date().toISOString() });
+  return { ok: true, accountName: v.accountName || "", accountId: v.accountId };
+});
+ipcMain.handle("turnstile:clear", () => {
+  if (rehearsing()) return { ok: true, rehearsed: true }; // dev walkthrough: nothing is really removed
+  removeStoredTurnstileToken();
+  removeTurnstileMeta();
+  delete process.env.CLOUDFLARE_API_TOKEN;
+  return { ok: true };
+});
+// A key the designer just copied on a library's site. After they click a sign-up link the
+// renderer asks, on the way back into the window, whether the clipboard holds a key of
+// that library's shape; a match is filled in and checked, so the paste step disappears.
+// The clipboard never crosses to the renderer unless it matches: anything else is null.
+const KEY_SHAPES = {
+  claude: /^sk-ant-[A-Za-z0-9_-]{30,}$/,  // an Anthropic Console key (no shorter way to get one: billing)
+  unsplash: /^[A-Za-z0-9_-]{40,48}$/,   // an Access Key: 43 url-safe chars
+  pexels: /^[A-Za-z0-9]{50,64}$/,       // 56 alphanumerics
+  pixabay: /^\d{6,10}-[0-9a-f]{20,40}$/, // <account id>-<hex>
+  cloudflare: /^[A-Za-z0-9_-]{36,64}$/,  // an API token: 40 url-safe chars, some room
+  cloudflareAccount: /^[0-9a-f]{32}$/i,   // an Account ID, copied from the dashboard's address
+};
+function keyFromClipboard(shape, text) {
+  const re = KEY_SHAPES[shape];
+  const t = String(text || "").trim();
+  return re && t && re.test(t) ? t : null;
+}
+ipcMain.handle("clipboard:key", (_event, { shape } = {}) => {
+  let text = ""; try { text = clipboard.readText(); } catch { /* no clipboard */ }
+  return keyFromClipboard(shape, text);
+});
 // The optional Pexels key (image sourcing, second library).
 ipcMain.handle("pexels:status", () => {
   const key = (process.env.PEXELS_API_KEY || "").trim();
@@ -6067,6 +6339,8 @@ app.whenReady().then(async () => {
   if (storedDesignLicense) process.env.DESIGN_LICENSE_KEY = storedDesignLicense;
   const storedUnsplashKey = loadStoredUnsplashKey(); // optional: image sourcing for the design build
   if (storedUnsplashKey) process.env.UNSPLASH_ACCESS_KEY = storedUnsplashKey;
+  const storedTurnstileToken = loadStoredTurnstileToken(); // optional: the site forms' spam protection
+  if (storedTurnstileToken) process.env.CLOUDFLARE_API_TOKEN = storedTurnstileToken;
   const storedPexelsKey = loadStoredPexelsKey(); // optional: the second image library
   if (storedPexelsKey) process.env.PEXELS_API_KEY = storedPexelsKey;
   const storedPixabayKey = loadStoredPixabayKey(); // optional: the third, and video

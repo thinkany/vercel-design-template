@@ -446,7 +446,8 @@ match answers; `--source <name>` forces one, and a `get` must name the source it
 
 ```bash
 node scripts/find-images.mjs search "lifted off-road truck mountain dusk" --orientation landscape --per 8
-node scripts/find-images.mjs get <id> --out public/images/hero.avif
+node scripts/find-images.mjs get <id> --source pexels --out public/images/hero.avif     # Pexels / Pixabay: a file
+node scripts/find-images.mjs get <id> --source unsplash                                 # Unsplash: a hotlinked src
 ```
 
 `search` reports the `source` it answered from and returns candidates with a description,
@@ -460,11 +461,19 @@ reworded query, never a loop; a `get` costs one request (none on Pexels). The sc
 its calls and spills to the next library on its own, per query, when one has no budget, no
 match, or a bad moment. **Exit 4** means every connected library is spent for now and
 **exit 5** that none had a match: either way use the plain path for that spot, don't retry.
-`get` writes the AVIF into `public/images/` **and records the credit** (photographer,
-links) in `credits.json` for you, so steps 1 and 5 below are already done for that image.
-Every Unsplash, Pexels and Pixabay photo is free to use, so the licence badge never flags
-them. A missing key (exit 3) means the whole build uses the plain path. Don't paste any
-library key anywhere.
+From Pexels or Pixabay, `get` writes the AVIF into `public/images/` **and records the
+credit** (photographer, links) in `credits.json` for you, so steps 1 and 5 below are
+already done for that image. **From Unsplash, `get` copies nothing:** Unsplash's terms
+ask that its photos are shown from Unsplash, so the result is `{ hotlinked: true, src,
+srcset }` on `images.unsplash.com`. Use `src` as the image's `src` exactly as returned
+(add `srcset` + `sizes` on a full-bleed spot; the CDN serves AVIF/WebP on its own); never
+`curl` it into `public/`, never strip its query string. The credit is recorded keyed by
+that URL. Their CDN is fast and CORS-open, so it renders in the preview, the Figma export
+and the built site alike. Tell the designer in the wrap-up which photos are served from
+Unsplash and that any of them can be swapped for their own image at any time. Every
+Unsplash, Pexels and Pixabay photo is free to use, so the licence badge never flags them.
+A missing key (exit 3) means the whole build uses the plain path. Don't paste any library
+key anywhere.
 
 Without a key, source over plain HTTP:
 

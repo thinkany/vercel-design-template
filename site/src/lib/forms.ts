@@ -39,7 +39,10 @@ export const formDef = z.object({
   replyTo: z.string().default(""),
   /** A field id whose value becomes the reply-to (replyTo is the fallback). */
   replyToField: z.string().default(""),
-  recaptcha: z.boolean().default(false),
+  /** Spam protection: Cloudflare Turnstile on this form (the site key lives in content/site.json). */
+  turnstile: z.boolean().default(false),
+  /** The toggle's old name; read as `turnstile` (see below), never written. */
+  recaptcha: z.boolean().optional(),
   updated: z.string().optional(),
 });
 export type FormDef = z.infer<typeof formDef>;
@@ -69,7 +72,9 @@ try {
 const byId: Record<string, FormDef> = {};
 for (const [file, raw] of Object.entries(files)) {
   const id = file.replace(/^.*\//, "").replace(/\.json$/, "");
-  const parsed = formDef.safeParse({ id, ...(raw && typeof raw === "object" ? raw : {}) });
+  const obj = raw && typeof raw === "object" ? { ...(raw as Record<string, unknown>) } : {};
+  if (obj.turnstile == null && obj.recaptcha) obj.turnstile = true; // forms saved before the rename
+  const parsed = formDef.safeParse({ id, ...obj });
   if (parsed.success) byId[parsed.data.id] = parsed.data;
   else console.warn(`[forms] content/forms/${id}.json is invalid: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
 }

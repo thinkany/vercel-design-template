@@ -422,7 +422,7 @@ function generatePassword() {
 // (Astro, dist-site, no noindex header), no gate (middleware.js is not uploaded, no
 // gate env), and SITE_URL set BEFORE the build (Astro bakes it into canonical links,
 // og:url, sitemap and robots), which means the domain is attached before the deploy.
-async function publishProject({ token, teamId, projectDir, projectName, env, siteEnv, password, customDomain, target = "preview", onProgress }) {
+async function publishProject({ token, teamId, projectDir, projectName, env, siteEnv, prepareSiteEnv, password, customDomain, target = "preview", onProgress }) {
   const emit = (step, status, detail) => onProgress && onProgress({ step, status, detail });
   const t = TARGETS[target] || TARGETS.preview;
   const isSite = target === "site";
@@ -454,10 +454,13 @@ async function publishProject({ token, teamId, projectDir, projectName, env, sit
   if (isSite) await attachDomain();
 
   if (isSite) {
+    // Spam protection (Turnstile): the widget wants the site's hostnames, known only now.
+    // The hook may also write into the project (the public site key), ahead of the upload.
+    const extraEnv = prepareSiteEnv ? await prepareSiteEnv({ url, projectId: project.id, projectName: project.name }) : null;
     emit("env", "run", "Setting the site address");
     await setEnv(token, teamId, project.id, "SITE_URL", url);
-    // Form delivery (FORMS_*): set what's configured, remove what was cleared.
-    for (const [k, v] of Object.entries(siteEnv || {})) {
+    // Form delivery (FORMS_*) and protection (TURNSTILE_*): set what's configured, remove what was cleared.
+    for (const [k, v] of Object.entries({ ...(siteEnv || {}), ...(extraEnv || {}) })) {
       if (v) await setEnv(token, teamId, project.id, k, String(v)); else await deleteEnv(token, teamId, project.id, k);
     }
     emit("env", "done", url.replace(/^https?:\/\//, ""));

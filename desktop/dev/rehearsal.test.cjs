@@ -28,9 +28,10 @@ for (const h of [
   "key:save", "key:clear",
   "license:save", "license:clear",
   "license:designSave", "license:designClear",
-  "unsplash:save", "unsplash:clear",
+  "unsplash:save", "unsplash:clear", "unsplash:connect",
   "pexels:save", "pexels:clear",
   "pixabay:save", "pixabay:clear",
+  "turnstile:save", "turnstile:clear",
   "usage:set",
 ]) {
   ok(/if \(rehearsing\(\)\)/.test(handler(h)), `${h} must bail out while rehearsing (it writes real state)`);
@@ -41,8 +42,10 @@ for (const [h, write] of [
   ["key:save", "storeKey("],
   ["license:designSave", "storeDesignLicense("],
   ["unsplash:save", "storeUnsplashKey("],
+  ["unsplash:connect", "storeUnsplashKey("],
   ["pexels:save", "storePexelsKey("],
   ["pixabay:save", "storePixabayKey("],
+  ["turnstile:save", "storeTurnstileToken("],
   ["usage:set", "setUiState("],
 ]) {
   const body = handler(h);
@@ -53,7 +56,7 @@ for (const [h, write] of [
 // ---- Everything READS as a fresh install ------------------------------------
 for (const h of [
   "key:status", "usage:get", "license:status", "license:designStatus",
-  "unsplash:status", "pexels:status", "pixabay:status", "video:sources",
+  "unsplash:status", "pexels:status", "pixabay:status", "video:sources", "turnstile:status",
 ]) {
   ok(/rehearsing\(\)|asFreshInstall\(/.test(handler(h)), `${h} must report a fresh install while rehearsing`);
 }

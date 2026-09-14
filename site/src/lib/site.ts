@@ -63,7 +63,9 @@ export const siteSchema = z.object({
     provider: z.enum(["", "resend", "postmark", "sendgrid"]).default(""),
     /** The verified sender, "Website <forms@client.com>". */
     from: z.string().default(""),
-  }).default({ provider: "", from: "" }),
+    /** Cloudflare Turnstile site key (public): the widget a protected form renders. Written by the app at publish, or pasted by hand. */
+    turnstileSiteKey: z.string().default(""),
+  }).default({ provider: "", from: "", turnstileSiteKey: "" }),
   /** Redirects (Settings): an old path to a new path or address, with the status code. */
   redirects: z.array(z.object({ from: z.string(), to: z.string(), type: z.number().default(301) })).default([]),
   /** CMS display names per block key (recognition only; the site doesn't use them). */

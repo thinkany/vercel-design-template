@@ -3,18 +3,21 @@
 //
 //   node scripts/find-images.mjs search "<query>" [--orientation landscape|portrait|squarish]
 //                                                  [--color <hint>] [--per 8] [--page 1]
-//   node scripts/find-images.mjs get <id> --out public/images/<name>.avif [--width 2400]
+//   node scripts/find-images.mjs get <id> --source pexels|pixabay --out public/images/<name>.avif [--width 2400]
+//   node scripts/find-images.mjs get <id> --source unsplash [--width 2400]      → a hotlinked src
 //   node scripts/find-images.mjs status
 //
 // `search` prints JSON candidates: id, a description and alt text, the dominant colour,
 // size and orientation, the photographer, and a small thumb URL (for a look, if wanted).
-// `get` takes one candidate into public/images as AVIF (JPG when sharp is unavailable),
-// records the attribution in public/images/credits.json, and reports the file. The
-// library's terms are honoured here: the download endpoint is triggered on every take,
-// and the credit carries the photographer and links for the site to show.
+// `get` takes one candidate. From Pexels or Pixabay it lands in public/images as AVIF
+// (JPG when sharp is unavailable). From Unsplash it is NOT copied: Unsplash's terms ask
+// that photos are shown from their CDN, so `get` returns a sized `src` (and a `srcset`)
+// on images.unsplash.com to use as-is, after triggering the download endpoint. Either
+// way the attribution lands in public/images/credits.json (keyed by the file, or by the
+// hotlinked URL) with the photographer and links for the site to show.
 //
-// Sources: Unsplash (UNSPLASH_ACCESS_KEY), Pexels (PEXELS_API_KEY) and Pixabay
-// (PIXABAY_API_KEY), the designer's own keys from Keys & Licenses.
+// Sources: Unsplash (UNSPLASH_ACCESS_KEY: minted by Connect with Unsplash, or the
+// designer's own), Pexels (PEXELS_API_KEY) and Pixabay (PIXABAY_API_KEY) from Keys & Licenses.
 // `--source unsplash|pexels|pixabay|auto` (default auto: each search walks the connected
 // libraries in order, Unsplash → Pexels → Pixabay, and the first one with budget and a
 // result answers). Colour hints: Unsplash black_and_white, black, white, yellow, orange,
@@ -31,14 +34,36 @@ import {
 const ROOT = process.cwd();
 export { recordCredit, writeImage, BudgetError };
 
+// The library endpoints. TA_STOCK_TEST_BASE points them at a local stub for
+// desktop/dev/find-images.test.mjs; unset (always, in a real project) they are the
+// libraries themselves.
+const TEST_BASE = process.env.TA_STOCK_TEST_BASE || "";
+const UNSPLASH_API = TEST_BASE ? `${TEST_BASE}/unsplash` : "https://api.unsplash.com";
+const PEXELS_API = TEST_BASE ? `${TEST_BASE}/pexels/v1` : "https://api.pexels.com/v1";
+const PIXABAY_API = TEST_BASE ? `${TEST_BASE}/pixabay/api/` : "https://pixabay.com/api/";
+
+// A hotlinked Unsplash photo at a width: their CDN (imgix) sizes on the fly, `auto=format`
+// serves AVIF/WebP to browsers that take it, and `ixid` (kept from `raw`) is the view
+// attribution their terms want.
+export function unsplashSrc(raw, width) {
+  const u = new URL(raw);
+  u.searchParams.set("w", String(width));
+  u.searchParams.set("auto", "format");
+  u.searchParams.set("fit", "max");
+  u.searchParams.set("q", "80");
+  return u.toString();
+}
+const SRCSET_WIDTHS = [640, 1024, 1600, 2400];
+
 const SOURCES = {
   unsplash: {
     id: "unsplash",
     key: () => (process.env.UNSPLASH_ACCESS_KEY || "").trim(),
     keyName: "UNSPLASH_ACCESS_KEY",
     label: "Unsplash",
+    hotlink: true, // shown from Unsplash's CDN, never copied into public/ (their terms)
     async search({ query, orientation, color, per, page }) {
-      const u = new URL("https://api.unsplash.com/search/photos");
+      const u = new URL(`${UNSPLASH_API}/search/photos`);
       u.searchParams.set("query", query);
       u.searchParams.set("per_page", String(per));
       u.searchParams.set("page", String(page));
@@ -65,20 +90,20 @@ const SOURCES = {
       const h = { Authorization: `Client-ID ${this.key()}`, "Accept-Version": "v1" };
       let p = cachedItem("unsplash", "photos", id);
       if (!p) {
-        const res = await api("unsplash", "Unsplash", `https://api.unsplash.com/photos/${encodeURIComponent(id)}`, h);
+        const res = await api("unsplash", "Unsplash", `${UNSPLASH_API}/photos/${encodeURIComponent(id)}`, h);
         if (!res.ok) throw new Error(`Unsplash photo ${id}: HTTP ${res.status}`);
         const j = await res.json();
         p = { id, raw: j.urls.raw, download_location: j.links.download_location, html: j.links.html, description: j.description || j.alt_description || "", user: { name: j.user && j.user.name || "", html: j.user && j.user.links && j.user.links.html || "" } };
       }
-      // The terms: trigger the download endpoint whenever a copy is taken (one counted call).
+      // The terms: trigger the download endpoint whenever a photo is used (one counted
+      // call), and show the photo from their CDN rather than a copy. So no bytes here:
+      // a sized `src` plus a `srcset` for the design to hotlink.
       if (p.download_location) { try { await api("unsplash", "Unsplash", p.download_location, h); } catch (e) { if (e instanceof BudgetError) throw e; } }
-      const u = new URL(p.raw);
-      u.searchParams.set("w", String(width)); u.searchParams.set("q", "85"); u.searchParams.set("fm", "jpg"); u.searchParams.set("fit", "max");
-      const img = await fetch(u);
-      if (!img.ok) throw new Error(`Unsplash file ${id}: HTTP ${img.status}`);
+      const src = unsplashSrc(p.raw, width);
+      const srcset = SRCSET_WIDTHS.filter((w) => w <= width).map((w) => `${unsplashSrc(p.raw, w)} ${w}w`).join(", ");
       return {
-        bytes: Buffer.from(await img.arrayBuffer()),
-        credit: { source: "unsplash.com", url: utm(p.html), free: true, author: p.user.name, authorUrl: utm(p.user.html), description: p.description },
+        src, srcset,
+        credit: { source: "unsplash.com", url: utm(p.html), free: true, hotlinked: true, author: p.user.name, authorUrl: utm(p.user.html), description: p.description },
       };
     },
   },
@@ -88,7 +113,7 @@ const SOURCES = {
     keyName: "PEXELS_API_KEY",
     label: "Pexels",
     async search({ query, orientation, color, per, page }) {
-      const u = new URL("https://api.pexels.com/v1/search");
+      const u = new URL(`${PEXELS_API}/search`);
       u.searchParams.set("query", query);
       u.searchParams.set("per_page", String(per));
       u.searchParams.set("page", String(page));
@@ -113,7 +138,7 @@ const SOURCES = {
     async take(id, width) {
       let p = cachedItem("pexels", "photos", id);
       if (!p) {
-        const res = await api("pexels", "Pexels", `https://api.pexels.com/v1/photos/${encodeURIComponent(id)}`, { Authorization: this.key() });
+        const res = await api("pexels", "Pexels", `${PEXELS_API}/photos/${encodeURIComponent(id)}`, { Authorization: this.key() });
         if (!res.ok) throw new Error(`Pexels photo ${id}: HTTP ${res.status}`);
         const j = await res.json();
         p = { id: String(j.id), original: j.src && j.src.original, html: j.url, description: j.alt || "", user: { name: j.photographer || "", html: j.photographer_url || "" } };
@@ -135,7 +160,7 @@ const SOURCES = {
     keyName: "PIXABAY_API_KEY",
     label: "Pixabay",
     async search({ query, orientation, color, per, page }) {
-      const u = new URL("https://pixabay.com/api/");
+      const u = new URL(PIXABAY_API);
       u.searchParams.set("key", this.key());
       u.searchParams.set("q", query);
       // Pixabay wants 3-200; anything smaller comes back as a validation error.
@@ -165,7 +190,7 @@ const SOURCES = {
     async take(id) {
       let p = cachedItem("pixabay", "photos", id);
       if (!p) {
-        const u = new URL("https://pixabay.com/api/");
+        const u = new URL(PIXABAY_API);
         u.searchParams.set("key", this.key());
         u.searchParams.set("id", String(id));
         const res = await api("pixabay", "Pixabay", u, {});
@@ -219,20 +244,33 @@ async function main() {
   }
   if (cmd === "get") {
     const id = a._[1]; const out = a.out;
-    if (!id || !out) { console.error("get needs <id> --out public/images/<name>.avif"); process.exit(2); }
+    if (!id) { console.error("get needs <id>"); process.exit(2); }
     // A `get` must name the library its `search` reported: ids aren't portable between them.
-    const src = forced || (connected().length === 1 ? connected()[0] : null);
-    if (!src) { console.error(`get needs --source (${connected().map((s) => s.id).join(" / ")}): name the library the search reported.`); process.exit(2); }
+    const lib = forced || (connected().length === 1 ? connected()[0] : null);
+    if (!lib) { console.error(`get needs --source (${connected().map((s) => s.id).join(" / ")}): name the library the search reported.`); process.exit(2); }
+    const width = Math.min(4000, parseInt(a.width || "2400", 10) || 2400);
+    if (lib.hotlink) {
+      // Nothing lands in public/: the photo is shown from the library's CDN. The credit
+      // is keyed by that URL, and `--out` is ignored (with a note, not a failure).
+      const { src, srcset, credit } = await lib.take(id, width);
+      // Keyed by the photo (its CDN path, without our sizing), so taking it again at
+      // another width updates one entry; `src` carries the last size handed out.
+      const key = new URL(src);
+      const n = recordCredit(ROOT, `${key.origin}${key.pathname}`, { ...credit, src });
+      console.log(JSON.stringify({ source: lib.id, hotlinked: true, src, srcset, credit, credits: n, note: `${lib.label} photos are shown from ${lib.label}'s CDN (their terms): use src as the image's src${out ? "; --out was ignored" : ""}.` }));
+      return;
+    }
+    if (!out) { console.error(`get from ${lib.label} needs --out public/images/<name>.avif`); process.exit(2); }
     const abs = path.resolve(ROOT, out);
     if (!abs.startsWith(path.join(ROOT, "public", "images") + path.sep)) { console.error("--out must be under public/images/"); process.exit(2); }
-    const { bytes, credit } = await src.take(id, Math.min(4000, parseInt(a.width || "2400", 10) || 2400));
+    const { bytes, credit } = await lib.take(id, width);
     const written = await writeImage(bytes, abs);
     const file = path.basename(written);
     const n = recordCredit(ROOT, file, credit);
-    console.log(JSON.stringify({ source: src.id, file: `/images/${file}`, credit, credits: n }));
+    console.log(JSON.stringify({ source: lib.id, file: `/images/${file}`, credit, credits: n }));
     return;
   }
-  console.error("usage: find-images.mjs search <query> [--source unsplash|pexels|pixabay|auto] [--orientation ..] [--color ..] [--per 8] | get <id> --source <the search's source> --out public/images/<name>.avif [--width 2400] | status");
+  console.error("usage: find-images.mjs search <query> [--source unsplash|pexels|pixabay|auto] [--orientation ..] [--color ..] [--per 8] | get <id> --source <the search's source> [--out public/images/<name>.avif, not for unsplash] [--width 2400] | status");
   process.exit(2);
 }
 

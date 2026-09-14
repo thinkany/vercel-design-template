@@ -123,7 +123,11 @@ contextBridge.exposeInMainWorld("desktop", {
   getUnsplashStatus: () => ipcRenderer.invoke("unsplash:status"),
   saveUnsplashKey: (key) => ipcRenderer.invoke("unsplash:save", { key }),
   clearUnsplashKey: () => ipcRenderer.invoke("unsplash:clear"),
+  // One click: sign in to Unsplash in the browser, and the app receives its own key.
+  connectUnsplash: () => ipcRenderer.invoke("unsplash:connect"),
   getImageUsage: () => ipcRenderer.invoke("images:usage"),
+  // The clipboard's text, only if it is shaped like that library's key (else null).
+  readClipboardKey: (shape) => ipcRenderer.invoke("clipboard:key", { shape }),
   getPexelsStatus: () => ipcRenderer.invoke("pexels:status"),
   savePexelsKey: (key) => ipcRenderer.invoke("pexels:save", { key }),
   clearPexelsKey: () => ipcRenderer.invoke("pexels:clear"),
@@ -136,6 +140,10 @@ contextBridge.exposeInMainWorld("desktop", {
   getPixabayStatus: () => ipcRenderer.invoke("pixabay:status"),
   savePixabayKey: (key) => ipcRenderer.invoke("pixabay:save", { key }),
   clearPixabayKey: () => ipcRenderer.invoke("pixabay:clear"),
+  // Cloudflare Turnstile: one API token; the app makes each site's widget at publish.
+  getTurnstileStatus: () => ipcRenderer.invoke("turnstile:status"),
+  saveTurnstileToken: (key, accountId) => ipcRenderer.invoke("turnstile:save", { key, accountId }),
+  clearTurnstileToken: () => ipcRenderer.invoke("turnstile:clear"),
 
   // ---- Publish (direct-to-Vercel) ----
   getVercelStatus: () => ipcRenderer.invoke("vercel:status"),
@@ -181,6 +189,10 @@ contextBridge.exposeInMainWorld("desktop", {
   onPhoneReceived: (cb) => { const l = (_e, p) => cb(p); ipcRenderer.on("phone:received", l); return () => ipcRenderer.removeListener("phone:received", l); },
   onPhoneExpired: (cb) => { const l = (_e, p) => cb(p); ipcRenderer.on("phone:expired", l); return () => ipcRenderer.removeListener("phone:expired", l); },
   getFormsDelivery: () => ipcRenderer.invoke("site:formsDelivery"),
+  // Spam protection (Cloudflare Turnstile) for this site: what is set up, and the
+  // hand-pasted keys when no token is connected.
+  getFormsProtection: () => ipcRenderer.invoke("site:formsProtection"),
+  saveFormsProtection: (siteKey, secret) => ipcRenderer.invoke("site:saveFormsProtection", { siteKey, secret }),
   saveFormsDelivery: (provider, from, key) => ipcRenderer.invoke("site:saveFormsDelivery", { provider, from, key }),
   testFormsDelivery: (to) => ipcRenderer.invoke("forms:test", { to }),
   // Media: the project's public/images for the image picker.

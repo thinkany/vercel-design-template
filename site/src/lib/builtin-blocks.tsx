@@ -25,6 +25,27 @@ import { z } from "astro/zod";
 import { defineBlock, formRef, richtext, type BlockDef } from "./blocks";
 import { Rich } from "./Rich";
 import { formById, pageRouteOf, FORM_UI, type FormDef, type FormField } from "./forms";
+import { site } from "./site";
+
+// Spam protection (Cloudflare Turnstile) on a form that has it on. The widget renders
+// into the slot below and puts its token into the form as `cf-turnstile-response`, so
+// the client's JSON post and a native post both carry it; /api/forms verifies it. The
+// site key is public (content/site.json, written by the app at publish or pasted by
+// hand). With none yet, the dev server shows the widget with Cloudflare's always-pass
+// test key, so the designer sees it in place before any account exists; a build with
+// no key renders no slot. The script loads once per page and never in the design
+// surface's preview (window.__taFormsPreview).
+const TURNSTILE_TEST_SITEKEY = "1x00000000000000000000AA";
+const TURNSTILE_LOADER = "(function(){if(window.__taFormsPreview||window.__taTurnstile)return;window.__taTurnstile=1;var s=document.createElement('script');s.src='https://challenges.cloudflare.com/turnstile/v0/api.js';s.async=true;s.defer=true;document.head.appendChild(s);})();";
+function turnstileSiteKey(): string {
+  const real = (site.forms && site.forms.turnstileSiteKey) || "";
+  if (real) return real;
+  let dev = false;
+  try { dev = !!(import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV; } catch { /* not under Vite */ }
+  return dev ? TURNSTILE_TEST_SITEKEY : "";
+}
+/** The action Turnstile stamps on the token (the endpoint checks it against the form). */
+export const turnstileAction = (formId: string) => formId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32);
 import { entriesOf, entryById, byDateDesc, types as contentTypes, ENTRIES_UI, type Entry } from "./entries";
 
 const codeProps = z.object({
@@ -120,6 +141,12 @@ export function FormBody({ def, children }: { def: FormDef; children?: React.Rea
         <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", width: 1, height: 1, overflow: "hidden" }}>
           <label>Website<input type="text" name="website" tabIndex={-1} autoComplete="off" /></label>
         </div>
+        {def.turnstile && turnstileSiteKey() && (
+          <>
+            <div className="cf-turnstile mb-4" data-sitekey={turnstileSiteKey()} data-action={turnstileAction(def.id)} data-theme="auto" />
+            <script dangerouslySetInnerHTML={{ __html: TURNSTILE_LOADER }} />
+          </>
+        )}
         <div data-ta-form-error="" hidden role="alert" className="font-ta-sans text-[14px] text-red-700 mb-4">{FORM_UI.error}</div>
         <button type="submit" className="font-ta-sans text-xs font-medium tracking-[0.1em] uppercase text-white bg-ta-primary px-[22px] py-[12px] rounded-[3px] cursor-pointer disabled:opacity-60">
           {def.submit.label || "Submit"}

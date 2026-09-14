@@ -9,6 +9,7 @@
 //   FORMS_PROVIDER_KEY  the provider's API key
 //   FORMS_FROM          the verified sender, "Website <forms@client.com>"
 //   FORMS_SITE_NAME     the client name, for the subject line
+//   TURNSTILE_SECRET    the site's Cloudflare Turnstile secret, when spam protection is on
 // Locally, Astro dev answers this route with a preview stub (forms-dev.mjs).
 import fs from "node:fs";
 import path from "node:path";
@@ -19,6 +20,29 @@ const ID = /^[a-z0-9][a-z0-9-]*$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_LEN = { textarea: 5000, other: 500 };
 const MIN_MS = 3000; // faster than this is not a person
+const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+let warnedNoSecret = false;
+
+// Cloudflare Turnstile, for a form with spam protection on. The widget puts its token in
+// the form as `cf-turnstile-response`, so both the client's JSON post and a native post
+// carry it. Not a pass (or a token minted for another form): dropped quietly, like the
+// honeypot. No secret in the environment: deliver anyway and say so once in the log (the
+// publish panel is where the designer is told). Cloudflare unreachable: fail open.
+async function turnstilePasses(def, body, req) {
+  if (!(def.turnstile || def.recaptcha)) return true; // `recaptcha` is the toggle's old name
+  const secret = process.env.TURNSTILE_SECRET;
+  if (!secret) { if (!warnedNoSecret) { warnedNoSecret = true; console.warn("[forms] spam protection is on but TURNSTILE_SECRET is not set; delivering unchecked"); } return true; }
+  const token = String(body["cf-turnstile-response"] || "");
+  if (!token) return false;
+  const remoteip = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || undefined;
+  try {
+    const res = await fetch(SITEVERIFY, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ secret, response: token, remoteip }) });
+    const j = await res.json();
+    if (j.success !== true) return false;
+    const action = String(def.id).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32); // as the block stamps it
+    return !j.action || j.action === action;
+  } catch (e) { console.error("[forms] turnstile unreachable, delivering unchecked:", e && e.message); return true; }
+}
 
 function projectRoot() {
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -58,6 +82,7 @@ export default async function handler(req, res) {
   // Spam: a filled honeypot, or a submission faster than a person could type, is dropped quietly.
   const t = Number(body._t || 0);
   if (String(body.website || "").trim() || (t && Date.now() - t < MIN_MS)) return reply(200, { ok: true });
+  if (!(await turnstilePasses({ ...def, id }, body, req))) return reply(200, { ok: true });
   const next = typeof body._next === "string" && /^\/(?!\/)/.test(body._next) ? body._next : null;
 
   // Validate against the definition; unknown keys are ignored.

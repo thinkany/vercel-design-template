@@ -20,7 +20,7 @@ const REDACT = [
   /\bre_[A-Za-z0-9]{10,}\b/g,             // Resend
   /\bSG\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, // SendGrid
   /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, // Postmark / license-shaped tokens
-  /(ANTHROPIC_API_KEY|DERIVE_LICENSE_KEY|DESIGN_LICENSE_KEY|FORMS_LICENSE_KEY|FORMS_PROVIDER_KEY|RECAPTCHA_SECRET)\s*[=:]\s*\S+/g,
+  /(ANTHROPIC_API_KEY|DERIVE_LICENSE_KEY|DESIGN_LICENSE_KEY|FORMS_LICENSE_KEY|FORMS_PROVIDER_KEY|RECAPTCHA_SECRET|TURNSTILE_SECRET|CLOUDFLARE_API_TOKEN)\s*[=:]\s*\S+/g,
 ];
 function redact(text) { let t = String(text); for (const re of REDACT) t = t.replace(re, (m, k) => (k ? `${k}=[redacted]` : "[redacted]")); return t; }
 
