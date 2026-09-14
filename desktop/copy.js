@@ -1702,6 +1702,10 @@ window.COPY = {
           title: "Save the form",
           body: "Save form writes it, and every page that uses it picks up the change. Delete form removes it; any Form block that used it shows no form until you pick another.",
         },
+        siteProtection: {
+          title: "Spam protection, once per site",
+          body: "Cloudflare Turnstile keeps bots off the forms that have Spam protection on. With a Cloudflare token connected under Keys & Licenses, the app makes this site\u2019s widget at publish and keeps it up to date; without one, paste the widget\u2019s keys here yourself. Turn protection on per form, under Delivery.",
+        },
         siteDelivery: {
           title: "Delivery, once per site",
           body: "How submissions actually get sent: a transactional mail service you connect once for this site. Pick the service, paste its key and set the from address, then send a test. The key stays in the app and reaches the site’s hosting at publish; it’s never written into the project.",
@@ -1842,6 +1846,10 @@ window.COPY = {
       unsplashKey: {
         title: "Photo libraries, optional",
         body: "Connect Unsplash with one click (sign in, click Allow) or add a Pexels or Pixabay key, and a build searches the library for photos that match the brief and records the photographer credit. All are free. Unsplash photos are served from Unsplash rather than copied into the project, and any photo can be replaced with your own. Skip them and images are found the plain way.",
+      },
+      turnstileToken: {
+        title: "Spam protection for forms, optional",
+        body: "One Cloudflare API token, pasted with your Account ID, and the app makes a Turnstile widget for every site you publish: a small check visitors complete without a puzzle, no cookies, no badge. Skip it and forms still send with the built-in honeypot; you can connect it later.",
       },
       closeDrawer: {
         title: "Closing a drawer",

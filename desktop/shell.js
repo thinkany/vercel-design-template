@@ -1984,6 +1984,7 @@ const TOUR_STEPS = [
   // your own keys first (Claude, then the photo/video libraries), then the two licences.
   { copy: "claudeKey", onEnter: () => ensureModal("licenses"), target: inDrawer("claude-key"), placement: "right" },
   { copy: "unsplashKey", onEnter: () => ensureModal("licenses"), target: inDrawer("unsplash-key"), placement: "right" },
+  { copy: "turnstileToken", onEnter: () => ensureModal("licenses"), target: inDrawer("turnstile-token"), placement: "right" },
   { copy: "figmaLicense", onEnter: () => ensureModal("licenses"), target: inDrawer("figma-license"), placement: "right" },
   { copy: "designLicense", onEnter: () => ensureModal("licenses"), target: inDrawer("design-license"), placement: "right" },
   { copy: "closeDrawer", onEnter: () => ensureModal("licenses"), target: () => modalClose, placement: "right" },
@@ -2101,6 +2102,7 @@ const CMS_TOUR_STEPS = [
   cmsStep("formDelivery", "cms-form-delivery", "left", () => ensureCmsTab("forms")),
   cmsStep("formActions", "cms-form-actions", "top", () => ensureCmsTab("forms")),
   cmsStep("siteDelivery", "cms-forms-delivery", "right", () => ensureCmsTab("forms")),
+  cmsStep("siteProtection", "cms-forms-protection", "right", () => ensureCmsTab("forms")),
   ]),
   // Media: the tab, Images/Files, folders, adding one, the library bar, then the grid.
   ...withTab("media", [
@@ -2393,9 +2395,17 @@ async function tourShow(i) {
     return;
   }
   tourTarget = target;
-  // A folded drawer section (the CMS accordions) opens so the tip has something to show.
+  // A folded section (the CMS accordions, the drawer's key folds) opens so the tip has
+  // something to show: the target's own fold, and every folded section it sits inside.
+  // A tip opened straight from the help list can land in a section the designer shut
+  // (the Forms list, say); without this the tip drew at the window's top-left corner.
   if (target.classList && target.classList.contains("site-acc") && !target.classList.contains("open")) {
     const head = target.querySelector(".site-acc-head"); if (head) head.click();
+  }
+  for (let el = target.parentElement; el && el !== document.body; el = el.parentElement) {
+    if (!(el.classList && el.classList.contains("site-acc-body") && el.hidden)) continue;
+    const head = el.previousElementSibling;
+    if (head && head.classList.contains("site-acc-head")) head.click();
   }
   // Bring a drawer target into view: centred when it fits comfortably, top-aligned when
   // it's taller than most of the window (so its heading stays visible).

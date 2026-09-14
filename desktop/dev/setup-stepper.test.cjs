@@ -29,13 +29,13 @@ for (const id of ids) ok(order.includes(id), `${id} is defined but never shown`)
 // array). A designer who meets them in one order and revisits them in another is being
 // told two different things about how the app is organised.
 const drawerSrc = shell.slice(shell.indexOf("async function renderLicenses"));
-const folds = [...drawerSrc.matchAll(/tourId: "([a-z]+-(?:key|license))"/g)].map((m) => m[1]).slice(0, 6);
+const folds = [...drawerSrc.matchAll(/tourId: "([a-z]+-(?:key|license|token))"/g)].map((m) => m[1]).slice(0, 7);
 ok(JSON.stringify(folds) === JSON.stringify(
-  ["claude-key", "unsplash-key", "pexels-key", "pixabay-key", "figma-license", "design-license"]),
+  ["claude-key", "unsplash-key", "pexels-key", "pixabay-key", "turnstile-token", "figma-license", "design-license"]),
   `the Keys drawer runs in the same order; got ${JSON.stringify(folds)}`);
 const tourBlock = shell.slice(shell.indexOf("const TOUR_STEPS = ["), shell.indexOf("const onGate ="));
-const tips = [...tourBlock.matchAll(/copy: "(claudeKey|unsplashKey|figmaLicense|designLicense)"/g)].map((m) => m[1]);
-ok(JSON.stringify(tips) === JSON.stringify(["claudeKey", "unsplashKey", "figmaLicense", "designLicense"]),
+const tips = [...tourBlock.matchAll(/copy: "(claudeKey|unsplashKey|turnstileToken|figmaLicense|designLicense)"/g)].map((m) => m[1]);
+ok(JSON.stringify(tips) === JSON.stringify(["claudeKey", "unsplashKey", "turnstileToken", "figmaLicense", "designLicense"]),
   `the walkthrough tips walk the drawer top to bottom; got ${JSON.stringify(tips)}`);
 
 // Only the Claude key is required: the studio cannot run without it, and everything
