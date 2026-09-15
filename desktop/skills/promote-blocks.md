@@ -61,7 +61,7 @@ A block is one file in `site/blocks/`, exporting a definition:
 import { z } from "astro/zod";
 import { defineBlock, richtext } from "../src/lib/blocks";
 import { Rich } from "../src/lib/Rich";
-import { Reveal } from "./lib/Reveal";
+import { Reveal, reveal } from "./lib/Reveal";
 import { anchor, image, link } from "./lib/schema";
 
 const props = z.object({
@@ -232,7 +232,7 @@ almost every design and each has one translation:
 
 | In the design | In the block |
 |---|---|
-| `motion` / `<Reveal>` from `motion/react` (whileInView, initial/animate) | `<Reveal delay={0.15}>` from `./lib/Reveal` (a `data-reveal` div; the site animates it with CSS + one observer, no runtime) |
+| `motion` / `<Reveal>` from `motion/react` (whileInView, initial/animate) | `<Reveal delay={0.15}>` from `./lib/Reveal` (a `data-reveal` div; the site animates it with CSS + one observer, no runtime). **Inside a grid or flex row, spread instead of wrapping**: `{...reveal(0.15)}` from the same file, because `<Reveal>`'s div would become the grid item and the real element would stop being one |
 | `<Parallax>` from `@/app/components/Parallax` | `<Parallax>` from `./lib/Parallax`, same props and markup (the CSS in `src/styles/motion.css` ships with the site, no runtime); if `lib/Parallax.tsx` is missing, copy it from the design's component verbatim |
 | CSS scroll-driven animation in the variation's `globals.css` (`animation-timeline: view()`/`scroll()`, a scrub, a fill) | the same CSS, moved to `site/blocks/blocks.css` with its `@supports` + reduced-motion guards; the ancestor chain must stay `overflow-clip`, never `hidden` |
 | `motion` `whileHover` / `whileTap` | Tailwind `transition-*` + `hover:` / `active:` classes on the same element |

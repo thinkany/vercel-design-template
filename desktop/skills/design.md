@@ -755,7 +755,7 @@ lost on the published site unless it has the CSS translation below.
 
 | Effect | In the design, use | On the site it becomes |
 |---|---|---|
-| Reveal on scroll (fade / slide / stagger in) | `motion` `whileInView` (`initial`/`animate`, `viewport={{ once: true }}`), or the `<Reveal>` pattern | `<Reveal delay>` (a `data-reveal` div, CSS + one observer). Carries. |
+| Reveal on scroll (fade / slide / stagger in) | `motion` `whileInView` (`initial`/`animate`, `viewport={{ once: true }}`), or the `<Reveal>` pattern | `<Reveal delay>` (a `data-reveal` div, CSS + one observer), or `{...reveal(delay)}` spread onto the element itself where a wrapper div would break a grid. Carries. |
 | Parallax (a photo drifting slower than the page) | `<Parallax>` (rule 8) | the same component, CSS only. Carries. |
 | Video (a moving hero background, a clip in a content row) | `<VideoBackground>` / `<VideoFigure>` (§4b-video) | the same components, CSS only. Carries. |
 | Scroll-linked progress (a bar filling, a mask opening, a scrub) | CSS scroll-driven animation: `animation-timeline: view()` / `scroll()` in the variation's `styles/globals.css` (promoted: `site/blocks/blocks.css`), wrapped in `@supports`, on an `overflow-clip` (never `hidden`) ancestor chain | the same CSS. Carries. |
