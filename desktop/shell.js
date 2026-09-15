@@ -11831,7 +11831,8 @@ async function reviewDesign(id, page) {
 }
 
 // The critique prompt: point the Art Director at the design's files, hand it the lint
-// findings as established fact, and ask for the judgment a lint can't make. Read-only.
+// findings as grounding it never repeats or argues with in front of the designer, and ask
+// for the judgment a lint can't take. Read-only.
 function buildArtDirectorCritiquePrompt(id, res) {
   const findings = (res.findings || [])
     .map((f) => `- [${f.severity}/${f.rule}] ${f.line ? `${f.file}:${f.line}` : f.file} · ${f.message}`)
@@ -11867,14 +11868,14 @@ function buildArtDirectorCritiquePrompt(id, res) {
     reads,
     ``,
     directionBlock,
-    `An automated rule + palette pass already ran. Treat these as established fact to build on, not something to re-derive or merely repeat:`,
+    `An automated rule + palette pass already ran. Build on it rather than re-deriving or repeating it. The designer never sees this list, so your writing must never mention, quote, correct or refer to it: no "the lint", no rule names, no class names, nothing addressed to the builder. If a finding looks wrong to you once you have read the code, leave it out; a suggestion card only carries what you stand behind:`,
     findings,
     ``,
     `Now give the judgment the lint can't: visual hierarchy, spacing rhythm and balance, type pairing and scale, palette harmony and how the palette carries the mood, imagery, ${directionJudgment}`,
     ``,
     `Your written read is SHORT: a paragraph or two on what's working and where the page stands overall. The specific changes do NOT go here, they go in the suggestion cards below, where the designer sees each one highlighted on the page. Don't write them twice. Do NOT edit anything; this is advisory.`,
     ``,
-    `Then, ONCE, call the \`suggest\` tool (mcp__artdirector__suggest) with your actionable items as structured cards, most impactful first. For each: a short imperative title, a one-line why, targets (file:line), and a kind: "code" (the builder can edit it: ${applyWhere}), "asset" (needs a new/replacement file you can't source, e.g. a photo, no apply), or "decision" (a client/human call, no apply). ALWAYS give an \`anchor\` unless the suggestion is genuinely about the whole page at once (the overall palette, the overall density). The anchor is how the designer SEES the suggestion on their design instead of reading about it, so an anchorless card is one they have to go hunt for: prefer \`anchor.block\` (a data-block value on the section) or \`anchor.text\` (a short exact heading/button label from that element), and when a note covers several sections anchor it to the clearest one rather than leaving it off. Fold in the code-actionable lint findings above too.`,
+    `Then, ONCE, call the \`suggest\` tool (mcp__artdirector__suggest) with your actionable items as structured cards, most impactful first. For each: a short imperative title, a one-line why, targets (file:line), and a kind: "code" (the builder can edit it: ${applyWhere}), "asset" (needs a new/replacement file you can't source, e.g. a photo, no apply), or "decision" (a client/human call, no apply). ALWAYS give an \`anchor\` unless the suggestion is genuinely about the whole page at once (the overall palette, the overall density). The anchor is how the designer SEES the suggestion on their design instead of reading about it, so an anchorless card is one they have to go hunt for: prefer \`anchor.block\` (a data-block value on the section) or \`anchor.text\` (a short exact heading/button label from that element), and when a note covers several sections anchor it to the clearest one rather than leaving it off. Fold in the automated findings above that you stand behind, as cards in plain language.`,
   ].join("\n");
 }
 

@@ -100,6 +100,22 @@ const TA_COLOR_UTIL = /(?:^|[\s"'`([{])(bg|text|border|from|via|to|ring|fill|str
 function lintSource(file, colorRoles) {
   const findings = [];
   const lines = file.text.split("\n");
+  // A font that arrives through a shared class constant (`const LEAD = "font-ta-sans ..."`
+  // then className={`${LEAD} max-w-[60ch]`}) IS on the element, just not on the line.
+  // Collect the string constants carrying a font-ta-* so line-level rules can see through
+  // them, and let a rule look back inside a className that spans several lines.
+  const fontConsts = [];
+  for (const m of file.text.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(["'`])([\s\S]*?)\2/g))
+    if (/\bfont-ta-/.test(m[3])) fontConsts.push(new RegExp(`(?<![\\w$])${m[1].replace(/\$/g, "\\$")}(?![\\w$])`));
+  const lineHasFont = (l) => /\bfont-ta-/.test(l) || fontConsts.some((re) => re.test(l));
+  const carriesFont = (i) => {
+    if (lineHasFont(lines[i])) return true;
+    for (let k = i - 1, n = 0; k >= 0 && n < 6; k--, n++) {
+      if (lineHasFont(lines[k])) return true;
+      if (/className=|[<>]/.test(lines[k])) break; // the attribute opened, or another element
+    }
+    return false;
+  };
   // SITE BLOCKS — a two-column block (media beside text) without the shared `side`
   // prop can't alternate from the CMS. Report once, at the grid.
   if (/^site\/blocks\//.test(file.name) && !/^site\/blocks\/(Header|Footer)\.tsx$/.test(file.name) && /<img\b/.test(file.text) && !/mediaSide/.test(file.text)) {
@@ -153,9 +169,9 @@ function lintSource(file, colorRoles) {
     // resolve against the element's OWN font, so a max-w-[Nch] on a wrapper with no
     // font-ta-* family measures the inherited body font, not the heading's — and the
     // text wraps/stacks early. When a font-ta-* IS on the same element, the measure sits
-    // on the text element itself (correct) and is not flagged. (Line-level: a className
-    // split across lines can still false-positive; the common single-line case is precise.)
-    if (/\bmax-w-\[[\d.]+(?:ch|em)\]/.test(ln) && !/\bfont-ta-/.test(ln))
+    // on the text element itself (correct) and is not flagged. carriesFont sees a font that
+    // comes through a shared class constant or an earlier line of the same className.
+    if (/\bmax-w-\[[\d.]+(?:ch|em)\]/.test(ln) && !carriesFont(i))
       add("review", "font-relative-measure", "ch/em measure on an element with no font-ta-* of its own — it resolves against the inherited body font, not the heading's, so the text wraps/stacks early. Move max-w onto the text element that carries the font.");
   });
 
@@ -267,4 +283,4 @@ function reviewVariation(projectDir, variationId) {
   return { variationId, findings, counts, filesReviewed: files.map((f) => f.name), direction: readDirection(projectDir, variationId) };
 }
 
-module.exports = { reviewSitePage, reviewVariation, contrastRatio, parseTokens };
+module.exports = { reviewSitePage, reviewVariation, contrastRatio, parseTokens, lintSource };
