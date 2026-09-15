@@ -276,6 +276,35 @@ function extractDocText(absPath, ext) {
   }
 }
 
+/** Where the build can read a document's whole text. Plain text (.md/.txt) is the upload
+ *  itself; anything else is written out as derived/<id>.txt. Returns a references-dir
+ *  relative POSIX path, or null if the text could not be written. */
+function readableTextPath(projectDir, rec, ext, text) {
+  if (ext === ".md" || ext === ".markdown" || ext === ".txt") return rec.file;
+  try {
+    const derived = path.join(references.referencesDir(projectDir), "derived");
+    fs.mkdirSync(derived, { recursive: true });
+    fs.writeFileSync(path.join(derived, `${rec.id}.txt`), text, "utf8");
+    return path.posix.join("derived", `${rec.id}.txt`);
+  } catch { return null; }
+}
+
+/**
+ * The uploaded documents whose full text the build should read, as the build note lists
+ * them: { id, name, path, chars }, `path` relative to the PROJECT (what the agent opens).
+ */
+function readableDocuments(projectDir) {
+  let assets = [];
+  try { assets = references.listAssets(projectDir); } catch { return []; }
+  const out = [];
+  for (const a of assets) {
+    if (a.kind !== "document" || !a.text) continue;
+    if (!fs.existsSync(path.join(references.referencesDir(projectDir), a.text))) continue;
+    out.push({ id: a.id, name: a.name, path: path.posix.join(".thinkany", "references", a.text), chars: a.fullChars || a.chars || 0 });
+  }
+  return out;
+}
+
 // ---- Digest assembly --------------------------------------------------------
 
 function firstExcerpt(text) {
@@ -313,6 +342,12 @@ function ingest(projectDir, onlyIds = null) {
       rec.chars = Math.min(full, DOC_TEXT_CAP);
       rec.truncated = full > DOC_TEXT_CAP;
       rec.excerpt = firstExcerpt((text || "").slice(0, DOC_TEXT_CAP));
+      // The FULL text stays readable for the build (the digest only carries an excerpt):
+      // plain-text uploads are read where they sit; binary formats (pdf, docx, rtf, odt)
+      // get their extracted text written next door as derived/<id>.txt. `text` is the
+      // path, relative to the references dir, the build note points the agent at.
+      rec.fullChars = full;
+      rec.text = full ? readableTextPath(projectDir, rec, ext, text) : null;
       rec.ingested = full > 0;
       rec.summary = full ? `document, ${full} chars extracted` : `document (${note || "no text"})`;
       rec.ingestError = full ? null : (note || "no text extracted");
@@ -368,6 +403,7 @@ function writeDigest(projectDir, manifest, vision = null) {
       summary: a.summary || null,
       palette: a.palette || undefined,
       excerpt: a.excerpt || undefined,
+      text: a.text || undefined, // full text, relative to the references dir
       chars: a.chars || undefined,
       truncated: a.truncated || undefined,
       ingested: a.ingested,
@@ -424,7 +460,7 @@ function renderDigestMd(digest, nImages, nDocs) {
     if (a.kind === "image" && a.summary) {
       lines.push(`- **${a.name}:** ${a.summary}`);
     } else if (a.kind === "document" && a.excerpt) {
-      lines.push(`- **${a.name}:** "${a.excerpt}"${a.truncated ? " …(truncated)" : ""}`);
+      lines.push(`- **${a.name}:** "${a.excerpt}"${a.truncated ? " …(truncated)" : ""}${a.text ? ` (full text: \`${a.text}\`)` : ""}`);
     } else if (a.kind === "document" && a.summary && !a.ingestError) {
       // A document read without a text excerpt (e.g. a scanned PDF read as page images).
       lines.push(`- **${a.name}:** ${a.summary}`);
@@ -784,7 +820,7 @@ async function visionPass(projectDir, onlyIds = null, opts = {}) {
 }
 
 module.exports = {
-  ingest, readDigest, readDigestMd, visionPass,
+  ingest, readDigest, readDigestMd, visionPass, readableDocuments,
   // exported for offline tests:
   imagePalette, extractDocText, docxText, pdfText, readZipEntry, mergePalette,
   rasterizePdfPages, paletteFromRGBBytes,

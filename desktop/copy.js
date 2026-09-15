@@ -2453,7 +2453,7 @@ window.COPY = {
     // the first question, so it isn't overlooked; Continue hands it over to the rail.
     refsIntro: {
       label: "Anything we should look at?",
-      help: "Sites, screenshots, brand files, anything with the feel you're after. Add them now or any time: this panel moves to the right and stays with you through every question.",
+      help: "Sites, screenshots, brand files, a copy deck or content outline, anything with the feel you're after. Documents are read in full when the design is built. Add them now or any time: this panel moves to the right and stays with you through every question.",
       continue: "Continue",
     },
     // The start fork. Shown only when Figma is licensed (Start from Figma + Get Designing);

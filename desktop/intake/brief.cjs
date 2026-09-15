@@ -37,6 +37,8 @@
  * @property {string|null} heroMedia         Full-screen hero background material ("image" | "video").
  * @property {object[]|null} referenceAssets  Uploaded design references (mirrors the ingest manifest).
  * @property {string|null} referenceDigest    The distilled reference direction (digest.md text).
+ * @property {object[]|null} referenceDocuments Uploaded documents with readable full text
+ *                                            ({ id, name, path, chars }); the build reads them whole.
  */
 
 const BRIEF_FIELDS = [
@@ -62,6 +64,8 @@ const BRIEF_FIELDS = [
   "heroMedia",
   // Reference-ingest (set from the ingest, not from a card — see references.cjs / ingest.cjs):
   "referenceAssets", "referenceDigest",
+  // Uploaded documents the build reads in full ({ id, name, path, chars }), set at handoff.
+  "referenceDocuments",
   // Design-variety: the sampled Direction (design-variety-spec.md), set at build handoff,
   // not a designer card. Persisted with the design for reproduction + the P2 knobs.
   "direction",

@@ -12,21 +12,30 @@ not built (A/B testing, brand identity, site search, licensing accounts, self-up
 is left out on purpose. Items marked [verify] are facts only Rob can settle.
 
 How to feed this to the app, in order:
-1. Start a new project, Get Designing. Paste §A1 as the "what are we making" answer.
-   Audience from §A1. Sections per page from §A2 (the app's own vocabulary).
+1. Start a new project, Get Designing. Paste §A0 (not §A1) as the "what are we
+   making" answer: that field caps at 400 characters on purpose, it seeds the design
+   direction and wants a few sentences, not the full description. The full §A1 reaches
+   the agent through the upload in step 2. Sections per page from §A2 (the app's
+   own vocabulary).
    References: the sites in §A7 with the reason given. Colors and fonts: §A7.
-2. Put this whole file in the project as `brief/marketing-site.md` BEFORE the build
-   starts, and say in the first chat message: "The structure and copy for every page
-   are in brief/marketing-site.md, Part B. Use that copy, don't write placeholder
-   copy." The design agent reads project files in full; the references uploader does
-   not (it keeps a 600-character excerpt for style only), so the file, not the upload,
-   is the channel for copy.
+2. Upload this whole file as a reference during the intake, with the other references.
+   That is all: the build reads uploaded documents in full, on its own, and where a
+   document holds structure and copy it builds to that structure and uses the copy as
+   written (the digest excerpt is only the style read). Nothing to say in chat.
 3. After the design is approved, /promote-blocks carries the copy into the CMS. Edit
    from there.
 
 ---
 
 ## Part A: the brief
+
+### A0. The "what are we making" answer (paste-ready, 384 characters)
+
+thinkany design is a Mac app for designers who build websites for clients. Describe
+the site in plain words and it designs a complete, on-brand first version in minutes,
+then turns the approved design into a real site with a CMS and publishes it. Confident,
+plain-spoken, craft over hype: it should feel like a studio, not a SaaS dashboard. For
+freelance designers and small agencies.
 
 ### A1. What the site is
 
