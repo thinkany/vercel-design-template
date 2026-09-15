@@ -373,7 +373,11 @@ export function Header({ siteName, logos, nav, preview }: Props & { preview?: Pr
       })}
 
       {/* Mobile drawer — fixed to the viewport (the site has no device frame). */}
-      <div className="lg:hidden" aria-hidden={!open}>
+      {/* Closed, the drawer stays in the DOM for its slide transition, so aria-hidden
+          alone leaves its links in the tab order (axe: aria-hidden-focus, WCAG 4.1.2).
+          `inert` takes them out of focus and the accessibility tree together; the
+          empty-string form is what React 18 renders, and it holds in the static HTML. */}
+      <div className="lg:hidden" aria-hidden={!open} {...((open ? {} : { inert: "" }) as {})}>
         <div
           onClick={() => setOpen(false)}
           className={cx("fixed inset-0 z-[70] bg-black/40 transition-opacity duration-300",

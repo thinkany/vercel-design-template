@@ -61,6 +61,19 @@ app.whenReady().then(async()=>{
     if (hitsPanel(await ev(AXE))) { found = true; break; }
   }
   console.log(`  opened menus: color-contrast in a panel? ${found?"yes":"no"}  (expected: YES)`);
-  console.log(`\n${found?"PASS":"FAIL"}  the audit reaches the menu's links`);
-  try{process.kill(-p.pid);}catch{} stopCaptureBridge(); app.exit(found?0:1);
+  // THE CLOSED DRAWER: on mobile the slide-in drawer stays in the DOM (for its transition)
+  // behind aria-hidden. Its links must be inert too, or axe reports aria-hidden-focus
+  // (WCAG 4.1.2, serious) on every mobile audit of every project.
+  await runCaptureOp({op:"viewport",width:390,height:780});
+  await runCaptureOp({op:"goto",url:`${url}/?v=v00&capture=mobile`});
+  await runCaptureOp({op:"waitSelector",selector:"header",timeout:20000});
+  await new Promise(r=>setTimeout(r,1500));
+  await ev(axe);
+  const mobile = await ev(AXE);
+  const hiddenFocus = (mobile||[]).filter(v => v.id==="aria-hidden-focus");
+  const inert = await ev(`(()=>{const d=document.querySelector('[data-menu-drawer]');const w=d&&d.parentElement;return !!(w&&w.hasAttribute("inert"))})()`);
+  console.log(`  closed mobile drawer: inert? ${inert?"yes":"no"}  aria-hidden-focus violations: ${hiddenFocus.length}  (expected: yes, 0)`);
+  const ok = found && inert && hiddenFocus.length===0;
+  console.log(`\n${ok?"PASS":"FAIL"}  the audit reaches the menu's links, and the closed drawer is inert`);
+  try{process.kill(-p.pid);}catch{} stopCaptureBridge(); app.exit(ok?0:1);
 });

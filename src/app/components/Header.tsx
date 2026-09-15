@@ -191,7 +191,11 @@ function MobileDrawer({
   const { ref, box } = useDrawerLock<HTMLDivElement>(open);
 
   return (
-    <div ref={ref} className="@lg:hidden" aria-hidden={!open}>
+    // Closed, the drawer stays in the DOM for its slide transition, so aria-hidden alone
+    // leaves its links in the tab order (axe: aria-hidden-focus, WCAG 4.1.2). `inert`
+    // takes them out of focus and the accessibility tree together. The empty-string
+    // form is what React 18 renders (`inert` is a boolean attribute it doesn't know).
+    <div ref={ref} className="@lg:hidden" aria-hidden={!open} {...((open ? {} : { inert: "" }) as {})}>
       {/* Scrim — above the sticky header (z-[60]) so the drawer covers the surface. */}
       <div
         onClick={() => setOpen(false)}
