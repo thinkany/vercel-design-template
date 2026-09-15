@@ -4716,6 +4716,15 @@ ipcMain.handle("log:save", async () => {
   if (res.canceled || !res.filePath) return { ok: false, canceled: true };
   try { fs.copyFileSync(cur, res.filePath); return { ok: true, path: res.filePath }; } catch (e) { return { ok: false, error: e.message }; }
 });
+// The site brief template (desktop/brief-template.md, a worked example with help notes),
+// saved wherever the designer picks. Read + write rather than copyFile: the source sits
+// inside the asar in the packaged app, and only the read side of fs is patched for it.
+ipcMain.handle("brief:saveTemplate", async () => {
+  const res = await dialog.showSaveDialog(mainWindow, { title: "Save the brief template", defaultPath: path.join(app.getPath("downloads"), "site-brief-template.md"), filters: [{ name: "Markdown", extensions: ["md"] }] });
+  if (res.canceled || !res.filePath) return { ok: false, canceled: true };
+  try { fs.writeFileSync(res.filePath, fs.readFileSync(path.join(__dirname, "brief-template.md"))); return { ok: true, path: res.filePath }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
 // Today's log as text for the clipboard: the last 200 KB when it's longer, so a paste stays sane.
 ipcMain.handle("log:read", () => {
   const cur = appLog.currentFile();

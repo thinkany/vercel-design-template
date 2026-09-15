@@ -100,6 +100,7 @@ contextBridge.exposeInMainWorld("desktop", {
   getLogging: () => ipcRenderer.invoke("log:status"),
   setLogging: (enabled) => ipcRenderer.invoke("log:set", { enabled }),
   saveLog: () => ipcRenderer.invoke("log:save"),
+  saveBriefTemplate: () => ipcRenderer.invoke("brief:saveTemplate"),
   readLog: () => ipcRenderer.invoke("log:read"),
   revealLogs: () => ipcRenderer.invoke("log:reveal"),
   getUsage: () => ipcRenderer.invoke("usage:get"),

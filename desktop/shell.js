@@ -2759,6 +2759,31 @@ async function renderHelp(body) {
     replay.appendChild(groups);
   }
   body.appendChild(replay);
+  // ── The site brief template ──
+  const bt = document.createElement("div");
+  bt.className = "setrow";
+  const bk = document.createElement("div");
+  bk.className = "k";
+  bk.textContent = COPY.briefTemplate.title;
+  const bd = document.createElement("div");
+  bd.className = "d";
+  bd.textContent = COPY.briefTemplate.desc;
+  const bb = document.createElement("button");
+  bb.type = "button";
+  bb.className = "cbtn ghost";
+  bb.textContent = COPY.briefTemplate.btn;
+  const bn = document.createElement("div");
+  bn.className = "d";
+  bb.addEventListener("click", async () => {
+    const r = await window.desktop.saveBriefTemplate();
+    if (r && r.ok) bn.textContent = COPY.briefTemplate.saved(r.path);
+    else if (r && r.error) bn.textContent = r.error;
+  });
+  const bbs = document.createElement("div");
+  bbs.className = "tour-replay-btns";
+  bbs.appendChild(bb);
+  bt.append(bk, bd, bbs, bn);
+  body.appendChild(bt);
   const sep = document.createElement("div");
   sep.className = "help-divider";
   body.appendChild(sep);
@@ -11257,7 +11282,7 @@ async function startClientIntake(type, from = 0) {
   try { seed = await window.desktop.readFigmaMeta(); } catch {}
   if (gen !== clientIntakeGen || intakePhase !== "gathering") return; // superseded / backed out during the await
   const script = [
-    [{ id: "what", field: "what", type: "open-text", long: true, maxLength: 400, label: COPY.intake.q.what, placeholder: COPY.intake.q.whatPlaceholder }],
+    [{ id: "what", field: "what", type: "open-text", long: true, maxLength: 400, label: COPY.intake.q.what, placeholder: COPY.intake.q.whatPlaceholder, footLink: "briefTemplate" }],
     [
       { id: "clientName", field: "clientName", type: "open-text", label: COPY.intake.q.clientName, skippable: true, agentDecidesLabel: COPY.intake.skip, value: (seed && seed.brandName) || undefined },
       { id: "projectName", field: "projectName", type: "open-text", label: COPY.intake.q.projectName, skippable: true, agentDecidesLabel: COPY.intake.skip, value: (seed && seed.nameSuggestion) || undefined },
@@ -11832,7 +11857,7 @@ async function reviewDesign(id, page) {
 
 // The critique prompt: point the Art Director at the design's files, hand it the lint
 // findings as grounding it never repeats or argues with in front of the designer, and ask
-// for the judgment a lint can't take. Read-only.
+// for the judgment a lint can't make. Read-only.
 function buildArtDirectorCritiquePrompt(id, res) {
   const findings = (res.findings || [])
     .map((f) => `- [${f.severity}/${f.rule}] ${f.line ? `${f.file}:${f.line}` : f.file} · ${f.message}`)
@@ -13899,6 +13924,23 @@ function renderIntakeCard(card, onChange, requestSubmit) {
   const body = document.createElement("div");
   body.className = "icard-body";
   elc.appendChild(body);
+  // A quiet link under the field. "briefTemplate": save the worked-example brief for a
+  // designer who has the whole brief already and wants to hand it over as a file.
+  if (card.footLink === "briefTemplate") {
+    const foot = document.createElement("div");
+    foot.className = "icard-foot";
+    const a = document.createElement("button");
+    a.type = "button";
+    a.className = "icard-link";
+    a.textContent = COPY.intake.q.templateLink;
+    a.addEventListener("click", async () => {
+      const r = await window.desktop.saveBriefTemplate();
+      if (r && r.ok) { foot.textContent = COPY.intake.q.templateSaved(r.path); }
+      else if (r && r.error) { foot.textContent = r.error; }
+    });
+    foot.appendChild(a);
+    elc.appendChild(foot);
+  }
 
   let skipped = false;
   const skippable = card.skippable === true;

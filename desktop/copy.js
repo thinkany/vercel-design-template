@@ -1485,6 +1485,14 @@ window.COPY = {
   },
 
   // ── About footer (version + site link) ──────────────────────────────────────
+  // The site brief template: a worked example (a made-up studio) with help notes, saved
+  // to a place the designer picks. Linked under the first Get Designing field and here.
+  briefTemplate: {
+    title: "Site brief template",
+    desc: "A worked example of a full brief and copy deck, with notes on what goes where. Fill it in, delete the notes, and upload it with your references in Get Designing: the build reads it in full and uses your copy as written.",
+    btn: "Save a copy…",
+    saved: (p) => `Saved to ${p}`,
+  },
   about: {
     versionPrefix: "Version ",
     siteLink: "thinkany.co",
@@ -2428,6 +2436,8 @@ window.COPY = {
     q: {
       what: "In your words, what are you making, and how should it feel?",
       whatPlaceholder: "A few sentences: what it’s for, who it’s for, the mood you’re after…",
+      templateLink: "Have the whole brief already? Save a brief template…",
+      templateSaved: (p) => `Saved to ${p}. Fill it in, delete the help notes, then upload it with your references.`,
       clientName: "Company or brand name",
       projectName: "A name for this project",
       logo: "Logo (optional)",
