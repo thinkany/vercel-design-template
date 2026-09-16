@@ -15,10 +15,14 @@ function projectTitle(m) {
   if (client && project) return `${client} - ${project}`;
   return client || project || (m && m.name) || "";
 }
+// The project's device views (desktop / tablet / mobile, from project:status), so the
+// block editor's preview offers the same breakpoints the design preview has.
+let projectViews = [];
 function setProjTitle(m) {
   const t = projectTitle(m);
   projname.textContent = t;
   projname.title = t;
+  if (m && Array.isArray(m.views)) projectViews = m.views;
 }
 
 // Sidebar + modal
@@ -5101,7 +5105,9 @@ function siteAlternateSide(list, props, def) {
 
 // The live block preview beside the fields: a webview onto the design surface's
 // blockpreview mode, fed the draft props (debounced) as the designer edits. Desktop
-// renders at 1280px scaled to the pane (zoom), Mobile at 390px.
+// renders at 1280px scaled to the pane (zoom), Tablet at 744px (the default tablet
+// device, offered when the project has the tablet preview), Mobile at 390px; a frame
+// wider than the pane is scaled down so the block still lays out at its real width.
 let siteDesignId = null; // the pinned design, from site:content
 function siteBlockPreview(type, getProps, { onExpand, onMode } = {}) {
   const el = siteEl("div", "site-block-preview");
@@ -5116,17 +5122,26 @@ function siteBlockPreview(type, getProps, { onExpand, onMode } = {}) {
   wv.setAttribute("src", `${viteUrl}/?v=${encodeURIComponent(siteDesignId)}&blockpreview=${encodeURIComponent(type)}`);
   stage.appendChild(wv);
   let mode = "desktop"; let ready = false; let timer = null;
+  const FRAME_WIDTHS = { tablet: 744, mobile: 390 }; // the design preview's default devices
   const fit = () => {
     const w = stage.clientWidth || 600;
-    if (mode === "mobile") { wv.style.width = "390px"; wv.style.alignSelf = "center"; try { wv.setZoomFactor(1); } catch {} }
-    else { wv.style.width = "100%"; wv.style.alignSelf = "stretch"; try { wv.setZoomFactor(Math.max(0.2, Math.min(1, w / 1280))); } catch {} }
+    const frame = FRAME_WIDTHS[mode];
+    if (frame) {
+      // The page lays out at the device width: the webview takes min(frame, pane) and the
+      // zoom makes up the difference (layout width = css width / zoom).
+      const cw = Math.min(w, frame);
+      wv.style.width = cw + "px"; wv.style.alignSelf = "center";
+      try { wv.setZoomFactor(Math.max(0.2, Math.min(1, cw / frame))); } catch {}
+    } else { wv.style.width = "100%"; wv.style.alignSelf = "stretch"; try { wv.setZoomFactor(Math.max(0.2, Math.min(1, w / 1280))); } catch {} }
   };
   const send = () => { if (!ready) return; try { wv.executeJavaScript(`window.__taSetBlockProps && window.__taSetBlockProps(${JSON.stringify(getProps() || {})})`); } catch {} };
   const push = () => { clearTimeout(timer); timer = setTimeout(send, 150); };
   wv.addEventListener("dom-ready", () => { ready = true; fit(); send(); });
   wv.addEventListener("did-finish-load", () => { ready = true; fit(); send(); });
   const mk = (m, label) => { const b = siteEl("button", "site-mini" + (mode === m ? " on" : ""), label); b.type = "button"; b.addEventListener("click", () => { mode = m; if (onMode) onMode(m); bar.querySelectorAll(".site-mini").forEach((x) => x.classList.toggle("on", x === b)); fit(); }); return b; };
-  bar.append(mk("desktop", COPY.site.previewDesktop), mk("mobile", COPY.site.previewMobile));
+  bar.appendChild(mk("desktop", COPY.site.previewDesktop));
+  if (!projectViews.length || projectViews.includes("tablet")) bar.appendChild(mk("tablet", COPY.site.previewTablet));
+  bar.appendChild(mk("mobile", COPY.site.previewMobile));
   if (onExpand) { const ex = siteMini(COPY.site.previewExpand, onExpand, { title: COPY.site.previewExpandTip }); ex.style.marginLeft = "auto"; bar.appendChild(ex); }
   window.addEventListener("resize", fit);
   const exec = (js) => { if (!ready) return; try { wv.executeJavaScript(js); } catch {} };

@@ -29,7 +29,9 @@ designer never edits blind.
   props, debounced by 150 ms. Invalid content (a required field emptied) shows the
   same in-surface note the site build would raise, instead of a broken block.
 - **Width**: Desktop renders the block at 1280 px and scales the webview to the
-  pane (zoom factor), so proportions match the site; Mobile renders at 390 px.
+  pane (zoom factor), so proportions match the site; Tablet renders at 744 px (the
+  design preview's default tablet, shown when the project has the tablet preview)
+  and Mobile at 390 px, each scaled down only if the pane is narrower than the frame.
 - **Save** is unchanged: the page's Save writes the file; the preview shows the
   unsaved draft until then.
 

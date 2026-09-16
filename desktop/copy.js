@@ -820,6 +820,7 @@ window.COPY = {
     previewExpandTip: "Edit this block in a larger view",
     blockEditDone: "Done",
     previewDesktop: "Desktop",
+    previewTablet: "Tablet",
     previewMobile: "Mobile",
     previewUnavailable: "The design preview isn't running, so the block can't be shown here yet.",
     pageSlugHint: "Made from the title until you edit it. One word or hyphenated, no slashes; a nested page’s address follows its parent’s, like /about/island-guide.",
