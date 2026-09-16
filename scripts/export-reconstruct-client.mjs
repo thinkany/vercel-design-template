@@ -36,15 +36,16 @@ import { performance } from "node:perf_hooks";
 // Build layer (local) — the derive IP is NOT here; it runs in the cloud.
 import { emitCalls, printManifest } from "./export-reconstruct-to-figma.mjs";
 
-const FALLBACK_WIDTHS = { desktop: 1440, tablet: 664, mobile: 370 };
+const FALLBACK_WIDTHS = { desktop: 1440, tablet: 744, mobile: 393 };
 const VIEWPORT_HEIGHT = 900;
 // Per-view capture height, matched to the device-frame portrait heights in the
 // live preview (PhoneFrame 780, TabletFrame 900, desktop unframed). Keeps
 // `min-h-full` content resolving to the SAME device height in the derive as in
 // the preview — without this a full-height mobile section measures at 900 here
 // but 780 in the phone frame, so preview↔Figma diverge.
-const VIEWPORT_HEIGHTS = { desktop: 900, tablet: 900, mobile: 780 };
-const viewHeight = (view) => VIEWPORT_HEIGHTS[view] ?? VIEWPORT_HEIGHT;
+const VIEWPORT_HEIGHTS = { desktop: 900, tablet: 1133, mobile: 852 };
+let heights = { ...VIEWPORT_HEIGHTS };
+const viewHeight = (view) => heights[view] ?? VIEWPORT_HEIGHTS[view] ?? VIEWPORT_HEIGHT;
 
 // The raw computed-style props the cloud derive reads. The client is the SOLE
 // producer of these, so this list is the runtime source of truth; contracts.ts
@@ -154,6 +155,7 @@ async function readManifest(page, url, viewsOverride) {
   await page.goto(`${url}/?v=v00`, { waitUntil: "networkidle0" });
   const cfg = await page.evaluate(() => window.__PREVIEW_CONFIG__ ?? null);
   const widths = { ...FALLBACK_WIDTHS, ...(cfg?.widths ?? {}) };
+  heights = { ...VIEWPORT_HEIGHTS, ...(cfg?.heights ?? {}) };
   const views = viewsOverride ?? cfg?.views ?? ["desktop", "mobile"];
   const pages = cfg?.pages?.length ? cfg.pages : [{ id: "home", route: "", name: "Home" }];
   return { views, widths, pages };

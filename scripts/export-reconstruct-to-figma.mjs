@@ -131,7 +131,7 @@ export async function emitCalls(manifest, out, limit) {
   return plan;
 }
 
-const FALLBACK_WIDTHS = { desktop: 1440, tablet: 664, mobile: 370 };
+const FALLBACK_WIDTHS = { desktop: 1440, tablet: 744, mobile: 393 };
 const VIEWPORT_HEIGHT = 900;
 // Per-view capture height, matched to the device-frame portrait heights in the
 // live preview (PhoneFrame 780, TabletFrame 900, desktop unframed). Keeps

@@ -46,7 +46,7 @@ the shell node is older):
 ```js
 // scratchpad/shot.mjs  →  node scratchpad/shot.mjs
 import puppeteer from "puppeteer";
-const WIDTHS = { desktop: 1440, tablet: 664, mobile: 370 }; // scaffold defaults
+const WIDTHS = { desktop: 1440, tablet: 744, mobile: 393 }; // scaffold defaults (the default devices)
 const view = process.argv[2] || "mobile";
 // The app sets TA_PREVIEW_URL to this project's real Vite port; fall back to :5173.
 const base = (process.env.TA_PREVIEW_URL || "http://localhost:5173").replace(/\/+$/, "");

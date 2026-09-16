@@ -8,14 +8,19 @@ export function TabletFrame({
   children,
   bg = "#fff",
   orientation = "portrait",
+  width = 744,
+  height = 1133,
 }: {
   children: ReactNode;
   bg?: string;
   orientation?: Orientation;
+  /** The screen, CSS px, portrait (a device from config/site `devices`). Landscape swaps them. */
+  width?: number;
+  height?: number;
 }) {
   const landscape = orientation === "landscape";
-  const screenW = landscape ? 900 : 664;
-  const screenH = landscape ? 664 : 900;
+  const screenW = landscape ? height : width;
+  const screenH = landscape ? width : height;
   // Drag-to-scroll (mouse "touch") + the circle touch cursor (via .ta-touch-surface).
   const { ref: screenRef, handlers } = useDragScroll<HTMLDivElement>();
   return (
