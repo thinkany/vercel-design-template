@@ -1242,6 +1242,16 @@
       .tagchip button { border: 0; background: none; color: #fff; opacity: .7; cursor: pointer; padding: 0; display: flex; }
       .tagchip button:hover { opacity: 1; }
       .tagchip button svg { width: 12px; height: 12px; }
+      /* Orderable chips: drag to reorder, the first one Primary (a star on the others sends them to the front). */
+      .tagchips.orderable .tagchip { cursor: grab; }
+      .tagchips.orderable .tagchip.dragging { opacity: .45; }
+      .tagchips.orderable .tagchip.drop-before { box-shadow: -3px 0 0 0 #111; }
+      .tagchips.orderable .tagchip.drop-after { box-shadow: 3px 0 0 0 #111; }
+      .tagchip.primary { background: #fff; color: #17171b; border: 1px solid #17171b; padding-left: 4px; }
+      .tagchip.primary button { color: #17171b; }
+      .tagchip-primary { font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; background: #17171b; color: #fff; border-radius: 999px; padding: 2px 6px; margin-right: 2px; }
+      .tagchip-star { opacity: .55; }
+      .tagchip-star:hover { opacity: 1; }
       .site-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #666; border: 1px solid #ddd; border-radius: 999px; padding: 2px 7px; white-space: nowrap; }
       .site-sub { margin: 6px 0 14px; padding: 10px 12px; border: 1px dashed #e2e2e8; border-radius: 8px; }
       .site-sub-title { margin-bottom: 8px; }

@@ -5558,10 +5558,13 @@ function renderSitePost(post, refresh) {
   upd.appendChild(siteEl("div", "sess-desc", updText)); pf.body.appendChild(upd);
   const ds = siteField(S.postDescription, draft.description, { textarea: true, hint: S.postDescriptionHint }); ds.input.addEventListener("input", () => { draft.description = ds.input.value; dirty(); }); pf.body.appendChild(ds.wrap);
   pf.body.appendChild(siteImageControl(draft.image, (next) => { draft.image = next ? next.src : ""; dirty(); }, { label: S.postImage }));
-  // Tags: the same picker as an image's tags. The list holds every tag used by any post
+  // Tags, a section of their own so they are found, not dug for: the same picker as an
+  // image's tags, orderable, the first one Primary (it names the post's address when the
+  // blog groups by tag, and its tag list). The list holds every tag used by any post
   // (renderSitePost.allTags, set by the Posts tab), so a tag is picked, not retyped.
-  const tg = tagCombo({ tags: draft.tags, allTags: renderSitePost.allTags || [], onChange: (t) => { draft.tags = [...t]; sl.lead.textContent = sitePostPrefix(draft.tags); dirty(); }, label: S.postTags, hint: siteBlogTag ? S.postTagsHintFirst : S.postTagsHint, noTags: S.postNoTags });
-  pf.body.appendChild(tg.wrap);
+  const tf = siteFold(S.postTagsHeading, "post:tags"); tf.sec.dataset.tour = "cms-post-tags"; card.appendChild(tf.sec);
+  const tg = tagCombo({ tags: draft.tags, allTags: renderSitePost.allTags || [], onChange: (t) => { draft.tags = [...t]; sl.lead.textContent = sitePostPrefix(draft.tags); dirty(); }, label: S.postTags, hint: siteBlogTag ? S.postTagsHintFirst : S.postTagsHint, noTags: S.postNoTags, orderable: true });
+  tf.body.appendChild(tg.wrap);
   const cf = siteFold(S.postContent, "post:content"); cf.sec.dataset.tour = "cms-post-content"; card.appendChild(cf.sec);
   const rich = siteRichEditor(draft.body, () => { draft.body = rich.getMarkdown(); dirty(); });
   cf.body.appendChild(rich.wrap); cf.body.appendChild(siteEl("div", "sess-desc", S.postBodyHint));
@@ -5662,7 +5665,7 @@ function siteTypeFieldControl(f, value, onChange, ctx, typeKey, typeLabel) {
     get = () => (href.value.trim() ? { label: lab.value.trim(), href: href.value.trim() } : "");
   } else if (f.kind === "tags") {
     // The same combo as a post's tags, fed only this type's vocabulary for this field.
-    const combo = tagCombo({ tags: Array.isArray(value) ? value : [], allTags: siteTypeTagVocab(ctx, typeKey, f.key), onChange: change, label: f.label + (f.required ? " *" : ""), hint: S.entryTagsHint((typeLabel || S.kindEntry + "s").toLowerCase()), noTags: S.entryNoTags });
+    const combo = tagCombo({ orderable: true, tags: Array.isArray(value) ? value : [], allTags: siteTypeTagVocab(ctx, typeKey, f.key), onChange: change, label: f.label + (f.required ? " *" : ""), hint: S.entryTagsHint((typeLabel || S.kindEntry + "s").toLowerCase()), noTags: S.entryNoTags });
     wrap.innerHTML = ""; wrap.className = ""; wrap.appendChild(combo.wrap);
     get = () => combo.get();
   } else if (f.kind === "list") {
@@ -5706,9 +5709,12 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   t.input.addEventListener("input", () => { if (!sl.input.dataset.touched) sl.input.value = siteSlugOf(t.input.value); dirty(); });
   sl.input.addEventListener("input", () => { sl.input.dataset.touched = "1"; dirty(); });
 
+  // Tags first, in a section of their own (every tags field of the type), then the rest.
+  const tagFields = type.fields.filter((f) => f.kind === "tags");
+  const tf = tagFields.length ? siteFold(S.entryTagsHeading, foldKey + ":tags") : null; if (tf) card.appendChild(tf.sec);
   const cf = siteFold(S.entryFieldsHeading, foldKey + ":fields"); card.appendChild(cf.sec);
   if (!type.fields.length) cf.body.appendChild(siteEl("div", "sess-desc", S.fieldsDesc));
-  const controls = type.fields.map((f) => { const c = siteTypeFieldControl(f, entry[f.key], dirty, ctx, type.key, type.label); cf.body.appendChild(c.wrap); return [f.key, c.get]; });
+  const controls = type.fields.map((f) => { const c = siteTypeFieldControl(f, entry[f.key], dirty, ctx, type.key, type.label); (f.kind === "tags" && tf ? tf.body : cf.body).appendChild(c.wrap); return [f.key, c.get]; });
 
   // Own blocks (a landing page) instead of the template.
   const bf = siteFold(S.blocksHeading, foldKey + ":blocks"); card.appendChild(bf.sec);
@@ -6600,7 +6606,10 @@ function mediaTile(it, { selected = false, onSelect, onOpen, onRenamed, onDelete
 // already on this image) as you type, offers to add what you typed as a new tag, and
 // shows the chosen tags as chips on their own line. Every add or remove calls onChange.
 // Also used for a post's tags (label / hint / noTags override the media wording there).
-function tagCombo({ tags, allTags, onChange, label, hint, noTags }) {
+// `orderable`: the chips can be dragged into an order (or sent to the front with the
+// star), and the first one wears a "Primary" badge: for posts and type entries the
+// first tag is the one the URL and the tag lists go by.
+function tagCombo({ tags, allTags, onChange, label, hint, noTags, orderable = false }) {
   const D = COPY.site.media.detail;
   const wrap = siteEl("div", "site-kv"); wrap.appendChild(siteEl("div", "k", label || D.tags));
   const combo = siteEl("div", "tagcombo");
@@ -6611,15 +6620,45 @@ function tagCombo({ tags, allTags, onChange, label, hint, noTags }) {
   const chips = siteEl("div", "tagchips"); wrap.appendChild(chips);
   let current = [...tags]; let hot = -1;
   const has = (t) => current.some((x) => x.toLowerCase() === t.toLowerCase());
+  let dragFrom = -1;
+  const move = (from, to) => { if (from === to || from < 0 || to < 0) return; const [t] = current.splice(from, 1); current.splice(to, 0, t); paintChips(); onChange(current); };
   const paintChips = () => {
     chips.innerHTML = "";
+    chips.classList.toggle("orderable", orderable);
     if (!current.length) { chips.appendChild(siteEl("span", "sess-desc", noTags || D.noTags)).style.margin = "0"; return; }
-    current.forEach((t) => {
-      const chip = siteEl("span", "tagchip", t);
+    current.forEach((t, i) => {
+      const chip = siteEl("span", "tagchip" + (orderable && i === 0 ? " primary" : ""));
+      if (orderable && i === 0) chip.appendChild(siteEl("span", "tagchip-primary", D.primary));
+      chip.appendChild(document.createTextNode(t));
+      if (orderable && i > 0) {
+        // Send to the front without dragging (keyboard and touch users too).
+        const star = document.createElement("button"); star.type = "button"; star.className = "tagchip-star"; star.title = D.makePrimary; star.setAttribute("aria-label", D.makePrimary);
+        star.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1.1 5.9L12 16.9l-5.3 2.8 1.1-5.9-4.3-4.1 5.9-.8z"/></svg>';
+        star.addEventListener("click", () => move(i, 0));
+        chip.appendChild(star);
+      }
       const x = document.createElement("button"); x.type = "button"; x.title = D.removeTag; x.setAttribute("aria-label", D.removeTag);
       x.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
       x.addEventListener("click", () => { current = current.filter((y) => y !== t); paintChips(); paintList(); onChange(current); });
-      chip.appendChild(x); chips.appendChild(chip);
+      chip.appendChild(x);
+      if (orderable) {
+        chip.draggable = true; chip.title = D.dragTag;
+        chip.addEventListener("dragstart", (e) => { dragFrom = i; chip.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", t); } catch {} });
+        chip.addEventListener("dragend", () => { dragFrom = -1; chips.querySelectorAll(".tagchip").forEach((c) => c.classList.remove("dragging", "drop-before", "drop-after")); });
+        chip.addEventListener("dragover", (e) => {
+          if (dragFrom < 0 || dragFrom === i) return; e.preventDefault(); try { e.dataTransfer.dropEffect = "move"; } catch {}
+          const r = chip.getBoundingClientRect(); const before = e.clientX < r.left + r.width / 2;
+          chip.classList.toggle("drop-before", before); chip.classList.toggle("drop-after", !before);
+        });
+        chip.addEventListener("dragleave", () => chip.classList.remove("drop-before", "drop-after"));
+        chip.addEventListener("drop", (e) => {
+          if (dragFrom < 0 || dragFrom === i) return; e.preventDefault();
+          const r = chip.getBoundingClientRect(); const before = e.clientX < r.left + r.width / 2;
+          let to = before ? i : i + 1; if (dragFrom < to) to -= 1; // the moved chip leaves a hole before the target
+          move(dragFrom, to); dragFrom = -1;
+        });
+      }
+      chips.appendChild(chip);
     });
   };
   const options = () => {
