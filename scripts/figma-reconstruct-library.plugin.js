@@ -25,9 +25,13 @@
 //   COMPONENTIZES each breakpoint into a `View=…` COMPONENT_SET. `compose` (below,
 //   unchanged from the block builder) instances those onto the design Pages.
 //
-// IDEMPOTENT: Brand vars find-by-name (bind canonical var(--ta-*) from the brand
-//   `variables` phase when present). Each block's set is removed by name + rebuilt;
-//   stale sets not in the manifest are pruned. Follows figma-use rules.
+// IDEMPOTENT, ADDITIVE PER VIEW: Brand vars find-by-name (bind canonical var(--ta-*)
+//   from the brand `variables` phase when present). Each block's `View=` set is found
+//   by name and only the variants for THIS run's views are replaced; variants of views
+//   the run didn't build (a desktop-only first export, then tablet + mobile later) stay,
+//   with their instances on the design pages intact. Stale sets not in the manifest
+//   are pruned. `compose` likewise replaces only its run's per-view frames.
+//   Follows figma-use rules.
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 async function getOrCreateCollection(name) {
@@ -40,6 +44,65 @@ async function getOrCreateCollection(name) {
 }
 const ROLE_PROXY = { display: "Playfair Display", serif: "Lora", sans: "Inter", mono: "JetBrains Mono" };
 const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+
+// The View bar's order, so a set's variants and a page's frames read left to right.
+const VIEW_ORDER = ["desktop", "tablet", "mobile"];
+const viewRank = (v) => { const i = VIEW_ORDER.indexOf(String(v || "").toLowerCase()); return i === -1 ? VIEW_ORDER.length : i; };
+// "View=Desktop" → "desktop"; a single-variant COMPONENT carries its view in plugin data.
+const viewOfVariant = (n) => { const m = /^View=(.+)$/.exec(n.name || ""); return m ? m[1].toLowerCase() : (n.getPluginData ? (n.getPluginData("ta:view") || null) : null); };
+
+// Merge freshly built per-view COMPONENTs (`fresh` = [{ view, node }], node already
+// named `View=…`) into the block's existing set on `page`, replacing the variants for
+// those views and KEEPING every other view's variant, so a partial export (some views)
+// never drops what an earlier export put there. Returns the final COMPONENT_SET (or a
+// bare COMPONENT when only one view exists). Existing variants stay the same nodes
+// where the API lets them (appendChild into the set), so instances on the design pages
+// keep their master; they are cloned only as a last resort.
+function mergeViewSet(page, name, fresh) {
+  const freshViews = new Set(fresh.map((f) => f.view));
+  const existing = page.children.filter((n) => n.name === name && (n.type === "COMPONENT_SET" || n.type === "COMPONENT"));
+  const kept = []; // { view, node } from earlier exports, views not in this run
+  let set = null;
+  for (const n of existing) {
+    if (n.type === "COMPONENT_SET") {
+      for (const c of [...n.children]) {
+        const v = viewOfVariant(c);
+        if (v && !freshViews.has(v)) kept.push({ view: v, node: c });
+        else c.remove();
+      }
+      if (!set && kept.length) set = n; else if (n !== set) n.remove();
+    } else {
+      const v = viewOfVariant(n);
+      if (v && !freshViews.has(v)) { n.name = `View=${cap(v)}`; kept.push({ view: v, node: n }); }
+      else n.remove();
+    }
+  }
+  const all = [...kept, ...fresh].sort((a, b) => viewRank(a.view) - viewRank(b.view));
+  if (!all.length) return null;
+  let result = null;
+  if (all.length === 1) {
+    result = all[0].node;
+    if (set && result.parent === set) { try { page.appendChild(result); } catch (e) { result = result.clone(); page.appendChild(result); } }
+    if (set) set.remove();
+    result.name = name;
+    try { result.setPluginData("ta:view", all[0].view); } catch (e) {}
+    return result;
+  }
+  // Prefer growing the existing set in place (kept variants stay the same nodes).
+  if (set) {
+    try {
+      for (const f of fresh) set.appendChild(f.node);
+      all.forEach((v, i) => { try { set.insertChild(i, v.node); } catch (e) {} });
+      return styleSet(set, name);
+    } catch (e) { /* fall through: rebuild the set from its variants */ }
+  }
+  const variants = all.map((v) => {
+    if (v.node.parent === set) { try { page.appendChild(v.node); return v.node; } catch (e) { const c = v.node.clone(); page.appendChild(c); return c; } }
+    return v.node;
+  });
+  if (set) set.remove();
+  return styleSet(figma.combineAsVariants(variants, page), name);
+}
 
 function styleSet(node, name) {
   node.name = name;
@@ -466,9 +529,9 @@ if (PHASE === "reconstruct") {
   const skipped = [];
   const photoOut = []; // { blockId, view, asset, nodeId }
   for (const blk of MANIFEST.blocks) {
-    if (!TEMP) for (const n of [...page.children]) if (n.name === blk.name && (n.type === "COMPONENT_SET" || n.type === "COMPONENT")) n.remove();
+    // The block's existing set is merged per view at the end (mergeViewSet), not wiped here.
     const views = Object.keys(blk.views);
-    const variants = [];
+    const variants = []; // { view, node }
     for (const view of views) {
       const spec = blk.views[view];
       if (!spec) continue;
@@ -502,15 +565,13 @@ if (PHASE === "reconstruct") {
         temps.push({ blockId: blk.blockId, view, componentId: comp.id, name: tname });
       } else {
         root.name = `View=${cap(view)}`;
-        variants.push(figma.createComponentFromNode(root));
+        variants.push({ view, node: figma.createComponentFromNode(root) });
       }
     }
     if (TEMP) continue;
     if (!variants.length) { skipped.push(blk.name); continue; }
-    let result;
-    if (variants.length === 1) { result = variants[0]; result.name = blk.name; }
-    else { result = styleSet(figma.combineAsVariants(variants, page), blk.name); }
-    built.push({ blockId: blk.blockId, block: blk.name, componentId: result.id, type: result.type, views });
+    const result = mergeViewSet(page, blk.name, variants);
+    built.push({ blockId: blk.blockId, block: blk.name, componentId: result.id, type: result.type, views, allViews: result.type === "COMPONENT_SET" ? result.children.map(viewOfVariant) : [viewOfVariant(result)] });
   }
 
   // prune stale sets — ONLY when the manifest represents the FULL design
@@ -539,19 +600,17 @@ if (PHASE === "combine") {
   const built = [];
   const missing = [];
   for (const b of MANIFEST.combine) {
-    for (const n of [...page.children]) if (n.name === b.name && (n.type === "COMPONENT_SET" || n.type === "COMPONENT")) n.remove();
-    const variants = [];
+    const variants = []; // { view, node }
     for (const view of b.views) {
       const t = page.children.find((n) => n.name === `__tmp:${b.blockId}:${view}` && n.type === "COMPONENT");
       if (!t) { missing.push(`${b.blockId}/${view}`); continue; }
       t.name = `View=${cap(view)}`;
-      variants.push(t);
+      variants.push({ view, node: t });
     }
     if (!variants.length) continue;
-    let result;
-    if (variants.length === 1) { result = variants[0]; result.name = b.name; }
-    else { result = styleSet(figma.combineAsVariants(variants, page), b.name); }
-    built.push({ blockId: b.blockId, block: b.name, componentId: result.id, type: result.type, views: b.views });
+    // Additive: only this run's views are replaced; an earlier export's other views stay.
+    const result = mergeViewSet(page, b.name, variants);
+    built.push({ blockId: b.blockId, block: b.name, componentId: result.id, type: result.type, views: b.views, allViews: result.type === "COMPONENT_SET" ? result.children.map(viewOfVariant) : [viewOfVariant(result)] });
   }
   let y = 80;
   for (const p of page.children.filter((n) => (n.type === "COMPONENT_SET" || n.type === "COMPONENT") && !n.name.startsWith("__tmp:"))) { p.x = 80; p.y = y; y += p.height + 64; }
@@ -597,7 +656,11 @@ if (PHASE === "compose") {
   let dpage = figma.root.children.find((p) => p.name === pg.name);
   if (!dpage) { dpage = figma.createPage(); dpage.name = pg.name; }
   await figma.setCurrentPageAsync(dpage);
-  for (const n of [...dpage.children]) if (n.name.startsWith(`${pg.name} — `)) n.remove();
+  // Additive per view: replace only this run's frames, keep the other views' frames
+  // (a desktop-only proof stays when tablet + mobile come later).
+  const frameName = (view) => `${pg.name} — ${cap(view)}`;
+  const runNames = new Set(views.map(frameName));
+  for (const n of [...dpage.children]) if (runNames.has(n.name)) n.remove();
 
   const frames = [];
   const missing = [];
@@ -629,5 +692,11 @@ if (PHASE === "compose") {
     frames.push({ view, id: frame.id, blocks: frame.children.length });
     x += w + 120;
   }
-  return { phase: "compose", page: pg.name, resolvedBy: byName ? "name" : "id", frames, missing };
+  // Lay every one of this page's view frames (kept + new) left to right in view order.
+  const prefix = `${pg.name} — `;
+  const viewOfFrame = (n) => (n.name && n.name.startsWith(prefix) ? n.name.slice(prefix.length).toLowerCase() : null);
+  const pageFrames = dpage.children.filter((n) => viewOfFrame(n)).sort((a, b) => viewRank(viewOfFrame(a)) - viewRank(viewOfFrame(b)));
+  x = 80;
+  for (const f of pageFrames) { f.x = x; f.y = 80; x += f.width + 120; }
+  return { phase: "compose", page: pg.name, resolvedBy: byName ? "name" : "id", frames, kept: pageFrames.map(viewOfFrame).filter((v) => !views.includes(v)), missing };
 }
