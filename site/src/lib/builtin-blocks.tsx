@@ -18,6 +18,10 @@
  *         when more than one type is listed) or hand-picked entries. A type with a
  *         page links each card to it (the whole card, or a "Read more" line). The
  *         filter and pager are site/src/lib/entries-client.ts, from Base.astro.
+ *   posts The newest blog posts (site/src/lib/posts.ts), with an optional tag filter
+ *         (pills or a select list). How many and the filter come from Settings →
+ *         Blog (content/site.json blog.posts), so every Posts block on the site
+ *         behaves the same; the block itself carries a heading and an intro.
  */
 import type React from "react";
 import { videoEmbed, embedFrameProps } from "./embed";
@@ -47,6 +51,7 @@ function turnstileSiteKey(): string {
 /** The action Turnstile stamps on the token (the endpoint checks it against the form). */
 export const turnstileAction = (formId: string) => formId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32);
 import { entriesOf, entryById, byDateDesc, types as contentTypes, ENTRIES_UI, type Entry } from "./entries";
+import { posts as allPosts, postDate, POSTS_UI, blogPath, postRoute, type Post } from "./posts";
 
 const codeProps = z.object({
   /** For you: what this snippet is (shown in the CMS, not on the page). */
@@ -429,6 +434,84 @@ function Entries(p: z.infer<typeof entriesProps>) {
   );
 }
 
+// Posts: the newest blog posts as cards, the count and the tag filter from Settings →
+// Blog. The filter reuses the Types block's client script (data-ta-entries): pills
+// are the same buttons; the select list is its own control the script also reads.
+const postsProps = z.object({
+  heading: z.string().default(""),
+  intro: richtext.default(""),
+  /** The link to the blog index under the cards, when more posts exist than are shown. Empty = no link. */
+  moreLabel: z.string().default(POSTS_UI.more),
+});
+
+function PostCard({ post }: { post: Post }) {
+  const href = "/" + postRoute(post);
+  const date = postDate(post.date);
+  return (
+    <li data-ta-entry="" data-ta-tags={post.tags.join("|") || undefined}>
+      <a href={href} className="no-underline block">
+        {post.image && <img src={post.image} alt="" className="w-full aspect-[4/3] object-cover rounded-[3px] mb-4" />}
+        {(date || post.draft) && (
+          <div className="font-ta-sans text-[11px] tracking-[0.14em] uppercase text-ta-muted mb-2">
+            {date}
+            {post.draft && <span className="ml-3 align-middle rounded-full bg-ta-ink px-2 py-[2px] text-[10px] text-ta-surface">Draft</span>}
+          </div>
+        )}
+        <h3 className="font-ta-display text-[22px] font-normal text-ta-ink leading-[1.15] mb-2">{post.title}</h3>
+        {post.description && <p className="font-ta-sans text-[15px] text-ta-body leading-[1.6] m-0">{post.description}</p>}
+        {post.tags.length > 0 && (
+          <ul className="list-none p-0 m-0 mt-3 flex flex-wrap gap-2">
+            {post.tags.map((t) => <li key={t} className="font-ta-sans text-[11px] text-ta-body border border-ta-ink/20 rounded-full px-2.5 py-[3px]">{t}</li>)}
+          </ul>
+        )}
+      </a>
+    </li>
+  );
+}
+
+function Posts(p: z.infer<typeof postsProps>) {
+  const cfg = site.blog.posts;
+  const items = cfg.count > 0 ? allPosts.slice(0, cfg.count) : allPosts;
+  const more = p.moreLabel && allPosts.length > items.length;
+  // The tags carried by the posts shown, in first-seen order, one filter each.
+  const tags = [...new Set(items.flatMap((x) => x.tags))];
+  const filter = cfg.filter && tags.length > 0;
+  return (
+    <section data-block="posts" data-ta-entries="" className="w-full bg-ta-surface px-8 py-20">
+      <div className="mx-auto w-full max-w-[1160px]">
+        {p.heading && <h2 className="font-ta-display text-[clamp(28px,4vw,40px)] font-normal text-ta-ink mb-4 leading-[1.1] tracking-[-0.02em]">{p.heading}</h2>}
+        <Rich text={p.intro} className="font-ta-sans text-[16px] text-ta-body leading-[1.6] max-w-[60ch] mb-8" />
+        {items.length === 0 ? (
+          <div className="font-ta-sans text-[14px] text-ta-muted border border-dashed border-ta-ink/25 rounded-[3px] px-4 py-3">{POSTS_UI.none}</div>
+        ) : (
+          <>
+            {filter && cfg.filterKind === "select" && (
+              <label data-ta-entries-filter="" className="flex items-center gap-3 mb-8 font-ta-sans text-[13px] text-ta-body">
+                <span>{POSTS_UI.filterLabel}</span>
+                <select data-ta-filter-select="" className="font-ta-sans text-[13px] text-ta-ink border border-ta-ink/25 rounded-[3px] bg-transparent px-3 py-[6px]">
+                  <option value="">{POSTS_UI.all}</option>
+                  {tags.map((t) => <option key={t} value={`tag:${t}`}>{t}</option>)}
+                </select>
+              </label>
+            )}
+            {filter && cfg.filterKind !== "select" && (
+              <div data-ta-entries-filter="" className="flex flex-wrap gap-2 mb-8">
+                <button type="button" data-ta-filter="" aria-pressed="true" className={PILL}>{POSTS_UI.all}</button>
+                {tags.map((t) => <button key={t} type="button" data-ta-filter={`tag:${t}`} aria-pressed="false" className={PILL}>{t}</button>)}
+              </div>
+            )}
+            <ul className="list-none p-0 m-0 grid gap-8 @lg:grid-cols-3">
+              {items.map((x) => <PostCard key={x.id} post={x} />)}
+            </ul>
+            {filter && <p data-ta-entries-empty="" hidden className="font-ta-sans text-[14px] text-ta-muted mt-4">{POSTS_UI.empty}</p>}
+            {more && <a href={"/" + blogPath} className="inline-block mt-10 font-ta-sans text-[12px] font-medium tracking-[0.1em] uppercase text-ta-primary no-underline hover:underline">{p.moreLabel}</a>}
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export const builtinBlocks: Record<string, BlockDef> = {
   table: defineBlock({
     name: "Table",
@@ -453,6 +536,12 @@ export const builtinBlocks: Record<string, BlockDef> = {
     description: "A video with its poster still. Upload a clip and the still is taken for you, or pick one already in the library.",
     props: videoProps,
     component: Video,
+  }),
+  posts: defineBlock({
+    name: "Posts",
+    description: "The newest blog posts, with an optional tag filter. How many, and the filter's style, are set in Settings → Blog.",
+    props: postsProps,
+    component: Posts,
   }),
   types: defineBlock({
     name: "Types",

@@ -4811,6 +4811,37 @@ function siteSeoApply(seo, s) {
   if (s.jsonld && !seo.jsonld) seo.jsonld = s.jsonld;
   if (s.image && !seo.image) seo.image = s.image;
 }
+// A section heading with a help icon beside it; the icon opens a small modal with
+// the section's guidance (HTML from copy.js), so the field hints can stay short.
+const ICON_HELP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4.5"/><circle cx="12" cy="8.2" r=".6" fill="currentColor"/></svg>';
+function siteLabelWithHelp(text, { title, html, aria }) {
+  const row = siteEl("div", "sess-label site-label-help");
+  row.appendChild(document.createTextNode(text));
+  const b = siteEl("button", "site-help"); b.type = "button"; b.innerHTML = ICON_HELP; b.title = aria || title; b.setAttribute("aria-label", aria || title);
+  b.addEventListener("click", () => siteHelpModal(title, html));
+  row.appendChild(b);
+  return row;
+}
+function siteHelpModal(title, html) {
+  const ov = siteEl("div", "blockedit");
+  const card = siteEl("div", "blockedit-card site-help-card");
+  const head = siteEl("div", "blockedit-head");
+  head.appendChild(siteEl("div", "blockedit-title", title));
+  const acts = siteEl("div", "blockedit-acts");
+  const done = siteEl("button", "panelbtn", COPY.site.helpClose); done.style.cssText = "margin:0;width:auto;";
+  acts.appendChild(done); head.appendChild(acts);
+  const body = siteEl("div", "site-help-body"); body.innerHTML = html;
+  card.append(head, body); ov.appendChild(card);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey, true); };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  done.addEventListener("click", close);
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  document.addEventListener("keydown", onKey, true);
+  document.body.appendChild(ov);
+  done.focus();
+  return { close };
+}
+
 // A sub-heading with a body, used inside a section (not folded, not remembered).
 function siteFoldInline(title) { const sec = siteEl("div", "site-sub"); sec.appendChild(siteEl("div", "k site-sub-title", title)); const body = siteEl("div"); sec.appendChild(body); return { sec, body }; }
 
@@ -4985,7 +5016,10 @@ function siteMarkPicker(options, value, onPick, marks) {
   return wrap;
 }
 let siteMarks = {}; // the current project's rendered marks, from site:content
-let siteBlogPath = "blog"; // the posts directory (Settings → Blog), from site:content
+let siteBlogPath = "blog"; // the blog's base route (Settings → Blog), from site:content ("" = no list of its own)
+let siteBlogTag = false;   // posts sit under their first tag ({%tag%} in the directory)
+// A post's address prefix ("/blog/", "/blog/news/", "/"): the base, then its first tag when the directory says so.
+const sitePostPrefix = (tags) => "/" + [siteBlogPath, siteBlogTag && tags && tags.length ? siteSlugOf(tags[0]) : ""].filter(Boolean).map((x) => x + "/").join("");
 
 // Alternating layout: a new two-column block lands on the opposite side from the
 // nearest sided block above it, so a page alternates without anyone asking.
@@ -5390,20 +5424,44 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
     const dzNo = siteMini(COPY.site.designBlockCancel, () => { dzForm.hidden = true; });
     const dzNote = siteEl("span", "sess-desc"); dzNote.style.margin = "0";
     dzRow.append(dzGo, dzNo, dzNote); dzForm.append(dzIn, dzDrop, dzRow);
+    // The status beside the link: the dots while the designer works (the drawer stays
+    // open, this page stays in view), then "the block is on the page" once it lands.
+    const dzStatus = siteEl("span", "sess-desc"); dzStatus.style.cssText = "margin:0 0 0 10px;display:inline-flex;align-items:center;gap:6px;";
+    const dzWorking = () => {
+      dzBtn.disabled = true; dzForm.hidden = true;
+      dzStatus.innerHTML = "<span class=\"ta-dots site-ai-dots\"><i></i><i></i><i></i></span>";
+      dzStatus.appendChild(document.createTextNode(COPY.site.designBlockWorking));
+    };
+    if (cmsDesignTurn && cmsDesignTurn.pageId === page.id) dzWorking(); // re-rendered mid-turn
+    else if (cmsDesignTurn) { dzBtn.disabled = true; dzBtn.title = COPY.site.designBlockBusy; } // one at a time
+    else if (cmsDesignDone && cmsDesignDone.pageId === page.id) {
+      // The turn just ended and this is the re-render: say how it went, once.
+      const d = cmsDesignDone; cmsDesignDone = null;
+      dzStatus.textContent = d.ok ? COPY.site.designBlockDone : COPY.site.designBlockFailed;
+      dzStatus.style.color = d.ok ? "#1a7f37" : "#e5484d";
+      setTimeout(() => { if (d.ok) dzStatus.textContent = ""; }, 6000);
+    }
     dzBtn.addEventListener("click", () => { dzForm.hidden = !dzForm.hidden; if (!dzForm.hidden) dzIn.focus(); });
     dzGo.addEventListener("click", async () => {
       // Strip a page suffix someone typed or pasted ("(add it to the … page)", "Page: …")
       // so the request carries the page exactly once.
       const desc = dzIn.value.trim().replace(/\s*\(add it to the [^)]*page\)?\s*/gi, " ").replace(/\n?\s*Page:\s*.+$/i, "").trim();
       if (!desc) return;
+      if (!appHasKey) { dzNote.textContent = COPY.errors.needKey; dzNote.style.color = "#e5484d"; return; }
+      // The designer writes this page's content file: unsaved edits here would be lost
+      // or would overwrite its placement, so they are saved (or dropped) first.
+      if (siteEditGuard && siteEditGuard.isDirty()) { dzNote.textContent = COPY.site.designBlockSaveFirst; dzNote.style.color = "#e5484d"; return; }
       // References still being read (the vision pass) → wait so the digest is whole.
       if (dzRefs.length && refsAnalyzing) { dzGo.disabled = true; dzNote.textContent = COPY.site.designBlockRefsReading; await waitForIngest(); dzGo.disabled = false; dzNote.textContent = ""; }
       if (dzPhoneOpen) dzPhoneOpen.close();
-      closeModal();
+      // The drawer stays open on this page; the turn runs behind it and the page
+      // re-renders with the new block when it ends (finishCmsDesignTurn).
+      cmsDesignTurn = { pageId: page.id };
+      dzWorking();
       // The command goes to Claude; the chat echoes a plain sentence.
       runAgent(COPY.site.designBlockRequest(desc, page.title, dzRefs), COPY.site.designBlockEcho(desc, page.title));
     });
-    dz.append(dzBtn, dzForm);
+    dz.append(dzBtn, dzStatus, dzForm);
     addRow.dataset.tour = "cms-add-block"; dz.dataset.tour = "cms-design-block";
     addRow.appendChild(sel); bf.body.appendChild(addRow); bf.body.appendChild(dz);
   }
@@ -5475,7 +5533,7 @@ function renderSitePost(post, refresh) {
   const S = COPY.site;
   const card = siteEl("div");
   const h = siteEl("div"); h.style.cssText = "display:flex;align-items:baseline;gap:10px;margin-bottom:10px;";
-  h.append(siteEl("div", "site-page-title", post.title), siteEl("div", "site-page-slug", "/" + siteBlogPath + "/" + post.id));
+  h.append(siteEl("div", "site-page-title", post.title), siteEl("div", "site-page-slug", "/" + (post.route || post.id)));
   h.querySelector(".site-page-title").style.fontSize = "15px";
   h.dataset.tour = "cms-post-head";
   card.appendChild(h);
@@ -5488,7 +5546,7 @@ function renderSitePost(post, refresh) {
   const pf = siteFold(S.postSettings, "post:settings"); pf.sec.dataset.tour = "cms-post-settings"; card.appendChild(pf.sec);
   const t = siteField(S.pageTitle, draft.title); pf.body.appendChild(t.wrap);
   // The permalink starts as the title's slug and follows the title until it's edited by hand.
-  const sl = sitePrefixField(S.postSlug, `/${siteBlogPath}/`, draft.slug, { hint: S.postSlugHint }); pf.body.appendChild(sl.wrap);
+  const sl = sitePrefixField(S.postSlug, sitePostPrefix(draft.tags), draft.slug, { hint: S.postSlugHint }); pf.body.appendChild(sl.wrap);
   const slugFollows = post.slug ? post.slug === slugOf(post.title) : true;
   if (!slugFollows) sl.input.dataset.touched = "1";
   t.input.addEventListener("input", () => { draft.title = t.input.value; if (!sl.input.dataset.touched) { draft.slug = slugOf(t.input.value); sl.input.value = draft.slug; } dirty(); });
@@ -5500,16 +5558,19 @@ function renderSitePost(post, refresh) {
   upd.appendChild(siteEl("div", "sess-desc", updText)); pf.body.appendChild(upd);
   const ds = siteField(S.postDescription, draft.description, { textarea: true, hint: S.postDescriptionHint }); ds.input.addEventListener("input", () => { draft.description = ds.input.value; dirty(); }); pf.body.appendChild(ds.wrap);
   pf.body.appendChild(siteImageControl(draft.image, (next) => { draft.image = next ? next.src : ""; dirty(); }, { label: S.postImage }));
-  // Tags: the same picker as an image's tags. The list holds every tag used by any post
+  // Tags, a section of their own so they are found, not dug for: the same picker as an
+  // image's tags, orderable, the first one Primary (it names the post's address when the
+  // blog groups by tag, and its tag list). The list holds every tag used by any post
   // (renderSitePost.allTags, set by the Posts tab), so a tag is picked, not retyped.
-  const tg = tagCombo({ tags: draft.tags, allTags: renderSitePost.allTags || [], onChange: (t) => { draft.tags = [...t]; dirty(); }, label: S.postTags, hint: S.postTagsHint, noTags: S.postNoTags });
-  pf.body.appendChild(tg.wrap);
+  const tf = siteFold(S.postTagsHeading, "post:tags"); tf.sec.dataset.tour = "cms-post-tags"; card.appendChild(tf.sec);
+  const tg = tagCombo({ tags: draft.tags, allTags: renderSitePost.allTags || [], onChange: (t) => { draft.tags = [...t]; sl.lead.textContent = sitePostPrefix(draft.tags); dirty(); }, label: S.postTags, hint: siteBlogTag ? S.postTagsHintFirst : S.postTagsHint, noTags: S.postNoTags, orderable: true });
+  tf.body.appendChild(tg.wrap);
   const cf = siteFold(S.postContent, "post:content"); cf.sec.dataset.tour = "cms-post-content"; card.appendChild(cf.sec);
-  const rich = siteRichEditor(draft.body, () => { draft.body = rich.getMarkdown(); dirty(); });
+  const rich = siteRichEditor(draft.body, () => { draft.body = rich.getMarkdown(); dirty(); }, { kind: "post" });
   cf.body.appendChild(rich.wrap); cf.body.appendChild(siteEl("div", "sess-desc", S.postBodyHint));
   const sf = siteFold(S.seoHeading, "post:seo"); sf.sec.dataset.tour = "cms-post-seo"; card.appendChild(sf.sec);
   sf.body.appendChild(siteSeoFill({
-    payload: () => ({ kind: "post", title: draft.title, route: `/${siteBlogPath}/${draft.slug || post.id}`, description: draft.description, body: draft.body, tags: draft.tags, date: draft.date, image: draft.image, seo: draft.seo }),
+    payload: () => ({ kind: "post", title: draft.title, route: sitePostPrefix(draft.tags) + (draft.slug || post.id), description: draft.description, body: draft.body, tags: draft.tags, date: draft.date, image: draft.image, seo: draft.seo }),
     apply: (s) => { siteSeoApply(draft.seo, s); st.input.value = draft.seo.title || ""; sd.input.value = draft.seo.description || ""; kp.input.value = draft.seo.keyphrase || ""; jta.value = draft.seo.jsonld || ""; paintImg(); dirty(); },
   }));
   const st = siteField(S.seoTitle, draft.seo.title, { hint: S.seoTitleHint }); st.input.addEventListener("input", () => { draft.seo.title = st.input.value; dirty(); }); sf.body.appendChild(st.wrap);
@@ -5604,7 +5665,7 @@ function siteTypeFieldControl(f, value, onChange, ctx, typeKey, typeLabel) {
     get = () => (href.value.trim() ? { label: lab.value.trim(), href: href.value.trim() } : "");
   } else if (f.kind === "tags") {
     // The same combo as a post's tags, fed only this type's vocabulary for this field.
-    const combo = tagCombo({ tags: Array.isArray(value) ? value : [], allTags: siteTypeTagVocab(ctx, typeKey, f.key), onChange: change, label: f.label + (f.required ? " *" : ""), hint: S.entryTagsHint((typeLabel || S.kindEntry + "s").toLowerCase()), noTags: S.entryNoTags });
+    const combo = tagCombo({ orderable: true, tags: Array.isArray(value) ? value : [], allTags: siteTypeTagVocab(ctx, typeKey, f.key), onChange: change, label: f.label + (f.required ? " *" : ""), hint: S.entryTagsHint((typeLabel || S.kindEntry + "s").toLowerCase()), noTags: S.entryNoTags });
     wrap.innerHTML = ""; wrap.className = ""; wrap.appendChild(combo.wrap);
     get = () => combo.get();
   } else if (f.kind === "list") {
@@ -5648,9 +5709,12 @@ function renderSiteEntry(type, entry, ctx, refresh) {
   t.input.addEventListener("input", () => { if (!sl.input.dataset.touched) sl.input.value = siteSlugOf(t.input.value); dirty(); });
   sl.input.addEventListener("input", () => { sl.input.dataset.touched = "1"; dirty(); });
 
+  // Tags first, in a section of their own (every tags field of the type), then the rest.
+  const tagFields = type.fields.filter((f) => f.kind === "tags");
+  const tf = tagFields.length ? siteFold(S.entryTagsHeading, foldKey + ":tags") : null; if (tf) card.appendChild(tf.sec);
   const cf = siteFold(S.entryFieldsHeading, foldKey + ":fields"); card.appendChild(cf.sec);
   if (!type.fields.length) cf.body.appendChild(siteEl("div", "sess-desc", S.fieldsDesc));
-  const controls = type.fields.map((f) => { const c = siteTypeFieldControl(f, entry[f.key], dirty, ctx, type.key, type.label); cf.body.appendChild(c.wrap); return [f.key, c.get]; });
+  const controls = type.fields.map((f) => { const c = siteTypeFieldControl(f, entry[f.key], dirty, ctx, type.key, type.label); (f.kind === "tags" && tf ? tf.body : cf.body).appendChild(c.wrap); return [f.key, c.get]; });
 
   // Own blocks (a landing page) instead of the template.
   const bf = siteFold(S.blocksHeading, foldKey + ":blocks"); card.appendChild(bf.sec);
@@ -6542,7 +6606,10 @@ function mediaTile(it, { selected = false, onSelect, onOpen, onRenamed, onDelete
 // already on this image) as you type, offers to add what you typed as a new tag, and
 // shows the chosen tags as chips on their own line. Every add or remove calls onChange.
 // Also used for a post's tags (label / hint / noTags override the media wording there).
-function tagCombo({ tags, allTags, onChange, label, hint, noTags }) {
+// `orderable`: the chips can be dragged into an order (or sent to the front with the
+// star), and the first one wears a "Primary" badge: for posts and type entries the
+// first tag is the one the URL and the tag lists go by.
+function tagCombo({ tags, allTags, onChange, label, hint, noTags, orderable = false }) {
   const D = COPY.site.media.detail;
   const wrap = siteEl("div", "site-kv"); wrap.appendChild(siteEl("div", "k", label || D.tags));
   const combo = siteEl("div", "tagcombo");
@@ -6553,15 +6620,45 @@ function tagCombo({ tags, allTags, onChange, label, hint, noTags }) {
   const chips = siteEl("div", "tagchips"); wrap.appendChild(chips);
   let current = [...tags]; let hot = -1;
   const has = (t) => current.some((x) => x.toLowerCase() === t.toLowerCase());
+  let dragFrom = -1;
+  const move = (from, to) => { if (from === to || from < 0 || to < 0) return; const [t] = current.splice(from, 1); current.splice(to, 0, t); paintChips(); onChange(current); };
   const paintChips = () => {
     chips.innerHTML = "";
+    chips.classList.toggle("orderable", orderable);
     if (!current.length) { chips.appendChild(siteEl("span", "sess-desc", noTags || D.noTags)).style.margin = "0"; return; }
-    current.forEach((t) => {
-      const chip = siteEl("span", "tagchip", t);
+    current.forEach((t, i) => {
+      const chip = siteEl("span", "tagchip" + (orderable && i === 0 ? " primary" : ""));
+      if (orderable && i === 0) chip.appendChild(siteEl("span", "tagchip-primary", D.primary));
+      chip.appendChild(document.createTextNode(t));
+      if (orderable && i > 0) {
+        // Send to the front without dragging (keyboard and touch users too).
+        const star = document.createElement("button"); star.type = "button"; star.className = "tagchip-star"; star.title = D.makePrimary; star.setAttribute("aria-label", D.makePrimary);
+        star.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1.1 5.9L12 16.9l-5.3 2.8 1.1-5.9-4.3-4.1 5.9-.8z"/></svg>';
+        star.addEventListener("click", () => move(i, 0));
+        chip.appendChild(star);
+      }
       const x = document.createElement("button"); x.type = "button"; x.title = D.removeTag; x.setAttribute("aria-label", D.removeTag);
       x.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
       x.addEventListener("click", () => { current = current.filter((y) => y !== t); paintChips(); paintList(); onChange(current); });
-      chip.appendChild(x); chips.appendChild(chip);
+      chip.appendChild(x);
+      if (orderable) {
+        chip.draggable = true; chip.title = D.dragTag;
+        chip.addEventListener("dragstart", (e) => { dragFrom = i; chip.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", t); } catch {} });
+        chip.addEventListener("dragend", () => { dragFrom = -1; chips.querySelectorAll(".tagchip").forEach((c) => c.classList.remove("dragging", "drop-before", "drop-after")); });
+        chip.addEventListener("dragover", (e) => {
+          if (dragFrom < 0 || dragFrom === i) return; e.preventDefault(); try { e.dataTransfer.dropEffect = "move"; } catch {}
+          const r = chip.getBoundingClientRect(); const before = e.clientX < r.left + r.width / 2;
+          chip.classList.toggle("drop-before", before); chip.classList.toggle("drop-after", !before);
+        });
+        chip.addEventListener("dragleave", () => chip.classList.remove("drop-before", "drop-after"));
+        chip.addEventListener("drop", (e) => {
+          if (dragFrom < 0 || dragFrom === i) return; e.preventDefault();
+          const r = chip.getBoundingClientRect(); const before = e.clientX < r.left + r.width / 2;
+          let to = before ? i : i + 1; if (dragFrom < to) to -= 1; // the moved chip leaves a hole before the target
+          move(dragFrom, to); dragFrom = -1;
+        });
+      }
+      chips.appendChild(chip);
     });
   };
   const options = () => {
@@ -6889,6 +6986,7 @@ function openMediaPicker(current, { kind = "image" } = {}) {
 // designer types in a rendered document, the file keeps markdown. window.TAEditor
 // is desktop/vendor/editor.js (bundled by desktop/build/bundle-editor.cjs).
 const EDITOR_ICONS = {
+  ai: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
   bold: '<path d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8"/>',
   italic: '<line x1="19" x2="10" y1="4" y2="4"/><line x1="14" x2="5" y1="20" y2="20"/><line x1="15" x2="9" y1="4" y2="20"/>',
   strike: '<path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/>',
@@ -6915,7 +7013,8 @@ function destroyLiveEditors() { liveEditors.forEach((e) => { try { e.destroy(); 
  * edit (read the value back through getMarkdown()). Returns { wrap, getMarkdown }.
  * Without the bundle (or if it fails) the field degrades to a markdown textarea.
  */
-function siteRichEditor(markdown, onChange, { compact } = {}) {
+// `kind` names what the editor holds ("post", "note") for the Ask Claude prompt.
+function siteRichEditor(markdown, onChange, { compact, kind } = {}) {
   const E = COPY.site.editor;
   const wrap = siteEl("div", "ta-editor" + (compact ? " compact" : ""));
   const bar = siteEl("div", "ta-editor-bar");
@@ -6951,7 +7050,7 @@ function siteRichEditor(markdown, onChange, { compact } = {}) {
     inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); ok.click(); } if (e.key === "Escape") { e.preventDefault(); no.click(); } });
     inp.focus();
   };
-  const hideAsk = () => { ask.hidden = true; ask.innerHTML = ""; };
+  const hideAsk = () => { ask.hidden = true; ask.innerHTML = ""; ask.classList.remove("ai", "ai-done"); };
 
   const buttons = [];
   const btn = (key, title, run, isOn, canRun) => {
@@ -7020,6 +7119,35 @@ function siteRichEditor(markdown, onChange, { compact } = {}) {
   sep();
   btn("undo", E.undo, () => chain().undo().run(), () => false, () => editor.can().undo());
   btn("redo", E.redo, () => chain().redo().run(), () => false, () => editor.can().redo());
+  sep();
+  // Ask Claude: what should change, the text goes with it, the reply replaces the text
+  // (in the editor's own markdown subset); Undo brings the previous text back.
+  const aiBtn = btn("ai", E.ai, () => {
+    if (!appHasKey) { showAiNote(COPY.site.seoFillNoKey, true); return; }
+    ask.innerHTML = ""; ask.hidden = false; ask.classList.add("ai");
+    ask.appendChild(siteEl("span", "k", E.aiAsk));
+    const inp = document.createElement("textarea"); inp.className = "field"; inp.placeholder = E.aiPlaceholder; inp.rows = 2;
+    const note = siteEl("span", "sess-desc"); note.style.margin = "0";
+    const go = siteMini(E.aiApply, async () => {
+      const instruction = inp.value.trim(); if (!instruction) { inp.focus(); return; }
+      go.disabled = true; no.disabled = true; inp.disabled = true; aiBtn.disabled = true;
+      note.innerHTML = "<span class=\"ta-dots site-ai-dots\"><i></i><i></i><i></i></span>"; note.appendChild(document.createTextNode(E.aiWorking)); note.style.color = "";
+      let r; try { r = await window.desktop.richAssist(showingRaw ? raw.value : ed.getMarkdown(), instruction, kind || ""); } catch (e) { r = { ok: false, error: e.message }; }
+      go.disabled = false; no.disabled = false; inp.disabled = false; aiBtn.disabled = false;
+      if (r && r.ok) {
+        if (showingRaw) { raw.value = r.markdown; } else ed.setMarkdown(r.markdown);
+        onChange();
+        showAiNote(E.aiDone, false); setTimeout(() => { if (!ask.hidden && ask.classList.contains("ai-done")) hideAsk(); }, 3500);
+        if (!showingRaw) editor.commands.focus();
+      } else { note.textContent = r && r.reason === "no-key" ? COPY.site.seoFillNoKey : ((r && r.error) || E.aiFail); note.style.color = "#e5484d"; }
+    });
+    const no = siteMini(E.cancel, () => { hideAsk(); editor.commands.focus(); });
+    ask.append(inp, go, no, note);
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); go.click(); } if (e.key === "Escape") { e.preventDefault(); no.click(); } });
+    inp.focus();
+  }, () => false);
+  // A one-line result in the ask row (done, or a refusal), replacing the prompt.
+  const showAiNote = (text, error) => { ask.innerHTML = ""; ask.hidden = false; ask.classList.add("ai"); ask.classList.toggle("ai-done", !error); const n = siteEl("span", "sess-desc", text); n.style.cssText = "margin:0;" + (error ? "color:#e5484d;" : "color:#1a7f37;"); ask.appendChild(n); if (error) ask.appendChild(siteMini(E.cancel, () => hideAsk())); };
 
   function paint() {
     buttons.forEach(({ b, isOn, canRun }) => { b.classList.toggle("on", !!isOn()); if (canRun) b.disabled = !canRun(); });
@@ -7340,9 +7468,9 @@ function siteLinkOptions(data, posts, ctx) {
   const addAnchor = (id, label) => { if (id && !seen.has(id)) { seen.add(id); out.push({ group: "sections", label: label || id, href: "/#" + id }); } };
   if (home) home.blocks.forEach((b) => { const id = b.props && b.props.id; const label = b.props && (b.props.heading || b.props.title); if (id) addAnchor(id, label); });
   (data.site.nav || []).forEach((l) => { const m = (l.href || "").match(/^\/#([a-z0-9-]+)$/); if (m) addAnchor(m[1], l.label); (l.links || []).forEach((s) => { const n = (s.href || "").match(/^\/#([a-z0-9-]+)$/); if (n) addAnchor(n[1], s.label); }); });
-  const blog = "/" + ((data.site && data.site.blogPath) || "blog");
-  if (posts.length) out.push({ group: "posts", label: COPY.site.tabs.posts, href: blog });
-  posts.filter((p) => !p.draft).forEach((p) => out.push({ group: "posts", label: p.title, href: blog + "/" + (p.slug || p.id) }));
+  const blogBase = data.site && typeof data.site.blogPath === "string" ? data.site.blogPath : "blog";
+  if (posts.length && blogBase) out.push({ group: "posts", label: COPY.site.tabs.posts, href: "/" + blogBase }); // no base: the parent page (or home) is the list
+  posts.filter((p) => !p.draft).forEach((p) => out.push({ group: "posts", label: p.title, href: "/" + (p.route || p.slug || p.id) }));
   (ctx.files || []).forEach((f) => out.push({ group: "files", label: f.name, href: f.url }));
   ctx.types.forEach((t) => {
     if (t.dataOnly) return; // no addresses to link to
@@ -7791,6 +7919,18 @@ function finishWpDesignTurn() {
   wpDesignTurn = null;
   if (RAILS.site.classList.contains("active")) { siteRailState.tab = "blocks"; openModal("site"); }
 }
+// "Design a new block…" from a page editor: the drawer stays open on that page while
+// the /design-block turn runs (dots beside the link), and when it ends the drawer
+// re-renders where it is, so the new block shows in the page's list with no trip
+// back through the chat. cmsDesignDone carries the outcome to that one re-render.
+let cmsDesignTurn = null; // { pageId } while the turn runs
+let cmsDesignDone = null; // { pageId, ok } for the re-render after it
+function finishCmsDesignTurn(ok) {
+  const t = cmsDesignTurn; cmsDesignTurn = null;
+  if (!t) return;
+  cmsDesignDone = { pageId: t.pageId, ok: !!ok };
+  if (RAILS.site.classList.contains("active")) openModal("site"); // same tab, same page (siteRailState)
+}
 
 // Use an existing design: pick one of the design's blocks, review where each field
 // lands (proposed from names and kinds), confirm, and every instance moves over.
@@ -7934,6 +8074,25 @@ function siteRowTip(row, text) {
   });
   row.addEventListener("mouseleave", hide);
   row.addEventListener("mousedown", hide);
+}
+
+// "Create with AI" above the Posts list: a title and a brief go to Claude, which
+// writes the post in the site's copy voice with its summary, tags and search
+// fields, saved as a draft; onCreated(id) opens the editor on it. The button is
+// the SEO fill's (sparkle, working dots, an error line), so it reads the same.
+function renderSiteAiPost({ onCreated }) {
+  const S = COPY.site;
+  const f = siteFold(S.aiPostHeading, "posts:ai", { defaultOpen: false }); f.sec.style.margin = "0 0 8px"; f.sec.dataset.tour = "cms-post-ai";
+  f.body.appendChild(siteEl("div", "sess-desc", S.aiPostDesc));
+  const t = siteField(S.aiPostTitle, "", { placeholder: S.aiPostTitlePlaceholder }); f.body.appendChild(t.wrap);
+  const b = siteField(S.aiPostBrief, "", { textarea: true, placeholder: S.aiPostBriefPlaceholder, hint: S.aiPostBriefHint }); f.body.appendChild(b.wrap);
+  const row = siteSeoFill({
+    label: S.aiPostWrite, title: S.aiPostWriteTitle, working: S.aiPostWorking,
+    run: async () => { const title = t.input.value.trim(); if (!title) return { ok: false, error: S.aiPostNeedTitle }; return window.desktop.writeSitePost(title, b.input.value.trim()); },
+    done: (r) => { t.input.value = ""; b.input.value = ""; if (r.post) onCreated(r.post.id); },
+  });
+  f.body.appendChild(row);
+  return f.sec;
 }
 
 // The Filter section above a list (Pages, Posts, a type's entries), collapsed by
@@ -8295,22 +8454,92 @@ async function renderSiteSettings(host, data, st) {
 
   // Blog: the posts directory.
   wrap.appendChild(siteEl("div", "drawer-sep"));
-  wrap.appendChild(siteEl("div", "sess-label", S.blogHeading));
-  const bp = siteField(S.postsDir, (data.site && data.site.blogPath) || "blog", { hint: S.postsDirHint });
+  wrap.appendChild(siteLabelWithHelp(S.blogHeading, { title: S.blogHelpTitle, html: S.blogHelp, aria: S.blogHelpAria }));
+  // Two panes under one heading: Posts URL (where posts live) and Blog Block (what the
+  // Posts block shows). The same segmented control as the Media tab's kinds; the chosen
+  // pane is remembered for the session.
+  const blogTabs = siteEl("div", "media-kinds in-column"); blogTabs.style.marginBottom = "12px";
+  const urlPane = siteEl("div"); const blockPane = siteEl("div");
+  const blogPanes = { url: urlPane, block: blockPane };
+  const showBlogTab = (k) => { siteRailState.blogTab = k; blogTabs.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.tab === k)); Object.entries(blogPanes).forEach(([key, el]) => { el.hidden = key !== k; }); };
+  [["url", S.blogTabUrl], ["block", S.blogTabBlock]].forEach(([k, label]) => { const b = document.createElement("button"); b.type = "button"; b.dataset.tab = k; b.textContent = label; b.addEventListener("click", () => showBlogTab(k)); blogTabs.appendChild(b); });
+  wrap.append(blogTabs, urlPane, blockPane);
+  // The parent page (none = the root) and the directory's own segment: /blog, or
+  // /resources/blog. Either change saves; the line beneath shows the resulting address.
+  // The field holds the directory's own segment; the tag grouping ({%tag%}) is a checkbox
+  // beneath it, so nobody types the token. The two combine into the template on save.
+  const blogDir = data.site && typeof data.site.blogDir === "string" ? data.site.blogDir : "blog";
+  let blogTagOn = !!(data.site && data.site.blogTag);
+  const pw = siteEl("div", "site-kv"); pw.appendChild(siteEl("div", "k", S.postsParent));
+  const psel = document.createElement("select"); psel.className = "field";
+  const o0 = document.createElement("option"); o0.value = ""; o0.textContent = S.postsParentNone; psel.appendChild(o0);
+  (data.pages || []).filter((x) => x.id !== "home").forEach((x) => { const o = document.createElement("option"); o.value = x.id; o.textContent = `${x.title}  ·  /${x.route || x.slug || x.id}`; psel.appendChild(o); });
+  psel.value = (data.site && data.site.blogParent) || "";
+  pw.appendChild(psel); pw.appendChild(siteEl("div", "sess-desc", S.postsParentHint)); urlPane.appendChild(pw);
+  const bp = siteField(S.postsDir, blogDir, { hint: S.postsDirHint });
   const bpStatus = siteEl("div"); bpStatus.style.cssText = "min-height:18px;";
+  const bpAddress = siteEl("div", "sess-desc", S.postsAddress(data.site && typeof data.site.blogPath === "string" ? data.site.blogPath : blogDir, !!(data.site && data.site.blogTag))); bpAddress.style.cssText = "margin:0 0 6px;font-weight:600;color:#2a2a2a;";
   // Autosave a second after the last keystroke (Enter saves at once); green "Saved" flash.
   let bpTimer = null;
   const saveBlogPath = async () => {
     clearTimeout(bpTimer);
-    const v = bp.input.value.trim(); if (!v || v === ((data.site && data.site.blogPath) || "blog")) return;
-    const r = await window.desktop.setBlogPath(v);
+    const v = bp.input.value.trim().replace(/^\/+|\/+$/g, ""); // "/" and "" both mean: right under the parent
+    const parent = psel.value || "";
+    if (v === ((data.site && data.site.blogDir) || "") && parent === ((data.site && data.site.blogParent) || "") && blogTagOn === !!(data.site && data.site.blogTag)) return;
+    const r = await window.desktop.setBlogPath([v, blogTagOn ? "{%tag%}" : ""].filter(Boolean).join("/"), parent);
     bpStatus.innerHTML = "";
-    if (r && r.ok) { bp.input.value = r.path; data.site.blogPath = r.path; siteBlogPath = r.path; siteFlash(bpStatus, S.saved); }
+    if (r && r.ok) {
+      // The normalized segment goes back into the field only when it isn't being typed in
+      // (a rewrite mid-word ate a trailing hyphen or slash); it lands on blur instead.
+      if (document.activeElement !== bp.input) bp.input.value = r.dir;
+      data.site.blogDir = r.dir; data.site.blogTemplate = r.path; data.site.blogParent = r.parent; data.site.blogPath = r.route; data.site.blogTag = !!r.tag; siteBlogPath = r.route; siteBlogTag = !!r.tag;
+      bpAddress.textContent = S.postsAddress(r.route, !!r.tag); siteFlash(bpStatus, S.saved);
+    }
     else if (r && r.error) { const e = siteEl("div", "sess-desc", r.error); e.style.color = "#c0261e"; bpStatus.appendChild(e); }
   };
+  bp.input.placeholder = S.postsDirPlaceholder;
   bp.input.addEventListener("input", () => { clearTimeout(bpTimer); bpTimer = setTimeout(saveBlogPath, 1000); });
   bp.input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveBlogPath(); } });
-  bp.wrap.appendChild(bpStatus); wrap.appendChild(bp.wrap);
+  bp.input.addEventListener("blur", () => { if (data.site && typeof data.site.blogDir === "string" && bp.input.value.trim().replace(/^\/+|\/+$/g, "") !== data.site.blogDir) saveBlogPath(); else if (data.site && typeof data.site.blogDir === "string") bp.input.value = data.site.blogDir; });
+  psel.addEventListener("change", saveBlogPath);
+  const tagRow = siteEl("label", "toggle-row"); const tagCb = document.createElement("input"); tagCb.type = "checkbox"; tagCb.checked = blogTagOn;
+  tagRow.append(tagCb, siteEl("span", "", S.postsTagGroup));
+  tagCb.addEventListener("change", () => { blogTagOn = tagCb.checked; saveBlogPath(); });
+  // The address line, then the tag checkbox right beneath it (they describe one URL), the
+  // save status after both; the empty status line no longer holds them apart.
+  bp.wrap.appendChild(bpAddress); urlPane.appendChild(bp.wrap);
+  bp.wrap.style.marginBottom = "8px"; tagRow.style.marginBottom = "6px";
+  urlPane.appendChild(tagRow); urlPane.appendChild(siteEl("div", "sess-desc", S.postsTagGroupHint)); urlPane.appendChild(bpStatus);
+  // The built-in Posts block: how many posts it shows, and its tag filter. Autosaved.
+  // The Blog Block pane: no box of its own now that it is a pane.
+  const pbl = { body: blockPane };
+  pbl.body.appendChild(siteEl("div", "sess-desc", S.postsBlockDesc));
+  const pb = { count: 6, filter: false, filterKind: "pills", ...((data.site && data.site.blogPosts) || {}) };
+  const pbStatus = siteEl("div"); pbStatus.style.cssText = "min-height:18px;";
+  let pbTimer = null;
+  const savePostsBlock = async () => {
+    clearTimeout(pbTimer);
+    const r = await window.desktop.saveBlogPosts(pb);
+    pbStatus.innerHTML = "";
+    if (r && r.ok) { Object.assign(pb, r.posts); data.site.blogPosts = r.posts; siteFlash(pbStatus, S.saved); }
+    else if (r && r.error) { const e = siteEl("div", "sess-desc", r.error); e.style.color = "#c0261e"; pbStatus.appendChild(e); }
+  };
+  const pbSoon = () => { clearTimeout(pbTimer); pbTimer = setTimeout(savePostsBlock, 600); };
+  const pc = siteField(S.postsCount, pb.count, { type: "number", hint: S.postsCountHint }); pc.input.min = "0"; pc.input.step = "1";
+  pc.input.addEventListener("input", () => { const n = Math.max(0, Math.floor(Number(pc.input.value) || 0)); pb.count = n; pbSoon(); });
+  pbl.body.appendChild(pc.wrap);
+  const pfRow = siteEl("label", "toggle-row"); const pfCb = document.createElement("input"); pfCb.type = "checkbox"; pfCb.checked = !!pb.filter;
+  pfRow.append(pfCb, siteEl("span", "", S.postsFilter)); pbl.body.appendChild(pfRow);
+  const pk = siteEl("div", "site-kv"); pk.appendChild(siteEl("div", "k", S.postsFilterKind));
+  const pkSel = document.createElement("select"); pkSel.className = "field";
+  for (const [k, label] of Object.entries(S.postsFilterKinds)) { const o = document.createElement("option"); o.value = k; o.textContent = label; pkSel.appendChild(o); }
+  pkSel.value = pb.filterKind; pk.appendChild(pkSel); pk.appendChild(siteEl("div", "sess-desc", S.postsFilterKindHint)); pbl.body.appendChild(pk);
+  const paintKind = () => { pk.style.display = pfCb.checked ? "" : "none"; };
+  pfCb.addEventListener("change", () => { pb.filter = pfCb.checked; paintKind(); pbSoon(); });
+  pkSel.addEventListener("change", () => { pb.filterKind = pkSel.value; pbSoon(); });
+  paintKind();
+  pbl.body.appendChild(pbStatus);
+  showBlogTab(siteRailState.blogTab === "block" ? "block" : "url");
 
   // Scripts: GTM + additional scripts with a placement. Published site only.
   wrap.appendChild(siteEl("div", "drawer-sep"));
@@ -8754,7 +8983,8 @@ async function renderSite(body) {
   siteLinkOptionsCache = siteLinkOptions(data, posts, ctx); siteLinkOptionsCache.stamp = String(Date.now());
   mediaIndex = await window.desktop.listMedia().catch(() => []); // thumbnails for image fields
   siteMarks = data.marks || {};
-  siteBlogPath = (data.site && data.site.blogPath) || "blog";
+  siteBlogPath = data.site && typeof data.site.blogPath === "string" ? data.site.blogPath : "blog";
+  siteBlogTag = !!(data.site && data.site.blogTag);
   siteDesignId = data.design || null;
 
   // ── Tabs: Pages · Posts · Types · Forms · Blocks · Navigation · Settings ──
@@ -8842,12 +9072,15 @@ async function renderSite(body) {
     left.dataset.tour = "cms-post-list"; // walkthrough anchors
     const cur = sel && sel.kind === "post" && posts.some((p) => p.id === sel.id) ? sel : (posts[0] ? { kind: "post", id: posts[0].id } : null);
     const curPost = cur && posts.find((p) => p.id === cur.id);
-    sitePreviewPath = curPost ? `/${siteBlogPath}/${curPost.slug || curPost.id}` : `/${siteBlogPath}`;
+    sitePreviewPath = curPost ? "/" + (curPost.route || curPost.slug || curPost.id) : "/" + siteBlogPath;
     // Search + Create + the Tags expander at the top, above the list.
     const addPost = addRow(COPY.site.newPostPlaceholder, COPY.site.create, async (t) => { const res = await window.desktop.createSitePost(t); if (res && res.ok) openItem("post", res.post.id); });
     addPost.dataset.tour = "cms-add-post";
     const postSub = (p) => p.draft ? COPY.site.draftTag : (p.date || "");
     const postItems = posts.map((p) => ({ id: p.id, title: p.title, sub: postSub(p), tags: p.tags || [] }));
+    // Create with AI: a title and a brief, and Claude writes the post as a draft (voice,
+    // summary, tags, SEO); the editor opens on it. Its own section, above Filter.
+    left.appendChild(renderSiteAiPost({ onCreated: (id) => openItem("post", id) }));
     const postStatus = siteStatusBar({ host: left, kind: "post", items: posts, refresh, filterKey: "posts" });
     const postTools = siteListTools({ left, right, placeholder: COPY.site.searchPosts, items: postItems, onOpen: (id) => openItem("post", id), addRow: addPost, tags: true, tourId: "cms-post" });
     if (!posts.length) left.appendChild(siteEl("div", "sess-desc", COPY.site.noPosts));
@@ -9860,6 +10093,7 @@ window.desktop.onAgentEvent((evt) => {
       previewTurnTitle = null;
       if (siteBuildTurn) finishSiteBuildTurn(true); // the promote turn: open the CMS drawer once the site is ready
       if (wpDesignTurn) finishWpDesignTurn();
+      if (cmsDesignTurn) finishCmsDesignTurn(true);
       // Quiet build finished → reveal the completed design now (both tabs, land on Home) and
       // open the chat for iteration. Nothing showed during the build.
       if (quietBuildActive) { finishQuietBuild(); break; }
@@ -9891,6 +10125,7 @@ window.desktop.onAgentEvent((evt) => {
       previewTurnTitle = null;
       if (siteBuildTurn) finishSiteBuildTurn(false);
       if (wpDesignTurn) finishWpDesignTurn();
+      if (cmsDesignTurn) finishCmsDesignTurn(false);
       // Even on error, settle-then-reveal so the designer isn't stuck behind a
       // cover (the chat carries the error detail).
       if (quietBuildActive) { finishQuietBuild(); break; } // reveal + open chat (the error is in it)
@@ -15340,6 +15575,8 @@ async function runAgent(toSend, echoText, opts) {
     addMsg("error", String(e));
     refreshPreview();
     endTurnGate(); // no result/error EVENT will arrive for an IPC-level failure
+    if (wpDesignTurn) finishWpDesignTurn();
+    if (cmsDesignTurn) finishCmsDesignTurn(false);
   } finally {
     send.disabled = false;
     input.focus();

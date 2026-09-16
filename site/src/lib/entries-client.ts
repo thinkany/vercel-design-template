@@ -56,6 +56,7 @@ export function enhanceEntries(root: ParentNode = document) {
       const empty = sec.querySelector<HTMLElement>("[data-ta-entries-empty]");
       if (empty) empty.hidden = vis.length > 0;
       sec.querySelectorAll<HTMLButtonElement>("[data-ta-filter]").forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.taFilter || "") === filter)));
+      sec.querySelectorAll<HTMLSelectElement>("[data-ta-filter-select]").forEach((s) => { if (s.value !== filter) s.value = filter; });
       const pager = sec.querySelector<HTMLElement>("[data-ta-entries-pager]");
       if (pager) {
         pager.hidden = pages <= 1;
@@ -82,6 +83,11 @@ export function enhanceEntries(root: ParentNode = document) {
       const settle = (pager: boolean) => { paint(); writeAddress(sec); if (pager && sec.getBoundingClientRect().top < 0) sec.scrollIntoView({ block: "start" }); };
       // One listener on the section: the pills and pager buttons may be re-created by a
       // re-render, the section itself stays.
+      // The Posts block's select-list filter: the same filter key, from a <select>.
+      sec.addEventListener("change", (e) => {
+        const s = e.target as HTMLElement | null;
+        if (s && s.matches("[data-ta-filter-select]") && sec.contains(s)) { sec.dataset.taFilterOn = (s as HTMLSelectElement).value || ""; sec.dataset.taPage = "0"; settle(false); }
+      });
       sec.addEventListener("click", (e) => {
         const t = e.target as HTMLElement | null;
         const pill = t && t.closest<HTMLElement>("[data-ta-filter]");

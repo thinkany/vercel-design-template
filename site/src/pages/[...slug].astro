@@ -11,15 +11,46 @@
 // here, loudly, instead of shipping without its behaviour.
 import { getCollection } from "astro:content";
 import Base from "../layouts/Base.astro";
+import BlogIndex from "../components/BlogIndex.astro";
+import BlogPost from "../components/BlogPost.astro";
 import { resolveBlock } from "../lib/blocks";
 import { pageRoute } from "../lib/pages";
+import { blogPath, blogParent, blogTag, postRoute, tagRoute, tagSlug } from "../lib/site";
 import { blocks } from "../../blocks";
 import { withBuiltins } from "../lib/builtin-blocks";
 
+// The BLOG lives here too: its list at the posts directory (Settings → Blog), a list
+// per tag when the directory carries {%tag%}, and a page per post. The directory may
+// sit under a parent page (/resources/blog) or be empty (posts right under the parent,
+// whose page is then the list), which is why it is this rest route and not a
+// fixed-depth one. A page at the same address keeps it: the CMS refuses that clash
+// for the directory and for a post's address, and a stray one is skipped here.
 export async function getStaticPaths() {
   // Drafts are previewed in dev and never built for the published site.
   const pages = await getCollection("pages", ({ data }) => import.meta.env.DEV || !data.draft);
-  return pages.map((page) => {
+  const crumbsFor = (parentId: string | undefined) => {
+    const chain: typeof pages = []; let cur = parentId ? pages.find((p) => p.id === parentId) : undefined; let g = 0;
+    while (cur && cur.id !== "home" && g++ < 16) { chain.unshift(cur); cur = cur.data.parent ? pages.find((p) => p.id === cur!.data.parent) : undefined; }
+    const home = pages.find((p) => p.id === "home");
+    return [...(home ? [{ name: home.data.title, route: "" }] : []), ...chain.map((p) => ({ name: p.data.title, route: pageRoute(p, pages) }))];
+  };
+  const out: { params: { slug: string | undefined }; props: Record<string, unknown> }[] = [];
+  const taken = new Set(pages.map((p) => pageRoute(p, pages)));
+  const posts = (await getCollection("posts", ({ data }) => import.meta.env.DEV || !data.draft)).sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+  const blogCrumbs = [...crumbsFor(blogParent || undefined), ...(blogPath ? [{ name: "Blog", route: blogPath }] : [])];
+  if (blogPath && !taken.has(blogPath)) out.push({ params: { slug: blogPath }, props: { blog: true, posts, crumbs: blogCrumbs } });
+  if (blogTag) {
+    // One list per first tag, at the tag's segment; two spellings of a tag share a slug and a list.
+    const byTag = new Map<string, { name: string; posts: typeof posts }>();
+    for (const post of posts) { const t = post.data.tags[0]; if (!t) continue; const k = tagSlug(t); if (!k) continue; const e = byTag.get(k) || { name: t, posts: [] }; e.posts.push(post); byTag.set(k, e); }
+    for (const [, e] of byTag) { const route = tagRoute(e.name); if (!taken.has(route)) out.push({ params: { slug: route }, props: { blog: true, tag: e.name, posts: e.posts, crumbs: [...blogCrumbs, { name: e.name, route }] } }); }
+  }
+  for (const post of posts) {
+    const route = postRoute({ id: post.id, slug: post.data.slug, tags: post.data.tags });
+    if (taken.has(route)) { console.warn(`[posts] "${post.data.title}" would live at /${route}, where a page already is; skipped.`); continue; }
+    out.push({ params: { slug: route }, props: { post, crumbs: blogCrumbs } });
+  }
+  return [...out, ...pages.map((page) => {
     const slug = pageRoute(page, pages); // parent chain: "about/island-guide"
     // Breadcrumbs: Home, then each ancestor, then this page.
     const chain: typeof pages = []; let cur: (typeof pages)[number] | undefined = page; let g = 0;
@@ -27,13 +58,14 @@ export async function getStaticPaths() {
     const home = pages.find((p) => p.id === "home");
     const crumbs = [...(home ? [{ name: home.data.title, route: "" }] : []), ...chain.map((p) => ({ name: p.data.title, route: pageRoute(p, pages) }))];
     return { params: { slug: slug || undefined }, props: { page, crumbs } };
-  });
+  })];
 }
 
-const { page, crumbs } = Astro.props;
+const { page, crumbs, blog, tag, posts, post } = Astro.props;
 const site = Astro.site ? Astro.site.href.replace(/\/$/, "") : "";
-const ld = { kind: "page" as const, crumbs: page.id === "home" ? [] : (crumbs as { name: string; route: string }[]).map((c) => ({ name: c.name, url: site + "/" + c.route })) };
-const rendered = page.data.blocks.map((b, i) => {
+const crumbUrls = (crumbs as { name: string; route: string }[]).map((c) => ({ name: c.name, url: site + "/" + c.route }));
+const ld = page ? { kind: "page" as const, crumbs: page.id === "home" ? [] : crumbUrls } : null;
+const rendered = !page ? [] : page.data.blocks.map((b, i) => {
   const where = `content/pages/${page.id}.json blocks[${i}]`;
   const r = resolveBlock(withBuiltins(blocks), b, where);
   if (r.hydrate) {
@@ -42,6 +74,12 @@ const rendered = page.data.blocks.map((b, i) => {
   return r;
 });
 ---
-<Base title={page.data.title} draft={page.data.draft} seo={page.data.seo} ld={ld} ldBlocks={rendered.flatMap((r) => r.schema || [])}>
-  {rendered.map(({ component: Block, props }) => <Block {...props} />)}
-</Base>
+{blog ? (
+  <BlogIndex posts={posts} crumbs={crumbUrls} tag={tag} />
+) : post ? (
+  <BlogPost post={post} />
+) : (
+  <Base title={page.data.title} draft={page.data.draft} seo={page.data.seo} ld={ld} ldBlocks={rendered.flatMap((r) => r.schema || [])}>
+    {rendered.map(({ component: Block, props }) => <Block {...props} />)}
+  </Base>
+)}

@@ -5,6 +5,7 @@
 import { z } from "astro/zod";
 import raw from "../../../content/site.json";
 import { navColumn } from "./blocks";
+import { pageRoute } from "./pages";
 
 const navLink = z.object({
   label: z.string(),
@@ -79,7 +80,22 @@ export const siteSchema = z.object({
   /** CMS display names per block key (recognition only; the site doesn't use them). */
   blockNames: z.record(z.string()).default({}),
   /** The posts directory: posts are listed at /<path> and served at /<path>/<post>. */
-  blog: z.object({ path: z.string().default("blog") }).default({ path: "blog" }),
+  blog: z.object({
+    path: z.string().default("blog"),
+    /**
+     * The posts directory: "blog" (the list at /blog, posts beneath), "" (posts right
+     * under the parent page, or at the root), and either may end in "/{%tag%}", which
+     * puts each post under its first tag ("blog/{%tag%}" → /blog/news/my-post, with a
+     * list per tag at /blog/news).
+     */
+    parent: z.string().default(""),
+    /** The built-in Posts block (Settings → Blog): how many posts, a tag filter, and its style. */
+    posts: z.object({
+      count: z.number().int().min(0).default(6),
+      filter: z.boolean().default(false),
+      filterKind: z.enum(["pills", "select"]).default("pills"),
+    }).default({ count: 6, filter: false, filterKind: "pills" }),
+  }).default({ path: "blog", parent: "", posts: { count: 6, filter: false, filterKind: "pills" } }),
   /** Site icons (the CMS Settings tab): paths under public/, e.g. "/images/icon.svg". */
   favicon: z.object({
     /** Browser tab / bookmark icon: SVG (best) or a square PNG. */
@@ -126,5 +142,28 @@ if (!parsed.success) {
   throw new Error(`content/site.json is invalid:\n${issues}`);
 }
 export const site: SiteSettings = parsed.data;
-/** The posts directory, normalized: no slashes, lower-case ("blog"). */
-export const blogPath: string = (site.blog.path || "blog").replace(/^\/+|\/+$/g, "").toLowerCase() || "blog";
+/** A tag as a URL segment ("Content Marketing" → "content-marketing"); mirrors the app's slugifyId. */
+export const tagSlug = (t: string): string => String(t || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+export const TAG_TOKEN = "{%tag%}";
+/** The posts directory as written, normalized: "", "blog", "blog/{%tag%}" or "{%tag%}". */
+export const blogTemplate: string = String(site.blog.path ?? "blog").trim().toLowerCase().replace(/^\/+|\/+$/g, "");
+const blogSegments = blogTemplate.split("/").map((x) => x.trim()).filter(Boolean);
+/** Whether each post sits under its first tag (the {%tag%} token). */
+export const blogTag: boolean = blogSegments.includes(TAG_TOKEN);
+/** The directory's own static segment(s), slugified: "blog", or "" for none. */
+export const blogDir: string = blogSegments.filter((x) => x !== TAG_TOKEN).map(tagSlug).filter(Boolean).join("/");
+/** The page it sits under (Settings → Blog), or "" for the root. */
+export const blogParent: string = String(site.blog.parent || "");
+// The parent's route needs the pages (content/pages/*.json). An eager glob in a
+// try/catch, as entries.ts does: the app's schema introspection bundles this for
+// Node, where import.meta.glob doesn't exist; a parent that no longer exists is ignored.
+const pagesRaw: Record<string, { slug?: string; parent?: string }> = (() => { try { return import.meta.glob("../../../content/pages/*.json", { eager: true, import: "default" }) as Record<string, { slug?: string; parent?: string }>; } catch { return {}; } })();
+const pageList = Object.entries(pagesRaw).map(([file, data]) => ({ id: file.replace(/^.*\//, "").replace(/\.json$/, ""), data: data || {} }));
+const parentPage = blogParent && blogParent !== "home" ? pageList.find((q) => q.id === blogParent) : undefined;
+/** The blog's base route, no leading slash: "blog", "resources/blog" under a parent, or "" (no list of its own: the parent page, or home, is the list). */
+export const blogPath: string = [parentPage ? pageRoute(parentPage, pageList) : "", blogDir].filter(Boolean).join("/");
+/** A tag's list route ("blog/news"), only meaningful with the {%tag%} token. */
+export const tagRoute = (tag: string): string => [blogPath, tagSlug(tag)].filter(Boolean).join("/");
+/** A post's route, no leading slash: base, then its first tag when the directory says so, then its slug. */
+export const postRoute = (p: { id: string; slug?: string; tags?: string[] }): string =>
+  [blogPath, blogTag && p.tags && p.tags.length ? tagSlug(p.tags[0]) : "", (p.slug || "").trim() || p.id].filter(Boolean).join("/");
