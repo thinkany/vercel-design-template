@@ -8351,21 +8351,34 @@ async function renderSiteSettings(host, data, st) {
   // Blog: the posts directory.
   wrap.appendChild(siteEl("div", "drawer-sep"));
   wrap.appendChild(siteEl("div", "sess-label", S.blogHeading));
-  const bp = siteField(S.postsDir, (data.site && data.site.blogPath) || "blog", { hint: S.postsDirHint });
+  // The parent page (none = the root) and the directory's own segment: /blog, or
+  // /resources/blog. Either change saves; the line beneath shows the resulting address.
+  const blogDir = (data.site && data.site.blogDir) || (data.site && data.site.blogPath) || "blog";
+  const pw = siteEl("div", "site-kv"); pw.appendChild(siteEl("div", "k", S.postsParent));
+  const psel = document.createElement("select"); psel.className = "field";
+  const o0 = document.createElement("option"); o0.value = ""; o0.textContent = S.postsParentNone; psel.appendChild(o0);
+  (data.pages || []).filter((x) => x.id !== "home").forEach((x) => { const o = document.createElement("option"); o.value = x.id; o.textContent = `${x.title}  ·  /${x.route || x.slug || x.id}`; psel.appendChild(o); });
+  psel.value = (data.site && data.site.blogParent) || "";
+  pw.appendChild(psel); pw.appendChild(siteEl("div", "sess-desc", S.postsParentHint)); wrap.appendChild(pw);
+  const bp = siteField(S.postsDir, blogDir, { hint: S.postsDirHint });
   const bpStatus = siteEl("div"); bpStatus.style.cssText = "min-height:18px;";
+  const bpAddress = siteEl("div", "sess-desc", S.postsAddress((data.site && data.site.blogPath) || blogDir)); bpAddress.style.margin = "0 0 6px";
   // Autosave a second after the last keystroke (Enter saves at once); green "Saved" flash.
   let bpTimer = null;
   const saveBlogPath = async () => {
     clearTimeout(bpTimer);
-    const v = bp.input.value.trim(); if (!v || v === ((data.site && data.site.blogPath) || "blog")) return;
-    const r = await window.desktop.setBlogPath(v);
+    const v = bp.input.value.trim(); if (!v) return;
+    const parent = psel.value || "";
+    if (v === blogDir && parent === ((data.site && data.site.blogParent) || "")) return;
+    const r = await window.desktop.setBlogPath(v, parent);
     bpStatus.innerHTML = "";
-    if (r && r.ok) { bp.input.value = r.path; data.site.blogPath = r.path; siteBlogPath = r.path; siteFlash(bpStatus, S.saved); }
+    if (r && r.ok) { bp.input.value = r.path; data.site.blogDir = r.path; data.site.blogParent = r.parent; data.site.blogPath = r.route; siteBlogPath = r.route; bpAddress.textContent = S.postsAddress(r.route); siteFlash(bpStatus, S.saved); }
     else if (r && r.error) { const e = siteEl("div", "sess-desc", r.error); e.style.color = "#c0261e"; bpStatus.appendChild(e); }
   };
   bp.input.addEventListener("input", () => { clearTimeout(bpTimer); bpTimer = setTimeout(saveBlogPath, 1000); });
   bp.input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveBlogPath(); } });
-  bp.wrap.appendChild(bpStatus); wrap.appendChild(bp.wrap);
+  psel.addEventListener("change", saveBlogPath);
+  bp.wrap.appendChild(bpAddress); bp.wrap.appendChild(bpStatus); wrap.appendChild(bp.wrap);
   // The built-in Posts block: how many posts it shows, and its tag filter. Autosaved.
   const pbl = siteFoldInline(S.postsBlockHeading); wrap.appendChild(pbl.sec);
   pbl.body.appendChild(siteEl("div", "sess-desc", S.postsBlockDesc));

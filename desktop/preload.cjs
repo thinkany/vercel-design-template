@@ -220,7 +220,7 @@ contextBridge.exposeInMainWorld("desktop", {
   getCmsSettings: () => ipcRenderer.invoke("cms:getSettings"),
   saveSiteSeo: (seo) => ipcRenderer.invoke("site:saveSeo", { seo }),
   setManageNav: (manageNav) => ipcRenderer.invoke("site:setManageNav", { manageNav }),
-  setBlogPath: (path) => ipcRenderer.invoke("site:setBlogPath", { path }),
+  setBlogPath: (path, parent) => ipcRenderer.invoke("site:setBlogPath", { path, parent }),
   saveBlogPosts: (posts) => ipcRenderer.invoke("site:saveBlogPosts", { posts }),
   saveSiteScripts: (scripts) => ipcRenderer.invoke("site:saveScripts", { scripts }),
   saveSiteRedirects: (redirects) => ipcRenderer.invoke("site:saveRedirects", { redirects }),

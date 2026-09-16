@@ -1,0 +1,33 @@
+---
+// ©2026 thinkany llc. All rights reserved.
+// The POSTS INDEX (CORE): the list at the posts directory (Settings → Blog), which
+// may sit under a parent page (/resources/blog). Rendered by the page route
+// (src/pages/[...slug].astro) at that address; posts link to their own pages.
+import type { CollectionEntry } from "astro:content";
+import Base from "../layouts/Base.astro";
+import { blogPath } from "../lib/site";
+interface Props { posts: CollectionEntry<"posts">[]; crumbs: { name: string; url: string }[] }
+const { posts, crumbs } = Astro.props;
+const fmt = (d: Date) => d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
+---
+<Base title="Blog" description="Latest posts" ld={{ kind: "collection" }}>
+  <main class="max-w-[720px] mx-auto px-6 py-20">
+    {crumbs.length > 1 && (
+      <nav aria-label="Breadcrumb" class="font-ta-sans text-[12px] text-ta-muted mb-6">
+        {crumbs.slice(0, -1).map((c, i) => <span>{i > 0 && <span class="mx-2">/</span>}<a href={c.url} class="no-underline hover:text-ta-ink">{c.name}</a></span>)}
+      </nav>
+    )}
+    <h1 class="font-ta-display text-[clamp(32px,5vw,48px)] text-ta-ink leading-[1.05] tracking-[-0.02em] mb-12">Blog</h1>
+    <ul class="list-none p-0 m-0 flex flex-col gap-10">
+      {posts.map((p) => (
+        <li>
+          <a href={`/${blogPath}/${p.data.slug || p.id}`} class="no-underline">
+            <div class="font-ta-sans text-[11px] tracking-[0.14em] uppercase text-ta-muted mb-2">{fmt(p.data.date)}{import.meta.env.DEV && p.data.draft && <span class="ml-3 rounded-full bg-ta-ink px-2 py-[2px] text-[10px] text-ta-surface">Draft</span>}</div>
+            <h2 class="font-ta-display text-[26px] text-ta-ink leading-[1.15] mb-2">{p.data.title}</h2>
+            {p.data.description && <p class="font-ta-serif text-[16px] text-ta-body leading-[1.6] m-0">{p.data.description}</p>}
+          </a>
+        </li>
+      ))}
+    </ul>
+  </main>
+</Base>

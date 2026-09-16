@@ -1885,7 +1885,7 @@ function readSiteContent(dir) {
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
     licensed: siteLicensed(), // the CMS drawer shows a licensing note instead of the editor when false
-    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), blogPosts: blogPostsOf(site), siteNameDefault: readProjectEnv(dir).VITE_CLIENT_NAME || path.basename(dir), logos: logosSetting(dir, site), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, footer: site.footer && typeof site.footer === "object" && !Array.isArray(site.footer) ? site.footer : {}, contact: contactSetting(site.contact), scripts: { gtm: (site.scripts && site.scripts.gtm) || "", extra: Array.isArray(site.scripts && site.scripts.extra) ? site.scripts.extra : [] }, redirects: Array.isArray(site.redirects) ? site.redirects : [], seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
+    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogRouteOf(dir, site), blogDir: blogPathOf(site), blogParent: blogParentOf(site), blogPosts: blogPostsOf(site), siteNameDefault: readProjectEnv(dir).VITE_CLIENT_NAME || path.basename(dir), logos: logosSetting(dir, site), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, footer: site.footer && typeof site.footer === "object" && !Array.isArray(site.footer) ? site.footer : {}, contact: contactSetting(site.contact), scripts: { gtm: (site.scripts && site.scripts.gtm) || "", extra: Array.isArray(site.scripts && site.scripts.extra) ? site.scripts.extra : [] }, redirects: Array.isArray(site.redirects) ? site.redirects : [], seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
     pages, posts, ...(() => {
       const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {}, builtins: {} };
       const names = site.blockNames && typeof site.blockNames === "object" ? site.blockNames : {};
@@ -1942,7 +1942,7 @@ function generatedLlms(dir) {
   const c = readSiteContent(dir);
   for (const p of c.pages) { if (p.seo && p.seo.noindex) continue; const slug = p.id === "home" ? "" : (p.slug || p.id); out.push(line(p.title, `${base}/${slug}`, p.seo && p.seo.description)); }
   const posts = readPosts(dir).filter((p) => !p.draft && !(p.seo && p.seo.noindex));
-  if (posts.length) { out.push("", "## Posts"); for (const p of posts) out.push(line(p.title, `${base}/${blogPathOf(site)}/${p.id}`, p.description)); }
+  if (posts.length) { out.push("", "## Posts"); for (const p of posts) out.push(line(p.title, `${base}/${blogRouteOf(dir, site)}/${p.id}`, p.description)); }
   return out.join("\n") + "\n";
 }
 // The posts directory (content/site.json blog.path), normalized like the site does.
@@ -1952,7 +1952,18 @@ function blogPostsOf(site) {
   const count = Number.isInteger(p.count) && p.count >= 0 ? p.count : 6;
   return { count, filter: !!p.filter, filterKind: p.filterKind === "select" ? "select" : "pills" };
 }
+// The posts directory: its own segment (blogPathOf), the page it sits under (blogParentOf,
+// "" = the root) and the full route (blogRouteOf: "blog", or "resources/blog"). A parent
+// that no longer exists is ignored, the way site/src/lib/site.ts ignores it.
 function blogPathOf(site) { return String((site && site.blog && site.blog.path) || "blog").replace(/^\/+|\/+$/g, "").toLowerCase() || "blog"; }
+function blogParentOf(site) { return String((site && site.blog && site.blog.parent) || ""); }
+function blogRouteOf(dir, site) {
+  const parent = blogParentOf(site);
+  if (!parent) return blogPathOf(site);
+  const byId = readPagesIndex(dir);
+  if (!byId[parent] || parent === "home") return blogPathOf(site);
+  return [pageRouteOf(parent, byId), blogPathOf(site)].filter(Boolean).join("/");
+}
 function siteJsonOf(dir) { return readJsonFile(path.join(siteContentDir(dir), "site.json")) || {}; }
 function slugifyId(s) {
   return String(s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
@@ -2061,7 +2072,7 @@ ipcMain.handle("site:movePage", (_e, { id, parent, index } = {}) => {
   byId[id].parent = target;
   const sib = Object.values(byId).find((q) => q.id !== id && (q.parent || null) === target && q.slug === byId[id].slug);
   if (sib) return { ok: false, error: `Another page there already uses the address "${byId[id].slug}".` };
-  if (!target && byId[id].slug === blogPathOf(siteJsonOf(currentProject))) return { ok: false, error: `"/${byId[id].slug}" is the posts directory (Settings, Blog). A page can't sit there.` };
+  { const sj = siteJsonOf(currentProject); if ((target || null) === (blogParentOf(sj) || null) && byId[id].slug === blogPathOf(sj)) return { ok: false, error: `"/${blogRouteOf(currentProject, sj)}" is the posts directory (Settings, Blog). A page can't sit there.` }; }
   try {
     const siblings = pageSiblings(byId, target, id);
     const at = Number.isFinite(index) ? Math.max(0, Math.min(siblings.length, Math.floor(index))) : siblings.length;
@@ -2098,7 +2109,7 @@ ipcMain.handle("site:savePage", (_e, { id, data } = {}) => {
   if (doc.seo.jsonld) { const v = validJsonLd(doc.seo.jsonld); if (v) return { ok: false, error: v }; }
   const sib = Object.values(byId).find((q) => q.id !== id && (q.parent || null) === parent && q.slug === doc.slug);
   if (sib) return { ok: false, error: `Another page there already uses the address "${doc.slug}".` };
-  if (!parent && doc.slug === blogPathOf(siteJsonOf(currentProject))) return { ok: false, error: `"/${doc.slug}" is the posts directory (Settings, Blog). Give the page another address.` };
+  { const sj = siteJsonOf(currentProject); if ((parent || null) === (blogParentOf(sj) || null) && doc.slug === blogPathOf(sj)) return { ok: false, error: `"/${blogRouteOf(currentProject, sj)}" is the posts directory (Settings, Blog). Give the page another address.` }; }
   try {
     fs.mkdirSync(path.dirname(pageFile(currentProject, id)), { recursive: true });
     fs.writeFileSync(pageFile(currentProject, id), JSON.stringify(doc, null, 2) + "\n");
@@ -2113,7 +2124,7 @@ ipcMain.handle("site:createPage", (_e, { title } = {}) => {
   const t = String(title || "").trim();
   if (!t) return { ok: false, error: "Give the page a title." };
   let id = slugifyId(t) || "page";
-  if (id === blogPathOf(siteJsonOf(currentProject))) id = `${id}-page`; // the posts directory
+  { const sj = siteJsonOf(currentProject); if (!blogParentOf(sj) && id === blogPathOf(sj)) id = `${id}-page`; } // the posts directory, at the root
   let n = 2; const base = id;
   while (fs.existsSync(pageFile(currentProject, id))) id = `${base}-${n++}`;
   const top = pageSiblings(readPagesIndex(currentProject), null, null);
@@ -2215,25 +2226,30 @@ ipcMain.handle("site:saveBlogPosts", (_e, { posts } = {}) => {
   const p = path.join(siteContentDir(currentProject), "site.json");
   const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
   const next = blogPostsOf({ blog: { posts: posts || {} } });
-  const out = { ...cur, blog: { ...(cur.blog || {}), path: blogPathOf(cur), posts: next } };
+  const out = { ...cur, blog: { ...(cur.blog || {}), path: blogPathOf(cur), parent: blogParentOf(cur), posts: next } };
   try { fs.writeFileSync(p, JSON.stringify(out, null, 2) + "\n"); return { ok: true, posts: next }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
-ipcMain.handle("site:setBlogPath", (_e, { path: raw } = {}) => {
+// The posts directory: its segment and, optionally, the page it sits under. Menu
+// links to the blog and its posts follow the move (rewriteNavRoutes on the full route).
+ipcMain.handle("site:setBlogPath", (_e, { path: raw, parent: rawParent } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
-  const next = slugifyId(String(raw || "").trim().replace(/^\/+|\/+$/g, ""));
-  if (!next) return { ok: false, error: "Give the posts directory a name, like blog or news." };
-  const byId = readPagesIndex(currentProject);
-  const page = Object.values(byId).find((q) => q.id !== "home" && !q.parent && q.slug === next);
-  if (page) return { ok: false, error: `The page "${page.title}" already lives at /${next}. Choose another name, or move that page.` };
-  const types = (readJsonFile(path.join(siteContentDir(currentProject), "types.json")) || {}).types || [];
-  if (types.some((t) => !t.dataOnly && String(t.path || "").replace(/^\/+/, "") === next)) return { ok: false, error: `A content type already uses /${next}.` };
   const p = path.join(siteContentDir(currentProject), "site.json");
   const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
-  const prev = blogPathOf(cur);
-  const out = { ...cur, blog: { ...(cur.blog || {}), path: next } };
-  try { fs.writeFileSync(p, JSON.stringify(out, null, 2) + "\n"); rewriteNavRoutes(currentProject, prev, next); return { ok: true, path: next }; }
+  const next = raw === undefined ? blogPathOf(cur) : slugifyId(String(raw || "").trim().replace(/^\/+|\/+$/g, ""));
+  if (!next) return { ok: false, error: "Give the posts directory a name, like blog or news." };
+  const byId = readPagesIndex(currentProject);
+  const parent = rawParent === undefined ? blogParentOf(cur) : String(rawParent || "");
+  if (parent && (parent === "home" || !byId[parent])) return { ok: false, error: "That parent page doesn't exist." };
+  const page = Object.values(byId).find((q) => q.id !== "home" && (q.parent || null) === (parent || null) && q.slug === next);
+  if (page) return { ok: false, error: `The page "${page.title}" already lives at /${pageRouteOf(page.id, byId)}. Choose another name, or move that page.` };
+  const types = (readJsonFile(path.join(siteContentDir(currentProject), "types.json")) || {}).types || [];
+  if (!parent && types.some((t) => !t.dataOnly && String(t.path || "").replace(/^\/+/, "") === next)) return { ok: false, error: `A content type already uses /${next}.` };
+  const prev = blogRouteOf(currentProject, cur);
+  const out = { ...cur, blog: { ...(cur.blog || {}), path: next, parent } };
+  const route = blogRouteOf(currentProject, out);
+  try { fs.writeFileSync(p, JSON.stringify(out, null, 2) + "\n"); rewriteNavRoutes(currentProject, prev, route); return { ok: true, path: next, parent, route }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
 // Scripts (Settings): GTM + named scripts with a placement. Injected by the site
@@ -2523,7 +2539,7 @@ ipcMain.handle("wp:transform", async () => {
     // 4. Content. Generated blocks carry their own field kinds; the site's other blocks come from introspection.
     const known = new Set(plan.blocks.map((b) => b.key));
     const blocks = [...existing.filter((b) => !known.has(b.key)), ...plan.blocks];
-    const r = await wpImport.transform(dir, payload, plan.mapping, { blocks, fetchMedia, blogPath: blogPathOf(siteJsonOf(dir)), draft: true, neverOverwrite: true, createdFile: wpFile(dir, "created.json") });
+    const r = await wpImport.transform(dir, payload, plan.mapping, { blocks, fetchMedia, blogPath: blogRouteOf(dir, siteJsonOf(dir)), draft: true, neverOverwrite: true, createdFile: wpFile(dir, "created.json") });
     if (!r.ok) return { ok: false, errors: r.errors, error: r.errors.join("\n") };
     // Every written page's blocks parsed against the live schemas, so a block the preview
     // would reject is in the report, not a surprise in the editor.
@@ -2903,7 +2919,7 @@ ipcMain.handle("site:savePost", (_e, { id, data } = {}) => {
   try {
     fs.mkdirSync(postsDir(currentProject), { recursive: true });
     fs.writeFileSync(p, serializeFrontmatter(fm, existing.unknown) + "\n" + body);
-    if (prevSlug !== slug) { const dir = blogPathOf(siteJsonOf(currentProject)); rewriteNavRoutes(currentProject, `${dir}/${prevSlug}`, `${dir}/${slug}`); } // menu links follow
+    if (prevSlug !== slug) { const dir = blogRouteOf(currentProject, siteJsonOf(currentProject)); rewriteNavRoutes(currentProject, `${dir}/${prevSlug}`, `${dir}/${slug}`); } // menu links follow
     return { ok: true, post: { id, ...fm, slug, body } };
   } catch (e) { return { ok: false, error: e.message }; }
 });
@@ -4932,7 +4948,7 @@ ipcMain.handle("seo:fillAll", async (_e, { rewrite } = {}) => {
   try {
     const targets = [];
     const site = siteJsonOf(dir);
-    const blog = blogPathOf(site);
+    const blog = blogRouteOf(dir, site);
     for (const p of readSiteContent(dir).pages) targets.push({
       kind: "page", title: p.title, seo: p.seo || {},
       payload: { kind: "page", title: p.title, route: p.id === "home" ? "/" : "/" + (p.route || p.slug || p.id), blocks: p.blocks, seo: p.seo || {} },

@@ -1,0 +1,35 @@
+---
+// ©2026 thinkany llc. All rights reserved.
+// ONE POST (CORE): its markdown body under the posts directory (Settings → Blog),
+// at /<posts directory>/<slug>, however deep that directory sits. Rendered by the
+// page route (src/pages/[...slug].astro).
+import type { CollectionEntry } from "astro:content";
+import { render } from "astro:content";
+import Base from "../layouts/Base.astro";
+interface Props { post: CollectionEntry<"posts"> }
+const { post } = Astro.props;
+const fmt = (d: Date) => d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
+const { Content } = await render(post);
+const seo = { description: post.data.description, image: post.data.image, ...post.data.seo };
+const updated = post.data.updated && fmt(post.data.updated) !== fmt(post.data.date) ? fmt(post.data.updated) : null;
+---
+<Base title={post.data.title} draft={post.data.draft} seo={seo} ld={{ kind: "post", datePublished: post.data.date.toISOString(), dateModified: (post.data.updated || post.data.date).toISOString(), tags: post.data.tags }}>
+  <article class="max-w-[720px] mx-auto px-6 py-20">
+    <div class="font-ta-sans text-[11px] tracking-[0.14em] uppercase text-ta-muted mb-3">{fmt(post.data.date)}{updated && <span> · Updated {updated}</span>}</div>
+    <h1 class="font-ta-display text-[clamp(32px,5vw,52px)] text-ta-ink leading-[1.05] tracking-[-0.02em] mb-8">{post.data.title}</h1>
+    {post.data.image && <img src={post.data.image} alt="" class="w-full mb-10" />}
+    <div class="post-body font-ta-serif text-[17px] text-ta-body leading-[1.7]">
+      <Content />
+    </div>
+  </article>
+</Base>
+
+<style is:global>
+  .post-body h2 { font-family: var(--ta-font-display); color: var(--ta-ink); font-size: 28px; line-height: 1.15; margin: 2.2em 0 0.6em; }
+  .post-body h3 { font-family: var(--ta-font-display); color: var(--ta-ink); font-size: 22px; line-height: 1.2; margin: 1.8em 0 0.5em; }
+  .post-body p { margin: 0 0 1.2em; }
+  .post-body a { color: var(--ta-primary); text-decoration: underline; }
+  .post-body ul, .post-body ol { padding-left: 1.4em; margin: 0 0 1.2em; }
+  .post-body blockquote { border-left: 2px solid var(--ta-border); padding-left: 1em; color: var(--ta-muted); margin: 1.5em 0; }
+  .post-body img { max-width: 100%; height: auto; }
+</style>

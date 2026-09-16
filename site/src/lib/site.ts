@@ -5,6 +5,7 @@
 import { z } from "astro/zod";
 import raw from "../../../content/site.json";
 import { navColumn } from "./blocks";
+import { pageRoute } from "./pages";
 
 const navLink = z.object({
   label: z.string(),
@@ -81,13 +82,15 @@ export const siteSchema = z.object({
   /** The posts directory: posts are listed at /<path> and served at /<path>/<post>. */
   blog: z.object({
     path: z.string().default("blog"),
+    /** The page the posts directory sits under (a page id), or "" for the root: /blog vs /resources/blog. */
+    parent: z.string().default(""),
     /** The built-in Posts block (Settings → Blog): how many posts, a tag filter, and its style. */
     posts: z.object({
       count: z.number().int().min(0).default(6),
       filter: z.boolean().default(false),
       filterKind: z.enum(["pills", "select"]).default("pills"),
     }).default({ count: 6, filter: false, filterKind: "pills" }),
-  }).default({ path: "blog", posts: { count: 6, filter: false, filterKind: "pills" } }),
+  }).default({ path: "blog", parent: "", posts: { count: 6, filter: false, filterKind: "pills" } }),
   /** Site icons (the CMS Settings tab): paths under public/, e.g. "/images/icon.svg". */
   favicon: z.object({
     /** Browser tab / bookmark icon: SVG (best) or a square PNG. */
@@ -134,5 +137,15 @@ if (!parsed.success) {
   throw new Error(`content/site.json is invalid:\n${issues}`);
 }
 export const site: SiteSettings = parsed.data;
-/** The posts directory, normalized: no slashes, lower-case ("blog"). */
-export const blogPath: string = (site.blog.path || "blog").replace(/^\/+|\/+$/g, "").toLowerCase() || "blog";
+/** The posts directory's own segment, normalized: no slashes, lower-case ("blog"). */
+export const blogDir: string = (site.blog.path || "blog").replace(/^\/+|\/+$/g, "").toLowerCase() || "blog";
+/** The page it sits under (Settings → Blog), or "" for the root. */
+export const blogParent: string = String(site.blog.parent || "");
+// The parent's route needs the pages (content/pages/*.json). An eager glob in a
+// try/catch, as entries.ts does: the app's schema introspection bundles this for
+// Node, where import.meta.glob doesn't exist; a parent that no longer exists is ignored.
+const pagesRaw: Record<string, { slug?: string; parent?: string }> = (() => { try { return import.meta.glob("../../../content/pages/*.json", { eager: true, import: "default" }) as Record<string, { slug?: string; parent?: string }>; } catch { return {}; } })();
+const pageList = Object.entries(pagesRaw).map(([file, data]) => ({ id: file.replace(/^.*\//, "").replace(/\.json$/, ""), data: data || {} }));
+const parentPage = blogParent ? pageList.find((q) => q.id === blogParent) : undefined;
+/** The posts directory's full route, no leading slash: "blog", or "resources/blog" under a parent page. */
+export const blogPath: string = parentPage ? [pageRoute(parentPage, pageList), blogDir].filter(Boolean).join("/") : blogDir;
