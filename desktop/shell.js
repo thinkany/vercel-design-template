@@ -8429,7 +8429,7 @@ async function renderSiteSettings(host, data, st) {
   bp.wrap.appendChild(bpAddress); bp.wrap.appendChild(bpStatus); wrap.appendChild(bp.wrap);
   wrap.appendChild(tagRow); wrap.appendChild(siteEl("div", "sess-desc", S.postsTagGroupHint));
   // The built-in Posts block: how many posts it shows, and its tag filter. Autosaved.
-  const pbl = siteFoldInline(S.postsBlockHeading); wrap.appendChild(pbl.sec);
+  const pbl = siteFoldInline(S.postsBlockHeading); pbl.sec.style.marginTop = "24px"; wrap.appendChild(pbl.sec); // clear of the tag-grouping hint above: its own topic
   pbl.body.appendChild(siteEl("div", "sess-desc", S.postsBlockDesc));
   const pb = { count: 6, filter: false, filterKind: "pills", ...((data.site && data.site.blogPosts) || {}) };
   const pbStatus = siteEl("div"); pbStatus.style.cssText = "min-height:18px;";
