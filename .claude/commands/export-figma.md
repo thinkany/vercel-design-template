@@ -81,6 +81,18 @@ Blocks)** and skip the prompt. **If the request already names a scope** ("export
 styleguide", "send the pages", "just recompose the pages") skip the prompt and run that
 path.
 
+**Views.** The app's Figma drawer offers the project's views (desktop / tablet / mobile,
+all ticked by default) and names the ticked ones **only when some were left out**, e.g.
+*"…, desktop and tablet views only"* or *"…, mobile view only"*. When the request names
+views, pass them through as **`--views {a,b}`** on `ta-export reconstruct` (step 6a);
+the `_compose-*.js` files inherit the manifest's views, so Part 2 follows without more
+flags. When no views are named, export every active view (no flag). **Never ask which
+views**, the drawer already did. The builder is **additive per view:** it replaces only
+the `View=` variants and page frames for the views in this run and keeps the rest, so a
+designer can send desktop first and come back for tablet or mobile (or both) later
+without losing what is already in Figma; re-sending a view that is there rebuilds it.
+Say which views went in the closing summary.
+
 Two follow-ups, only when a **new** file will be created (skip both when reusing a
 recorded file):
 
@@ -334,7 +346,8 @@ The brand-tokens pair in detail:
         `views`/`widths`, and `assets` (image files downloaded to
         `figma-export/reconstruct-assets/`). No minting, no `generate_figma_design`,
         no polling, this is the whole discover+extract, done offline. (Iterate with
-        `--fast` for the primary breakpoint, `--only {ids}` to re-extract some blocks.)
+        `--fast` for the primary breakpoint, `--only {ids}` to re-extract some blocks,
+        `--views {a,b}` for the views the designer ticked, see "Views" above.)
         Specs OMIT default-valued fields (≈40–50% smaller) so heavy blocks fit a call.
      b. **Add `--emit-calls`** and the script also writes **batched, ready-to-submit
         `use_figma` payloads** to `figma-export/reconstruct-calls/{variation}/`, assembled
@@ -443,11 +456,13 @@ All builder calls stay **sequential, never parallel** (Figma state mutations mus
 serialize), except the per-page `compose` calls in step 7, which target different
 Figma Pages and so fan out in parallel, and the `upload_assets` POSTs in step 6c.
 The `components` phase is self-contained, safe to re-run after a `cva`/token change
-(idempotent find-by-name). The `reconstruct` phase is idempotent per block name (it
-removes + rebuilds each block's set and prunes stale ones); re-run
+(idempotent find-by-name). The `reconstruct` phase is idempotent per block name and
+view (it rebuilds each block's `View=` variants for the run's views, keeps the
+variants of views not in the run, and prunes stale blocks); re-run
 `ta-export reconstruct` (offline, cheap, no minting) whenever the page design
-changes, then re-run the builder. `compose` is idempotent per page (it clears its
-prior `{Page}, {View}` frames) and cheap to re-run after blocks change.
+changes, then re-run the builder. `compose` is idempotent per page and view (it
+replaces its prior `{Page}, {View}` frames for the run's views and keeps the others)
+and cheap to re-run after blocks change.
 
 **Fonts:** the builder uses the project's real `--ta-font-*` family when Figma has
 it, else a role-based **proxy** (Display→Playfair Display, Serif→Lora, Sans→Inter,

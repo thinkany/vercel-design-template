@@ -3226,6 +3226,12 @@ async function renderFigma(body) {
   // (Destination / update-vs-new file (P16/P17) are still confirmed in chat on first export.)
   let cbStyleguide = null;
   let cbPages = null;
+  // The views (desktop / tablet / mobile) to export, all on by default. Only the project's own
+  // views are offered (an app has no desktop). A partial set keeps the first proof small; the
+  // builder is additive, so the rest can follow in a later export without losing these.
+  let cbViews = []; // [{ view, cb }]
+  let projectViewList = [];
+  try { projectViewList = (await window.desktop.getProjectStatus()).views || []; } catch {}
   // "What to export" header, with a help (life-preserver) button pushed to the right that opens the options help.
   // Shown unlicensed too (as "What gets exported") so the help is readable before buying,
   // and so the walkthrough tour can point at the help button on a fresh install.
@@ -3262,6 +3268,14 @@ async function renderFigma(body) {
     // re-sent separately once the first export is confirmed.
     cbStyleguide = scopeRow(COPY.figma.scopeStyleguide, true);
     cbPages = scopeRow(COPY.figma.scopePages, false);
+    if (projectViewList.length > 1) {
+      const viewsLabel = document.createElement("div");
+      viewsLabel.className = "sess-label";
+      viewsLabel.style.marginTop = "12px";
+      viewsLabel.textContent = COPY.figma.viewsLabel;
+      body.appendChild(viewsLabel);
+      cbViews = projectViewList.map((view) => ({ view, cb: scopeRow(COPY.figma.viewNames[view] || view, true) }));
+    }
   }
 
   // Export Design — enabled only when licensed, a build has finished (previewReady), and at
@@ -3270,23 +3284,29 @@ async function renderFigma(body) {
   exportBtn.type = "button";
   exportBtn.className = "ifigma-export";
   exportBtn.textContent = COPY.figma.exportDesign;
+  const tickedViews = () => cbViews.filter((v) => v.cb.checked).map((v) => v.view);
   const updateExport = () => {
     const anyScope = !cbStyleguide || cbStyleguide.checked || cbPages.checked;
-    exportBtn.disabled = !(lic.hasLicense && design.previewReady) || !anyScope;
+    const anyView = !cbViews.length || tickedViews().length > 0;
+    exportBtn.disabled = !(lic.hasLicense && design.previewReady) || !anyScope || !anyView;
     exportBtn.title =
       !lic.hasLicense ? COPY.figma.exportDisabledHint
       : !design.previewReady ? COPY.figma.exportAfterBuild
       : !anyScope ? COPY.figma.exportPickScope
+      : !anyView ? COPY.figma.exportPickView
       : "";
   };
   if (cbStyleguide) { cbStyleguide.addEventListener("change", updateExport); cbPages.addEventListener("change", updateExport); }
+  cbViews.forEach((v) => v.cb.addEventListener("change", updateExport));
   updateExport();
   exportBtn.addEventListener("click", () => {
     if (exportBtn.disabled) return;
     closeModal();
     const sg = !cbStyleguide || cbStyleguide.checked;
     const pg = !cbPages || cbPages.checked;
-    sendText(COPY.figma.exportCommandFor(sg, pg));
+    // Name the views only when the designer left some out: the full set is the default.
+    const views = tickedViews();
+    sendText(COPY.figma.exportCommandFor(sg, pg, cbViews.length && views.length < cbViews.length ? views : null));
   });
   body.appendChild(exportBtn);
 

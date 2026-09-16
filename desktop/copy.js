@@ -2057,13 +2057,21 @@ window.COPY = {
     scopeStyleguide: "Styleguide + Blocks",
     scopePages: "Pages",
     exportPickScope: "Tick at least one thing to export.",
+    viewsLabel: "Which views",
+    viewNames: { desktop: "Desktop", tablet: "Tablet", mobile: "Mobile" },
+    exportPickView: "Tick at least one view to export.",
     // The chat command the drawer sends — names the ticked scope so the agent doesn't
-    // re-ask it (P15). Kept in sync with export-figma.md's "already names a scope" cases.
-    exportCommandFor: (styleguide, pages) =>
-      styleguide && pages ? "export to Figma — both the Styleguide + Blocks and the Pages"
-      : styleguide ? "export the Styleguide + Blocks to Figma"
-      : pages ? "export just the Pages to Figma (recompose the pages from the blocks)"
-      : "export to Figma",
+    // re-ask it (P15), and the ticked views when some were left out (the skill passes
+    // them as --views; the builder keeps the views it isn't rebuilding). Kept in sync with
+    // export-figma.md's "already names a scope" and "names views" cases.
+    exportCommandFor: (styleguide, pages, views) => {
+      const base =
+        styleguide && pages ? "export to Figma — both the Styleguide + Blocks and the Pages"
+        : styleguide ? "export the Styleguide + Blocks to Figma"
+        : pages ? "export just the Pages to Figma (recompose the pages from the blocks)"
+        : "export to Figma";
+      return views && views.length ? `${base}, ${views.join(" and ")} view${views.length > 1 ? "s" : ""} only` : base;
+    },
     exportDisabledHint: "Add your Figma export license to enable",
     exportAfterBuild: "Export becomes available after build completes.",
     note: "Unlocks Figma export. Validated with the derive service; stored encrypted in your OS keychain.",
@@ -2082,6 +2090,9 @@ window.COPY = {
 
     <h4>Pages</h4>
     <p>Your complete page layouts (app screens, for an app project), composed by stacking the Blocks above into full pages. It reuses the Styleguide + Blocks, so it assumes they were exported already.</p>
+
+    <h4>Which views</h4>
+    <p>Desktop, tablet, and mobile are all ticked by default. Untick a view to keep the first export small, then come back for the others once the proof looks right: a later export adds the views you tick and leaves the ones already in Figma as they are. Ticking a view that is already there rebuilds it.</p>
 
     <div class="iref-help-note">Styleguide + Blocks is recommended for a completed design’s first export. Upon confirming the export for accuracy, Pages can be exported separately and cheaply anytime a page (or pages) layout changes. The initial export will take some time and depends on the complexity of the design.</div>
   `,
