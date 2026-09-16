@@ -8426,8 +8426,11 @@ async function renderSiteSettings(host, data, st) {
   const tagRow = siteEl("label", "toggle-row"); const tagCb = document.createElement("input"); tagCb.type = "checkbox"; tagCb.checked = blogTagOn;
   tagRow.append(tagCb, siteEl("span", "", S.postsTagGroup));
   tagCb.addEventListener("change", () => { blogTagOn = tagCb.checked; saveBlogPath(); });
-  bp.wrap.appendChild(bpAddress); bp.wrap.appendChild(bpStatus); wrap.appendChild(bp.wrap);
-  wrap.appendChild(tagRow); wrap.appendChild(siteEl("div", "sess-desc", S.postsTagGroupHint));
+  // The address line, then the tag checkbox right beneath it (they describe one URL), the
+  // save status after both; the empty status line no longer holds them apart.
+  bp.wrap.appendChild(bpAddress); wrap.appendChild(bp.wrap);
+  bp.wrap.style.marginBottom = "8px"; tagRow.style.marginBottom = "6px";
+  wrap.appendChild(tagRow); wrap.appendChild(siteEl("div", "sess-desc", S.postsTagGroupHint)); wrap.appendChild(bpStatus);
   // The built-in Posts block: how many posts it shows, and its tag filter. Autosaved.
   const pbl = siteFoldInline(S.postsBlockHeading); pbl.sec.style.marginTop = "24px"; wrap.appendChild(pbl.sec); // clear of the tag-grouping hint above: its own topic
   pbl.body.appendChild(siteEl("div", "sess-desc", S.postsBlockDesc));
