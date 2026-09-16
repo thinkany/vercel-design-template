@@ -8387,7 +8387,10 @@ async function renderSiteSettings(host, data, st) {
   wrap.appendChild(siteLabelWithHelp(S.blogHeading, { title: S.blogHelpTitle, html: S.blogHelp, aria: S.blogHelpAria }));
   // The parent page (none = the root) and the directory's own segment: /blog, or
   // /resources/blog. Either change saves; the line beneath shows the resulting address.
-  const blogDir = data.site && typeof data.site.blogTemplate === "string" ? data.site.blogTemplate : "blog"; // as written: "", "blog", "blog/{%tag%}"
+  // The field holds the directory's own segment; the tag grouping ({%tag%}) is a checkbox
+  // beneath it, so nobody types the token. The two combine into the template on save.
+  const blogDir = data.site && typeof data.site.blogDir === "string" ? data.site.blogDir : "blog";
+  let blogTagOn = !!(data.site && data.site.blogTag);
   const pw = siteEl("div", "site-kv"); pw.appendChild(siteEl("div", "k", S.postsParent));
   const psel = document.createElement("select"); psel.className = "field";
   const o0 = document.createElement("option"); o0.value = ""; o0.textContent = S.postsParentNone; psel.appendChild(o0);
@@ -8403,17 +8406,28 @@ async function renderSiteSettings(host, data, st) {
     clearTimeout(bpTimer);
     const v = bp.input.value.trim().replace(/^\/+|\/+$/g, ""); // "/" and "" both mean: right under the parent
     const parent = psel.value || "";
-    if (v === blogDir && parent === ((data.site && data.site.blogParent) || "")) return;
-    const r = await window.desktop.setBlogPath(v, parent);
+    if (v === ((data.site && data.site.blogDir) || "") && parent === ((data.site && data.site.blogParent) || "") && blogTagOn === !!(data.site && data.site.blogTag)) return;
+    const r = await window.desktop.setBlogPath([v, blogTagOn ? "{%tag%}" : ""].filter(Boolean).join("/"), parent);
     bpStatus.innerHTML = "";
-    if (r && r.ok) { bp.input.value = r.path; data.site.blogTemplate = r.path; data.site.blogParent = r.parent; data.site.blogPath = r.route; data.site.blogTag = !!r.tag; siteBlogPath = r.route; siteBlogTag = !!r.tag; bpAddress.textContent = S.postsAddress(r.route, !!r.tag); siteFlash(bpStatus, S.saved); }
+    if (r && r.ok) {
+      // The normalized segment goes back into the field only when it isn't being typed in
+      // (a rewrite mid-word ate a trailing hyphen or slash); it lands on blur instead.
+      if (document.activeElement !== bp.input) bp.input.value = r.dir;
+      data.site.blogDir = r.dir; data.site.blogTemplate = r.path; data.site.blogParent = r.parent; data.site.blogPath = r.route; data.site.blogTag = !!r.tag; siteBlogPath = r.route; siteBlogTag = !!r.tag;
+      bpAddress.textContent = S.postsAddress(r.route, !!r.tag); siteFlash(bpStatus, S.saved);
+    }
     else if (r && r.error) { const e = siteEl("div", "sess-desc", r.error); e.style.color = "#c0261e"; bpStatus.appendChild(e); }
   };
   bp.input.placeholder = S.postsDirPlaceholder;
   bp.input.addEventListener("input", () => { clearTimeout(bpTimer); bpTimer = setTimeout(saveBlogPath, 1000); });
   bp.input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveBlogPath(); } });
+  bp.input.addEventListener("blur", () => { if (data.site && typeof data.site.blogDir === "string" && bp.input.value.trim().replace(/^\/+|\/+$/g, "") !== data.site.blogDir) saveBlogPath(); else if (data.site && typeof data.site.blogDir === "string") bp.input.value = data.site.blogDir; });
   psel.addEventListener("change", saveBlogPath);
+  const tagRow = siteEl("label", "toggle-row"); const tagCb = document.createElement("input"); tagCb.type = "checkbox"; tagCb.checked = blogTagOn;
+  tagRow.append(tagCb, siteEl("span", "", S.postsTagGroup));
+  tagCb.addEventListener("change", () => { blogTagOn = tagCb.checked; saveBlogPath(); });
   bp.wrap.appendChild(bpAddress); bp.wrap.appendChild(bpStatus); wrap.appendChild(bp.wrap);
+  wrap.appendChild(tagRow); wrap.appendChild(siteEl("div", "sess-desc", S.postsTagGroupHint));
   // The built-in Posts block: how many posts it shows, and its tag filter. Autosaved.
   const pbl = siteFoldInline(S.postsBlockHeading); wrap.appendChild(pbl.sec);
   pbl.body.appendChild(siteEl("div", "sess-desc", S.postsBlockDesc));

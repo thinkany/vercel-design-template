@@ -2291,7 +2291,7 @@ ipcMain.handle("site:setBlogPath", (_e, { path: raw, parent: rawParent } = {}) =
     // Menu links follow: the list's address, then every post's (a tag segment moves them one by one).
     if (prevBase && base && prevBase !== base) rewriteNavRoutes(currentProject, prevBase, base);
     for (const q of posts) { const from = q.route; const to = postRouteOf(currentProject, out, q, base); if (from !== to) rewriteNavRoutes(currentProject, from, to); }
-    return { ok: true, path: next, parent, route: base, tag: blogTagOf(out) };
+    return { ok: true, path: next, dir: own, parent, route: base, tag: blogTagOf(out) };
   } catch (e) { return { ok: false, error: e.message }; }
 });
 // Scripts (Settings): GTM + named scripts with a placement. Injected by the site
