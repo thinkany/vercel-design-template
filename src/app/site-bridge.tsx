@@ -28,7 +28,7 @@ type ChromeModule = { Header?: ((p: AnyRecord) => ReactNode) | null; Footer?: ((
 
 // content/site.json → { design, nav, footerLinks }
 const siteFiles = import.meta.glob("../../content/site.json", { eager: true, import: "default" }) as Record<string, AnyRecord>;
-const site = (Object.values(siteFiles)[0] || {}) as { design?: string; url?: string; nav?: AnyRecord[]; footerLinks?: AnyRecord[]; legal?: AnyRecord; manageNav?: boolean; seo?: { siteName?: string; separator?: string; image?: string; schema?: AnyRecord }; logos?: { items?: { slot: string; src: string }[]; wordmark?: string } };
+const site = (Object.values(siteFiles)[0] || {}) as { design?: string; url?: string; nav?: AnyRecord[]; footerLinks?: AnyRecord[]; legal?: AnyRecord; footer?: AnyRecord; manageNav?: boolean; seo?: { siteName?: string; separator?: string; image?: string; schema?: AnyRecord }; logos?: { items?: { slot: string; src: string }[]; wordmark?: string } };
 const logosFiles = import.meta.glob("../../site/src/lib/logos.ts", { eager: true }) as Record<string, { resolveLogos?: (s: unknown, b: string | undefined, n: string) => AnyRecord }>;
 const resolveLogos = (Object.values(logosFiles)[0] || {}).resolveLogos;
 
@@ -160,9 +160,10 @@ export function SitePage({ pageId, onNavigate, view, setView, orientation, setOr
     : (site.nav || []).map((l) => ({ links: [], ...(l as AnyRecord) }));
   const logos = resolveLogos ? resolveLogos(site.logos, siteConfig.logo || undefined, (site.seo && site.seo.siteName) || siteConfig.clientName) : { header: siteConfig.logo || undefined, wordmark: siteConfig.clientName };
   const rawChrome = { siteName: siteConfig.clientName, logo: logos.header, logos, nav, footerLinks: site.footerLinks || [], legal: site.legal || { links: [] } };
-  const parseChrome = (def?: BlockDef) => { const r = def?.props.safeParse(rawChrome); return r && r.success && r.data ? r.data : rawChrome; };
+  // The footer adds its own copy (site.json `footer`); the schema's defaults fill the rest.
+  const parseChrome = (def?: BlockDef, extra: AnyRecord = {}) => { const raw = { ...rawChrome, ...extra }; const r = def?.props.safeParse(raw); return r && r.success && r.data ? r.data : raw; };
   const headerProps = parseChrome(chromeMod.chrome?.header);
-  const footerProps = parseChrome(chromeMod.chrome?.footer);
+  const footerProps = parseChrome(chromeMod.chrome?.footer, site.footer || {});
 
   const onClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
     const a = (e.target as HTMLElement).closest("a[href]") as HTMLAnchorElement | null;

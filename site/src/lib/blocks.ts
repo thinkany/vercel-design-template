@@ -60,6 +60,32 @@ export interface Chrome {
   footer?: BlockDef;
 }
 
+/** The props the layout hands every chrome component, all from content/site.json. */
+export const CHROME_PROP_KEYS = ["siteName", "logo", "logos", "nav", "footerLinks", "legal"] as const;
+
+/**
+ * FOOTER COPY: whatever a Footer's schema declares BEYOND the chrome set (a tagline,
+ * a line about the product, a newsletter note). A design that carries such a line
+ * declares it `tagline: z.string().default("…the design's words…")` and renders the
+ * prop, never a literal, so it reaches the CMS (Navigation → Footer) as a provisional
+ * field the moment the site builds, prefilled from the schema's default. Edits live in
+ * content/site.json `footer`; this resolves stored value over default, per field.
+ */
+export function chromeCopy(def: BlockDef | undefined, stored: unknown): Record<string, unknown> {
+  const shape = (def?.props as unknown as { shape?: Record<string, ZodTypeAny> } | undefined)?.shape;
+  if (!shape || typeof shape !== "object") return {};
+  const from = stored && typeof stored === "object" ? (stored as Record<string, unknown>) : {};
+  const out: Record<string, unknown> = {};
+  for (const [key, schema] of Object.entries(shape)) {
+    if ((CHROME_PROP_KEYS as readonly string[]).includes(key)) continue;
+    // A stored value that no longer fits the schema falls back to the default, never to nothing.
+    const stored_ = schema.safeParse(from[key]);
+    const r = stored_.success ? stored_ : schema.safeParse(undefined);
+    if (r.success && r.data !== undefined) out[key] = r.data;
+  }
+  return out;
+}
+
 /**
  * Prose a client edits as rich text (markdown on disk, a WYSIWYG editor in the
  * CMS). Use it for body copy and render it with <Rich text={…} />; titles,

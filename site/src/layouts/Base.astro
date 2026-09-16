@@ -16,6 +16,7 @@ import { jsonLdText, type LdPage } from "../lib/schema";
 import { resolveSeo, type Seo } from "../lib/seo";
 import { site } from "../lib/site";
 import { Header, Footer, chrome } from "../../blocks/chrome";
+import { chromeCopy } from "../lib/blocks";
 
 interface Props {
   title: string;
@@ -33,6 +34,8 @@ const image = shareImage ? new URL(shareImage, Astro.site).href : undefined;
 
 const logos = resolveLogos(site.logos, siteConfig.logo || undefined, site.seo.siteName || siteConfig.clientName);
 const chromeProps = { siteName: siteConfig.clientName, logo: logos.header, logos, nav: await resolveNav(site), footerLinks: site.footerLinks, legal: site.legal };
+// Plus the footer's own copy (its schema's extra props, site.json `footer` over the defaults).
+const footerProps = { ...chromeProps, ...chromeCopy(chrome.footer, site.footer) };
 // Self-hosted fonts (site/src/lib/self-host-fonts.mjs writes public/fonts at build and
 // defines __TA_FONT_PRELOAD__): the local sheet + preloads for the display and body
 // faces. Not hosted (offline build): preconnect to Google instead.
@@ -101,7 +104,7 @@ const faviconType = /\.svg$/i.test(favicon) ? "image/svg+xml" : /\.png$/i.test(f
       <main class="flex-1">
         <slot />
       </main>
-      {Footer && (chrome.footer?.hydrate ? <Footer client:load {...chromeProps} /> : <Footer {...chromeProps} />)}
+      {Footer && (chrome.footer?.hydrate ? <Footer client:load {...footerProps} /> : <Footer {...footerProps} />)}
       {import.meta.env.DEV && draft && <div class="fixed bottom-4 left-4 z-[60] rounded-full bg-ta-ink px-3 py-1 font-ta-sans text-[11px] tracking-[0.12em] uppercase text-ta-surface shadow-md" title="A draft: previewed here, left out of the published site">Draft</div>}
     </div>
     <script>

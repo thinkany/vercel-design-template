@@ -213,6 +213,27 @@ where it sits, a run of plain links forms a column where it sits, in the design'
 and the legal line: `fillCopyright(legal.copyright, siteName)` plus `legal.links`,
 in the design's idiom.
 
+**Footer copy is a PROVISIONAL FIELD, never a literal.** A design's footer often
+carries a line of its own beyond the links and the legal line: a tagline under the
+lockup, a sentence about the product, a newsletter note. Every such line becomes a prop
+on the Footer's schema with the design's words as its default, rendered from the prop:
+
+```ts
+const props = z.object({
+  …the chrome set above…,
+  tagline: z.string().default("A short line about the product, in the design's words."),
+  // prose with paragraphs or links: richtext.default("…")
+});
+export function Footer({ …, tagline }: z.infer<typeof props>) { … <p className="…">{tagline}</p> … }
+```
+
+The CMS reads the schema: anything beyond the chrome set shows under Navigation →
+Footer → Footer copy, prefilled with the default, and edits land in `content/site.json`
+`footer` (`chromeCopy` in `site/src/lib/blocks.ts` resolves stored over default). A
+literal string in the Footer's JSX is copy the client can never change, so grep the
+finished Footer for any and move each one to a prop before you build. Do NOT write
+`footer` into `site.json` yourself; the defaults are the design's words.
+
 **Mega menu: move the DATA, not the component.** The configured header already
 renders `item.columns` (`{ heading, links, feature: { image, title, text, link } }`)
 as a mega panel and `item.links` as a dropdown, deciding per item from the data. So
@@ -247,6 +268,7 @@ almost every design and each has one translation:
 | `siteConfig.clientName` / `siteConfig.logo` in chrome | the `siteName` / `logo` props |
 | `NAV_ITEMS` in `nav.ts` | `content/site.json` `nav` (see §4) |
 | `footerLinks` / `legal` in `src/app/footer.ts`, or footer links hardcoded in the design | `content/site.json` `footerLinks` + `legal` (see §4); the Footer block reads its props, never `nav` |
+| A line of copy written into the design's footer (a tagline, a note) | a prop on the Footer's schema with `.default("…the design's words…")`, rendered from the prop (§2, Footer copy); the CMS edits it under Navigation → Footer |
 | `getVariationId()`, `window.location.search`, `?v=` | nothing; the site is pinned in `site.json` |
 | `DesignSurface`, `ViewToggle`, device frames, `capture` prop | nothing; the layout provides the shell |
 | `data-block-name`, `data-capture-ready` | dropped |
@@ -270,7 +292,8 @@ Write, in the same turn as the last block:
   if the design's footer showed the header menu, copy those links here, so the two
   lists are independent from now on). Build `legal` from the footer's copyright line
   (write it with placeholders: `"© {year} {siteName}"`) and any privacy / terms links.
-  Keep `url` as is.
+  Keep `url` as is. Write no `footer` key: the Footer's own copy lives in its schema
+  defaults (§2, Footer copy) until the client edits it in the CMS.
 - **`content/pages/home.json`** (one per design page, `about.json` for an About
   page, `slug` = the page's route): `title`, `seo.description` (a real one-line
   summary of the page, from the hero copy), and `blocks` in the design's order,

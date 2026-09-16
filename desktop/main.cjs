@@ -1885,7 +1885,7 @@ function readSiteContent(dir) {
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
     licensed: siteLicensed(), // the CMS drawer shows a licensing note instead of the editor when false
-    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), siteNameDefault: readProjectEnv(dir).VITE_CLIENT_NAME || path.basename(dir), logos: logosSetting(dir, site), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, scripts: { gtm: (site.scripts && site.scripts.gtm) || "", extra: Array.isArray(site.scripts && site.scripts.extra) ? site.scripts.extra : [] }, redirects: Array.isArray(site.redirects) ? site.redirects : [], seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
+    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), siteNameDefault: readProjectEnv(dir).VITE_CLIENT_NAME || path.basename(dir), logos: logosSetting(dir, site), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, footer: site.footer && typeof site.footer === "object" && !Array.isArray(site.footer) ? site.footer : {}, scripts: { gtm: (site.scripts && site.scripts.gtm) || "", extra: Array.isArray(site.scripts && site.scripts.extra) ? site.scripts.extra : [] }, redirects: Array.isArray(site.redirects) ? site.redirects : [], seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
     pages, posts, ...(() => {
       const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {}, builtins: {} };
       const names = site.blockNames && typeof site.blockNames === "object" ? site.blockNames : {};
@@ -1897,6 +1897,7 @@ function readSiteContent(dir) {
         blocks: all.map((b) => ({ ...b, originalName: b.name, name: (typeof names[b.key] === "string" && names[b.key].trim()) || b.name, defaults: ib.defaults[b.key] || {}, templates: ib.templates[b.key] || {}, fields: (ib.fields && ib.fields[b.key]) || {}, needsDesign: !!b.needsDesign, wp: b.wp || null, labels: (site.blockFieldLabels && site.blockFieldLabels[b.key]) || {} })),
         marks: ib.marks || {}, // the design's icon set, rendered: { key: "<svg…>" }
         megaMenu: !!ib.megaMenu, // the header renders nav columns → the Navigation tab offers them
+        footerCopy: ib.footer || { defaults: {}, fields: {}, templates: {} }, // the footer's own copy props → edited under Navigation → Footer
       };
     })(),
     liveUrl: (pub.site && pub.site.url) || null, previewUrl: siteUrl,
@@ -2122,7 +2123,7 @@ ipcMain.handle("site:deletePage", (_e, { id } = {}) => {
 });
 // Site-level settings: nav + footer links (the pinned design + url are managed by
 // promotion and publishing, so they're preserved, never edited here).
-ipcMain.handle("site:saveSite", (_e, { nav, footerLinks, legal } = {}) => {
+ipcMain.handle("site:saveSite", (_e, { nav, footerLinks, legal, footer } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   const p = path.join(siteContentDir(currentProject), "site.json");
@@ -2161,6 +2162,9 @@ ipcMain.handle("site:saveSite", (_e, { nav, footerLinks, legal } = {}) => {
     .map((l) => ({ label: l.label, ...(l.href ? { href: l.href } : {}), ...(l.links.length ? { links: l.links } : {}) }));
   const next = { ...cur, nav: clean(nav, true), footerLinks: cleanFooter(footerLinks) };
   if (legal && typeof legal === "object") next.legal = { ...(typeof legal.copyright === "string" && legal.copyright.trim() ? { copyright: legal.copyright.trim() } : {}), links: clean(legal.links, false) };
+  // The footer's own copy (its schema's extra props): stored as edited; the site fills
+  // any absent field from the schema's default (chromeCopy in site/src/lib/blocks.ts).
+  if (footer && typeof footer === "object" && !Array.isArray(footer)) next.footer = footer;
   try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, site: next }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
