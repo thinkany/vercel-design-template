@@ -4085,8 +4085,9 @@ async function runPublishFlow(btn, host, opts) {
   if (activePublish && activePublish.running) return; // one publish at a time
   const label = btn.textContent;
   const ap = activePublish = { opts: opts || {}, label, events: [], result: null, running: true, host, btn, discouraged: false };
-  // The site discourages crawlers: said in red at the head of the run, every run.
-  try { ap.discouraged = siteDiscouraged(await window.desktop.getSiteContent()); } catch { /* no site content: no note */ }
+  // The site discourages crawlers: said in red at the head of every SITE run. The design
+  // preview (the password-gated preview domain) is never meant to be found, so not there.
+  if (ap.opts.target === "site") { try { ap.discouraged = siteDiscouraged(await window.desktop.getSiteContent()); } catch { /* no site content: no note */ } }
   btn.disabled = true;
   btn.textContent = COPY.publish.publishing;
   const unsub = window.desktop.onPublishProgress((evt) => { ap.events.push(evt); repaintPublish(); });
@@ -4574,7 +4575,6 @@ async function renderPublish(body) {
       body.appendChild(credBox);
     }
     if (resetBtn) body.appendChild(resetBtn);
-    if (publishDiscouraged) body.appendChild(siteWarnBanner(COPY.publish.discourageNote)); // not dismissible here
     body.appendChild(publishBtn);
     body.appendChild(host);
 
