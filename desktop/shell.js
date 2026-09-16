@@ -8330,6 +8330,34 @@ async function renderSiteSettings(host, data, st) {
   bp.input.addEventListener("input", () => { clearTimeout(bpTimer); bpTimer = setTimeout(saveBlogPath, 1000); });
   bp.input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveBlogPath(); } });
   bp.wrap.appendChild(bpStatus); wrap.appendChild(bp.wrap);
+  // The built-in Posts block: how many posts it shows, and its tag filter. Autosaved.
+  const pbl = siteFoldInline(S.postsBlockHeading); wrap.appendChild(pbl.sec);
+  pbl.body.appendChild(siteEl("div", "sess-desc", S.postsBlockDesc));
+  const pb = { count: 6, filter: false, filterKind: "pills", ...((data.site && data.site.blogPosts) || {}) };
+  const pbStatus = siteEl("div"); pbStatus.style.cssText = "min-height:18px;";
+  let pbTimer = null;
+  const savePostsBlock = async () => {
+    clearTimeout(pbTimer);
+    const r = await window.desktop.saveBlogPosts(pb);
+    pbStatus.innerHTML = "";
+    if (r && r.ok) { Object.assign(pb, r.posts); data.site.blogPosts = r.posts; siteFlash(pbStatus, S.saved); }
+    else if (r && r.error) { const e = siteEl("div", "sess-desc", r.error); e.style.color = "#c0261e"; pbStatus.appendChild(e); }
+  };
+  const pbSoon = () => { clearTimeout(pbTimer); pbTimer = setTimeout(savePostsBlock, 600); };
+  const pc = siteField(S.postsCount, pb.count, { type: "number", hint: S.postsCountHint }); pc.input.min = "0"; pc.input.step = "1";
+  pc.input.addEventListener("input", () => { const n = Math.max(0, Math.floor(Number(pc.input.value) || 0)); pb.count = n; pbSoon(); });
+  pbl.body.appendChild(pc.wrap);
+  const pfRow = siteEl("label", "toggle-row"); const pfCb = document.createElement("input"); pfCb.type = "checkbox"; pfCb.checked = !!pb.filter;
+  pfRow.append(pfCb, siteEl("span", "", S.postsFilter)); pbl.body.appendChild(pfRow);
+  const pk = siteEl("div", "site-kv"); pk.appendChild(siteEl("div", "k", S.postsFilterKind));
+  const pkSel = document.createElement("select"); pkSel.className = "field";
+  for (const [k, label] of Object.entries(S.postsFilterKinds)) { const o = document.createElement("option"); o.value = k; o.textContent = label; pkSel.appendChild(o); }
+  pkSel.value = pb.filterKind; pk.appendChild(pkSel); pk.appendChild(siteEl("div", "sess-desc", S.postsFilterKindHint)); pbl.body.appendChild(pk);
+  const paintKind = () => { pk.style.display = pfCb.checked ? "" : "none"; };
+  pfCb.addEventListener("change", () => { pb.filter = pfCb.checked; paintKind(); pbSoon(); });
+  pkSel.addEventListener("change", () => { pb.filterKind = pkSel.value; pbSoon(); });
+  paintKind();
+  pbl.body.appendChild(pbStatus);
 
   // Scripts: GTM + additional scripts with a placement. Published site only.
   wrap.appendChild(siteEl("div", "drawer-sep"));

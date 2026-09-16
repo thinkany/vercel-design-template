@@ -1885,7 +1885,7 @@ function readSiteContent(dir) {
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
     licensed: siteLicensed(), // the CMS drawer shows a licensing note instead of the editor when false
-    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), siteNameDefault: readProjectEnv(dir).VITE_CLIENT_NAME || path.basename(dir), logos: logosSetting(dir, site), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, footer: site.footer && typeof site.footer === "object" && !Array.isArray(site.footer) ? site.footer : {}, contact: contactSetting(site.contact), scripts: { gtm: (site.scripts && site.scripts.gtm) || "", extra: Array.isArray(site.scripts && site.scripts.extra) ? site.scripts.extra : [] }, redirects: Array.isArray(site.redirects) ? site.redirects : [], seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
+    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), blogPosts: blogPostsOf(site), siteNameDefault: readProjectEnv(dir).VITE_CLIENT_NAME || path.basename(dir), logos: logosSetting(dir, site), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, footer: site.footer && typeof site.footer === "object" && !Array.isArray(site.footer) ? site.footer : {}, contact: contactSetting(site.contact), scripts: { gtm: (site.scripts && site.scripts.gtm) || "", extra: Array.isArray(site.scripts && site.scripts.extra) ? site.scripts.extra : [] }, redirects: Array.isArray(site.redirects) ? site.redirects : [], seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
     pages, posts, ...(() => {
       const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {}, builtins: {} };
       const names = site.blockNames && typeof site.blockNames === "object" ? site.blockNames : {};
@@ -1946,6 +1946,12 @@ function generatedLlms(dir) {
   return out.join("\n") + "\n";
 }
 // The posts directory (content/site.json blog.path), normalized like the site does.
+// The built-in Posts block's settings (site.json blog.posts), with the defaults site.ts applies.
+function blogPostsOf(site) {
+  const p = site && site.blog && site.blog.posts && typeof site.blog.posts === "object" ? site.blog.posts : {};
+  const count = Number.isInteger(p.count) && p.count >= 0 ? p.count : 6;
+  return { count, filter: !!p.filter, filterKind: p.filterKind === "select" ? "select" : "pills" };
+}
 function blogPathOf(site) { return String((site && site.blog && site.blog.path) || "blog").replace(/^\/+|\/+$/g, "").toLowerCase() || "blog"; }
 function siteJsonOf(dir) { return readJsonFile(path.join(siteContentDir(dir), "site.json")) || {}; }
 function slugifyId(s) {
@@ -2203,6 +2209,16 @@ ipcMain.handle("site:setManageNav", (_e, { manageNav } = {}) => {
 });
 // The posts directory (Settings → Blog). Refused when a top-level page or a content
 // type already uses the address; menu links to posts follow the change.
+ipcMain.handle("site:saveBlogPosts", (_e, { posts } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const p = path.join(siteContentDir(currentProject), "site.json");
+  const cur = readJsonFile(p) || { design: "v00", url: "https://example.com" };
+  const next = blogPostsOf({ blog: { posts: posts || {} } });
+  const out = { ...cur, blog: { ...(cur.blog || {}), path: blogPathOf(cur), posts: next } };
+  try { fs.writeFileSync(p, JSON.stringify(out, null, 2) + "\n"); return { ok: true, posts: next }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
 ipcMain.handle("site:setBlogPath", (_e, { path: raw } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };

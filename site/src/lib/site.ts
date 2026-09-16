@@ -79,7 +79,15 @@ export const siteSchema = z.object({
   /** CMS display names per block key (recognition only; the site doesn't use them). */
   blockNames: z.record(z.string()).default({}),
   /** The posts directory: posts are listed at /<path> and served at /<path>/<post>. */
-  blog: z.object({ path: z.string().default("blog") }).default({ path: "blog" }),
+  blog: z.object({
+    path: z.string().default("blog"),
+    /** The built-in Posts block (Settings → Blog): how many posts, a tag filter, and its style. */
+    posts: z.object({
+      count: z.number().int().min(0).default(6),
+      filter: z.boolean().default(false),
+      filterKind: z.enum(["pills", "select"]).default("pills"),
+    }).default({ count: 6, filter: false, filterKind: "pills" }),
+  }).default({ path: "blog", posts: { count: 6, filter: false, filterKind: "pills" } }),
   /** Site icons (the CMS Settings tab): paths under public/, e.g. "/images/icon.svg". */
   favicon: z.object({
     /** Browser tab / bookmark icon: SVG (best) or a square PNG. */
