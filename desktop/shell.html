@@ -1228,11 +1228,12 @@
       .site-block-preview-stage webview { display: flex; flex: 1 1 auto; min-height: 0; width: 100%; }
       /* The expanded block editor: an overlay above the drawer, below the media picker. */
       .blockedit { position: fixed; inset: 0; z-index: 205; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.45); }
-      .blockedit-card { width: min(1560px, 96vw); height: 92vh; background: #fff; border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.35); display: flex; flex-direction: column; overflow: hidden; }
+      .blockedit-card { width: 96vw; height: 92vh; background: #fff; border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.35); display: flex; flex-direction: column; overflow: hidden; }
       .blockedit-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #ececf1; }
       .blockedit-title { font-size: 14px; font-weight: 600; color: #17171b; }
       .blockedit-acts { display: flex; gap: 8px; }
-      .blockedit-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 400px minmax(0, 1fr); }
+      /* The fields keep a quarter of the card at any window size (the block gets the rest), never narrower than the inline editor's column. */
+      .blockedit-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(360px, 26%) minmax(0, 1fr); }
       .blockedit-fields { overflow: auto; padding: 14px 16px; border-right: 1px solid #ececf1; }
       .blockedit-preview { min-width: 0; padding: 14px; display: flex; }
       .blockedit-preview .site-block-preview { position: static; flex: 1; display: flex; flex-direction: column; min-height: 0; }
