@@ -288,13 +288,34 @@ export function Header({ siteName, logos, nav, preview }: Props & { preview?: Pr
     return () => window.removeEventListener("keydown", onKey);
   }, [active]);
 
-  // Lock the page behind the drawer (the site's viewport is the frame, so this is
-  // the document, not a scroll container).
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.documentElement.style.overflow;
-    document.documentElement.style.overflow = "hidden";
-    return () => { document.documentElement.style.overflow = prev; };
+  // Lock the page behind the drawer. On the site the viewport is the frame, so this
+  // is the document. In the app's device frame the header sits inside a scrolling
+  // SCREEN, and a `fixed` drawer would escape it to the window: measure that scroll
+  // container's visible area, pin the drawer to it (absolute, against this header,
+  // which is `relative`) and freeze its scroll instead. Static HTML renders the fixed
+  // form first; the box only ever exists in the browser, and only inside a frame.
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState<{ top: number; height: number } | null>(null);
+  useIsoLayoutEffect(() => {
+    if (!open) { setBox(null); return; }
+    let sc: HTMLElement | null = drawerRef.current?.parentElement ?? null;
+    while (sc && sc !== document.body && sc !== document.documentElement && !/^(auto|scroll)$/.test(getComputedStyle(sc).overflowY)) sc = sc.parentElement;
+    if (!sc || sc === document.body || sc === document.documentElement) {
+      const prev = document.documentElement.style.overflow;
+      document.documentElement.style.overflow = "hidden";
+      return () => { document.documentElement.style.overflow = prev; };
+    }
+    const screen = sc;
+    const measure = () => {
+      const header = drawerRef.current?.closest("header");
+      const top = header ? screen.getBoundingClientRect().top - header.getBoundingClientRect().top : 0;
+      setBox({ top, height: screen.clientHeight });
+    };
+    measure();
+    const prev = screen.style.overflowY;
+    screen.style.overflowY = "hidden";
+    window.addEventListener("resize", measure);
+    return () => { window.removeEventListener("resize", measure); screen.style.overflowY = prev; setBox(null); };
   }, [open]);
 
   const left = headerConfig.menuSide === "left";
@@ -376,20 +397,24 @@ export function Header({ siteName, logos, nav, preview }: Props & { preview?: Pr
         return null;
       })}
 
-      {/* Mobile drawer — fixed to the viewport (the site has no device frame). */}
+      {/* Mobile drawer — fixed to the viewport on the site; pinned to the screen in a device frame (box). */}
       {/* Closed, the drawer stays in the DOM for its slide transition, so aria-hidden
           alone leaves its links in the tab order (axe: aria-hidden-focus, WCAG 4.1.2).
           `inert` takes them out of focus and the accessibility tree together; the
           empty-string form is what React 18 renders, and it holds in the static HTML. */}
-      <div className="@lg:hidden" aria-hidden={!open} {...((open ? {} : { inert: "" }) as {})}>
+      <div ref={drawerRef} className="@lg:hidden" aria-hidden={!open} {...((open ? {} : { inert: "" }) as {})}>
         <div
           onClick={() => setOpen(false)}
-          className={cx("fixed inset-0 z-[70] bg-black/40 transition-opacity duration-300",
+          style={box ? { top: box.top, height: box.height } : undefined}
+          className={cx("z-[70] bg-black/40 transition-opacity duration-300",
+            box ? "absolute left-0 right-0" : "fixed inset-0",
             open ? "opacity-100" : "pointer-events-none opacity-0")}
         />
         <nav
           data-menu-drawer={headerConfig.menuSide}
-          className={cx("fixed inset-y-0 z-[80] flex w-[78%] max-w-[320px] flex-col transition-transform duration-300",
+          style={box ? { top: box.top, height: box.height } : undefined}
+          className={cx("z-[80] flex w-[78%] max-w-[320px] flex-col transition-transform duration-300",
+            box ? "absolute" : "fixed inset-y-0",
             left ? "left-0" : "right-0", headerSkin.drawer,
             open ? "translate-x-0" : `${left ? "-translate-x-full" : "translate-x-full"} pointer-events-none`)}
         >
