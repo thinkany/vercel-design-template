@@ -1239,6 +1239,9 @@ const SETUP_STEP_DEFS = [
     id: "media",
     title: () => COPY.setupGate.mediaTitle,
     desc: () => COPY.setupGate.mediaDesc,
+    // Connecting more than one is normal, so say which the build reaches for first
+    // (scripts/find-images.mjs ORDER); otherwise it is a guess.
+    also: () => COPY.setupGate.mediaOrder,
     help: () => ({ title: COPY.setupGate.mediaHelpTitle, html: COPY.setupGate.mediaHelpHtml }),
     // The one step that shows several fields at once: these are alternatives to each
     // other, not a sequence, and asking for them one at a time would read as nagging.

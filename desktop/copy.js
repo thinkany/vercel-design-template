@@ -1429,6 +1429,10 @@ window.COPY = {
     mediaDesc: "Add optional free stock image and video libraries so your build can automatically find visuals that match your design description and download them with proper photographer credit.",
     // Behind the lifesaver on the Photos & Video card (the order text used to sit under
     // the description; as a help card it is there when wanted and out of the way otherwise).
+    // Which library the build reaches for first (scripts/find-images.mjs ORDER). Without
+    // this the order is a guess, and a designer who connected two wonders which one their
+    // images came from.
+    mediaOrder: "When more than one is connected, the build searches Unsplash first, then Pexels, then Pixabay.",
     mediaHelpTitle: "How a build uses these libraries",
     mediaHelpHtml: `
     <div class="iref-help-head">
