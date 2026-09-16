@@ -966,7 +966,8 @@
       /* A red banner: a fact not to miss (the site discourages crawlers). */
       .site-warn { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 14px; padding: 10px 12px; border: 1px solid #e5484d; border-radius: 8px; background: #fff5f5; color: #b3261e; font-size: 12.5px; line-height: 1.45; }
       .site-warn > svg { width: 16px; height: 16px; flex: none; margin-top: 1px; }
-      .site-warn-text { flex: 1; }
+      .site-warn-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+      .site-warn a { color: inherit; text-decoration: underline; font-weight: 600; }
       .site-warn-x { border: 0; background: none; color: #b3261e; opacity: .7; cursor: pointer; padding: 0; display: flex; margin-top: 1px; }
       .site-warn-x:hover { opacity: 1; }
       .site-warn-x svg { width: 14px; height: 14px; }

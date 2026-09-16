@@ -4058,7 +4058,7 @@ function repaintPublish() {
   if (!ap || !ap.host) return;
   ap.host.hidden = false;
   ap.host.innerHTML = "";
-  if (ap.discouraged) ap.host.appendChild(siteWarnBanner(COPY.publish.discourageNote));
+  if (ap.discouraged) { const w = siteWarnBanner(COPY.publish.discourageNote, { link: discourageLink() }); w.style.margin = "14px 8px 12px 0"; ap.host.appendChild(w); }
   const list = document.createElement("div");
   ap.host.appendChild(list);
   const paint = publishProgressList(list);
@@ -4667,7 +4667,7 @@ function renderSitePublish(body, site, domainRefreshers) {
   btn.addEventListener("click", () => runPublishFlow(btn, host, { target: "site" }));
 
   if (liveBox) body.appendChild(liveBox);
-  if (publishDiscouraged) body.appendChild(siteWarnBanner(COPY.publish.discourageNote)); // not dismissible here
+  if (publishDiscouraged) { const w = siteWarnBanner(COPY.publish.discourageNote, { link: discourageLink() }); w.style.margin = "18px 8px 4px 0"; body.appendChild(w); } // not dismissible here; inset like the live box, clear of it
   body.appendChild(btn);
   body.appendChild(host);
   if (site.lastDeployAt) {
@@ -4851,12 +4851,18 @@ function siteHelpModal(title, html) {
 
 // A red banner: a fact the designer should not miss (the site discourages crawlers).
 // With onDismiss it carries a close button; without, it stays (the publish process).
-function siteWarnBanner(text, { onDismiss, title } = {}) {
+function siteWarnBanner(text, { onDismiss, title, link } = {}) {
   const box = siteEl("div", "site-warn");
   box.setAttribute("role", "alert");
   if (title) box.title = title; // the full sentence, where the box shows the short one
   box.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18.1A2 2 0 0 0 3.5 21h17a2 2 0 0 0 1.7-2.9L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>';
-  box.appendChild(siteEl("span", "site-warn-text", text));
+  const t = siteEl("span", "site-warn-text", text);
+  if (link) { // "Open …" after the sentence: where to put it right
+    const a = document.createElement("a"); a.href = "#"; a.textContent = link.label;
+    a.addEventListener("click", (e) => { e.preventDefault(); link.run(); });
+    t.appendChild(document.createTextNode(" ")); t.appendChild(a);
+  }
+  box.appendChild(t);
   if (onDismiss) {
     const x = siteEl("button", "site-warn-x"); x.type = "button"; x.title = COPY.site.dismiss; x.setAttribute("aria-label", COPY.site.dismiss);
     x.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
@@ -4869,6 +4875,13 @@ function siteWarnBanner(text, { onDismiss, title } = {}) {
 // Pages, Posts, Types and Settings tabs, dismissible per project; the Publish panel
 // shows it regardless (siteDiscouraged reads the flag the same way there).
 const siteDiscouraged = (data) => !!(data && data.site && data.site.seo && data.site.seo.discourage);
+// The CMS Settings tab, scrolled to one of its headings (data-section on the label).
+async function openSettingsSection(id) {
+  await ensureCmsTab("settings");
+  const el = modalBody.querySelector(`[data-section="${id}"]`);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+const discourageLink = () => ({ label: COPY.publish.discourageOpen, run: () => openSettingsSection("search") });
 function siteDiscourageBanner(cms, data) {
   if (!siteDiscouraged(data)) return null;
   if (cms && cms.ui && cms.ui.notices && cms.ui.notices.discourage) return null; // dismissed
@@ -8340,7 +8353,7 @@ async function renderSiteSettings(host, data, st) {
 
   // ── Search engines: robots.txt, the sitemap, llms.txt (content/site.json seo) ──
   wrap.appendChild(siteEl("div", "drawer-sep"));
-  wrap.appendChild(siteEl("div", "sess-label", S.searchHeading));
+  { const l = siteEl("div", "sess-label", S.searchHeading); l.dataset.section = "search"; wrap.appendChild(l); } // an anchor: the publish note links here
   const seo = JSON.parse(JSON.stringify((data.site && data.site.seo) || { discourage: false, sitemap: true, llms: { enabled: true, content: null } }));
   const seoStatus = siteEl("div"); seoStatus.style.cssText = "min-height:18px;";
   const saveSeo = async () => { const res = await window.desktop.saveSiteSeo(seo); seoStatus.innerHTML = ""; if (res && res.ok) siteFlash(seoStatus, S.saved); };

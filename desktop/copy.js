@@ -2169,7 +2169,8 @@ window.COPY = {
 
   // ── Publish drawer (Vercel connect + one-click publish) ─────────────────────
   publish: {
-    discourageNote: "This site discourages search engines (Settings → Search engines): the published site carries noindex on every page and no sitemap. Meant for a site that isn't public yet; switch it off before launch.",
+    discourageNote: "This site discourages search engines: the published site carries noindex on every page and no sitemap. Meant for a site that isn't public yet; switch it off before launch.",
+    discourageOpen: "Open the Search engines settings.",
     vercelLabel: "Vercel",
     disconnect: "Disconnect Vercel",
     connectedWith: (user) => `Connected · ${user}`,
