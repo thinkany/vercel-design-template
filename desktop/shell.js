@@ -7936,6 +7936,25 @@ function siteRowTip(row, text) {
   row.addEventListener("mousedown", hide);
 }
 
+// "Create with AI" above the Posts list: a title and a brief go to Claude, which
+// writes the post in the site's copy voice with its summary, tags and search
+// fields, saved as a draft; onCreated(id) opens the editor on it. The button is
+// the SEO fill's (sparkle, working dots, an error line), so it reads the same.
+function renderSiteAiPost({ onCreated }) {
+  const S = COPY.site;
+  const f = siteFold(S.aiPostHeading, "posts:ai", { defaultOpen: false }); f.sec.style.margin = "0 0 8px"; f.sec.dataset.tour = "cms-post-ai";
+  f.body.appendChild(siteEl("div", "sess-desc", S.aiPostDesc));
+  const t = siteField(S.aiPostTitle, "", { placeholder: S.aiPostTitlePlaceholder }); f.body.appendChild(t.wrap);
+  const b = siteField(S.aiPostBrief, "", { textarea: true, placeholder: S.aiPostBriefPlaceholder, hint: S.aiPostBriefHint }); f.body.appendChild(b.wrap);
+  const row = siteSeoFill({
+    label: S.aiPostWrite, title: S.aiPostWriteTitle, working: S.aiPostWorking,
+    run: async () => { const title = t.input.value.trim(); if (!title) return { ok: false, error: S.aiPostNeedTitle }; return window.desktop.writeSitePost(title, b.input.value.trim()); },
+    done: (r) => { t.input.value = ""; b.input.value = ""; if (r.post) onCreated(r.post.id); },
+  });
+  f.body.appendChild(row);
+  return f.sec;
+}
+
 // The Filter section above a list (Pages, Posts, a type's entries), collapsed by
 // default: a status filter (All / Published / Drafts), select all, and Publish /
 // Unpublish selected. Each row gets a checkbox from rowBox(); the filter shows and
@@ -8848,6 +8867,9 @@ async function renderSite(body) {
     addPost.dataset.tour = "cms-add-post";
     const postSub = (p) => p.draft ? COPY.site.draftTag : (p.date || "");
     const postItems = posts.map((p) => ({ id: p.id, title: p.title, sub: postSub(p), tags: p.tags || [] }));
+    // Create with AI: a title and a brief, and Claude writes the post as a draft (voice,
+    // summary, tags, SEO); the editor opens on it. Its own section, above Filter.
+    left.appendChild(renderSiteAiPost({ onCreated: (id) => openItem("post", id) }));
     const postStatus = siteStatusBar({ host: left, kind: "post", items: posts, refresh, filterKey: "posts" });
     const postTools = siteListTools({ left, right, placeholder: COPY.site.searchPosts, items: postItems, onOpen: (id) => openItem("post", id), addRow: addPost, tags: true, tourId: "cms-post" });
     if (!posts.length) left.appendChild(siteEl("div", "sess-desc", COPY.site.noPosts));

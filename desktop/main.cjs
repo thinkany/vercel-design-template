@@ -4841,6 +4841,65 @@ ipcMain.handle("seo:fill", async (_e, payload = {}) => {
   if (!process.env.ANTHROPIC_API_KEY) return { ok: false, reason: "no-key" };
   return seoFillOne(payload);
 });
+// ---- Create with AI: a blog post from a title and a brief -------------------
+// The Posts list's "Create with AI" section. Claude writes the post in the project's
+// copy voice (the tone + rules the design agent follows), with its summary, tags and
+// search fields, and it lands as a DRAFT file the editor opens on; the designer
+// reviews and publishes. Same headless call shape as seoFillOne.
+ipcMain.handle("post:write", async (_e, { title, brief } = {}) => {
+  if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!process.env.ANTHROPIC_API_KEY) return { ok: false, reason: "no-key" };
+  const t = String(title || "").trim();
+  if (!t) return { ok: false, error: "Give the post a title." };
+  const W = require("./post-writer.cjs");
+  const SEO = require("./seo-fill.cjs");
+  const dir = currentProject;
+  const site = siteJsonOf(dir);
+  const settings = seoSettings(site.seo);
+  const env = readProjectEnv(dir);
+  const posts = readPosts(dir);
+  const ctx = {
+    name: settings.siteName || env.VITE_CLIENT_NAME || path.basename(dir),
+    url: site.url || "",
+    publisher: settings.schema,
+    voice: effectiveVoice(dir),
+    tags: [...new Set(posts.flatMap((p) => p.tags || []))],
+    titles: posts.map((p) => p.title),
+    // The newest published posts, as samples of the voice in use.
+    samples: posts.filter((p) => !p.draft).slice(0, W.SAMPLES).map((p) => ({ title: p.title, excerpt: SEO.plainMarkdown(parseFrontmatter(readTextSafe(postFile(dir, p.id))).body).slice(0, W.SAMPLE_MAX) })),
+  };
+  const { system, user } = W.prompt({ title: t, brief: String(brief || "") }, ctx);
+  try {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk"); // precedent: seoFillOne
+    const client = new Anthropic({ timeout: 180_000, maxRetries: 1 });
+    const msg = await client.beta.messages.create({
+      model: "claude-opus-5",
+      max_tokens: 8192,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      system,
+      messages: [{ role: "user", content: user }],
+      output_config: { effort: "medium", format: { type: "json_schema", schema: W.SCHEMA } },
+    });
+    if (msg.stop_reason === "refusal") return { ok: false, error: "Claude declined to write this post." };
+    const text = (msg.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+    let raw; try { raw = JSON.parse(text); } catch { return { ok: false, error: "The reply wasn't the JSON expected. Try again." }; }
+    const post = W.clean(raw, { title: t }, ctx);
+    if (!post.body) return { ok: false, error: "The reply had no post in it. Try again." };
+    // The file, a draft, the way createPost writes one.
+    let id = slugifyId(post.title) || "post"; const base = id; let n = 2;
+    while (fs.existsSync(postFile(dir, id))) id = `${base}-${n++}`;
+    const fm = { title: post.title, date: todayIso(), description: post.description, image: "", tags: post.tags, draft: true, seo: post.seo };
+    fs.mkdirSync(postsDir(dir), { recursive: true });
+    fs.writeFileSync(postFile(dir, id), serializeFrontmatter(fm) + "\n" + post.body + "\n");
+    if (appLog.isEnabled()) appLog.write("info", "post", `write "${post.title}" via ${msg.model}: ${msg.usage ? `${msg.usage.input_tokens} in, ${msg.usage.output_tokens} out` : "no usage"}`);
+    return { ok: true, post: { id, ...fm, body: post.body } };
+  } catch (e) {
+    const m = e && e.status ? `${e.status}: ${(e.error && e.error.error && e.error.error.message) || e.message}` : (e && e.message) || String(e);
+    return { ok: false, error: m };
+  }
+});
 // The whole site at once (Settings, Search engines): every page, post and entry
 // without a title and description gets them written from its content, straight to
 // its file, three at a time; the designer reviews in the editors. `rewrite` also
