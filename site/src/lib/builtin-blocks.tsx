@@ -51,7 +51,7 @@ function turnstileSiteKey(): string {
 /** The action Turnstile stamps on the token (the endpoint checks it against the form). */
 export const turnstileAction = (formId: string) => formId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32);
 import { entriesOf, entryById, byDateDesc, types as contentTypes, ENTRIES_UI, type Entry } from "./entries";
-import { posts as allPosts, postDate, POSTS_UI, blogPath, type Post } from "./posts";
+import { posts as allPosts, postDate, POSTS_UI, blogPath, postRoute, type Post } from "./posts";
 
 const codeProps = z.object({
   /** For you: what this snippet is (shown in the CMS, not on the page). */
@@ -445,7 +445,7 @@ const postsProps = z.object({
 });
 
 function PostCard({ post }: { post: Post }) {
-  const href = `/${blogPath}/${post.slug}`;
+  const href = "/" + postRoute(post);
   const date = postDate(post.date);
   return (
     <li data-ta-entry="" data-ta-tags={post.tags.join("|") || undefined}>
@@ -504,7 +504,7 @@ function Posts(p: z.infer<typeof postsProps>) {
               {items.map((x) => <PostCard key={x.id} post={x} />)}
             </ul>
             {filter && <p data-ta-entries-empty="" hidden className="font-ta-sans text-[14px] text-ta-muted mt-4">{POSTS_UI.empty}</p>}
-            {more && <a href={`/${blogPath}`} className="inline-block mt-10 font-ta-sans text-[12px] font-medium tracking-[0.1em] uppercase text-ta-primary no-underline hover:underline">{p.moreLabel}</a>}
+            {more && <a href={"/" + blogPath} className="inline-block mt-10 font-ta-sans text-[12px] font-medium tracking-[0.1em] uppercase text-ta-primary no-underline hover:underline">{p.moreLabel}</a>}
           </>
         )}
       </div>

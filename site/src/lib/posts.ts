@@ -7,8 +7,8 @@
 // Mirrors entries.ts: eager glob in a try/catch (the app's schema introspection
 // bundles this for Node, where import.meta.glob doesn't exist).
 
-import { blogPath } from "./site";
-export { blogPath };
+import { blogPath, blogTag, postRoute, tagSlug } from "./site";
+export { blogPath, blogTag, postRoute, tagSlug };
 
 /** Strings the rendered block needs on the page. */
 export const POSTS_UI = {
