@@ -4851,9 +4851,10 @@ function siteHelpModal(title, html) {
 
 // A red banner: a fact the designer should not miss (the site discourages crawlers).
 // With onDismiss it carries a close button; without, it stays (the publish process).
-function siteWarnBanner(text, { onDismiss } = {}) {
+function siteWarnBanner(text, { onDismiss, title } = {}) {
   const box = siteEl("div", "site-warn");
   box.setAttribute("role", "alert");
+  if (title) box.title = title; // the full sentence, where the box shows the short one
   box.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18.1A2 2 0 0 0 3.5 21h17a2 2 0 0 0 1.7-2.9L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>';
   box.appendChild(siteEl("span", "site-warn-text", text));
   if (onDismiss) {
@@ -4871,7 +4872,7 @@ const siteDiscouraged = (data) => !!(data && data.site && data.site.seo && data.
 function siteDiscourageBanner(cms, data) {
   if (!siteDiscouraged(data)) return null;
   if (cms && cms.ui && cms.ui.notices && cms.ui.notices.discourage) return null; // dismissed
-  return siteWarnBanner(COPY.site.discourageBanner, { onDismiss: async () => { try { await window.desktop.setCmsSettings({ ui: { notices: { discourage: true } } }); if (cms && cms.ui) cms.ui.notices = { ...(cms.ui.notices || {}), discourage: true }; } catch (e) { console.warn("[cms] dismissal not saved:", e); } } });
+  return siteWarnBanner(COPY.site.discourageBannerShort, { title: COPY.site.discourageBanner, onDismiss: async () => { try { await window.desktop.setCmsSettings({ ui: { notices: { discourage: true } } }); if (cms && cms.ui) cms.ui.notices = { ...(cms.ui.notices || {}), discourage: true }; } catch (e) { console.warn("[cms] dismissal not saved:", e); } } });
 }
 
 // A sub-heading with a body, used inside a section (not folded, not remembered).
@@ -9041,6 +9042,8 @@ async function renderSite(body) {
   const helpBtn = siteEl("button", "site-tabs-help"); helpBtn.type = "button"; helpBtn.dataset.tour = "cms-help"; helpBtn.title = COPY.site.helpTip; helpBtn.setAttribute("aria-label", COPY.site.helpTip);
   helpBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/><circle cx="12" cy="12" r="4"/></svg>';
   helpBtn.addEventListener("click", () => openCmsHelp(siteRailState.tab));
+  // The site discourages crawlers: a compact red note in the row, just left of the help icon.
+  if (["pages", "posts", "types", "settings"].includes(siteRailState.tab)) { const warn = siteDiscourageBanner(cms, data); if (warn) { warn.classList.add("in-tabs"); tabs.appendChild(warn); } }
   tabs.appendChild(helpBtn);
   body.appendChild(tabs);
 
@@ -9060,8 +9063,6 @@ async function renderSite(body) {
     btn.addEventListener("click", go); inp.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
     row.append(inp, btn); return row;
   };
-
-  if (["pages", "posts", "types", "settings"].includes(siteRailState.tab)) { const warn = siteDiscourageBanner(cms, data); if (warn) body.appendChild(warn); }
 
   if (siteRailState.tab === "pages") {
     const { left, right } = two();

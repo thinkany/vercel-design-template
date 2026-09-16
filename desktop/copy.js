@@ -946,6 +946,7 @@ window.COPY = {
     footerHeading: "Footer",
     helpClose: "Close",
     dismiss: "Dismiss",
+    discourageBannerShort: "Search engines are discouraged from this site",
     discourageBanner: "Search engines are asked to stay away from this site (Settings → Search engines → Discourage search engines). Fine while it isn't public; switch it off before launch, or the published site won't be found.",
     footerCopyHeading: "Footer copy",
     footerCopyDesc: "The footer's own words and contact details, beneath its links. A line the design wrote into the footer (a tagline, a note) shows here as a field, prefilled with the design's words.",
