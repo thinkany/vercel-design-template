@@ -17,8 +17,8 @@ const ok = (c, m) => { checks++; assert.ok(c, m); };
 const block = shell.slice(shell.indexOf("const SETUP_STEP_DEFS = ["), shell.indexOf("/** Read what is already connected"));
 // The order is declared on its own, so reordering is one line rather than a block move.
 const order = JSON.parse(shell.match(/const SETUP_ORDER = (\[[^\]]*\])/)[1].replace(/'/g, '"'));
-ok(JSON.stringify(order) === JSON.stringify(["claude", "media", "figma", "research"]),
-  `steps run Claude, then the libraries, then the licences; got ${JSON.stringify(order)}`);
+ok(JSON.stringify(order) === JSON.stringify(["claude", "figma", "research", "media", "turnstile"]),
+  `the keys you supply come first, then the two licences; got ${JSON.stringify(order)}`);
 // Every ordered id resolves, and no definition is left out of the walk-through.
 const ids = [...block.matchAll(/^\s{4}id: "(\w+)",/gm)].map((m) => m[1]);
 for (const id of order) ok(ids.includes(id), `${id} is ordered but not defined`);
@@ -126,15 +126,18 @@ ok(/if \(step\.id === id\) break/.test(rest), "counting only the rows that sit a
 ok(/claudeKeySection\(host/.test(block), "step 1 renders the drawer's Claude row");
 ok(/noDesc: true/.test(block),
   "without the row's own description, which the step has already given in full");
-// Figma, Research, and ONE call inside the media step's loop that serves all three
-// libraries: three call sites, five rows.
-ok((block.match(/licenseSection\(/g) || []).length === 3,
+// Figma, Research, Turnstile, and ONE call inside the media step's loop that serves all
+// three libraries: four call sites, six rows.
+ok((block.match(/licenseSection\(/g) || []).length === 4,
   "the other steps render the drawer's licence rows");
 const loop = block.slice(block.indexOf("for (const lib of libs)"));
 ok(/licenseSection\(fold/.test(loop), "the media step loops one licence row over its three libraries");
 ok(/onConnected:/.test(block), "each row reports a successful save back to the stepper");
 // onConnected must actually be honoured, or the drawer would re-open over the stepper.
-const ls = shell.slice(shell.indexOf("async function licenseSection"), shell.indexOf("async function licenseSection") + 3000);
+// Slice to the END of the function, not a fixed byte count: a 3000-char window silently
+// stopped covering the line below as licenseSection grew, so the check passed on nothing.
+const lsStart = shell.indexOf("async function licenseSection");
+const ls = shell.slice(lsStart, shell.indexOf("\n}\n", lsStart));
 ok(/if \(opts\.onConnected\) opts\.onConnected\(res\);\s*\n\s*else \{ refreshRailActivation\(\); openModal\("licenses"\); \}/.test(ls),
   "licenseSection defers to onConnected instead of always re-opening the drawer");
 

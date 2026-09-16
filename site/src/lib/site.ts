@@ -31,6 +31,14 @@ export const siteSchema = z.object({
   /** The legal line: copyright ({year} and {siteName} are filled in) + privacy / terms links. */
   legal: z.object({ copyright: z.string().optional(), links: z.array(navLink).default([]) }).default({ links: [] }),
   /**
+   * The footer's own copy (the Footer schema's props beyond the chrome set: a tagline, a
+   * short line), edited in the CMS under Navigation → Footer. Absent fields fall back to
+   * the schema's defaults, the design's words. See chromeCopy in lib/blocks.
+   */
+  footer: z.record(z.unknown()).default({}),
+  /** Contact details (email, phone, address): the footer shows what is set; the Organization structured data carries them. */
+  contact: z.object({ email: z.string().default(""), phone: z.string().default(""), address: z.string().default("") }).default({ email: "", phone: "", address: "" }),
+  /**
    * true: the header menu is `nav` above, edited in the CMS. false: the menu follows
    * the page outline (top-level pages in order, their children as sub-links).
    */

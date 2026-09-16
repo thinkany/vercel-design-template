@@ -104,7 +104,7 @@ One file `site/blocks/<Name>.tsx`:
 import { z } from "astro/zod";
 import { defineBlock, richtext } from "../src/lib/blocks";
 import { Rich } from "../src/lib/Rich";
-import { Reveal } from "./lib/Reveal";
+import { Reveal, reveal } from "./lib/Reveal";
 import { anchor, image, link } from "./lib/schema";
 
 const props = z.object({
@@ -163,7 +163,8 @@ Then one row in `site/blocks/index.ts` (`testimonials,` or `"team-grid": teamGri
    same container width, same section rhythm (light/dark alternation, stagger),
    the same motif kit. A block that could belong to any site is wrong.
 7. **Static HTML.** No `motion`, no `useState`, no `window`. Reveals are
-   `<Reveal delay={…}>`; loops are keyframes in `site/blocks/blocks.css` (respect
+   `<Reveal delay={…}>`, or `{...reveal(…)}` spread onto an element that must stay
+   the grid/flex item; loops are keyframes in `site/blocks/blocks.css` (respect
    `prefers-reduced-motion`). Interactive pieces aren't supported in page blocks:
    if the request needs one (a carousel, tabs), say so and design the static
    version (a grid, an accordion of `<details>`).

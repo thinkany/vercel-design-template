@@ -227,9 +227,13 @@ Before hand-rolling UI, use what's installed:
   (lowercase/data exports are skipped).
 - **Content is single-source, never fork it by breakpoint.** Author copy/images once;
   DesignSurface renders that one node in each device frame. Breakpoints differ only through
-  responsive *styling* (`sm:`/`md:` variants, `clamp()`), **never branch content on `view`**
+  responsive *styling* (`@lg:` container variants, `clamp()`), **never branch content on `view`**
   (`view === "mobile" ? … : …`) or duplicate text/images per device. Same for shared globals:
   edit the one component, not each page.
+- **Phones share one layout.** Everything below `@lg` (512px) is the phone design; `@sm` is
+  pinned at 448px, above the widest phone, so it only ever means tablet-or-wider. Don't
+  design a between state for it. The View bar's Mobile and Tablet buttons list real devices
+  (iPhone SE to Pro Max, iPad mini to Pro) to check the one layout at each real width.
 - **Dark mode** via `.dark` on `<html>` + `dark:` variants, not manual media queries.
 - **Images** are gathered non-browser into `public/` (or held with
   [ImagePlaceholder](src/app/components/ImagePlaceholder.tsx) when `TA_DESIGN_IMAGES=placeholder`);

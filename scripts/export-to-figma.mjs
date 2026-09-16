@@ -73,15 +73,17 @@ function printTimingSummary(title, rows) {
 const CAPTURE_JS = "https://mcp.figma.com/mcp/html-to-design/capture.js";
 // Fallback widths if the app doesn't expose __PREVIEW_CONFIG__ (kept in sync
 // with previewWidths in src/config/site.ts).
-const FALLBACK_WIDTHS = { desktop: 1440, tablet: 664, mobile: 370 };
+const FALLBACK_WIDTHS = { desktop: 1440, tablet: 744, mobile: 393 };
 const VIEWPORT_HEIGHT = 900; // starting height; full-page capture grabs the rest
 // Per-view capture height, matched to the device-frame portrait heights in the
-// live preview (PhoneFrame 780, TabletFrame 900, desktop unframed). This keeps
-// `min-h-full` content resolving to the SAME device height in the export as in
-// the preview — otherwise a full-height mobile section would measure at the flat
-// 900 here but 780 in the phone frame, and preview↔Figma would diverge.
-const VIEWPORT_HEIGHTS = { desktop: 900, tablet: 900, mobile: 780 };
-const viewHeight = (view) => VIEWPORT_HEIGHTS[view] ?? VIEWPORT_HEIGHT;
+// live preview (the default phone 852, the default tablet 1133, desktop unframed;
+// __PREVIEW_CONFIG__.heights carries the chosen devices' when the app exposes it).
+// This keeps `min-h-full` content resolving to the SAME device height in the export
+// as in the preview — otherwise a full-height mobile section would measure at the
+// flat 900 here but 852 in the phone frame, and preview↔Figma would diverge.
+const VIEWPORT_HEIGHTS = { desktop: 900, tablet: 1133, mobile: 852 };
+let heights = { ...VIEWPORT_HEIGHTS };
+const viewHeight = (view) => heights[view] ?? VIEWPORT_HEIGHTS[view] ?? VIEWPORT_HEIGHT;
 
 function parseArgs(argv) {
   const args = { url: "http://localhost:5173", variation: "v00", out: "figma-export", captures: null, views: null, pages: null, blocks: false, timing: false, fast: false };
@@ -165,6 +167,7 @@ async function readManifest(page, url, viewsOverride) {
   await page.goto(`${url}/?v=v00`, { waitUntil: "networkidle0" });
   const cfg = await page.evaluate(() => window.__PREVIEW_CONFIG__ ?? null);
   const widths = { ...FALLBACK_WIDTHS, ...(cfg?.widths ?? {}) };
+  heights = { ...VIEWPORT_HEIGHTS, ...(cfg?.heights ?? {}) };
   const views = viewsOverride ?? cfg?.views ?? ["desktop", "mobile"];
   const pages = cfg?.pages?.length ? cfg.pages : [{ id: "home", route: "", name: "Home" }];
   return { views, widths, pages };

@@ -40,7 +40,7 @@ function Value({ k, v, depth }: { k: string; v: unknown; depth: number }): React
     return (
       <div className="mb-5">
         <div className="font-ta-sans text-[11px] tracking-[0.08em] uppercase text-ta-muted mb-2">{words(k)} ({v.length})</div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 @lg:grid-cols-2 @5xl:grid-cols-3">
           {v.map((item, i) => (
             <div key={i} className="border border-ta-border rounded-[4px] p-4">
               {typeof item === "object" && item !== null && !isImage(item) && !isLink(item)

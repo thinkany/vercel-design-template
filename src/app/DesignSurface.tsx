@@ -6,7 +6,8 @@ import { ViewToggle } from "./components/ViewToggle";
 import { getVariationId, resolveComponent } from "./variationRegistry";
 import { MenuStateContext } from "./menuState";
 import { ImageCredits } from "./components/ImageCredits";
-import { previewConfig, projectType } from "@/config/site";
+import { devices, previewConfig, projectType, type DeviceKind } from "@/config/site";
+import { getDevice, setDevice } from "./devices";
 
 type View = "desktop" | "tablet" | "mobile";
 type Orientation = "portrait" | "landscape";
@@ -120,6 +121,10 @@ export function DesignSurface({
   const toggleOrientation = () =>
     setOrientation(orientation === "portrait" ? "landscape" : "portrait");
 
+  // The device each framed view simulates (remembered per project, see devices.ts).
+  const [device, setDeviceState] = useState(() => ({ mobile: getDevice("mobile"), tablet: getDevice("tablet") }));
+  const chooseDevice = (kind: DeviceKind, id: string) => setDeviceState((d) => ({ ...d, [kind]: setDevice(kind, id) }));
+
   return (
     <div className="min-h-screen flex flex-col" style={{ background: bg }}>
       <ViewToggle
@@ -128,15 +133,18 @@ export function DesignSurface({
         views={previewConfig.views}
         orientation={orientation}
         onRotate={toggleOrientation}
+        devices={devices}
+        device={{ mobile: device.mobile.id, tablet: device.tablet.id }}
+        onDevice={chooseDevice}
         onEdit={onEdit}
         editLabel={editLabel}
       />
       {view === "mobile" ? (
-        <PhoneFrame bg={bg} orientation={orientation}>
+        <PhoneFrame bg={bg} orientation={orientation} width={device.mobile.width} height={device.mobile.height}>
           {surface}
         </PhoneFrame>
       ) : view === "tablet" ? (
-        <TabletFrame bg={bg} orientation={orientation}>
+        <TabletFrame bg={bg} orientation={orientation} width={device.tablet.width} height={device.tablet.height}>
           {surface}
         </TabletFrame>
       ) : (

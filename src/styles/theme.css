@@ -5,6 +5,15 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* Container-query breakpoints. A design's `@sm:` / `@lg:` variants measure the design
+     surface (the device frame here, the page wrapper on the site), never the window.
+     Tailwind's default `@sm` (24rem = 384px) falls INSIDE the phone range: a 375px SE
+     stacks while a 440px Pro Max gets the `@sm:` layout, a between state nobody designed.
+     28rem (448px) sits above the widest phone and below every tablet (744px+), so every
+     phone shares ONE layout and `@sm:` means "tablet or wider". `@lg` stays at 512px.
+     (The same token sizes max-w-sm, which grows from 384 to 448px.) */
+  --container-sm: 28rem;
+
   /* Semantic brand roles → Tailwind utilities: bg-ta-surface, text-ta-ink,
      text-ta-body, bg-ta-primary, border-ta-border, etc. Components use these
      role utilities, so a palette change only swaps values in tokens.css. */

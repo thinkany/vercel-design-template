@@ -3,7 +3,8 @@ import { useState, useEffect } from "react";
 
 import { resolveComponent } from "./variationRegistry";
 import { fetchVariation, patchVariation, type Variation } from "../data/variations";
-import { siteConfig, previewConfig, previewWidths, projectType } from "../config/site";
+import { siteConfig, previewConfig, projectType } from "../config/site";
+import { currentPreviewSizes } from "./devices";
 import type { View } from "../config/site";
 
 import { Dashboard } from "./components/Dashboard";
@@ -62,14 +63,15 @@ export default function App() {
   const variationId = getVariationId();
   const captureView = getCaptureView();
 
-  // Expose the active breakpoint set + widths so the headless export tool can
+  // Expose the active breakpoint set + viewport sizes so the headless export tool can
   // read the project's real device matrix instead of hardcoding it. Tablet is
-  // present here only when VITE_ENABLE_TABLET is on (see previewConfig).
+  // present here only when VITE_ENABLE_TABLET is on (see previewConfig). The sizes
+  // are the chosen preview devices' (devices.ts patches them when the choice changes).
   useEffect(() => {
     (window as unknown as { __PREVIEW_CONFIG__?: unknown }).__PREVIEW_CONFIG__ = {
       views: previewConfig.views,
       defaultView: previewConfig.defaultView,
-      widths: previewWidths,
+      ...currentPreviewSizes(),
       pages: designPages.map(({ id, route, name }) => ({ id, route, name })),
     };
   }, []);

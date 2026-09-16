@@ -8,19 +8,24 @@ export function PhoneFrame({
   children,
   bg = "#fff",
   orientation = "portrait",
+  width = 393,
+  height = 852,
 }: {
   children: ReactNode;
   bg?: string;
   orientation?: Orientation;
+  /** The screen, CSS px, portrait (a device from config/site `devices`). Landscape swaps them. */
+  width?: number;
+  height?: number;
 }) {
   const landscape = orientation === "landscape";
-  const screenW = landscape ? 780 : 370;
-  const screenH = landscape ? 370 : 780;
+  const screenW = landscape ? height : width;
+  const screenH = landscape ? width : height;
   // Drag-to-scroll (mouse "touch") + the circle touch cursor (via .ta-touch-surface).
   const { ref: screenRef, handlers } = useDragScroll<HTMLDivElement>();
   return (
     <div style={{ display: "flex", justifyContent: "center", padding: "40px 24px 60px", minHeight: "calc(100vh - 49px)", alignItems: "flex-start" }}>
-      <div style={{ position: "relative", width: landscape ? "auto" : 390, flexShrink: 0 }}>
+      <div style={{ position: "relative", width: landscape ? "auto" : width + 20, flexShrink: 0 }}>
         {/* Outer shell */}
         <div
           style={{

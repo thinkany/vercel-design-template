@@ -27,8 +27,12 @@
 //     viewport IS the frame, so there is no useDrawerLock and no box math.
 //   • `useIsoLayoutEffect`: the header is server-rendered first, and React warns
 //     on useLayoutEffect there.
-//   • Container queries become viewport breakpoints (`lg:`): the site has no
-//     `@container` design surface wrapping it.
+//   • Breakpoints are CONTAINER variants (`@lg:`), the same ones the design header
+//     uses: Base.astro wraps the page in `@container`, so on the real site the
+//     container is the viewport, and in the app's device frames it is the frame.
+//     Viewport variants (`lg:`) would read the app WINDOW inside a phone frame and
+//     show the desktop nav there. Phones (all below `@lg`, 512px) get the drawer;
+//     tablets and desktop get the nav, in the frame and on the site alike.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { z } from "astro/zod";
 import { defineBlock, navItem, logosProp } from "../../src/lib/blocks";
@@ -41,7 +45,7 @@ const cx = (...parts: (string | false | null | undefined)[]) => parts.filter(Boo
 const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 const MEGA_COLS: Record<number, string> = {
-  2: "lg:grid-cols-2", 3: "lg:grid-cols-3", 4: "lg:grid-cols-4", 5: "lg:grid-cols-5",
+  2: "@lg:grid-cols-2", 3: "@lg:grid-cols-3", 4: "@lg:grid-cols-4", 5: "@lg:grid-cols-5",
 };
 
 const props = z.object({
@@ -185,8 +189,8 @@ function Logo({ siteName, logos }: { siteName: string; logos: Props["logos"] }) 
     <a href="/" data-header-logo aria-label={siteName} className="flex items-center leading-none no-underline">
       {src ? (
         <>
-          <img src={src} alt={siteName} className={cx(headerSkin.logo, mobile && "hidden sm:block")} />
-          {mobile && <img src={mobile} alt={siteName} className={cx(headerSkin.logo, "sm:hidden")} />}
+          <img src={src} alt={siteName} className={cx(headerSkin.logo, mobile && "hidden @lg:block")} />
+          {mobile && <img src={mobile} alt={siteName} className={cx(headerSkin.logo, "@lg:hidden")} />}
         </>
       ) : (
         <span className={headerSkin.wordmark}>{logos?.wordmark || siteName}</span>
@@ -284,13 +288,34 @@ export function Header({ siteName, logos, nav, preview }: Props & { preview?: Pr
     return () => window.removeEventListener("keydown", onKey);
   }, [active]);
 
-  // Lock the page behind the drawer (the site's viewport is the frame, so this is
-  // the document, not a scroll container).
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.documentElement.style.overflow;
-    document.documentElement.style.overflow = "hidden";
-    return () => { document.documentElement.style.overflow = prev; };
+  // Lock the page behind the drawer. On the site the viewport is the frame, so this
+  // is the document. In the app's device frame the header sits inside a scrolling
+  // SCREEN, and a `fixed` drawer would escape it to the window: measure that scroll
+  // container's visible area, pin the drawer to it (absolute, against this header,
+  // which is `relative`) and freeze its scroll instead. Static HTML renders the fixed
+  // form first; the box only ever exists in the browser, and only inside a frame.
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState<{ top: number; height: number } | null>(null);
+  useIsoLayoutEffect(() => {
+    if (!open) { setBox(null); return; }
+    let sc: HTMLElement | null = drawerRef.current?.parentElement ?? null;
+    while (sc && sc !== document.body && sc !== document.documentElement && !/^(auto|scroll)$/.test(getComputedStyle(sc).overflowY)) sc = sc.parentElement;
+    if (!sc || sc === document.body || sc === document.documentElement) {
+      const prev = document.documentElement.style.overflow;
+      document.documentElement.style.overflow = "hidden";
+      return () => { document.documentElement.style.overflow = prev; };
+    }
+    const screen = sc;
+    const measure = () => {
+      const header = drawerRef.current?.closest("header");
+      const top = header ? screen.getBoundingClientRect().top - header.getBoundingClientRect().top : 0;
+      setBox({ top, height: screen.clientHeight });
+    };
+    measure();
+    const prev = screen.style.overflowY;
+    screen.style.overflowY = "hidden";
+    window.addEventListener("resize", measure);
+    return () => { window.removeEventListener("resize", measure); screen.style.overflowY = prev; setBox(null); };
   }, [open]);
 
   const left = headerConfig.menuSide === "left";
@@ -301,7 +326,7 @@ export function Header({ siteName, logos, nav, preview }: Props & { preview?: Pr
       onClick={() => setOpen((v) => !v)}
       aria-label={open ? "Close menu" : "Open menu"}
       aria-expanded={open}
-      className={cx("cursor-pointer lg:hidden", headerSkin.hamburger)}
+      className={cx("cursor-pointer @lg:hidden", headerSkin.hamburger)}
     >
       <Burger open={open} />
     </button>
@@ -315,16 +340,16 @@ export function Header({ siteName, logos, nav, preview }: Props & { preview?: Pr
       <div className={cx("grid grid-cols-[1fr_auto_1fr] items-center gap-6", headerSkin.inner)}>
         {/* row-start-1 on EVERY cell: without it a col-start-2 logo declared after the
             col-start-3 nav drops to an implicit second row. Written once, here. */}
-        <nav data-header-nav="left" className="col-start-1 row-start-1 hidden items-center justify-end gap-8 lg:flex">
+        <nav data-header-nav="left" className="col-start-1 row-start-1 hidden items-center justify-end gap-8 @lg:flex">
           <NavLinks items={l} offset={0} {...navProps} />
         </nav>
         <div className="col-start-2 row-start-1 flex items-center justify-center">
           <Logo siteName={siteName} logos={logos} />
         </div>
-        <nav data-header-nav="right" className="col-start-3 row-start-1 hidden items-center justify-start gap-8 lg:flex">
+        <nav data-header-nav="right" className="col-start-3 row-start-1 hidden items-center justify-start gap-8 @lg:flex">
           <NavLinks items={r} offset={l.length} {...navProps} />
         </nav>
-        <div className={cx("row-start-1 flex items-center lg:hidden", left ? "col-start-1 justify-start" : "col-start-3 justify-end")}>
+        <div className={cx("row-start-1 flex items-center @lg:hidden", left ? "col-start-1 justify-start" : "col-start-3 justify-end")}>
           {burger}
         </div>
       </div>
@@ -332,9 +357,9 @@ export function Header({ siteName, logos, nav, preview }: Props & { preview?: Pr
   } else if (headerConfig.placement === "left-center") {
     bar = (
       <div className={cx("flex items-center justify-between gap-6", headerSkin.inner)}>
-        {left && <div className="flex items-center lg:hidden">{burger}</div>}
+        {left && <div className="flex items-center @lg:hidden">{burger}</div>}
         <div className="flex items-center"><Logo siteName={siteName} logos={logos} /></div>
-        <nav data-header-nav="center" className="pointer-events-none absolute inset-x-0 hidden items-center justify-center gap-8 lg:flex">
+        <nav data-header-nav="center" className="pointer-events-none absolute inset-x-0 hidden items-center justify-center gap-8 @lg:flex">
           <span className="pointer-events-auto flex items-center gap-8"><NavLinks items={items} offset={0} {...navProps} /></span>
         </nav>
         <div className="flex items-center gap-6">{!left && burger}</div>
@@ -343,9 +368,9 @@ export function Header({ siteName, logos, nav, preview }: Props & { preview?: Pr
   } else {
     bar = (
       <div className={cx("flex items-center justify-between gap-6", headerSkin.inner)}>
-        {left && <div className="flex items-center lg:hidden">{burger}</div>}
+        {left && <div className="flex items-center @lg:hidden">{burger}</div>}
         <div className="flex items-center"><Logo siteName={siteName} logos={logos} /></div>
-        <nav data-header-nav="right" className="hidden items-center gap-8 lg:flex">
+        <nav data-header-nav="right" className="hidden items-center gap-8 @lg:flex">
           <NavLinks items={items} offset={0} {...navProps} />
         </nav>
         {!left && burger}
@@ -372,20 +397,24 @@ export function Header({ siteName, logos, nav, preview }: Props & { preview?: Pr
         return null;
       })}
 
-      {/* Mobile drawer — fixed to the viewport (the site has no device frame). */}
+      {/* Mobile drawer — fixed to the viewport on the site; pinned to the screen in a device frame (box). */}
       {/* Closed, the drawer stays in the DOM for its slide transition, so aria-hidden
           alone leaves its links in the tab order (axe: aria-hidden-focus, WCAG 4.1.2).
           `inert` takes them out of focus and the accessibility tree together; the
           empty-string form is what React 18 renders, and it holds in the static HTML. */}
-      <div className="lg:hidden" aria-hidden={!open} {...((open ? {} : { inert: "" }) as {})}>
+      <div ref={drawerRef} className="@lg:hidden" aria-hidden={!open} {...((open ? {} : { inert: "" }) as {})}>
         <div
           onClick={() => setOpen(false)}
-          className={cx("fixed inset-0 z-[70] bg-black/40 transition-opacity duration-300",
+          style={box ? { top: box.top, height: box.height } : undefined}
+          className={cx("z-[70] bg-black/40 transition-opacity duration-300",
+            box ? "absolute left-0 right-0" : "fixed inset-0",
             open ? "opacity-100" : "pointer-events-none opacity-0")}
         />
         <nav
           data-menu-drawer={headerConfig.menuSide}
-          className={cx("fixed inset-y-0 z-[80] flex w-[78%] max-w-[320px] flex-col transition-transform duration-300",
+          style={box ? { top: box.top, height: box.height } : undefined}
+          className={cx("z-[80] flex w-[78%] max-w-[320px] flex-col transition-transform duration-300",
+            box ? "absolute" : "fixed inset-y-0",
             left ? "left-0" : "right-0", headerSkin.drawer,
             open ? "translate-x-0" : `${left ? "-translate-x-full" : "translate-x-full"} pointer-events-none`)}
         >

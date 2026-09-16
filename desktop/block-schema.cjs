@@ -93,8 +93,8 @@ function introspectBlocks(dir, { esbuild } = {}) {
   const cachePath = path.join(dir, ".thinkany", "blocks.json");
   const mtime = blocksMtime(dir);
   const cached = readJsonFile(cachePath);
-  if (cached && cached.mtime === mtime && cached.defaults && cached.fields && "megaMenu" in cached && cached.builtins) return { defaults: cached.defaults, templates: cached.templates || {}, fields: cached.fields || {}, marks: cached.marks || {}, megaMenu: !!cached.megaMenu, builtins: cached.builtins || {} };
-  let defaults = {}; let templates = {}; let fields = {}; let marks = {}; let megaMenu = false; let builtinMeta = {};
+  if (cached && cached.mtime === mtime && cached.defaults && cached.fields && "megaMenu" in cached && cached.footer && cached.builtins) return { defaults: cached.defaults, templates: cached.templates || {}, fields: cached.fields || {}, marks: cached.marks || {}, megaMenu: !!cached.megaMenu, footer: cached.footer, builtins: cached.builtins || {} };
+  let defaults = {}; let templates = {}; let fields = {}; let marks = {}; let megaMenu = false; let footer = NO_FOOTER_COPY; let builtinMeta = {};
   try {
     if (!esbuild) esbuild = require("esbuild");
     const result = esbuild.buildSync({
@@ -132,13 +132,14 @@ function introspectBlocks(dir, { esbuild } = {}) {
       fields[key] = fm;
     }
     marks = renderMarks(dir, esbuild, req);
-    megaMenu = headerAcceptsColumns(dir, esbuild, req);
+    try { const chrome = loadChrome(dir, esbuild, req); megaMenu = chromeAcceptsColumns(chrome); footer = footerCopyOf(chrome); }
+    catch (e) { console.warn(`[blocks] chrome introspection failed: ${e.message}`); }
   } catch (e) {
     console.warn(`[blocks] introspection failed: ${e.message}`);
-    return cached && cached.defaults ? { defaults: cached.defaults, templates: cached.templates || {}, fields: cached.fields || {}, marks: cached.marks || {}, megaMenu: !!cached.megaMenu, builtins: cached.builtins || {} } : { defaults: {}, templates: {}, fields: {}, marks: {}, megaMenu: false, builtins: {} };
+    return cached && cached.defaults ? { defaults: cached.defaults, templates: cached.templates || {}, fields: cached.fields || {}, marks: cached.marks || {}, megaMenu: !!cached.megaMenu, footer: cached.footer || NO_FOOTER_COPY, builtins: cached.builtins || {} } : { defaults: {}, templates: {}, fields: {}, marks: {}, megaMenu: false, footer: NO_FOOTER_COPY, builtins: {} };
   }
-  try { fs.mkdirSync(path.dirname(cachePath), { recursive: true }); fs.writeFileSync(cachePath, JSON.stringify({ mtime, defaults, templates, fields, marks, megaMenu, builtins: builtinMeta }, null, 2) + "\n"); } catch {}
-  return { defaults, templates, fields, marks, megaMenu, builtins: builtinMeta };
+  try { fs.mkdirSync(path.dirname(cachePath), { recursive: true }); fs.writeFileSync(cachePath, JSON.stringify({ mtime, defaults, templates, fields, marks, megaMenu, footer, builtins: builtinMeta }, null, 2) + "\n"); } catch {}
+  return { defaults, templates, fields, marks, megaMenu, footer, builtins: builtinMeta };
 }
 
 
@@ -186,26 +187,49 @@ function zodFields(schema, out, at, depth, desc) {
   }
 }
 
+// The props the layout supplies to chrome (site/src/lib/blocks.ts CHROME_PROP_KEYS).
+// Whatever else a Footer's schema declares is FOOTER COPY, edited in the CMS.
+const CHROME_PROP_KEYS = ["siteName", "logo", "logos", "nav", "footerLinks", "legal", "contact"];
+
+// The site's chrome definitions (site/blocks/chrome.ts), bundled and evaluated.
+function loadChrome(dir, esbuild, req) {
+  const file = path.join(dir, "site", "blocks", "chrome.ts");
+  if (!fs.existsSync(file)) return null;
+  const result = esbuild.buildSync({
+    entryPoints: [file], bundle: true, write: false, platform: "node", format: "cjs", target: "node20",
+    jsx: "automatic", tsconfig: path.join(dir, "site", "tsconfig.json"), logLevel: "silent",
+    alias: designHeaderAlias(dir), // chrome.ts pulls in the CORE header, which uses them
+    external: ["react", "react-dom", "react/jsx-runtime", "lucide-react", "motion", "motion/*", "astro/zod", "astro:*"],
+  });
+  const mod = { exports: {} };
+  new Function("require", "module", "exports", "__filename", "__dirname", result.outputFiles[0].text)(req, mod, mod.exports, file, path.dirname(file));
+  return mod.exports.chrome || null;
+}
+
+// The footer's own copy: its schema's props beyond the chrome set, as { defaults,
+// fields, templates } the way a block's are, so the Navigation tab edits them with the
+// same field editor. Empty when the footer declares nothing of its own.
+function footerCopyOf(chrome) {
+  const footer = chrome && chrome.footer;
+  const shape = footer && footer.props && footer.props._def && (typeof footer.props._def.shape === "function" ? footer.props._def.shape() : footer.props._def.shape);
+  if (!shape) return { defaults: {}, fields: {}, templates: {} };
+  const defaults = {}; const fields = {}; const templates = {};
+  for (const [k, s] of Object.entries(shape)) {
+    if (CHROME_PROP_KEYS.includes(k)) continue;
+    try { defaults[k] = zodDefault(s, 0, templates, k); zodFields(s, fields, k, 0); } catch {}
+  }
+  return { defaults, fields, templates };
+}
+
 // Does the site's Header block render a mega menu? True when its nav schema accepts
 // `columns` (the navItem fragment). The CMS offers columns only then.
-function headerAcceptsColumns(dir, esbuild, req) {
-  const file = path.join(dir, "site", "blocks", "chrome.ts");
-  if (!fs.existsSync(file)) return false;
-  try {
-    const result = esbuild.buildSync({
-      entryPoints: [file], bundle: true, write: false, platform: "node", format: "cjs", target: "node20",
-      jsx: "automatic", tsconfig: path.join(dir, "site", "tsconfig.json"), logLevel: "silent",
-      alias: designHeaderAlias(dir), // chrome.ts pulls in the CORE header, which uses them
-      external: ["react", "react-dom", "react/jsx-runtime", "lucide-react", "motion", "motion/*", "astro/zod", "astro:*"],
-    });
-    const mod = { exports: {} };
-    new Function("require", "module", "exports", "__filename", "__dirname", result.outputFiles[0].text)(req, mod, mod.exports, file, path.dirname(file));
-    const header = mod.exports.chrome && mod.exports.chrome.header;
-    if (!header || !header.props) return false;
-    const f = {}; zodFields(header.props, f, "", 0);
-    return !!f["nav.columns"];
-  } catch (e) { console.warn(`[blocks] chrome introspection failed: ${e.message}`); return false; }
+function chromeAcceptsColumns(chrome) {
+  const header = chrome && chrome.header;
+  if (!header || !header.props) return false;
+  const f = {}; zodFields(header.props, f, "", 0);
+  return !!f["nav.columns"];
 }
+const NO_FOOTER_COPY = { defaults: {}, fields: {}, templates: {} };
 
 // The design's marks (site/blocks/lib/marks.tsx exports MARKS: key → component),
 // rendered to static SVG with the project's React so the editor can show them.
@@ -266,4 +290,4 @@ function validateContent(dir, { esbuild } = {}) {
   return { ok: true, invalid: out };
 }
 
-module.exports = { introspectBlocks, zodDefault, zodFields, renderMarks, headerAcceptsColumns, blocksMtime, validateContent };
+module.exports = { introspectBlocks, zodDefault, zodFields, renderMarks, loadChrome, chromeAcceptsColumns, footerCopyOf, blocksMtime, validateContent };

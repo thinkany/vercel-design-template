@@ -743,6 +743,7 @@ window.COPY = {
           { h: "Sub-links", items: ["<b>+ Sub-link</b> under a link makes a dropdown on desktop and an expandable group on mobile."] },
           { h: "Mega menu", items: ["When the site’s header was designed with a mega menu, each link also offers <b>+ Panel</b> (a heading and its links) and <b>+ Promo panel</b> (an image, a title, a line of text and a link, shown beside the other panels; one per menu), under its sub-links. The chevron on a link hides its sub-links and panels; the one on a panel folds it to its heading row. Headers designed with a plain dropdown don’t show panels.", "Drag to rearrange: a link moves with its group, sub-links and panel links can be dropped into any group or panel, or between top-level links to become one."] },
           { h: "Footer", items: ["The footer's own list, independent of the header menu. It starts as a copy of the design's footer links; from then on the two are managed separately.", "<b>Columns</b>: add sub-links to a footer link (or drop links into it) and it becomes a column headed by its text; leave its address empty when the heading shouldn't be a link."] },
+          { h: "Footer copy", items: ["The footer's own words: a <b>Note</b> (rich text) every footer carries, plus any line the design wrote into its footer (a tagline), prefilled with the design's words.", "<b>Contact details</b>: email, phone and address. The footer shows whichever are set, email and phone as links, and the site's structured data carries them."] },
           { h: "Legal", items: ["<b>Copyright line</b>: shown at the bottom of every page; <i>{year}</i> and <i>{siteName}</i> are filled in automatically.", "<b>Legal links</b>: Privacy, Terms and the like, shown beside the copyright line."] },
         ],
       },
@@ -888,6 +889,7 @@ window.COPY = {
     removePromo: "Remove promo panel",
     promoEmpty: "Empty promo panel",
     navPreviewHint: "The site's header, live from what you edit. Click a link, or anything under it, and its menu opens here.",
+    footerPreviewHint: "The site's footer, live from what you edit: its links, copy, contact details and legal line.",
     treeCollapse: "Hide the pages under this one",
     treeExpand: "Show the pages under this one",
     typeCollapse: "Hide this type's entries",
@@ -937,6 +939,13 @@ window.COPY = {
     addSubLink: "+ Sub-link",
     subLinks: "Sub-links",
     footerHeading: "Footer",
+    footerCopyHeading: "Footer copy",
+    footerCopyDesc: "The footer's own words and contact details, beneath its links. A line the design wrote into the footer (a tagline, a note) shows here as a field, prefilled with the design's words.",
+    contactHeading: "Contact details",
+    contactDesc: "Shown in the footer as set (email and phone as links) and carried in the site's structured data. Leave blank what the footer shouldn't show.",
+    contactEmail: "Email",
+    contactPhone: "Phone",
+    contactAddress: "Address",
     saveNav: "Save navigation",
     postsHeading: "Blog posts",
     noPosts: "No posts yet.",
@@ -1429,6 +1438,10 @@ window.COPY = {
     mediaDesc: "Add optional free stock image and video libraries so your build can automatically find visuals that match your design description and download them with proper photographer credit.",
     // Behind the lifesaver on the Photos & Video card (the order text used to sit under
     // the description; as a help card it is there when wanted and out of the way otherwise).
+    // Which library the build reaches for first (scripts/find-images.mjs ORDER). Without
+    // this the order is a guess, and a designer who connected two wonders which one their
+    // images came from.
+    mediaOrder: "When more than one is connected, the build searches Unsplash first, then Pexels, then Pixabay.",
     mediaHelpTitle: "How a build uses these libraries",
     mediaHelpHtml: `
     <div class="iref-help-head">

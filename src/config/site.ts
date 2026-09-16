@@ -138,14 +138,46 @@ function computePreviewConfig(): { views: View[]; defaultView: View } {
 export const previewConfig = computePreviewConfig();
 
 /**
- * Viewport widths (px) used to render each breakpoint for the Figma export
- * (scripts/export-to-figma.mjs) and any headless snapshot. These mirror the
- * content widths the in-app device frames simulate (PhoneFrame screen = 370,
- * TabletFrame screen = 664), so an exported design matches what the designer
- * sees in the preview. Desktop has no frame, so a standard artboard width.
+ * The devices the phone and tablet frames can simulate (CSS px, portrait). The View
+ * bar lists them under the Mobile and Tablet buttons; the FIRST of each kind is the
+ * default. Real current devices, so what the designer checks is what a client holds
+ * (the old 370px frame was narrower than any phone on sale). Every phone here sits
+ * below the `@sm` container breakpoint (448px, see styles/theme.css) and every
+ * tablet above `@lg` (512px), so phones share one layout and tablets another.
+ */
+export type DeviceKind = "mobile" | "tablet";
+export interface Device { id: string; name: string; width: number; height: number; }
+export const devices: Record<DeviceKind, readonly Device[]> = {
+  mobile: [
+    { id: "iphone-16", name: "iPhone 16", width: 393, height: 852 },
+    { id: "iphone-16-pro", name: "iPhone 16 Pro", width: 402, height: 874 },
+    { id: "iphone-16-pro-max", name: "iPhone 16 Pro Max", width: 440, height: 956 },
+    { id: "iphone-se", name: "iPhone SE", width: 375, height: 667 },
+    { id: "pixel-9", name: "Pixel 9", width: 412, height: 923 },
+    { id: "galaxy-s24", name: "Galaxy S24", width: 360, height: 780 },
+  ],
+  tablet: [
+    { id: "ipad-mini", name: "iPad mini", width: 744, height: 1133 },
+    { id: "ipad", name: "iPad", width: 820, height: 1180 },
+    { id: "ipad-pro-11", name: "iPad Pro 11\"", width: 834, height: 1194 },
+    { id: "ipad-pro-13", name: "iPad Pro 13\"", width: 1024, height: 1366 },
+  ],
+};
+
+/**
+ * Viewport sizes (px) per breakpoint for the Figma export (scripts/export-to-figma.mjs)
+ * and any headless snapshot: the DEFAULT devices' screens, desktop a standard artboard.
+ * The live preview may have another device chosen (src/app/devices.ts); App.tsx
+ * publishes THAT through window.__PREVIEW_CONFIG__, so an export run against the
+ * same browser storage matches what the designer is looking at.
  */
 export const previewWidths: Record<View, number> = {
   desktop: 1440,
-  tablet: 664,
-  mobile: 370,
+  tablet: devices.tablet[0].width,
+  mobile: devices.mobile[0].width,
+};
+export const previewHeights: Record<View, number> = {
+  desktop: 900,
+  tablet: devices.tablet[0].height,
+  mobile: devices.mobile[0].height,
 };
