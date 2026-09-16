@@ -220,6 +220,8 @@ export function SitePage({ pageId, onNavigate, view, setView, orientation, setOr
  * they do on a page. `window.__taOpenMenu(id, mode)` opens one item (desktop: its
  * panel; mobile: the drawer with it expanded) through the header's `preview` prop, so
  * the editor can point at the item being edited and keep it open while typing.
+ * `blockpreview=footer` is the site's FOOTER the same way: the editor pushes
+ * `{ footerLinks, legal, contact, …footer copy }` and the schema fills the rest.
  */
 export function BlockPreview({ type }: { type: string }) {
   const [props, setProps] = useState<AnyRecord | null>(() => {
@@ -234,6 +236,7 @@ export function BlockPreview({ type }: { type: string }) {
   }, []);
   useEffect(() => { if (enhanceForms) enhanceForms(document, { preview: true }); if (enhanceEntries) enhanceEntries(document); });
   const isHeader = type === "header";
+  const isFooter = type === "footer";
   const [menuOpen, setMenuOpen] = useState<{ open: string | null; mode: "desktop" | "mobile"; tick: number } | null>(null);
   useEffect(() => {
     if (!isHeader) return;
@@ -241,13 +244,14 @@ export function BlockPreview({ type }: { type: string }) {
     w.__taOpenMenu = (id, mode) => setMenuOpen((p) => ({ open: id || null, mode: mode === "mobile" ? "mobile" : "desktop", tick: (p ? p.tick : 0) + 1 }));
     return () => { delete w.__taOpenMenu; };
   }, [isHeader]);
-  const def = isHeader ? chromeMod.chrome?.header : blocks[type];
-  if (!def) return <BridgeNote text={isHeader ? "This site has no header block to preview." : `Unknown block "${type}"`} />;
+  const def = isHeader ? chromeMod.chrome?.header : isFooter ? chromeMod.chrome?.footer : blocks[type];
+  if (!def) return <BridgeNote text={isHeader ? "This site has no header block to preview." : isFooter ? "This site has no footer block to preview." : `Unknown block "${type}"`} />;
   if (!props) return null;
   let full: AnyRecord = props;
-  if (isHeader) {
+  if (isHeader || isFooter) {
+    // Chrome: the site name and logos come from the site, the rest from the editor's draft.
     const logos = resolveLogos ? resolveLogos(site.logos, siteConfig.logo || undefined, (site.seo && site.seo.siteName) || siteConfig.clientName) : { header: siteConfig.logo || undefined, wordmark: siteConfig.clientName };
-    full = { siteName: siteConfig.clientName, logo: logos.header, logos, ...props, nav: ((props.nav as AnyRecord[]) || []).map((l) => ({ links: [], ...l })) };
+    full = { siteName: siteConfig.clientName, logo: logos.header, logos, ...props, ...(isHeader ? { nav: ((props.nav as AnyRecord[]) || []).map((l) => ({ links: [], ...l })) } : {}) };
   }
   const parsed = def.props.safeParse(full);
   if (!parsed.success) {

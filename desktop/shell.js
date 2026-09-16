@@ -7406,7 +7406,7 @@ let siteNavRemove = () => {};
 // The header names an item by its label (or address), the way the site's Header does,
 // so the editor can ask the preview to open exactly that item's panel.
 function siteNavItemId(it, i) { return String(it.label || it.href || "").replace(/^[/#]+/, "").replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || `item-${i}`; }
-function renderSiteNav(site, refresh, options = [], megaMenu = false, { onDraft, onFocusItem, footerCopy } = {}) {
+function renderSiteNav(site, refresh, options = [], megaMenu = false, { onDraft, onFocusItem, onSection, footerCopy } = {}) {
   const wrap = siteEl("div");
   const hf = siteFold(COPY.site.navHeading, "nav:header"); hf.sec.dataset.tour = "cms-nav-header"; wrap.appendChild(hf.sec);
   hf.body.appendChild(siteEl("div", "sess-desc", site.manageNav === false ? COPY.site.navAuto : COPY.site.navDesc));
@@ -7653,6 +7653,11 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false, { onDraft,
   status = siteEl("div", "sess-desc"); status.style.margin = "0";
   actions.appendChild(status);
   wrap.appendChild(actions);
+  // Which chrome the designer is in: the header for the menu, the footer for the rest.
+  if (onSection) {
+    const watch = (sec, which) => { for (const ev of ["pointerdown", "focusin"]) sec.addEventListener(ev, () => onSection(which)); };
+    watch(hf.sec, "header"); watch(ff.sec, "footer"); watch(cf.sec, "footer"); watch(lf.sec, "footer");
+  }
   return wrap;
 }
 
@@ -8873,16 +8878,33 @@ async function renderSite(body) {
     // The menu editor on the left; the site's own header on the right, live from the
     // draft, with the item being edited open in it (docs/menu-spec.md).
     const cols = siteEl("div", "site-cols nav"); const left = siteEl("div"); const right = siteEl("div", "site-detail"); cols.append(left, right); body.appendChild(cols);
-    let navDraft = null; let focused = null; // the top-level item being edited, and its index
+    let navDraft = null; let draft = null; let focused = null; // the whole draft; the top-level item being edited, and its index
     const openFocused = () => { if (!focused) return; preview.exec(`window.__taOpenMenu && window.__taOpenMenu(${JSON.stringify(siteNavItemId(focused.item, focused.index))}, ${JSON.stringify(preview.mode())})`); };
     const preview = siteBlockPreview("header", () => ({ nav: navDraft || data.site.nav || [] }), { onMode: openFocused });
-    right.appendChild(preview.el);
-    right.appendChild(siteEl("div", "sess-desc", COPY.site.navPreviewHint));
+    // The footer, the same way, live from its links, copy, contact details and legal line.
+    // One slot shows whichever chrome the section being edited belongs to.
+    const s = data.site;
+    const footerPreview = siteBlockPreview("footer", () => (draft
+      ? { footerLinks: draft.footerLinks, legal: draft.legal, contact: draft.contact, ...(draft.footer || {}) }
+      : { footerLinks: s.footerLinks || [], legal: s.legal, contact: s.contact, ...(s.footer || {}) }));
+    footerPreview.el.hidden = true;
+    const hint = siteEl("div", "sess-desc", COPY.site.navPreviewHint);
+    right.append(preview.el, footerPreview.el, hint);
+    let shown = "header";
+    const showPreview = (which) => {
+      if (which === shown) return; shown = which;
+      preview.el.hidden = which !== "header"; footerPreview.el.hidden = which !== "footer";
+      hint.textContent = which === "footer" ? COPY.site.footerPreviewHint : COPY.site.navPreviewHint;
+      const now = which === "footer" ? footerPreview : preview;
+      if (now.fit) now.fit(); // it was sized while hidden
+      now.push();
+    };
     left.appendChild(renderSiteNav(data.site, refresh, siteLinkOptions(data, posts, ctx), !!data.megaMenu, { footerCopy: data.footerCopy,
       // Every change re-opens the item: a renamed item has a new id, and the header
       // closes its panel on a hover-out; the editor keeps it in view either way.
-      onDraft: (d) => { navDraft = d.nav; preview.push(); setTimeout(openFocused, 200); },
+      onDraft: (d) => { navDraft = d.nav; draft = d; preview.push(); footerPreview.push(); setTimeout(openFocused, 200); },
       onFocusItem: (item, index) => { focused = { item, index }; openFocused(); },
+      onSection: showPreview,
     }));
   } else {
     await renderSiteSettings(body, data, cms);

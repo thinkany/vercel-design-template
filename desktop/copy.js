@@ -889,6 +889,7 @@ window.COPY = {
     removePromo: "Remove promo panel",
     promoEmpty: "Empty promo panel",
     navPreviewHint: "The site's header, live from what you edit. Click a link, or anything under it, and its menu opens here.",
+    footerPreviewHint: "The site's footer, live from what you edit: its links, copy, contact details and legal line.",
     treeCollapse: "Hide the pages under this one",
     treeExpand: "Show the pages under this one",
     typeCollapse: "Hide this type's entries",
