@@ -4058,6 +4058,7 @@ function repaintPublish() {
   if (!ap || !ap.host) return;
   ap.host.hidden = false;
   ap.host.innerHTML = "";
+  if (ap.discouraged) ap.host.appendChild(siteWarnBanner(COPY.publish.discourageNote));
   const list = document.createElement("div");
   ap.host.appendChild(list);
   const paint = publishProgressList(list);
@@ -4083,7 +4084,9 @@ function reattachPublish(host, btn) {
 async function runPublishFlow(btn, host, opts) {
   if (activePublish && activePublish.running) return; // one publish at a time
   const label = btn.textContent;
-  const ap = activePublish = { opts: opts || {}, label, events: [], result: null, running: true, host, btn };
+  const ap = activePublish = { opts: opts || {}, label, events: [], result: null, running: true, host, btn, discouraged: false };
+  // The site discourages crawlers: said in red at the head of the run, every run.
+  try { ap.discouraged = siteDiscouraged(await window.desktop.getSiteContent()); } catch { /* no site content: no note */ }
   btn.disabled = true;
   btn.textContent = COPY.publish.publishing;
   const unsub = window.desktop.onPublishProgress((evt) => { ap.events.push(evt); repaintPublish(); });
@@ -4248,8 +4251,10 @@ function mountDomainPicker(domBody, domNote, { customDomain, baseSlug, target })
   };
 }
 
+let publishDiscouraged = false; // the site discourages crawlers (read when the drawer renders)
 async function renderPublish(body) {
   const st = await window.desktop.getVercelStatus();
+  try { publishDiscouraged = siteDiscouraged(await window.desktop.getSiteContent()); } catch { publishDiscouraged = false; }
   railPublish.classList.toggle("activated", !!st.connected);
 
   // Fill the drawer height so the help button can pin to the bottom, with the gap
@@ -4569,6 +4574,7 @@ async function renderPublish(body) {
       body.appendChild(credBox);
     }
     if (resetBtn) body.appendChild(resetBtn);
+    if (publishDiscouraged) body.appendChild(siteWarnBanner(COPY.publish.discourageNote)); // not dismissible here
     body.appendChild(publishBtn);
     body.appendChild(host);
 
@@ -4661,6 +4667,7 @@ function renderSitePublish(body, site, domainRefreshers) {
   btn.addEventListener("click", () => runPublishFlow(btn, host, { target: "site" }));
 
   if (liveBox) body.appendChild(liveBox);
+  if (publishDiscouraged) body.appendChild(siteWarnBanner(COPY.publish.discourageNote)); // not dismissible here
   body.appendChild(btn);
   body.appendChild(host);
   if (site.lastDeployAt) {
@@ -4840,6 +4847,31 @@ function siteHelpModal(title, html) {
   document.body.appendChild(ov);
   done.focus();
   return { close };
+}
+
+// A red banner: a fact the designer should not miss (the site discourages crawlers).
+// With onDismiss it carries a close button; without, it stays (the publish process).
+function siteWarnBanner(text, { onDismiss } = {}) {
+  const box = siteEl("div", "site-warn");
+  box.setAttribute("role", "alert");
+  box.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18.1A2 2 0 0 0 3.5 21h17a2 2 0 0 0 1.7-2.9L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>';
+  box.appendChild(siteEl("span", "site-warn-text", text));
+  if (onDismiss) {
+    const x = siteEl("button", "site-warn-x"); x.type = "button"; x.title = COPY.site.dismiss; x.setAttribute("aria-label", COPY.site.dismiss);
+    x.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    x.addEventListener("click", () => { box.remove(); onDismiss(); });
+    box.appendChild(x);
+  }
+  return box;
+}
+// The site discourages crawlers (Settings → Search engines): a banner at the top of the
+// Pages, Posts, Types and Settings tabs, dismissible per project; the Publish panel
+// shows it regardless (siteDiscouraged reads the flag the same way there).
+const siteDiscouraged = (data) => !!(data && data.site && data.site.seo && data.site.seo.discourage);
+function siteDiscourageBanner(cms, data) {
+  if (!siteDiscouraged(data)) return null;
+  if (cms && cms.ui && cms.ui.notices && cms.ui.notices.discourage) return null; // dismissed
+  return siteWarnBanner(COPY.site.discourageBanner, { onDismiss: async () => { try { await window.desktop.setCmsSettings({ ui: { notices: { discourage: true } } }); if (cms && cms.ui) cms.ui.notices = { ...(cms.ui.notices || {}), discourage: true }; } catch (e) { console.warn("[cms] dismissal not saved:", e); } } });
 }
 
 // A sub-heading with a body, used inside a section (not folded, not remembered).
@@ -8379,7 +8411,7 @@ async function renderSiteSettings(host, data, st) {
   const shours = siteField(S.schemaHours, seo.schema.hours || "", { hint: S.schemaHoursHint }); shours.input.addEventListener("input", () => { seo.schema.hours = shours.input.value; saveSeoSoon(); }); local.appendChild(shours.wrap);
   sch.body.appendChild(local);
   wrap.appendChild(sch.sec);
-  const disc = toggle(S.discourage, S.discourageHint, seo.discourage, (on) => { seo.discourage = on; paintSeo(); saveSeo(); });
+  const disc = toggle(S.discourage, S.discourageHint, seo.discourage, (on) => { seo.discourage = on; paintSeo(); saveSeo(); if (on) window.desktop.setCmsSettings({ ui: { notices: { discourage: false } } }).catch(() => {}); });
   const smap = toggle(S.sitemap, S.sitemapHint, seo.sitemap, (on) => { seo.sitemap = on; saveSeo(); });
   const llm = toggle(S.llms, S.llmsHint, seo.llms.enabled, (on) => { seo.llms.enabled = on; paintSeo(); saveSeo(); });
   wrap.append(disc.row, disc.hint, smap.row, smap.hint, llm.row, llm.hint);
@@ -9028,6 +9060,8 @@ async function renderSite(body) {
     btn.addEventListener("click", go); inp.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
     row.append(inp, btn); return row;
   };
+
+  if (["pages", "posts", "types", "settings"].includes(siteRailState.tab)) { const warn = siteDiscourageBanner(cms, data); if (warn) body.appendChild(warn); }
 
   if (siteRailState.tab === "pages") {
     const { left, right } = two();

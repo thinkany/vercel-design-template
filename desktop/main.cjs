@@ -3566,13 +3566,19 @@ function loadCmsSettings(dir) {
   // (only Settings is reachable while off).
   d.enabled = !(j && j.enabled === false);
   // Drawer UI state kept with the project (which sections are folded).
-  d.ui = { folds: j && j.ui && j.ui.folds && typeof j.ui.folds === "object" ? j.ui.folds : {} };
+  d.ui = {
+    folds: j && j.ui && j.ui.folds && typeof j.ui.folds === "object" ? j.ui.folds : {},
+    notices: j && j.ui && j.ui.notices && typeof j.ui.notices === "object" ? j.ui.notices : {}, // dismissed banners (the discourage-crawling note)
+  };
   return d;
 }
 function saveCmsSettings(dir, patch) {
   const cur = loadCmsSettings(dir);
   const next = { ...cur, media: { ...cur.media, ...(patch && patch.media ? patch.media : {}) }, ...(patch && typeof patch.enabled === "boolean" ? { enabled: patch.enabled } : {}) };
-  if (patch && patch.ui && patch.ui.folds && typeof patch.ui.folds === "object") next.ui = { folds: { ...cur.ui.folds, ...patch.ui.folds } };
+  if (patch && patch.ui && typeof patch.ui === "object") next.ui = {
+    folds: patch.ui.folds && typeof patch.ui.folds === "object" ? { ...cur.ui.folds, ...patch.ui.folds } : cur.ui.folds,
+    notices: patch.ui.notices && typeof patch.ui.notices === "object" ? { ...cur.ui.notices, ...patch.ui.notices } : cur.ui.notices,
+  };
   const q = Number(next.media.quality), w = Number(next.media.maxWidth);
   next.media.quality = Math.min(95, Math.max(20, Math.round(Number.isFinite(q) ? q : MEDIA_QUALITY)));
   next.media.maxWidth = Math.min(6000, Math.max(800, Math.round(Number.isFinite(w) ? w : MEDIA_MAX_WIDTH)));

@@ -945,6 +945,8 @@ window.COPY = {
     subLinks: "Sub-links",
     footerHeading: "Footer",
     helpClose: "Close",
+    dismiss: "Dismiss",
+    discourageBanner: "Search engines are asked to stay away from this site (Settings → Search engines → Discourage search engines). Fine while it isn't public; switch it off before launch, or the published site won't be found.",
     footerCopyHeading: "Footer copy",
     footerCopyDesc: "The footer's own words and contact details, beneath its links. A line the design wrote into the footer (a tagline, a note) shows here as a field, prefilled with the design's words.",
     contactHeading: "Contact details",
@@ -2166,6 +2168,7 @@ window.COPY = {
 
   // ── Publish drawer (Vercel connect + one-click publish) ─────────────────────
   publish: {
+    discourageNote: "This site discourages search engines (Settings → Search engines): the published site carries noindex on every page and no sitemap. Meant for a site that isn't public yet; switch it off before launch.",
     vercelLabel: "Vercel",
     disconnect: "Disconnect Vercel",
     connectedWith: (user) => `Connected · ${user}`,
