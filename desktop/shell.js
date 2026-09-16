@@ -8385,6 +8385,15 @@ async function renderSiteSettings(host, data, st) {
   // Blog: the posts directory.
   wrap.appendChild(siteEl("div", "drawer-sep"));
   wrap.appendChild(siteLabelWithHelp(S.blogHeading, { title: S.blogHelpTitle, html: S.blogHelp, aria: S.blogHelpAria }));
+  // Two panes under one heading: Posts URL (where posts live) and Blog Block (what the
+  // Posts block shows). The same segmented control as the Media tab's kinds; the chosen
+  // pane is remembered for the session.
+  const blogTabs = siteEl("div", "media-kinds in-column"); blogTabs.style.marginBottom = "12px";
+  const urlPane = siteEl("div"); const blockPane = siteEl("div");
+  const blogPanes = { url: urlPane, block: blockPane };
+  const showBlogTab = (k) => { siteRailState.blogTab = k; blogTabs.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.tab === k)); Object.entries(blogPanes).forEach(([key, el]) => { el.hidden = key !== k; }); };
+  [["url", S.blogTabUrl], ["block", S.blogTabBlock]].forEach(([k, label]) => { const b = document.createElement("button"); b.type = "button"; b.dataset.tab = k; b.textContent = label; b.addEventListener("click", () => showBlogTab(k)); blogTabs.appendChild(b); });
+  wrap.append(blogTabs, urlPane, blockPane);
   // The parent page (none = the root) and the directory's own segment: /blog, or
   // /resources/blog. Either change saves; the line beneath shows the resulting address.
   // The field holds the directory's own segment; the tag grouping ({%tag%}) is a checkbox
@@ -8396,7 +8405,7 @@ async function renderSiteSettings(host, data, st) {
   const o0 = document.createElement("option"); o0.value = ""; o0.textContent = S.postsParentNone; psel.appendChild(o0);
   (data.pages || []).filter((x) => x.id !== "home").forEach((x) => { const o = document.createElement("option"); o.value = x.id; o.textContent = `${x.title}  ·  /${x.route || x.slug || x.id}`; psel.appendChild(o); });
   psel.value = (data.site && data.site.blogParent) || "";
-  pw.appendChild(psel); pw.appendChild(siteEl("div", "sess-desc", S.postsParentHint)); wrap.appendChild(pw);
+  pw.appendChild(psel); pw.appendChild(siteEl("div", "sess-desc", S.postsParentHint)); urlPane.appendChild(pw);
   const bp = siteField(S.postsDir, blogDir, { hint: S.postsDirHint });
   const bpStatus = siteEl("div"); bpStatus.style.cssText = "min-height:18px;";
   const bpAddress = siteEl("div", "sess-desc", S.postsAddress(data.site && typeof data.site.blogPath === "string" ? data.site.blogPath : blogDir, !!(data.site && data.site.blogTag))); bpAddress.style.cssText = "margin:0 0 6px;font-weight:600;color:#2a2a2a;";
@@ -8428,11 +8437,12 @@ async function renderSiteSettings(host, data, st) {
   tagCb.addEventListener("change", () => { blogTagOn = tagCb.checked; saveBlogPath(); });
   // The address line, then the tag checkbox right beneath it (they describe one URL), the
   // save status after both; the empty status line no longer holds them apart.
-  bp.wrap.appendChild(bpAddress); wrap.appendChild(bp.wrap);
+  bp.wrap.appendChild(bpAddress); urlPane.appendChild(bp.wrap);
   bp.wrap.style.marginBottom = "8px"; tagRow.style.marginBottom = "6px";
-  wrap.appendChild(tagRow); wrap.appendChild(siteEl("div", "sess-desc", S.postsTagGroupHint)); wrap.appendChild(bpStatus);
+  urlPane.appendChild(tagRow); urlPane.appendChild(siteEl("div", "sess-desc", S.postsTagGroupHint)); urlPane.appendChild(bpStatus);
   // The built-in Posts block: how many posts it shows, and its tag filter. Autosaved.
-  const pbl = siteFoldInline(S.postsBlockHeading); pbl.sec.style.marginTop = "24px"; wrap.appendChild(pbl.sec); // clear of the tag-grouping hint above: its own topic
+  // The Blog Block pane: no box of its own now that it is a pane.
+  const pbl = { body: blockPane };
   pbl.body.appendChild(siteEl("div", "sess-desc", S.postsBlockDesc));
   const pb = { count: 6, filter: false, filterKind: "pills", ...((data.site && data.site.blogPosts) || {}) };
   const pbStatus = siteEl("div"); pbStatus.style.cssText = "min-height:18px;";
@@ -8459,6 +8469,7 @@ async function renderSiteSettings(host, data, st) {
   pkSel.addEventListener("change", () => { pb.filterKind = pkSel.value; pbSoon(); });
   paintKind();
   pbl.body.appendChild(pbStatus);
+  showBlogTab(siteRailState.blogTab === "block" ? "block" : "url");
 
   // Scripts: GTM + additional scripts with a placement. Published site only.
   wrap.appendChild(siteEl("div", "drawer-sep"));

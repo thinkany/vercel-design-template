@@ -1091,6 +1091,8 @@ window.COPY = {
         "<p>Leave this field empty (or <code>/</code>) to keep posts directly under the parent page, such as <code>/parent-page/your-post</code>.</p>" +
         "<p>To group posts by their first tag, tick <b>Group posts by their first tag</b>. It adds the tag after the segment, so <code>blog</code> creates tag-based URLs like <code>/parent-page/blog/news/your-post</code>, and an empty segment gives <code>/parent-page/news/your-post</code>. This example assumes <code>news</code> has been added as the first tag to <code>your-post</code>. Each tag also gets a list of its own posts, at <code>/parent-page/blog/news</code>.</p>",
       postsAddress: (route, tag) => (tag ? `Posts live at /${route ? route + "/" : ""}<tag>/<post>, with a list per tag` : route ? `Posts live at /${route}/<post>, the list at /${route}` : "Posts live at /<post>; the parent page (or the home page) is the list"),
+      blogTabUrl: "Posts URL",
+      blogTabBlock: "Blog Block",
       postsBlockHeading: "Posts block",
       postsBlockDesc: "The Posts block (in the block picker) shows the newest posts on any page. These settings apply to every Posts block on the site.",
       postsCount: "Posts to show",
