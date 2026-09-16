@@ -161,7 +161,7 @@ You can push your designs into Figma — **one frame per page × screen size**
 toolbar, no device bezel). Every design page is included automatically, and the
 capture uses each breakpoint's real viewport width, so the layout you get in
 Figma is the true responsive design, not a scaled-down thumbnail. Tablet is
-included only if you enabled it during setup.
+included unless you turned it off during setup.
 
 ### With Claude (recommended)
 

@@ -95,13 +95,14 @@ Follow these steps:
    - If they chose **Brand** → **skip this question entirely** (brand mode has no
      device preview). Leave `VITE_ENABLE_TABLET=""`.
    - If they chose **Web Site** or **App** → ask, header "Tablet view", question
-     "Include a tablet preview as well?" Both default to **no** tablet unless
-     asked. Options: **"No, skip tablet"** (default, first) / **"Yes, add
-     tablet"**. "Yes" writes `VITE_ENABLE_TABLET="true"`; "No" leaves it blank.
+     "Include a tablet preview as well?" Both default to **yes**: the design is one
+     responsive layout, so the extra frame costs nothing. Options: **"Yes, keep
+     tablet"** (default, first) / **"No, skip tablet"**. "Yes" leaves
+     `VITE_ENABLE_TABLET=""`; "No" writes `VITE_ENABLE_TABLET="false"`.
 
    Note the effect back to the user: an **App** opens on the phone preview with no
-   desktop button; a **Web Site** opens on desktop; tablet appears only if they
-   opted in. Keep the chosen type in mind, it tailors the project-name options in
+   desktop button; a **Web Site** opens on desktop; tablet is there unless they
+   opted out. Keep the chosen type in mind, it tailors the project-name options in
    the next step.
 
 4. **Ask the project name, tailored to the type.** `VITE_PROJECT_NAME` fills the
@@ -144,8 +145,8 @@ Follow these steps:
 6. **Write the values back** into `.env`, preserving its comments and the rest of the
    file. Quote the values: `VITE_CLIENT_NAME="ACME ltd"`,
    `VITE_PROJECT_NAME="Web Redesign"`, `VITE_PROJECT_TYPE="app"`, and
-   `VITE_ENABLE_TABLET="true"` (leave `VITE_ENABLE_TABLET=""` when tablet was
-   declined). For websites, also write `VITE_MENU_STYLE` from step 5 (leave `""` for
+   `VITE_ENABLE_TABLET="false"` (leave `VITE_ENABLE_TABLET=""` when tablet was
+   kept). For websites, also write `VITE_MENU_STYLE` from step 5 (leave `""` for
    traditional). Leave `VITE_COMPANY_NAME` untouched.
 
 7. **Write the values, then move straight on, no recap, no publishing talk here.**

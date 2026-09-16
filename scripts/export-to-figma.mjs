@@ -13,8 +13,8 @@
  *
  *   The active breakpoint set is read live from the running app
  *   (`window.__PREVIEW_CONFIG__`, derived from previewConfig in
- *   src/config/site.ts). So Tablet is captured ONLY when VITE_ENABLE_TABLET is
- *   on, Desktop is skipped for `app` projects, etc. — nothing hardcoded here.
+ *   src/config/site.ts). So Tablet is skipped when VITE_ENABLE_TABLET="false",
+ *   Desktop is skipped for `app` projects, etc. — nothing hardcoded here.
  *
  * TWO MODES
  *   • dry-run (default) — screenshots each breakpoint to ./figma-export/*.png.
@@ -168,7 +168,12 @@ async function readManifest(page, url, viewsOverride) {
   const cfg = await page.evaluate(() => window.__PREVIEW_CONFIG__ ?? null);
   const widths = { ...FALLBACK_WIDTHS, ...(cfg?.widths ?? {}) };
   heights = { ...VIEWPORT_HEIGHTS, ...(cfg?.heights ?? {}) };
-  const views = viewsOverride ?? cfg?.views ?? ["desktop", "mobile"];
+  // --views narrows the project's active set (the export drawer's view checkboxes); a
+  // view the project doesn't have is ignored, and an override naming none of them
+  // falls back to the override itself (a deliberate force on an unusual project).
+  const active = cfg?.views ?? ["desktop", "mobile"];
+  const narrowed = viewsOverride ? viewsOverride.filter((v) => active.includes(v)) : null;
+  const views = narrowed && narrowed.length ? narrowed : (viewsOverride ?? active);
   const pages = cfg?.pages?.length ? cfg.pages : [{ id: "home", route: "", name: "Home" }];
   return { views, widths, pages };
 }

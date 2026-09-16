@@ -5671,6 +5671,7 @@ ipcMain.handle("project:status", () => ({
   ...(currentProject ? readProjectMeta(currentProject) : { client: "", project: "" }),
   viteUrl,
   design: currentProject ? detectDesign(currentProject) : { active: false, variationId: null },
+  views: currentProject ? projectViews(currentProject) : [],
   companyProfile: hasCompanyProfile(currentProject),
 }));
 
@@ -5902,8 +5903,8 @@ async function runMenuCheckFor(variationId, opts = {}) {
   const vid = variationId || (detectDesign(currentProject).variationId || "v01");
   const { runMenuCheck } = require("./menu-check.cjs");
   const { runCaptureOp } = require("./capture-bridge.cjs");
-  // Skip the tablet width when the project didn't opt into a tablet preview: it
-  // isn't a surface the designer ever sees, and each width costs a page load.
+  // Skip the tablet width when the project opted out of the tablet preview: it
+  // isn't a surface the designer ever sees then, and each width costs a page load.
   const widths = tabletEnabled(currentProject) ? undefined : ["desktop", "mobile"];
   // The design preview shows the SITE's header once promoted, so check it as such.
   const promoted = previewIsSite(currentProject);
@@ -5918,12 +5919,19 @@ async function runMenuCheckFor(variationId, opts = {}) {
     ...opts, site,
   });
 }
-/** Whether .env opted into the tablet preview (VITE_ENABLE_TABLET). */
+/** Whether the project still has the tablet preview: on unless .env says VITE_ENABLE_TABLET="false" (mirrors previewConfig in src/config/site.ts). */
 function tabletEnabled(dir) {
   try {
     const env = fs.readFileSync(path.join(dir, ".env"), "utf8");
-    return /^\s*VITE_ENABLE_TABLET\s*=\s*["']?true["']?/mi.test(env);
-  } catch { return false; }
+    return !/^\s*VITE_ENABLE_TABLET\s*=\s*["']?false["']?/mi.test(env);
+  } catch { return true; }
+}
+/** The project's device views, in the View bar's order (mirrors previewConfig): a website has all three, an app hides desktop, brand has none. */
+function projectViews(dir) {
+  const type = String(readProjectEnv(dir).VITE_PROJECT_TYPE || "").trim().toLowerCase();
+  if (type === "brand") return [];
+  const tablet = tabletEnabled(dir);
+  return ["desktop", "tablet", "mobile"].filter((v) => (v === "desktop" ? type !== "app" : v === "tablet" ? tablet : true));
 }
 ipcMain.handle("menu:check", (_e, { variationId, site } = {}) => runMenuCheckFor(variationId, site ? { site: true, previewUrl: siteUrl } : {}));
 

@@ -65,7 +65,7 @@ export default function App() {
 
   // Expose the active breakpoint set + viewport sizes so the headless export tool can
   // read the project's real device matrix instead of hardcoding it. Tablet is
-  // present here only when VITE_ENABLE_TABLET is on (see previewConfig). The sizes
+  // present unless VITE_ENABLE_TABLET="false" (see previewConfig). The sizes
   // are the chosen preview devices' (devices.ts patches them when the choice changes).
   useEffect(() => {
     (window as unknown as { __PREVIEW_CONFIG__?: unknown }).__PREVIEW_CONFIG__ = {

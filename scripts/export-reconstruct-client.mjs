@@ -156,7 +156,12 @@ async function readManifest(page, url, viewsOverride) {
   const cfg = await page.evaluate(() => window.__PREVIEW_CONFIG__ ?? null);
   const widths = { ...FALLBACK_WIDTHS, ...(cfg?.widths ?? {}) };
   heights = { ...VIEWPORT_HEIGHTS, ...(cfg?.heights ?? {}) };
-  const views = viewsOverride ?? cfg?.views ?? ["desktop", "mobile"];
+  // --views narrows the project's active set (the export drawer's view checkboxes); a
+  // view the project doesn't have is ignored, and an override naming none of them
+  // falls back to the override itself (a deliberate force on an unusual project).
+  const active = cfg?.views ?? ["desktop", "mobile"];
+  const narrowed = viewsOverride ? viewsOverride.filter((v) => active.includes(v)) : null;
+  const views = narrowed && narrowed.length ? narrowed : (viewsOverride ?? active);
   const pages = cfg?.pages?.length ? cfg.pages : [{ id: "home", route: "", name: "Home" }];
   return { views, widths, pages };
 }

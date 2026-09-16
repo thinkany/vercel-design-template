@@ -87,8 +87,8 @@ export const siteTitle = siteConfig.projectName
  * A whole-project decision (every variation of an app is an app), so it lives in
  * the committed .env rather than on the per-variation record.
  *
- *   "website" — desktop + mobile are the baseline (tablet optional).
- *   "app"     — mobile-first; desktop is hidden entirely (tablet optional).
+ *   "website" — desktop + tablet + mobile.
+ *   "app"     — mobile-first; desktop is hidden entirely (tablet + mobile).
  *   "brand"   — Brand Guideline mode. STUBBED / coming soon: App.tsx renders the
  *               Brand.tsx placeholder in place of the Home preview, so the device
  *               matrix below is unused for it (kept website-like just for safety).
@@ -114,9 +114,11 @@ const rawMenuStyle = (import.meta.env.VITE_MENU_STYLE ?? "").trim().toLowerCase(
 export const menuStyle: MenuStyle =
   rawMenuStyle === "dropdown" || rawMenuStyle === "mega" ? rawMenuStyle : "traditional";
 
-// Whether the designer opted into a tablet preview (setup follow-up question).
+// The tablet preview is part of the baseline: the design is one responsive layout
+// (phones share one layout below @lg, tablets sit above it), so the frame costs the
+// build nothing. VITE_ENABLE_TABLET="false" is the opt-OUT (any other value keeps it).
 const enableTablet =
-  (import.meta.env.VITE_ENABLE_TABLET ?? "").trim().toLowerCase() === "true";
+  (import.meta.env.VITE_ENABLE_TABLET ?? "").trim().toLowerCase() !== "false";
 
 /**
  * Derived device-preview config consumed by the responsive preview (ViewToggle +
@@ -126,10 +128,10 @@ const enableTablet =
  */
 function computePreviewConfig(): { views: View[]; defaultView: View } {
   const isApp = projectType === "app";
-  // Full width-descending order, filtered by project type + the tablet opt-in.
+  // Full width-descending order, filtered by project type + the tablet opt-out.
   const views = (["desktop", "tablet", "mobile"] as View[]).filter((v) => {
     if (v === "desktop") return !isApp;      // apps hide desktop entirely
-    if (v === "tablet") return enableTablet; // tablet is opt-in for every type
+    if (v === "tablet") return enableTablet; // on unless the project opted out
     return true;                             // mobile is always available
   });
   return { views, defaultView: isApp ? "mobile" : "desktop" };
