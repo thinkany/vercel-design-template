@@ -4811,6 +4811,37 @@ function siteSeoApply(seo, s) {
   if (s.jsonld && !seo.jsonld) seo.jsonld = s.jsonld;
   if (s.image && !seo.image) seo.image = s.image;
 }
+// A section heading with a help icon beside it; the icon opens a small modal with
+// the section's guidance (HTML from copy.js), so the field hints can stay short.
+const ICON_HELP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4.5"/><circle cx="12" cy="8.2" r=".6" fill="currentColor"/></svg>';
+function siteLabelWithHelp(text, { title, html, aria }) {
+  const row = siteEl("div", "sess-label site-label-help");
+  row.appendChild(document.createTextNode(text));
+  const b = siteEl("button", "site-help"); b.type = "button"; b.innerHTML = ICON_HELP; b.title = aria || title; b.setAttribute("aria-label", aria || title);
+  b.addEventListener("click", () => siteHelpModal(title, html));
+  row.appendChild(b);
+  return row;
+}
+function siteHelpModal(title, html) {
+  const ov = siteEl("div", "blockedit");
+  const card = siteEl("div", "blockedit-card site-help-card");
+  const head = siteEl("div", "blockedit-head");
+  head.appendChild(siteEl("div", "blockedit-title", title));
+  const acts = siteEl("div", "blockedit-acts");
+  const done = siteEl("button", "panelbtn", COPY.site.helpClose); done.style.cssText = "margin:0;width:auto;";
+  acts.appendChild(done); head.appendChild(acts);
+  const body = siteEl("div", "site-help-body"); body.innerHTML = html;
+  card.append(head, body); ov.appendChild(card);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey, true); };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  done.addEventListener("click", close);
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  document.addEventListener("keydown", onKey, true);
+  document.body.appendChild(ov);
+  done.focus();
+  return { close };
+}
+
 // A sub-heading with a body, used inside a section (not folded, not remembered).
 function siteFoldInline(title) { const sec = siteEl("div", "site-sub"); sec.appendChild(siteEl("div", "k site-sub-title", title)); const body = siteEl("div"); sec.appendChild(body); return { sec, body }; }
 
@@ -8353,7 +8384,7 @@ async function renderSiteSettings(host, data, st) {
 
   // Blog: the posts directory.
   wrap.appendChild(siteEl("div", "drawer-sep"));
-  wrap.appendChild(siteEl("div", "sess-label", S.blogHeading));
+  wrap.appendChild(siteLabelWithHelp(S.blogHeading, { title: S.blogHelpTitle, html: S.blogHelp, aria: S.blogHelpAria }));
   // The parent page (none = the root) and the directory's own segment: /blog, or
   // /resources/blog. Either change saves; the line beneath shows the resulting address.
   const blogDir = data.site && typeof data.site.blogTemplate === "string" ? data.site.blogTemplate : "blog"; // as written: "", "blog", "blog/{%tag%}"
@@ -8365,7 +8396,7 @@ async function renderSiteSettings(host, data, st) {
   pw.appendChild(psel); pw.appendChild(siteEl("div", "sess-desc", S.postsParentHint)); wrap.appendChild(pw);
   const bp = siteField(S.postsDir, blogDir, { hint: S.postsDirHint });
   const bpStatus = siteEl("div"); bpStatus.style.cssText = "min-height:18px;";
-  const bpAddress = siteEl("div", "sess-desc", S.postsAddress(data.site && typeof data.site.blogPath === "string" ? data.site.blogPath : blogDir, !!(data.site && data.site.blogTag))); bpAddress.style.margin = "0 0 6px";
+  const bpAddress = siteEl("div", "sess-desc", S.postsAddress(data.site && typeof data.site.blogPath === "string" ? data.site.blogPath : blogDir, !!(data.site && data.site.blogTag))); bpAddress.style.cssText = "margin:0 0 6px;font-weight:600;color:#2a2a2a;";
   // Autosave a second after the last keystroke (Enter saves at once); green "Saved" flash.
   let bpTimer = null;
   const saveBlogPath = async () => {

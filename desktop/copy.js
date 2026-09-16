@@ -944,6 +944,7 @@ window.COPY = {
     addSubLink: "+ Sub-link",
     subLinks: "Sub-links",
     footerHeading: "Footer",
+    helpClose: "Close",
     footerCopyHeading: "Footer copy",
     footerCopyDesc: "The footer's own words and contact details, beneath its links. A line the design wrote into the footer (a tagline, a note) shows here as a field, prefilled with the design's words.",
     contactHeading: "Contact details",
@@ -1080,7 +1081,13 @@ window.COPY = {
       postsParentHint: "Put the blog under a page: with Resources chosen, the list lives at /resources/blog and each post beneath it. Menu links follow the move.",
       postsDir: "Posts Directory",
       postsDirPlaceholder: "blog, or leave empty",
-      postsDirHint: "The blog's own segment: the list at /blog and each post at /blog/<post>, under the parent page if one is chosen. One word or hyphenated; no page can use it. Leave it empty (or /) to put posts right under the parent page, which is then the list. End it with /{%tag%} (blog/{%tag%}, or just {%tag%}) to put each post under its first tag, with a list per tag: /blog/news/my-post.",
+      postsDirHint: "One word or hyphenated (blog), empty for posts right under the parent page, or ending in /{%tag%} to group posts by their first tag. The help icon above has the examples.",
+      blogHelpTitle: "Posts Directory",
+      blogHelpAria: "About the Posts Directory",
+      blogHelp:
+        "<p>Set the URL segment for blog posts. For example, using <code>blog</code> puts posts at <code>/parent-page/blog/your-post</code>, where the parent page sets the post listing URL (commonly named blog url). Use a single word or a hyphenated word, and do not reuse it for any other page.</p>" +
+        "<p>Leave this field empty (or <code>/</code>) to keep posts directly under the parent page, such as <code>/parent-page/your-post</code>.</p>" +
+        "<p>To group posts by their first tag, end the segment with <code>/{%tag%}</code>. For example, <code>blog/{%tag%}</code> or just <code>{%tag%}</code> creates tag-based URLs like <code>/parent-page/blog/news/your-post</code>. This example assumes <code>news</code> has been added as the first tag to <code>your-post</code>.</p>",
       postsAddress: (route, tag) => (tag ? `Posts live at /${route ? route + "/" : ""}<tag>/<post>, with a list per tag` : route ? `Posts live at /${route}/<post>, the list at /${route}` : "Posts live at /<post>; the parent page (or the home page) is the list"),
       postsBlockHeading: "Posts block",
       postsBlockDesc: "The Posts block (in the block picker) shows the newest posts on any page. These settings apply to every Posts block on the site.",
