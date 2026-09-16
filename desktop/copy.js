@@ -869,6 +869,11 @@ window.COPY = {
     designBlockRefRemove: "Remove",
     // What the chat shows for that request (the command itself stays out of view).
     designBlockEcho: (desc, page) => `Design a new block for the ${page} page: ${desc}`,
+    designBlockWorking: "Designing the block",
+    designBlockDone: "The new block is on the page.",
+    designBlockFailed: "The block wasn't made. The chat has the details.",
+    designBlockBusy: "A block is being designed on another page.",
+    designBlockSaveFirst: "Save this page's changes first, then send the request.",
     editContent: "Edit content",
     hideContent: "Hide content",
     moveUp: "Move up",

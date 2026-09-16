@@ -5390,20 +5390,44 @@ function renderSitePage(page, blocks, refresh, forceOpen) {
     const dzNo = siteMini(COPY.site.designBlockCancel, () => { dzForm.hidden = true; });
     const dzNote = siteEl("span", "sess-desc"); dzNote.style.margin = "0";
     dzRow.append(dzGo, dzNo, dzNote); dzForm.append(dzIn, dzDrop, dzRow);
+    // The status beside the link: the dots while the designer works (the drawer stays
+    // open, this page stays in view), then "the block is on the page" once it lands.
+    const dzStatus = siteEl("span", "sess-desc"); dzStatus.style.cssText = "margin:0 0 0 10px;display:inline-flex;align-items:center;gap:6px;";
+    const dzWorking = () => {
+      dzBtn.disabled = true; dzForm.hidden = true;
+      dzStatus.innerHTML = "<span class=\"ta-dots site-ai-dots\"><i></i><i></i><i></i></span>";
+      dzStatus.appendChild(document.createTextNode(COPY.site.designBlockWorking));
+    };
+    if (cmsDesignTurn && cmsDesignTurn.pageId === page.id) dzWorking(); // re-rendered mid-turn
+    else if (cmsDesignTurn) { dzBtn.disabled = true; dzBtn.title = COPY.site.designBlockBusy; } // one at a time
+    else if (cmsDesignDone && cmsDesignDone.pageId === page.id) {
+      // The turn just ended and this is the re-render: say how it went, once.
+      const d = cmsDesignDone; cmsDesignDone = null;
+      dzStatus.textContent = d.ok ? COPY.site.designBlockDone : COPY.site.designBlockFailed;
+      dzStatus.style.color = d.ok ? "#1a7f37" : "#e5484d";
+      setTimeout(() => { if (d.ok) dzStatus.textContent = ""; }, 6000);
+    }
     dzBtn.addEventListener("click", () => { dzForm.hidden = !dzForm.hidden; if (!dzForm.hidden) dzIn.focus(); });
     dzGo.addEventListener("click", async () => {
       // Strip a page suffix someone typed or pasted ("(add it to the … page)", "Page: …")
       // so the request carries the page exactly once.
       const desc = dzIn.value.trim().replace(/\s*\(add it to the [^)]*page\)?\s*/gi, " ").replace(/\n?\s*Page:\s*.+$/i, "").trim();
       if (!desc) return;
+      if (!appHasKey) { dzNote.textContent = COPY.errors.needKey; dzNote.style.color = "#e5484d"; return; }
+      // The designer writes this page's content file: unsaved edits here would be lost
+      // or would overwrite its placement, so they are saved (or dropped) first.
+      if (siteEditGuard && siteEditGuard.isDirty()) { dzNote.textContent = COPY.site.designBlockSaveFirst; dzNote.style.color = "#e5484d"; return; }
       // References still being read (the vision pass) → wait so the digest is whole.
       if (dzRefs.length && refsAnalyzing) { dzGo.disabled = true; dzNote.textContent = COPY.site.designBlockRefsReading; await waitForIngest(); dzGo.disabled = false; dzNote.textContent = ""; }
       if (dzPhoneOpen) dzPhoneOpen.close();
-      closeModal();
+      // The drawer stays open on this page; the turn runs behind it and the page
+      // re-renders with the new block when it ends (finishCmsDesignTurn).
+      cmsDesignTurn = { pageId: page.id };
+      dzWorking();
       // The command goes to Claude; the chat echoes a plain sentence.
       runAgent(COPY.site.designBlockRequest(desc, page.title, dzRefs), COPY.site.designBlockEcho(desc, page.title));
     });
-    dz.append(dzBtn, dzForm);
+    dz.append(dzBtn, dzStatus, dzForm);
     addRow.dataset.tour = "cms-add-block"; dz.dataset.tour = "cms-design-block";
     addRow.appendChild(sel); bf.body.appendChild(addRow); bf.body.appendChild(dz);
   }
@@ -7791,6 +7815,18 @@ function finishWpDesignTurn() {
   wpDesignTurn = null;
   if (RAILS.site.classList.contains("active")) { siteRailState.tab = "blocks"; openModal("site"); }
 }
+// "Design a new block…" from a page editor: the drawer stays open on that page while
+// the /design-block turn runs (dots beside the link), and when it ends the drawer
+// re-renders where it is, so the new block shows in the page's list with no trip
+// back through the chat. cmsDesignDone carries the outcome to that one re-render.
+let cmsDesignTurn = null; // { pageId } while the turn runs
+let cmsDesignDone = null; // { pageId, ok } for the re-render after it
+function finishCmsDesignTurn(ok) {
+  const t = cmsDesignTurn; cmsDesignTurn = null;
+  if (!t) return;
+  cmsDesignDone = { pageId: t.pageId, ok: !!ok };
+  if (RAILS.site.classList.contains("active")) openModal("site"); // same tab, same page (siteRailState)
+}
 
 // Use an existing design: pick one of the design's blocks, review where each field
 // lands (proposed from names and kinds), confirm, and every instance moves over.
@@ -9910,6 +9946,7 @@ window.desktop.onAgentEvent((evt) => {
       previewTurnTitle = null;
       if (siteBuildTurn) finishSiteBuildTurn(true); // the promote turn: open the CMS drawer once the site is ready
       if (wpDesignTurn) finishWpDesignTurn();
+      if (cmsDesignTurn) finishCmsDesignTurn(true);
       // Quiet build finished → reveal the completed design now (both tabs, land on Home) and
       // open the chat for iteration. Nothing showed during the build.
       if (quietBuildActive) { finishQuietBuild(); break; }
@@ -9941,6 +9978,7 @@ window.desktop.onAgentEvent((evt) => {
       previewTurnTitle = null;
       if (siteBuildTurn) finishSiteBuildTurn(false);
       if (wpDesignTurn) finishWpDesignTurn();
+      if (cmsDesignTurn) finishCmsDesignTurn(false);
       // Even on error, settle-then-reveal so the designer isn't stuck behind a
       // cover (the chat carries the error detail).
       if (quietBuildActive) { finishQuietBuild(); break; } // reveal + open chat (the error is in it)
@@ -15390,6 +15428,8 @@ async function runAgent(toSend, echoText, opts) {
     addMsg("error", String(e));
     refreshPreview();
     endTurnGate(); // no result/error EVENT will arrive for an IPC-level failure
+    if (wpDesignTurn) finishWpDesignTurn();
+    if (cmsDesignTurn) finishCmsDesignTurn(false);
   } finally {
     send.disabled = false;
     input.focus();
