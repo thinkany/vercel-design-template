@@ -171,6 +171,7 @@ contextBridge.exposeInMainWorld("desktop", {
   saveSitePost: (id, data) => ipcRenderer.invoke("site:savePost", { id, data }),
   createSitePost: (title) => ipcRenderer.invoke("site:createPost", { title }),
   writeSitePost: (title, brief) => ipcRenderer.invoke("post:write", { title, brief }),
+  richAssist: (markdown, instruction, kind) => ipcRenderer.invoke("rich:assist", { markdown, instruction, kind }),
   deleteSitePost: (id) => ipcRenderer.invoke("site:deletePost", { id }),
   getSiteTypes: () => ipcRenderer.invoke("site:types"),
   saveSiteType: (type) => ipcRenderer.invoke("site:saveType", { type }),

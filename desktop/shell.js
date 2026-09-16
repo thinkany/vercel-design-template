@@ -5566,7 +5566,7 @@ function renderSitePost(post, refresh) {
   const tg = tagCombo({ tags: draft.tags, allTags: renderSitePost.allTags || [], onChange: (t) => { draft.tags = [...t]; sl.lead.textContent = sitePostPrefix(draft.tags); dirty(); }, label: S.postTags, hint: siteBlogTag ? S.postTagsHintFirst : S.postTagsHint, noTags: S.postNoTags, orderable: true });
   tf.body.appendChild(tg.wrap);
   const cf = siteFold(S.postContent, "post:content"); cf.sec.dataset.tour = "cms-post-content"; card.appendChild(cf.sec);
-  const rich = siteRichEditor(draft.body, () => { draft.body = rich.getMarkdown(); dirty(); });
+  const rich = siteRichEditor(draft.body, () => { draft.body = rich.getMarkdown(); dirty(); }, { kind: "post" });
   cf.body.appendChild(rich.wrap); cf.body.appendChild(siteEl("div", "sess-desc", S.postBodyHint));
   const sf = siteFold(S.seoHeading, "post:seo"); sf.sec.dataset.tour = "cms-post-seo"; card.appendChild(sf.sec);
   sf.body.appendChild(siteSeoFill({
@@ -6986,6 +6986,7 @@ function openMediaPicker(current, { kind = "image" } = {}) {
 // designer types in a rendered document, the file keeps markdown. window.TAEditor
 // is desktop/vendor/editor.js (bundled by desktop/build/bundle-editor.cjs).
 const EDITOR_ICONS = {
+  ai: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
   bold: '<path d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8"/>',
   italic: '<line x1="19" x2="10" y1="4" y2="4"/><line x1="14" x2="5" y1="20" y2="20"/><line x1="15" x2="9" y1="4" y2="20"/>',
   strike: '<path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/>',
@@ -7012,7 +7013,8 @@ function destroyLiveEditors() { liveEditors.forEach((e) => { try { e.destroy(); 
  * edit (read the value back through getMarkdown()). Returns { wrap, getMarkdown }.
  * Without the bundle (or if it fails) the field degrades to a markdown textarea.
  */
-function siteRichEditor(markdown, onChange, { compact } = {}) {
+// `kind` names what the editor holds ("post", "note") for the Ask Claude prompt.
+function siteRichEditor(markdown, onChange, { compact, kind } = {}) {
   const E = COPY.site.editor;
   const wrap = siteEl("div", "ta-editor" + (compact ? " compact" : ""));
   const bar = siteEl("div", "ta-editor-bar");
@@ -7048,7 +7050,7 @@ function siteRichEditor(markdown, onChange, { compact } = {}) {
     inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); ok.click(); } if (e.key === "Escape") { e.preventDefault(); no.click(); } });
     inp.focus();
   };
-  const hideAsk = () => { ask.hidden = true; ask.innerHTML = ""; };
+  const hideAsk = () => { ask.hidden = true; ask.innerHTML = ""; ask.classList.remove("ai", "ai-done"); };
 
   const buttons = [];
   const btn = (key, title, run, isOn, canRun) => {
@@ -7117,6 +7119,35 @@ function siteRichEditor(markdown, onChange, { compact } = {}) {
   sep();
   btn("undo", E.undo, () => chain().undo().run(), () => false, () => editor.can().undo());
   btn("redo", E.redo, () => chain().redo().run(), () => false, () => editor.can().redo());
+  sep();
+  // Ask Claude: what should change, the text goes with it, the reply replaces the text
+  // (in the editor's own markdown subset); Undo brings the previous text back.
+  const aiBtn = btn("ai", E.ai, () => {
+    if (!appHasKey) { showAiNote(COPY.site.seoFillNoKey, true); return; }
+    ask.innerHTML = ""; ask.hidden = false; ask.classList.add("ai");
+    ask.appendChild(siteEl("span", "k", E.aiAsk));
+    const inp = document.createElement("textarea"); inp.className = "field"; inp.placeholder = E.aiPlaceholder; inp.rows = 2;
+    const note = siteEl("span", "sess-desc"); note.style.margin = "0";
+    const go = siteMini(E.aiApply, async () => {
+      const instruction = inp.value.trim(); if (!instruction) { inp.focus(); return; }
+      go.disabled = true; no.disabled = true; inp.disabled = true; aiBtn.disabled = true;
+      note.innerHTML = "<span class=\"ta-dots site-ai-dots\"><i></i><i></i><i></i></span>"; note.appendChild(document.createTextNode(E.aiWorking)); note.style.color = "";
+      let r; try { r = await window.desktop.richAssist(showingRaw ? raw.value : ed.getMarkdown(), instruction, kind || ""); } catch (e) { r = { ok: false, error: e.message }; }
+      go.disabled = false; no.disabled = false; inp.disabled = false; aiBtn.disabled = false;
+      if (r && r.ok) {
+        if (showingRaw) { raw.value = r.markdown; } else ed.setMarkdown(r.markdown);
+        onChange();
+        showAiNote(E.aiDone, false); setTimeout(() => { if (!ask.hidden && ask.classList.contains("ai-done")) hideAsk(); }, 3500);
+        if (!showingRaw) editor.commands.focus();
+      } else { note.textContent = r && r.reason === "no-key" ? COPY.site.seoFillNoKey : ((r && r.error) || E.aiFail); note.style.color = "#e5484d"; }
+    });
+    const no = siteMini(E.cancel, () => { hideAsk(); editor.commands.focus(); });
+    ask.append(inp, go, no, note);
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); go.click(); } if (e.key === "Escape") { e.preventDefault(); no.click(); } });
+    inp.focus();
+  }, () => false);
+  // A one-line result in the ask row (done, or a refusal), replacing the prompt.
+  const showAiNote = (text, error) => { ask.innerHTML = ""; ask.hidden = false; ask.classList.add("ai"); ask.classList.toggle("ai-done", !error); const n = siteEl("span", "sess-desc", text); n.style.cssText = "margin:0;" + (error ? "color:#e5484d;" : "color:#1a7f37;"); ask.appendChild(n); if (error) ask.appendChild(siteMini(E.cancel, () => hideAsk())); };
 
   function paint() {
     buttons.forEach(({ b, isOn, canRun }) => { b.classList.toggle("on", !!isOn()); if (canRun) b.disabled = !canRun(); });

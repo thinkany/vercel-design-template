@@ -4980,6 +4980,44 @@ ipcMain.handle("post:write", async (_e, { title, brief } = {}) => {
     return { ok: false, error: m };
   }
 });
+// ---- Ask Claude, in any rich text editor ------------------------------------
+// The editor's sparkle: the text as it stands plus what should change, back as
+// markdown held to the editor's subset (desktop/rich-assist.cjs), in the project's
+// copy voice. Nothing is written: the editor swaps its content and Undo restores it.
+ipcMain.handle("rich:assist", async (_e, { markdown, instruction, kind } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!process.env.ANTHROPIC_API_KEY) return { ok: false, reason: "no-key" };
+  const ask = String(instruction || "").trim();
+  if (!ask) return { ok: false, error: "Say what should change." };
+  const A = require("./rich-assist.cjs");
+  const site = siteJsonOf(currentProject);
+  const settings = seoSettings(site.seo);
+  const env = readProjectEnv(currentProject);
+  const ctx = { name: settings.siteName || env.VITE_CLIENT_NAME || path.basename(currentProject), voice: effectiveVoice(currentProject) };
+  const { system, user } = A.prompt({ markdown: String(markdown || ""), instruction: ask, kind: String(kind || "") }, ctx);
+  try {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk"); // precedent: post:write
+    const client = new Anthropic({ timeout: 180_000, maxRetries: 1 });
+    const msg = await client.beta.messages.create({
+      model: "claude-opus-5",
+      max_tokens: 8192,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      system,
+      messages: [{ role: "user", content: user }],
+      output_config: { effort: "medium", format: { type: "json_schema", schema: A.SCHEMA } },
+    });
+    if (msg.stop_reason === "refusal") return { ok: false, error: "Claude declined to edit this text." };
+    const text = (msg.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+    let raw; try { raw = JSON.parse(text); } catch { return { ok: false, error: "The reply wasn't the JSON expected. Try again." }; }
+    const out = A.clean(raw);
+    if (appLog.isEnabled()) appLog.write("info", "rich", `assist "${ask.slice(0, 60)}" via ${msg.model}: ${msg.usage ? `${msg.usage.input_tokens} in, ${msg.usage.output_tokens} out` : "no usage"}`);
+    return { ok: true, markdown: out };
+  } catch (e) {
+    const m = e && e.status ? `${e.status}: ${(e.error && e.error.error && e.error.error.message) || e.message}` : (e && e.message) || String(e);
+    return { ok: false, error: m };
+  }
+});
 // The whole site at once (Settings, Search engines): every page, post and entry
 // without a title and description gets them written from its content, straight to
 // its file, three at a time; the designer reviews in the editors. `rewrite` also
