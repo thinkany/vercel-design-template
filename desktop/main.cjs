@@ -1885,7 +1885,7 @@ function readSiteContent(dir) {
   return {
     ready: r.ready, reason: r.ready ? null : r.reason, design: r.design || site.design || null,
     licensed: siteLicensed(), // the CMS drawer shows a licensing note instead of the editor when false
-    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), siteNameDefault: readProjectEnv(dir).VITE_CLIENT_NAME || path.basename(dir), logos: logosSetting(dir, site), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, footer: site.footer && typeof site.footer === "object" && !Array.isArray(site.footer) ? site.footer : {}, scripts: { gtm: (site.scripts && site.scripts.gtm) || "", extra: Array.isArray(site.scripts && site.scripts.extra) ? site.scripts.extra : [] }, redirects: Array.isArray(site.redirects) ? site.redirects : [], seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
+    site: { url: site.url || null, nav: Array.isArray(site.nav) ? site.nav : [], footerLinks: Array.isArray(site.footerLinks) ? site.footerLinks : [], manageNav: site.manageNav !== false, navHasPanels: navHasPanels(site), blogPath: blogPathOf(site), siteNameDefault: readProjectEnv(dir).VITE_CLIENT_NAME || path.basename(dir), logos: logosSetting(dir, site), legal: { copyright: (site.legal && site.legal.copyright) || "", links: Array.isArray(site.legal && site.legal.links) ? site.legal.links : [] }, footer: site.footer && typeof site.footer === "object" && !Array.isArray(site.footer) ? site.footer : {}, contact: contactSetting(site.contact), scripts: { gtm: (site.scripts && site.scripts.gtm) || "", extra: Array.isArray(site.scripts && site.scripts.extra) ? site.scripts.extra : [] }, redirects: Array.isArray(site.redirects) ? site.redirects : [], seo: seoSettings(site.seo), favicon: { icon: (site.favicon && site.favicon.icon) || "", touch: (site.favicon && site.favicon.touch) || "" } },
     pages, posts, ...(() => {
       const ib = r.ready ? introspectBlocks(dir) : { defaults: {}, templates: {}, fields: {}, marks: {}, builtins: {} };
       const names = site.blockNames && typeof site.blockNames === "object" ? site.blockNames : {};
@@ -1906,6 +1906,12 @@ function readSiteContent(dir) {
 // Search-engine settings in content/site.json (built into robots.txt, the sitemap,
 // llms.txt and the pages' robots meta). Defaults mirror site/src/lib/site.ts.
 const SEO_SEPARATORS = ["-", "\u2013", "\u2014", ":", "\u00b7", "\u2022", "*", "\u22c6", "|", "~", "\u00ab", "\u00bb", "<", ">"]; // Yoast's set
+// Contact details (site.json `contact`): three trimmed strings, whatever was stored.
+function contactSetting(raw) {
+  const c = raw && typeof raw === "object" ? raw : {};
+  const s = (v) => (typeof v === "string" ? v.trim() : "");
+  return { email: s(c.email), phone: s(c.phone), address: s(c.address) };
+}
 function seoSettings(raw) {
   const r = raw && typeof raw === "object" ? raw : {};
   const llms = r.llms && typeof r.llms === "object" ? r.llms : {};
@@ -2123,7 +2129,7 @@ ipcMain.handle("site:deletePage", (_e, { id } = {}) => {
 });
 // Site-level settings: nav + footer links (the pinned design + url are managed by
 // promotion and publishing, so they're preserved, never edited here).
-ipcMain.handle("site:saveSite", (_e, { nav, footerLinks, legal, footer } = {}) => {
+ipcMain.handle("site:saveSite", (_e, { nav, footerLinks, legal, footer, contact } = {}) => {
   if (!siteLicensed()) return { ok: false, error: SITE_NOT_LICENSED };
   if (!currentProject) return { ok: false, error: "No project is open." };
   const p = path.join(siteContentDir(currentProject), "site.json");
@@ -2165,6 +2171,7 @@ ipcMain.handle("site:saveSite", (_e, { nav, footerLinks, legal, footer } = {}) =
   // The footer's own copy (its schema's extra props): stored as edited; the site fills
   // any absent field from the schema's default (chromeCopy in site/src/lib/blocks.ts).
   if (footer && typeof footer === "object" && !Array.isArray(footer)) next.footer = footer;
+  if (contact && typeof contact === "object") next.contact = contactSetting(contact);
   try { fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n"); return { ok: true, site: next }; }
   catch (e) { return { ok: false, error: e.message }; }
 });

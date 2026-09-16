@@ -184,11 +184,11 @@ export { Footer } from "./Footer";       // by NAME, like the header
 export const chrome: Chrome = { header: headerChrome, footer };
 ```
 
-Chrome components receive `{ siteName, logo, logos, nav, footerLinks, legal }` from
-the layout (all from `content/site.json`), so their props schema is:
+Chrome components receive `{ siteName, logo, logos, nav, footerLinks, legal, contact }`
+from the layout (all from `content/site.json`), so their props schema is:
 
 ```ts
-import { navItem, navLink, legalLine, logosProp, fillCopyright } from "../src/lib/blocks";
+import { navItem, navLink, legalLine, logosProp, contactDetails, richtext, fillCopyright } from "../src/lib/blocks";
 const props = z.object({
   siteName: z.string(),
   logo: z.string().optional(),   // = logos.header (kept for older chrome)
@@ -196,8 +196,18 @@ const props = z.object({
   nav: z.array(navItem).default([]),   // the HEADER menu: links (dropdown) + columns (mega menu)
   footerLinks: z.array(navLink).default([]), // the FOOTER's own links, never the header's
   legal: legalLine,                    // copyright ({year}, {siteName}) + privacy / terms links
+  contact: contactDetails,             // { email, phone, address }: the FOOTER renders what is set
+  note: richtext.default(""),          // the footer's own prose, ALWAYS present (a WYSIWYG field in the CMS)
 });
 ```
+
+**Contact details are data, like the legal line.** Every Footer takes `contact` and
+renders whichever of `email` (`mailto:`), `phone` (`tel:`) and `address` (as given,
+line breaks kept) is set, in the design's idiom and where the design put such things
+(a contact column, a line beside the legal row), nothing when all three are empty.
+Every Footer also takes `note` (rich text, `<Rich text={note} />`, nothing when empty),
+placed where a short line reads naturally (beneath the lockup, say), so a client can
+always add a sentence to the footer without a designer.
 
 **Logos per slot.** The Header renders `logos.header` on desktop and
 `logos.headerMobile` on mobile (two `<img>`s with `hidden @lg:block` / `@lg:hidden`
@@ -268,7 +278,8 @@ almost every design and each has one translation:
 | `siteConfig.clientName` / `siteConfig.logo` in chrome | the `siteName` / `logo` props |
 | `NAV_ITEMS` in `nav.ts` | `content/site.json` `nav` (see §4) |
 | `footerLinks` / `legal` in `src/app/footer.ts`, or footer links hardcoded in the design | `content/site.json` `footerLinks` + `legal` (see §4); the Footer block reads its props, never `nav` |
-| A line of copy written into the design's footer (a tagline, a note) | a prop on the Footer's schema with `.default("…the design's words…")`, rendered from the prop (§2, Footer copy); the CMS edits it under Navigation → Footer |
+| A line of copy written into the design's footer (a tagline, a note) | a prop on the Footer's schema with `.default("…the design's words…")`, rendered from the prop (§2, Footer copy); the CMS edits it under Navigation → Footer copy |
+| An email, phone number or address written into the design's footer | `content/site.json` `contact` (§4), rendered from the `contact` prop (§2); the CMS edits it under Navigation → Footer copy |
 | `getVariationId()`, `window.location.search`, `?v=` | nothing; the site is pinned in `site.json` |
 | `DesignSurface`, `ViewToggle`, device frames, `capture` prop | nothing; the layout provides the shell |
 | `data-block-name`, `data-capture-ready` | dropped |
@@ -292,8 +303,10 @@ Write, in the same turn as the last block:
   if the design's footer showed the header menu, copy those links here, so the two
   lists are independent from now on). Build `legal` from the footer's copyright line
   (write it with placeholders: `"© {year} {siteName}"`) and any privacy / terms links.
-  Keep `url` as is. Write no `footer` key: the Footer's own copy lives in its schema
-  defaults (§2, Footer copy) until the client edits it in the CMS.
+  Build `contact` (`{ email, phone, address }`) from whatever the design's footer or
+  contact section shows; empty strings otherwise. Keep `url` as is. Write no `footer`
+  key: the Footer's own copy lives in its schema defaults (§2, Footer copy) until the
+  client edits it in the CMS.
 - **`content/pages/home.json`** (one per design page, `about.json` for an About
   page, `slug` = the page's route): `title`, `seo.description` (a real one-line
   summary of the page, from the hero copy), and `blocks` in the design's order,

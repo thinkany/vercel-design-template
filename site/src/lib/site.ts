@@ -36,6 +36,8 @@ export const siteSchema = z.object({
    * the schema's defaults, the design's words. See chromeCopy in lib/blocks.
    */
   footer: z.record(z.unknown()).default({}),
+  /** Contact details (email, phone, address): the footer shows what is set; the Organization structured data carries them. */
+  contact: z.object({ email: z.string().default(""), phone: z.string().default(""), address: z.string().default("") }).default({ email: "", phone: "", address: "" }),
   /**
    * true: the header menu is `nav` above, edited in the CMS. false: the menu follows
    * the page outline (top-level pages in order, their children as sub-links).

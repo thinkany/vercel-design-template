@@ -189,7 +189,7 @@ function zodFields(schema, out, at, depth, desc) {
 
 // The props the layout supplies to chrome (site/src/lib/blocks.ts CHROME_PROP_KEYS).
 // Whatever else a Footer's schema declares is FOOTER COPY, edited in the CMS.
-const CHROME_PROP_KEYS = ["siteName", "logo", "logos", "nav", "footerLinks", "legal"];
+const CHROME_PROP_KEYS = ["siteName", "logo", "logos", "nav", "footerLinks", "legal", "contact"];
 
 // The site's chrome definitions (site/blocks/chrome.ts), bundled and evaluated.
 function loadChrome(dir, esbuild, req) {

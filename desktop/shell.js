@@ -7420,7 +7420,7 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false, { onDraft,
   // The footer's own copy (the Footer schema's props beyond links and legal, see
   // footerCopy in site:content): the design's words as defaults, the saved edits over them.
   const copyFields = footerCopy && footerCopy.fields && Object.keys(footerCopy.fields).length ? footerCopy : null;
-  const draft = JSON.parse(JSON.stringify({ nav: site.nav || [], footerLinks: site.footerLinks || [], legal: { copyright: (site.legal && site.legal.copyright) || "", links: (site.legal && site.legal.links) || [] }, footer: copyFields ? { ...copyFields.defaults, ...(site.footer || {}) } : (site.footer || {}) }));
+  const draft = JSON.parse(JSON.stringify({ nav: site.nav || [], footerLinks: site.footerLinks || [], legal: { copyright: (site.legal && site.legal.copyright) || "", links: (site.legal && site.legal.links) || [] }, footer: copyFields ? { ...copyFields.defaults, ...(site.footer || {}) } : (site.footer || {}), contact: { email: "", phone: "", address: "", ...(site.contact || {}) } }));
   // Autosave: every change (typing, drag, add, remove) writes content/site.json a
   // moment after the last one. No re-render on save, so typing keeps its focus;
   // the drawer picks the saved menu up next time it opens.
@@ -7428,8 +7428,8 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false, { onDraft,
   const setStatus = (text, error) => { status.textContent = text || ""; status.style.color = error ? "#c0261e" : "#737373"; };
   const saveNow = async () => {
     setStatus(COPY.site.saving);
-    const res = await window.desktop.saveSiteSettings(draft.nav, draft.footerLinks, draft.legal, draft.footer);
-    if (res && res.ok) { site.nav = res.site.nav; site.footerLinks = res.site.footerLinks; site.legal = res.site.legal; site.footer = res.site.footer || {}; setStatus(COPY.site.saved); setTimeout(() => { if (status.textContent === COPY.site.saved) setStatus(""); }, 1800); }
+    const res = await window.desktop.saveSiteSettings(draft.nav, draft.footerLinks, draft.legal, draft.footer, draft.contact);
+    if (res && res.ok) { site.nav = res.site.nav; site.footerLinks = res.site.footerLinks; site.legal = res.site.legal; site.footer = res.site.footer || {}; site.contact = res.site.contact || site.contact; setStatus(COPY.site.saved); setTimeout(() => { if (status.textContent === COPY.site.saved) setStatus(""); }, 1800); }
     else setStatus((res && res.error) || "Couldn't save.", true);
   };
   const dirty = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 600); if (onDraft) onDraft(draft); };
@@ -7620,19 +7620,24 @@ function renderSiteNav(site, refresh, options = [], megaMenu = false, { onDraft,
   paintNav();
   if (site.manageNav !== false) hf.body.appendChild(navList); // derived menus aren't edited here
   const ff = siteFold(COPY.site.footerHeading, "nav:footer"); ff.sec.dataset.tour = "cms-nav-footer"; wrap.appendChild(ff.sec);
-  if (copyFields) {
-    // Provisional fields: whatever the design wrote into its footer beyond the links
-    // and the legal line, prefilled with the design's words and edited like a block's.
-    ff.body.appendChild(siteEl("div", "k", COPY.site.footerCopy));
-    ff.body.appendChild(siteEl("div", "sess-desc", COPY.site.footerCopyDesc));
-    ff.body.appendChild(sitePropsEditor(draft.footer, dirty, 0, { templates: copyFields.templates || {}, fields: copyFields.fields || {} }));
-    ff.body.appendChild(siteEl("div", "k", COPY.site.footerLinksHeading));
-  }
   ff.body.appendChild(siteEl("div", "sess-desc", COPY.site.footerDesc));
   const footList = siteEl("div");
   const paintFoot = () => { footList.innerHTML = ""; draft.footerLinks.forEach((l, i) => footList.appendChild(linkRow(l, draft.footerLinks, i, paintFoot, true, { kind: "footer", owners: [], reorder: { kinds: ["footer", "link"], target: () => draft.footerLinks, topLevel: true }, nest: { into: () => (l.links = Array.isArray(l.links) ? l.links : []) }, repaint: paintFoot }))); footList.appendChild(siteMini(COPY.site.addLink, () => { draft.footerLinks.push({ label: "", href: "/" }); dirty(); paintFoot(); })); };
   paintFoot();
   ff.body.appendChild(footList);
+  // Footer copy: the design's own footer lines (provisional fields from the Footer's
+  // schema, prefilled with the design's words, the note a WYSIWYG) and the contact
+  // details (email, phone, address) the footer and the structured data show.
+  const cf = siteFold(COPY.site.footerCopyHeading, "nav:footer-copy"); cf.sec.dataset.tour = "cms-nav-footer-copy"; wrap.appendChild(cf.sec);
+  cf.body.appendChild(siteEl("div", "sess-desc", COPY.site.footerCopyDesc));
+  if (copyFields) cf.body.appendChild(sitePropsEditor(draft.footer, dirty, 0, { templates: copyFields.templates || {}, fields: copyFields.fields || {} }));
+  cf.body.appendChild(siteEl("div", "k", COPY.site.contactHeading));
+  cf.body.appendChild(siteEl("div", "sess-desc", COPY.site.contactDesc));
+  for (const [k, label, opts] of [["email", COPY.site.contactEmail, { type: "email" }], ["phone", COPY.site.contactPhone, { type: "tel" }], ["address", COPY.site.contactAddress, { textarea: true }]]) {
+    const f = siteField(label, draft.contact[k] || "", opts);
+    f.input.addEventListener("input", () => { draft.contact[k] = f.input.value; dirty(); });
+    cf.body.appendChild(f.wrap);
+  }
   // Legal: the copyright line + privacy / terms links, their own section.
   const lf = siteFold(COPY.site.legalHeading, "nav:legal"); lf.sec.dataset.tour = "cms-nav-legal"; wrap.appendChild(lf.sec);
   lf.body.appendChild(siteEl("div", "sess-desc", COPY.site.legalDesc));

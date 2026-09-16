@@ -60,15 +60,23 @@ export interface Chrome {
   footer?: BlockDef;
 }
 
+/**
+ * The site's contact details (content/site.json `contact`, edited in the CMS under
+ * Navigation → Footer copy): the footer renders whichever are set (mailto: / tel:
+ * links, the address as given), and the Organization structured data carries them.
+ */
+export const contactDetails = z.object({ email: z.string().default(""), phone: z.string().default(""), address: z.string().default("") }).default({ email: "", phone: "", address: "" });
+
 /** The props the layout hands every chrome component, all from content/site.json. */
-export const CHROME_PROP_KEYS = ["siteName", "logo", "logos", "nav", "footerLinks", "legal"] as const;
+export const CHROME_PROP_KEYS = ["siteName", "logo", "logos", "nav", "footerLinks", "legal", "contact"] as const;
 
 /**
- * FOOTER COPY: whatever a Footer's schema declares BEYOND the chrome set (a tagline,
- * a line about the product, a newsletter note). A design that carries such a line
- * declares it `tagline: z.string().default("…the design's words…")` and renders the
- * prop, never a literal, so it reaches the CMS (Navigation → Footer) as a provisional
- * field the moment the site builds, prefilled from the schema's default. Edits live in
+ * FOOTER COPY: whatever a Footer's schema declares BEYOND the chrome set: the `note`
+ * every footer carries (`richtext.default("")`, a WYSIWYG field in the CMS), a tagline,
+ * a newsletter line. A design that carries such a line declares it
+ * `tagline: z.string().default("…the design's words…")` and renders the prop, never a
+ * literal, so it reaches the CMS (Navigation → Footer copy) as a provisional field the
+ * moment the site builds, prefilled from the schema's default. Edits live in
  * content/site.json `footer`; this resolves stored value over default, per field.
  */
 export function chromeCopy(def: BlockDef | undefined, stored: unknown): Record<string, unknown> {

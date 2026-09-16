@@ -25,6 +25,13 @@ export const legal: { copyright: string; links: FooterLink[] } = {
   links: [],
 };
 
+/**
+ * Contact details the footer shows when set (email and phone as links, the address as
+ * given). Promote moves them to content/site.json `contact`; the CMS edits them under
+ * Navigation → Footer copy, and the site's structured data carries them.
+ */
+export const contact: { email: string; phone: string; address: string } = { email: "", phone: "", address: "" };
+
 export function fillCopyright(text: string): string {
   return text.replace(/\{year\}/g, String(new Date().getFullYear())).replace(/\{siteName\}/g, siteConfig.clientName || "");
 }

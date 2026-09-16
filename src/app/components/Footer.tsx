@@ -1,6 +1,7 @@
 // ©2026 thinkany llc. All rights reserved.
 import { siteConfig } from "@/config/site";
 import { footerLinks, legal, fillCopyright } from "@/app/footer";
+import * as footerData from "@/app/footer"; // `contact` arrived later; an older project's footer.ts may lack it
 
 /**
  * Global site footer — rendered for every WEBSITE design page by DesignSurface,
@@ -13,6 +14,7 @@ import { footerLinks, legal, fillCopyright } from "@/app/footer";
  * legal line (copyright + privacy / terms links) sits beneath.
  */
 export function Footer({ onNavigate }: { onNavigate: (page: string) => void }) {
+  const contact = (footerData as { contact?: { email?: string; phone?: string; address?: string } }).contact || {};
   const linkClass = "font-ta-sans text-[11px] tracking-[0.08em] uppercase text-ta-body hover:text-ta-ink transition-colors cursor-pointer no-underline";
   const render = (l: { label: string; page?: string; href?: string }, cls: string) =>
     l.page ? (
@@ -57,6 +59,14 @@ export function Footer({ onNavigate }: { onNavigate: (page: string) => void }) {
           </nav>
         )}
       </div>
+      {(contact.email || contact.phone || contact.address) && (
+        // Contact details, when the project has them: email and phone as links, the address as given.
+        <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 font-ta-sans text-[12px] text-ta-body">
+          {contact.email && <a href={`mailto:${contact.email}`} className="no-underline hover:text-ta-ink">{contact.email}</a>}
+          {contact.phone && <a href={`tel:${contact.phone.replace(/[^+\d]/g, "")}`} className="no-underline hover:text-ta-ink">{contact.phone}</a>}
+          {contact.address && <span className="whitespace-pre-line">{contact.address}</span>}
+        </div>
+      )}
       <div className="mt-6 flex flex-col gap-2 border-t border-black/5 pt-4 @lg:flex-row @lg:items-center @lg:justify-between">
         <div className="font-ta-sans text-[11px] tracking-[0.08em] uppercase text-ta-muted">{fillCopyright(legal.copyright)}</div>
         {legal.links.length > 0 && (

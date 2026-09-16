@@ -26,6 +26,8 @@ export type LdInput = {
   siteName: string;
   logo?: string;          // brand logo path or URL
   schema?: SchemaSettings;
+  /** Site contact details (site.json `contact`); the publisher's phone / address when Structured data leaves them empty, plus its email. */
+  contact?: { email?: string; phone?: string; address?: string };
   url: string;            // canonical page URL (absolute)
   title: string;          // the page title (without the site name)
   description?: string;
@@ -74,8 +76,10 @@ export function buildJsonLd(i: LdInput): Record<string, unknown>[] {
   const logo = abs(base, s.logo || i.logo);
   if (logo) org[orgType === "Person" ? "image" : "logo"] = logo;
   if (s.sameAs && s.sameAs.length) org.sameAs = s.sameAs;
-  if (s.phone) org.telephone = s.phone;
-  if (s.address) org.address = { "@type": "PostalAddress", streetAddress: s.address };
+  const c = i.contact || {};
+  if (c.email) org.email = c.email;
+  if (s.phone || c.phone) org.telephone = s.phone || c.phone;
+  if (s.address || c.address) org.address = { "@type": "PostalAddress", streetAddress: s.address || c.address };
   if (orgType === "LocalBusiness" && s.hours) org.openingHours = s.hours;
   const website: Record<string, unknown> = { "@type": "WebSite", "@id": siteId, name: i.siteName, url: base + "/", publisher: { "@id": orgId } };
   const graph: Record<string, unknown>[] = [org, website];

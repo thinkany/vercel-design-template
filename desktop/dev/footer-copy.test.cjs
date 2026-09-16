@@ -16,7 +16,7 @@ const { footerCopyOf } = require("../block-schema.cjs");
 let checks = 0;
 const is = (got, want, msg) => { checks++; assert.deepStrictEqual(got, want, msg); };
 
-const chromeSet = { siteName: z.string(), logo: z.string().optional(), logos: z.object({ wordmark: z.string() }).default({ wordmark: "" }), nav: z.array(z.any()).default([]), footerLinks: z.array(z.any()).default([]), legal: z.object({ links: z.array(z.any()).default([]) }).default({ links: [] }) };
+const chromeSet = { siteName: z.string(), logo: z.string().optional(), logos: z.object({ wordmark: z.string() }).default({ wordmark: "" }), nav: z.array(z.any()).default([]), footerLinks: z.array(z.any()).default([]), legal: z.object({ links: z.array(z.any()).default([]) }).default({ links: [] }), contact: z.object({ email: z.string().default("") }).default({ email: "" }) };
 const footer = { name: "Footer", props: z.object({ ...chromeSet, tagline: z.string().default("The design's words."), note: z.string().describe("richtext").default("") }) };
 const bare = { name: "Footer", props: z.object(chromeSet) };
 
@@ -36,12 +36,12 @@ is(chromeCopy(footer, { tagline: "Edited in the CMS" }), { tagline: "Edited in t
 is(chromeCopy(footer, { tagline: 42, junk: "x", siteName: "hijack" }), { tagline: "The design's words.", note: "" }, "a wrong type falls back to the default; unknown and chrome keys are ignored");
 is(chromeCopy(bare, { tagline: "x" }), {}, "a footer with no copy props takes nothing from site.json");
 is(chromeCopy(undefined, { tagline: "x" }), {}, "no footer at all is fine");
-is([...CHROME_PROP_KEYS], ["siteName", "logo", "logos", "nav", "footerLinks", "legal"], "the chrome set the two sides agree on");
+is([...CHROME_PROP_KEYS], ["siteName", "logo", "logos", "nav", "footerLinks", "legal", "contact"], "the chrome set the two sides agree on");
 
 // Both sides name the same chrome set (the app's copy lives in block-schema.cjs).
 const fs = require("node:fs");
 const appSrc = fs.readFileSync(path.join(__dirname, "..", "block-schema.cjs"), "utf8");
 checks++;
-assert.ok(appSrc.includes('const CHROME_PROP_KEYS = ["siteName", "logo", "logos", "nav", "footerLinks", "legal"];'), "block-schema.cjs lists the same chrome set as site/src/lib/blocks.ts");
+assert.ok(appSrc.includes('const CHROME_PROP_KEYS = ["siteName", "logo", "logos", "nav", "footerLinks", "legal", "contact"];'), "block-schema.cjs lists the same chrome set as site/src/lib/blocks.ts");
 
 console.log(`footer-copy: ${checks} checks pass.`);

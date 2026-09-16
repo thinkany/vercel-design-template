@@ -33,7 +33,7 @@ const shareImage = meta.image || site.seo.image; // the page's own, else the sit
 const image = shareImage ? new URL(shareImage, Astro.site).href : undefined;
 
 const logos = resolveLogos(site.logos, siteConfig.logo || undefined, site.seo.siteName || siteConfig.clientName);
-const chromeProps = { siteName: siteConfig.clientName, logo: logos.header, logos, nav: await resolveNav(site), footerLinks: site.footerLinks, legal: site.legal };
+const chromeProps = { siteName: siteConfig.clientName, logo: logos.header, logos, nav: await resolveNav(site), footerLinks: site.footerLinks, legal: site.legal, contact: site.contact };
 // Plus the footer's own copy (its schema's extra props, site.json `footer` over the defaults).
 const footerProps = { ...chromeProps, ...chromeCopy(chrome.footer, site.footer) };
 // Self-hosted fonts (site/src/lib/self-host-fonts.mjs writes public/fonts at build and
@@ -55,7 +55,7 @@ const extra = (where: "head" | "bodyStart" | "bodyEnd") => (injectScripts ? site
 // Structured data: one JSON-LD graph, generated (site/src/lib/schema.ts) + the page's custom block.
 const ldText = jsonLdText({
   siteUrl: Astro.site ? Astro.site.href.replace(/\/$/, "") : "",
-  siteName, logo: siteConfig.logo || undefined, schema: site.seo.schema,
+  siteName, logo: siteConfig.logo || undefined, schema: site.seo.schema, contact: site.contact,
   url: canonical, title: (seo && (seo as { title?: string }).title) || title, description: meta.description, image,
   page: ld || { kind: "page" }, blocks: ldBlocks || [], custom: seo ? (seo as { jsonld?: string }).jsonld : undefined,
 });
