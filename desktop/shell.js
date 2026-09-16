@@ -8363,6 +8363,10 @@ async function renderSiteSettings(host, data, st) {
     const h = siteEl("div", "sess-desc", hint); h.style.margin = "-6px 0 12px 22px";
     return { row, cb, hint: h };
   };
+  // Visibility first: whether the site is to be found at all, then the sitemap.
+  const disc = toggle(S.discourage, S.discourageHint, seo.discourage, (on) => { seo.discourage = on; paintSeo(); saveSeo(); if (on) window.desktop.setCmsSettings({ ui: { notices: { discourage: false } } }).catch(() => {}); });
+  const smap = toggle(S.sitemap, S.sitemapHint, seo.sitemap, (on) => { seo.sitemap = on; saveSeo(); });
+  wrap.append(disc.row, disc.hint, smap.row, smap.hint);
   // Website name, title separator, site image (the defaults every page's SEO falls back to).
   let seoTimer = null; const saveSeoSoon = () => { clearTimeout(seoTimer); seoTimer = setTimeout(saveSeo, 1000); };
   const sn = siteField(S.siteNameLabel, seo.siteName || "", { hint: S.siteNameHint, placeholder: (data.site && data.site.siteNameDefault) || "" });
@@ -8425,10 +8429,8 @@ async function renderSiteSettings(host, data, st) {
   const shours = siteField(S.schemaHours, seo.schema.hours || "", { hint: S.schemaHoursHint }); shours.input.addEventListener("input", () => { seo.schema.hours = shours.input.value; saveSeoSoon(); }); local.appendChild(shours.wrap);
   sch.body.appendChild(local);
   wrap.appendChild(sch.sec);
-  const disc = toggle(S.discourage, S.discourageHint, seo.discourage, (on) => { seo.discourage = on; paintSeo(); saveSeo(); if (on) window.desktop.setCmsSettings({ ui: { notices: { discourage: false } } }).catch(() => {}); });
-  const smap = toggle(S.sitemap, S.sitemapHint, seo.sitemap, (on) => { seo.sitemap = on; saveSeo(); });
   const llm = toggle(S.llms, S.llmsHint, seo.llms.enabled, (on) => { seo.llms.enabled = on; paintSeo(); saveSeo(); });
-  wrap.append(disc.row, disc.hint, smap.row, smap.hint, llm.row, llm.hint);
+  wrap.append(llm.row, llm.hint);
   // llms.txt content: the saved custom text, or the generated version as a starting point.
   const llmBox = siteEl("div", "site-kv"); llmBox.style.marginLeft = "22px";
   llmBox.appendChild(siteEl("div", "k", S.llmsContent));
