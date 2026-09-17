@@ -488,6 +488,27 @@ window.COPY = {
       applyingEcho: (title) => `Apply: ${title}`,
       creatingEcho: (title) => `Create the "${title}" page`,
       createFailed: "The page could not be created.",
+      // Phase 3: Find more, earlier reviews, since the last review, carry-over.
+      findMore: "Find more",
+      finding: "Searching for competitors…",
+      findFailed: "The search did not come back.",
+      findNone: "No new competitors found. Add one by address.",
+      foundLabel: "Suggested (click to add)",
+      earlier: "Earlier reviews",
+      runOption: (when, recs, done) => `${when}: ${recs} recommendation${recs === 1 ? "" : "s"}, ${done} done`,
+      latestSuffix: " (latest)",
+      viewingOld: (when) => `Viewing the review from ${when}. Recommendations here are read-only; the latest review holds the live ones.`,
+      oldRunNote: "This is an earlier review. Switch to the latest to act on its recommendations.",
+      since: (when) => `Since the last review (${when})`,
+      sinceNothing: "Nothing moved in the field, and this site reads the same.",
+      sinceAdded: (host) => `${host} joined the list.`,
+      sinceRemoved: (host) => `${host} left the list.`,
+      sinceChange: (site, col, from, to) => {
+        const val = (v) => (v === true ? "yes" : v === false || v == null || v === "" ? "none" : String(v));
+        return `${site}: ${col} went from ${val(from)} to ${val(to)}.`;
+      },
+      sinceDone: (n) => `${n} recommendation${n === 1 ? " was" : "s were"} applied from the last review.`,
+      carried: "Carried over: you already decided this one last time.",
     },
     mediaTabDesc: "Every image in the project, the same library the image fields pick from. Hover an image to rename or delete it.",
     mediaVideoDesc: "The clips this site plays. Each one keeps the poster still taken when it was added, which is what shows before it starts and for visitors who ask for less motion.",

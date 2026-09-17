@@ -171,6 +171,46 @@ const runExtractor = (url, flags = []) => new Promise((resolve, reject) => execF
   ok(!cmpCopy.includes("—"), "no em-dash in the tab's copy");
   ok(/\.cmp-table \{/.test(html) && /\.cmp-angle-opportunity \{/.test(html) && /\.cmp-evidence \{/.test(html), "the tab's CSS is in");
 
+  // 10. phase 3: carry-over, the since-last diff, candidates, the find prompt.
+  const prevRun = { active: [{ id: "a", title: "Show prices on the home page", held: true }], completed: [{ id: "b", title: "Add a FAQ to Services" }], dismissed: [{ id: "c", title: "Shorten the contact form" }] };
+  const fresh = [{ id: "x1", title: "Add a FAQ to services." }, { id: "x2", title: "Shorten the Contact form" }, { id: "x3", title: "Show prices on the home page" }, { id: "x4", title: "Add a proof row under the hero" }];
+  const carried = C.carryOver(prevRun, fresh);
+  eq(carried.completed.map((r) => r.id), ["x1"], "a rec titled like one already done lands in done");
+  ok(carried.completed[0].carried === true, "and is flagged carried");
+  eq(carried.dismissed.map((r) => r.id), ["x2"], "a dismissed one stays dismissed, punctuation and case aside");
+  eq(carried.active.map((r) => [r.id, !!r.held]), [["x3", true], ["x4", false]], "a held one stays held, a new one is open");
+  eq(C.carryOver(null, fresh).active.length, 4, "no previous run: everything is open");
+  const readA = { field: [field[0]], site };
+  const readB = { field: [{ ...field[0], pages: field[0].pages.map((pg) => ({ ...pg, sections: pg.sections.filter((x) => x.type !== "faq") })) }, { url: "https://new.example/", nav: { pattern: "simple", items: [] }, pages: [{ route: "/", sections: [], forms: [] }] }], site: { ...site, posts: 0 } };
+  const diff = C.diffRuns(readA, readB);
+  eq(diff.added, ["new.example"], "a competitor that joined");
+  eq(diff.removed, [], "none left");
+  ok(diff.changes.some((c) => !c.self && c.column === "faq" && c.from === true && c.to === false), "the competitor's FAQ went away");
+  ok(diff.changes.some((c) => c.self && c.column === "blog" && c.to === false), "this site's blog changed too");
+  ok(C.diffRuns(null, readB) === null, "no previous read: no diff");
+  const cands = C.parseCandidates('Here you go:\n[{"url":"acme.com","name":"Acme","why":"same trade"},{"url":"https://www.facebook.com/x"},{"url":"https://mf.example/about"},{"url":"https://b.co/","name":"B"},{"url":"https://acme.com/pricing"}] done', { exclude: ["https://b.co/"], selfUrl: "https://mf.example" });
+  eq(cands.map((c) => c.url), ["https://acme.com/"], "candidates: normalized, social networks, the site itself, the already-listed and duplicates dropped");
+  eq(cands[0].name, "Acme", "with their names");
+  eq(C.parseCandidates("no json here"), [], "no array: no candidates");
+  const fp = C.buildFindPrompt({ site, brief: { what: "an interiors studio" }, list: ["https://b.co/"] });
+  ok(/ONLY a JSON array/.test(fp) && /never list it/.test(fp) && /do not repeat: https:\/\/b\.co\//.test(fp) && !fp.includes("—"), "the find prompt asks for JSON only, excludes the site and the list, no em-dash");
+  const summary = C.runSummary({ ranAt: "2026-09-16T00:00:00Z", sitesRead: 3, sitesFailed: ["x"], active: [1, 2], completed: [3], dismissed: [] }, 1);
+  eq(summary, { index: 1, ranAt: "2026-09-16T00:00:00Z", sitesRead: 3, sitesFailed: 1, recs: 3, done: 1 }, "a run summary for the archive");
+
+  // 11. phase 3 wiring (static).
+  const shell3 = fs.readFileSync(path.join(ROOT, "desktop", "shell.js"), "utf8");
+  const main3 = fs.readFileSync(path.join(ROOT, "desktop", "main.cjs"), "utf8");
+  const preload3 = fs.readFileSync(path.join(ROOT, "desktop", "preload.cjs"), "utf8");
+  const copy3 = fs.readFileSync(path.join(ROOT, "desktop", "copy.js"), "utf8");
+  ok(/function markdownBlocks\(text\)/.test(shell3) && /function renderMarkdownBlocksInto\(parent, blocks\)/.test(shell3) && /renderMarkdownInto\(lede, blocks\[ledeAt\]\.text\)/.test(shell3), "the report renders as markdown (headings, lists, bold)");
+  ok(/st\.since && !viewingOld/.test(shell3) && /T\.sinceChange\(/.test(shell3), "the since-last block paints on the latest run");
+  ok(/window\.desktop\.findCompetitors\(list\)/.test(shell3) && /cmp-cand/.test(shell3), "Find more offers candidates as chips");
+  ok(/siteRailState\.cmpRun = Number\(pick\.value\)/.test(shell3) && /T\.oldRunNote/.test(shell3), "earlier reviews are selectable and read-only");
+  ok(main3.includes('ipcMain.handle("competitor:find"') && /competitors\.parseCandidates\(text/.test(main3), "main handles Find more through a read-only turn");
+  ok(/competitors\.carryOver\(prevRun,/.test(main3) && /competitors\.diffRuns\(readOf\(prev\), read\)/.test(main3) && /runs: runs\.map\(competitors\.runSummary\)/.test(main3), "a run carries decisions over, diffs against the previous read, and lists the archive");
+  ok(preload3.includes("findCompetitors:") && /getCompetitors: \(index\)/.test(preload3), "the bridge carries find and the run index");
+  ok(/findMore: "Find more"/.test(copy3) && /sinceChange:/.test(copy3) && /oldRunNote:/.test(copy3), "phase 3 copy exists");
+
   server.close();
   fs.rmSync(proj, { recursive: true, force: true });
   console.log(`competitor review: ${checks} checks passed`);

@@ -4030,25 +4030,65 @@ function competitorExtractor(dir) {
   return unpacked(path.join(appRoot, "desktop", "template", "scripts", "extract-layout.mjs"));
 }
 let competitorReviewRunning = false;
-function competitorState(dir) {
+let competitorFindRunning = false;
+// The tab's state: the list, the chosen run (the latest unless an earlier one is being
+// viewed), its field table, the run list for the archive, and, for the latest run, what
+// moved since the one before it.
+function competitorState(dir, index = 0) {
   const store = competitors.loadStore(dir);
   // An empty list is seeded from the brief's references, the sites the designer named as models.
   const list = (store.list || []).length ? store.list : competitors.readBriefSummary(dir).references.map(competitors.normalizeUrl).filter(Boolean).slice(0, competitors.MAX_COMPETITORS);
-  const run = (store.runs || [])[0] || null;
-  let table = null;
-  if (run && run.read) { const read = readJsonFile(path.join(dir, ".thinkany", run.read)); if (read) table = competitors.fieldTable(read); }
-  return { licensed: competitorLicensed(), hasKey: !!process.env.ANTHROPIC_API_KEY, running: competitorReviewRunning, list, seeded: !(store.list || []).length && list.length > 0, run, runs: (store.runs || []).length, table };
+  const runs = store.runs || [];
+  const i = Math.min(Math.max(0, index | 0), Math.max(0, runs.length - 1));
+  const run = runs[i] || null;
+  const readOf = (r) => (r && r.read ? readJsonFile(path.join(dir, ".thinkany", r.read)) : null);
+  const read = readOf(run);
+  const table = read ? competitors.fieldTable(read) : null;
+  const prev = i === 0 && runs[1] ? runs[1] : null;
+  const since = prev ? { ...(competitors.diffRuns(readOf(prev), read) || { added: [], removed: [], changes: [] }), doneBefore: (prev.completed || []).length, prevAt: prev.ranAt } : null;
+  return {
+    licensed: competitorLicensed(), hasKey: !!process.env.ANTHROPIC_API_KEY, running: competitorReviewRunning, finding: competitorFindRunning,
+    list, seeded: !(store.list || []).length && list.length > 0,
+    run, index: i, runs: runs.map(competitors.runSummary), table, since,
+  };
 }
-ipcMain.handle("competitor:get", () => (currentProject ? competitorState(currentProject) : { licensed: false, hasKey: false, running: false, list: [], run: null, runs: 0, table: null }));
+ipcMain.handle("competitor:get", (_e, { index } = {}) => (currentProject ? competitorState(currentProject, index || 0) : { licensed: false, hasKey: false, running: false, finding: false, list: [], run: null, index: 0, runs: [], table: null, since: null }));
+// "Find more": one short read-only turn (WebSearch) that names candidate competitor sites;
+// the tab offers them as chips to add. Never adds anything itself.
+ipcMain.handle("competitor:find", async (_e, { list } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!competitorLicensed()) return { ok: false, error: "The competitor review is part of the Design license. Add your key under Keys & Licenses." };
+  if (!process.env.ANTHROPIC_API_KEY) return { ok: false, reason: "no-key", error: "Add your Claude API key to search for competitors." };
+  if (competitorFindRunning) return { ok: false, error: "A search is already running." };
+  competitorFindRunning = true;
+  const dir = currentProject;
+  try {
+    const site = competitors.readProjectContent(dir);
+    const brief = competitors.readBriefSummary(dir);
+    const prompt = competitors.buildFindPrompt({ site, brief, list: Array.isArray(list) ? list : [] });
+    const { runPrompt } = await import(pathToFileURL(path.join(__dirname, "agent.mjs")).href);
+    let text = "", errorMsg = null;
+    await runPrompt({
+      prompt, cwd: dir, model: currentModel, reviewMode: "competitor",
+      onEvent: (ev) => { if (ev.type === "text") text += ev.text; else if (ev.type === "error") errorMsg = ev.message; },
+      projectState: projectStateForAgent(dir),
+    });
+    const candidates = competitors.parseCandidates(text, { exclude: Array.isArray(list) ? list : [], selfUrl: site.url });
+    if (!candidates.length && errorMsg) return { ok: false, error: errorMsg };
+    return { ok: true, candidates };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+  finally { competitorFindRunning = false; }
+});
 ipcMain.handle("competitor:saveList", (_e, { list } = {}) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   return { ok: true, list: competitors.saveList(currentProject, Array.isArray(list) ? list : []) };
 });
-ipcMain.handle("competitor:saveRecs", (_e, { active, dismissed, completed } = {}) => {
+ipcMain.handle("competitor:saveRecs", (_e, { active, dismissed, completed, index } = {}) => {
   if (!currentProject) return { ok: false, error: "No project is open." };
   const store = competitors.loadStore(currentProject);
-  if (!store.runs || !store.runs[0]) return { ok: false, error: "No review yet." };
-  store.runs[0] = { ...store.runs[0], active: active || [], dismissed: dismissed || [], completed: completed || [] };
+  const i = index | 0;
+  if (!store.runs || !store.runs[i]) return { ok: false, error: "No review yet." };
+  store.runs[i] = { ...store.runs[i], active: active || [], dismissed: dismissed || [], completed: completed || [] };
   competitors.saveStore(currentProject, store);
   return { ok: true };
 });
@@ -4083,10 +4123,14 @@ ipcMain.handle("competitor:review", async (event, { list } = {}) => {
       projectState: projectStateForAgent(dir),
     });
     if (errorMsg && !suggestions.length && !report.trim()) { send({ phase: "error", message: errorMsg }); return { ok: false, error: errorMsg }; }
+    // A decision already made on a like-titled rec last time carries over (done or dismissed
+    // stay so; held stays held), so a re-run never asks the same question twice.
+    const prevRun = competitors.latestRun(dir);
+    const carried = competitors.carryOver(prevRun, suggestions.map((s, i) => ({ ...s, id: s.id || `c${i + 1}` })));
     const run = competitors.recordRun(dir, {
       ranAt: new Date().toISOString(), read: readPath,
       sitesRead: field.filter((c) => !c.failed).length, sitesFailed: field.filter((c) => c.failed).map((c) => c.url),
-      report: report.trim(), active: suggestions.map((s, i) => ({ ...s, id: s.id || `c${i + 1}` })),
+      report: report.trim(), ...carried,
     });
     appLog.write("info", "competitors", `review done: ${run.sitesRead} read, ${run.active.length} suggestion(s)`);
     send({ phase: "done" });

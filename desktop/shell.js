@@ -9027,9 +9027,12 @@ function siteAccordionize(wrap) {
 let competitorProgressOff = null;
 async function renderSiteCompetitors(host, data, refresh) {
   const T = COPY.site.competitors;
-  const st = await window.desktop.getCompetitors().catch(() => ({ licensed: false, hasKey: false, running: false, list: [], run: null, runs: 0, table: null }));
+  const wantIndex = siteRailState.cmpRun | 0;
+  const st = await window.desktop.getCompetitors(wantIndex).catch(() => ({ licensed: false, hasKey: false, running: false, finding: false, list: [], run: null, index: 0, runs: [], table: null, since: null }));
   let list = (st.list || []).slice();
   const run = st.run || null;
+  const viewingOld = (st.index | 0) > 0; // an earlier review: read-only
+  siteRailState.cmpRun = st.index | 0;
 
   // ── Header: the list + Review ──
   const head = siteEl("div", "cmp-head");
@@ -9060,14 +9063,52 @@ async function renderSiteCompetitors(host, data, refresh) {
     list = (saved && saved.list) || list; inp.value = ""; paintChips(); updateReview();
   };
   addBtn.addEventListener("click", add); inp.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
-  addRow.append(inp, addBtn); listWrap.appendChild(addRow);
+  addRow.append(inp, addBtn);
+  // "Find more": one short read-only turn names candidate sites; they appear as chips to add.
+  const findBtn = siteEl("button", "panelbtn", T.findMore); findBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+  findBtn.disabled = !st.licensed || !st.hasKey || st.finding || list.length >= 6;
+  findBtn.title = !st.licensed ? T.notLicensed : !st.hasKey ? T.needKey : list.length >= 6 ? T.max : "";
+  addRow.appendChild(findBtn);
+  listWrap.appendChild(addRow);
+  const found = siteEl("div", "cmp-found"); found.hidden = true; listWrap.appendChild(found);
+  findBtn.addEventListener("click", async () => {
+    if (findBtn.disabled) return;
+    findBtn.disabled = true; found.hidden = false; found.innerHTML = ""; found.appendChild(siteEl("div", "sess-desc", T.finding));
+    const res = await window.desktop.findCompetitors(list).catch((e) => ({ ok: false, error: String(e) }));
+    found.innerHTML = "";
+    findBtn.disabled = list.length >= 6;
+    if (!res || !res.ok) { found.appendChild(siteEl("div", "sess-desc cmp-err", (res && res.error) || T.findFailed)); return; }
+    if (!res.candidates.length) { found.appendChild(siteEl("div", "sess-desc", T.findNone)); return; }
+    found.appendChild(siteEl("div", "sess-label", T.foundLabel));
+    const cands = siteEl("div", "cmp-chips");
+    res.candidates.forEach((c) => {
+      const chip = siteEl("button", "cmp-chip cmp-cand"); chip.type = "button"; chip.title = c.why || c.url;
+      chip.appendChild(siteEl("span", "cmp-chip-host", c.name || hostOfUrl(c.url)));
+      chip.appendChild(siteEl("span", "cmp-chip-add", "+"));
+      chip.addEventListener("click", async () => {
+        if (list.length >= 6) { inp.placeholder = T.max; return; }
+        const saved = await window.desktop.saveCompetitorList([...list, c.url]);
+        list = (saved && saved.list) || list; chip.remove(); paintChips(); updateReview();
+        if (!cands.children.length) found.hidden = true;
+      });
+      cands.appendChild(chip);
+    });
+    found.appendChild(cands);
+  });
   head.appendChild(listWrap);
 
   const act = siteEl("div", "cmp-act");
   const reviewBtn = siteEl("button", "panelbtn primary", run ? T.reviewAgain : T.review); reviewBtn.style.cssText = "margin:0;width:auto;";
   const progress = siteEl("div", "cmp-progress"); progress.hidden = true;
-  const when = siteEl("div", "sess-desc", run ? T.lastRun(new Date(run.ranAt).toLocaleString(), run.sitesRead, (run.sitesFailed || []).length) : T.notYet);
+  const when = siteEl("div", "sess-desc", run ? (viewingOld ? T.viewingOld(new Date(run.ranAt).toLocaleString()) : T.lastRun(new Date(run.ranAt).toLocaleString(), run.sitesRead, (run.sitesFailed || []).length)) : T.notYet);
   act.append(reviewBtn, progress, when);
+  // Earlier reviews: a small select; the latest is the only one with live actions.
+  if ((st.runs || []).length > 1) {
+    const pick = document.createElement("select"); pick.className = "field cmp-runs"; pick.setAttribute("aria-label", T.earlier);
+    st.runs.forEach((r) => { const o = document.createElement("option"); o.value = String(r.index); o.textContent = T.runOption(new Date(r.ranAt).toLocaleString(), r.recs, r.done) + (r.index === 0 ? T.latestSuffix : ""); if (r.index === (st.index | 0)) o.selected = true; pick.appendChild(o); });
+    pick.addEventListener("change", () => { siteRailState.cmpRun = Number(pick.value) || 0; siteRailState.selected = null; refresh(); });
+    act.appendChild(pick);
+  }
   head.appendChild(act);
   host.appendChild(head);
   if (!st.licensed) { host.appendChild(siteEl("div", "sess-desc cmp-note", T.notLicensed)); }
@@ -9102,19 +9143,34 @@ async function renderSiteCompetitors(host, data, refresh) {
 
   if (!run) { host.appendChild(siteEl("div", "sess-desc cmp-intro", T.intro)); return; }
 
-  // ── The report's lede + the field table ──
-  const paras = String(run.report || "").split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
-  if (paras.length) {
+  // ── The report's lede (the first paragraph, as markdown) + the rest behind a fold ──
+  const blocks = markdownBlocks(String(run.report || ""));
+  const ledeAt = blocks.findIndex((b) => b.type === "p");
+  if (blocks.length) {
     const rep = siteEl("div", "cmp-report");
-    rep.appendChild(siteEl("p", "cmp-lede", paras[0]));
-    if (paras.length > 1) {
+    if (ledeAt !== -1) { const lede = siteEl("p", "cmp-lede"); renderMarkdownInto(lede, blocks[ledeAt].text); rep.appendChild(lede); }
+    const rest = blocks.filter((_, i) => i !== ledeAt);
+    if (rest.length) {
       const more = siteEl("div", "cmp-report-more"); more.hidden = true;
-      paras.slice(1).forEach((t) => more.appendChild(siteEl("p", "", t)));
+      renderMarkdownBlocksInto(more, rest);
       const tog = siteEl("button", "site-mini", T.readMore); tog.type = "button";
       tog.addEventListener("click", () => { more.hidden = !more.hidden; tog.textContent = more.hidden ? T.readMore : T.readLess; });
       rep.append(tog, more);
     }
     host.appendChild(rep);
+  }
+  // ── Since the last review: what moved between the two reads ──
+  if (st.since && !viewingOld) {
+    const sc = st.since; const lines = [];
+    sc.added.forEach((h) => lines.push(T.sinceAdded(h)));
+    sc.removed.forEach((h) => lines.push(T.sinceRemoved(h)));
+    sc.changes.slice(0, 8).forEach((c) => lines.push(T.sinceChange(c.self ? T.thisSite : c.site, T.columns[c.column] || c.column, c.from, c.to)));
+    if (sc.doneBefore) lines.push(T.sinceDone(sc.doneBefore));
+    const box = siteEl("div", "cmp-since");
+    box.appendChild(siteEl("div", "sess-label", T.since(new Date(sc.prevAt).toLocaleDateString())));
+    if (!lines.length) box.appendChild(siteEl("div", "sess-desc", T.sinceNothing));
+    else { const ul = document.createElement("ul"); ul.className = "cmp-since-list"; lines.forEach((t) => { const li = document.createElement("li"); li.textContent = t; ul.appendChild(li); }); box.appendChild(ul); }
+    host.appendChild(box);
   }
   if (st.table && st.table.rows && st.table.rows.length) host.appendChild(competitorTable(st.table, T));
 
@@ -9124,7 +9180,7 @@ async function renderSiteCompetitors(host, data, refresh) {
   const completed = (run.completed || []).slice();
   const held = active.filter((r) => r.held);
   const open = active.filter((r) => !r.held);
-  const persist = () => window.desktop.saveCompetitorRecs(active, dismissed, completed).catch(() => {});
+  const persist = () => window.desktop.saveCompetitorRecs(active, dismissed, completed, st.index | 0).catch(() => {});
   const cols = siteEl("div", "site-cols cmp-cols"); const left = siteEl("div"); const right = siteEl("div", "site-detail"); cols.append(left, right); host.appendChild(cols);
   const sel = siteRailState.selected && siteRailState.selected.kind === "cmp" ? siteRailState.selected.id : null;
   const all = [...open, ...held, ...completed, ...dismissed];
@@ -9172,6 +9228,7 @@ async function renderSiteCompetitors(host, data, refresh) {
     right.appendChild(top);
     right.appendChild(siteEl("h3", "cmp-detail-title", rec.title || rec.id));
     if (rec.why) right.appendChild(siteEl("p", "cmp-detail-why", rec.why));
+    if (rec.carried) right.appendChild(siteEl("div", "sess-desc cmp-carried", T.carried));
     if (rec.evidence) { const ev = siteEl("div", "cmp-evidence"); ev.appendChild(siteEl("div", "cmp-evidence-label", T.evidence)); ev.appendChild(siteEl("div", "cmp-evidence-text", rec.evidence)); right.appendChild(ev); }
     if (rec.kind === "create" && rec.create) right.appendChild(siteEl("p", "sess-desc", T.createPlan(rec.create.title, (rec.create.blocks || []).join(", "))));
     // The block the move lands on, live, at the width the designer picks.
@@ -9187,7 +9244,8 @@ async function renderSiteCompetitors(host, data, refresh) {
       if (to === "held") { rec.held = true; active.push(rec); } else if (to === "open") active.push(rec); else if (to === "dismissed") dismissed.push(rec); else if (to === "done") completed.push(rec);
       persist(); siteRailState.selected = { kind: "cmp", id: rec.id }; refresh();
     };
-    if (state === "open" || state === "held") {
+    if (viewingOld) acts.appendChild(siteEl("div", "sess-desc", T.oldRunNote));
+    else if (state === "open" || state === "held") {
       if ((rec.kind === "code" && rec.apply) || (rec.kind === "create" && rec.create)) {
         const a = btn(rec.kind === "create" ? T.createPage : T.apply, "primary", () => { moveTo("done"); applyCompetitorRec(rec, page, data); });
         a.disabled = !appHasKey || agentBusy; if (a.disabled) a.title = !appHasKey ? COPY.errors.needKey : T.busy;
@@ -9202,6 +9260,34 @@ async function renderSiteCompetitors(host, data, refresh) {
   paintDetail();
 }
 function hostOfUrl(u) { try { return new URL(u).host.replace(/^www\./, ""); } catch { return String(u || ""); } }
+// A small block-level markdown read for a report: headings, bullet and numbered lists,
+// paragraphs; inline bold and code through renderMarkdownInto (the chat's own).
+function markdownBlocks(text) {
+  const out = [];
+  const lines = String(text || "").replace(/\r/g, "").split("\n");
+  let para = [], list = null;
+  const flushPara = () => { if (para.length) { out.push({ type: "p", text: para.join(" ").trim() }); para = []; } };
+  const flushList = () => { if (list) { out.push(list); list = null; } };
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const h = /^(#{1,6})\s+(.*)$/.exec(line);
+    const li = /^\s*(?:[-*•]|\d+[.)])\s+(.*)$/.exec(line);
+    if (!line.trim()) { flushPara(); flushList(); continue; }
+    if (h) { flushPara(); flushList(); out.push({ type: "h", level: h[1].length, text: h[2].trim() }); continue; }
+    if (li) { flushPara(); const ordered = /^\s*\d/.test(line); if (!list || list.ordered !== ordered) { flushList(); list = { type: "list", ordered, items: [] }; } list.items.push(li[1].trim()); continue; }
+    if (list && /^\s{2,}\S/.test(raw)) { list.items[list.items.length - 1] += " " + line.trim(); continue; } // a wrapped list item
+    flushList(); para.push(line.trim());
+  }
+  flushPara(); flushList();
+  return out;
+}
+function renderMarkdownBlocksInto(parent, blocks) {
+  for (const b of blocks) {
+    if (b.type === "h") { const h = document.createElement("h4"); renderMarkdownInto(h, b.text); parent.appendChild(h); }
+    else if (b.type === "list") { const l = document.createElement(b.ordered ? "ol" : "ul"); b.items.forEach((t) => { const li = document.createElement("li"); renderMarkdownInto(li, t); l.appendChild(li); }); parent.appendChild(l); }
+    else { const p = document.createElement("p"); renderMarkdownInto(p, b.text); parent.appendChild(p); }
+  }
+}
 function blockNameOf(data, type) { const b = (data.blocks || []).find((x) => x.key === type || x.type === type); return b ? b.name : null; }
 // The field table: this site first, then each competitor; a tick, a dash, a count or a label per cell.
 function competitorTable(table, T) {

@@ -68,10 +68,11 @@ contextBridge.exposeInMainWorld("desktop", {
   setImagesMode: (placeholder) => ipcRenderer.invoke("images:set", { placeholder }),
   getResearch: () => ipcRenderer.invoke("research:get"),
   // Competitor review (the Competitors tab in the site builder).
-  getCompetitors: () => ipcRenderer.invoke("competitor:get"),
+  getCompetitors: (index) => ipcRenderer.invoke("competitor:get", { index: index || 0 }),
   saveCompetitorList: (list) => ipcRenderer.invoke("competitor:saveList", { list }),
   runCompetitorReview: (list) => ipcRenderer.invoke("competitor:review", { list }),
-  saveCompetitorRecs: (active, dismissed, completed) => ipcRenderer.invoke("competitor:saveRecs", { active, dismissed, completed }),
+  findCompetitors: (list) => ipcRenderer.invoke("competitor:find", { list }),
+  saveCompetitorRecs: (active, dismissed, completed, index) => ipcRenderer.invoke("competitor:saveRecs", { active, dismissed, completed, index: index || 0 }),
   onCompetitorProgress: (cb) => {
     const listener = (_e, payload) => cb(payload);
     ipcRenderer.on("competitor:progress", listener);
