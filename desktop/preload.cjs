@@ -67,6 +67,16 @@ contextBridge.exposeInMainWorld("desktop", {
   getImagesMode: () => ipcRenderer.invoke("images:get"),
   setImagesMode: (placeholder) => ipcRenderer.invoke("images:set", { placeholder }),
   getResearch: () => ipcRenderer.invoke("research:get"),
+  // Competitor review (the Competitors tab in the site builder).
+  getCompetitors: () => ipcRenderer.invoke("competitor:get"),
+  saveCompetitorList: (list) => ipcRenderer.invoke("competitor:saveList", { list }),
+  runCompetitorReview: (list) => ipcRenderer.invoke("competitor:review", { list }),
+  saveCompetitorRecs: (active, dismissed, completed) => ipcRenderer.invoke("competitor:saveRecs", { active, dismissed, completed }),
+  onCompetitorProgress: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    ipcRenderer.on("competitor:progress", listener);
+    return () => ipcRenderer.removeListener("competitor:progress", listener);
+  },
   setResearchGlobal: (enabled) => ipcRenderer.invoke("research:setGlobal", { enabled }),
   setResearchVariation: (enabled) => ipcRenderer.invoke("research:setVariation", { enabled }),
   setResearchBroadGlobal: (enabled) => ipcRenderer.invoke("research:setBroadGlobal", { enabled }),

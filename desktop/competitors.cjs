@@ -274,7 +274,66 @@ function buildReviewPrompt({ field, site, brief, readPath }) {
   return lines.join("\n");
 }
 
+// ---- the field table -------------------------------------------------------------------
+// One row per competitor plus this site, one column per signal the read carries, so the
+// designer sees the gaps before reading a word. Booleans and small counts; never prose.
+const BLOG_RE = /\b(blog|news|journal|insights?|articles?|stories|resources|updates)\b/i;
+const PRICING_RE = /\b(pric(e|es|ing)|plans?|packages?|rates?)\b/i;
+const FAQ_RE = /\bfaqs?\b|questions/i;
+const TESTIMONIAL_RE = /testimonial|review|what (our )?(clients|customers) say|in their words|quote/i;
+const LOGOS_RE = /trusted by|as seen|partners?|clients?\b|logos?/i;
+const COLUMNS = ["pricing", "faq", "testimonials", "logos", "stats", "form", "blog", "cta"];
+function competitorRow(c) {
+  const pages = (c.pages || []).filter((p) => !p.failed);
+  const sections = pages.flatMap((p) => p.sections || []);
+  const home = pages.find((p) => p.route === "/") || pages[0] || { sections: [], forms: [] };
+  const navText = (c.nav && c.nav.items || []).join(" ");
+  const any = (fn) => sections.some(fn);
+  const fields = pages.flatMap((p) => (p.forms || []).filter((n) => n > 0));
+  const hero = (home.sections || [])[0];
+  return {
+    name: hostOf(c.url), url: c.url, self: false, failed: !!c.failed,
+    cells: c.failed ? {} : {
+      pricing: any((s) => s.type === "pricing") || PRICING_RE.test(navText) || pages.some((p) => PRICING_RE.test(p.route)),
+      faq: any((s) => s.type === "faq" || FAQ_RE.test(s.heading || "")),
+      testimonials: any((s) => s.type === "testimonial" || (s.proof && s.proof.quotes > 0)),
+      logos: any((s) => s.type === "logos" || (s.proof && s.proof.logos >= 3)),
+      stats: (home.sections || []).reduce((n, s) => n + ((s.proof && s.proof.stats) || 0), 0),
+      form: fields.length ? Math.min(...fields) : false,
+      blog: BLOG_RE.test(navText),
+      cta: (hero && hero.ctas && hero.ctas[0]) || "",
+    },
+  };
+}
+function siteRow(site) {
+  const pages = site.pages || [];
+  const blocks = pages.flatMap((p) => p.blocks || []);
+  const text = (b) => [b.type, ...(b.headings || [])].join(" ");
+  const any = (re) => blocks.some((b) => re.test(text(b)));
+  const home = pages.find((p) => p.id === "home") || pages[0] || { blocks: [] };
+  const hero = (home.blocks || [])[0];
+  return {
+    name: site.name, url: site.url, self: true, failed: false,
+    cells: {
+      pricing: any(PRICING_RE) || (site.nav || []).some((n) => PRICING_RE.test(n.label || "") || PRICING_RE.test(n.href || "")),
+      faq: any(FAQ_RE),
+      testimonials: any(TESTIMONIAL_RE),
+      logos: any(LOGOS_RE),
+      stats: blocks.reduce((n, b) => n + ((b.sample || "").match(/\b\d[\d,.]*\s?(?:\+|%|k\b|years?|clients?|customers?|projects?)/gi) || []).length, 0),
+      form: pages.some((p) => p.forms > 0) ? true : false,
+      blog: site.posts > 0 || (site.nav || []).some((n) => BLOG_RE.test(n.label || "") || BLOG_RE.test(n.href || "")),
+      cta: (hero && hero.ctas && hero.ctas[0]) || "",
+    },
+  };
+}
+function hostOf(u) { try { return new URL(u).host.replace(/^www\./, ""); } catch { return String(u || ""); } }
+function fieldTable(read) {
+  const rows = [siteRow(read.site || {}), ...(read.field || []).map(competitorRow)];
+  return { columns: COLUMNS, rows };
+}
+
 module.exports = {
+  fieldTable, competitorRow, siteRow, hostOf,
   MAX_COMPETITORS, DEFAULT_PAGES, SKIP_PAGE,
   normalizeUrl, sameSiteUrl, pickPages, extractPage, compactSection, compactPage,
   readCompetitor, readField, blockText, readProjectContent, readBriefSummary,

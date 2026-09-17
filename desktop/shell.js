@@ -9018,6 +9018,249 @@ function siteAccordionize(wrap) {
   const sw = wrap.querySelector(".site-enable-row"); if (sw) sw.dataset.tour = "cms-settings-enable";
 }
 
+// ---- Competitors tab (docs/competitor-review-spec.md, phase 2) --------------------------
+// Header: the competitor list as chips + Review. Then, once a run exists: the report's lede,
+// the field table (rows = this site + each competitor, columns = the signals the read
+// carries), and two columns: the recommendations (Edge, then Opportunity) on the left, the
+// selected one's evidence and the block it lands on, live, on the right. Apply runs the same
+// scoped builder turn the Art Director uses; Hold and Dismiss move the rec between lists.
+let competitorProgressOff = null;
+async function renderSiteCompetitors(host, data, refresh) {
+  const T = COPY.site.competitors;
+  const st = await window.desktop.getCompetitors().catch(() => ({ licensed: false, hasKey: false, running: false, list: [], run: null, runs: 0, table: null }));
+  let list = (st.list || []).slice();
+  const run = st.run || null;
+
+  // ── Header: the list + Review ──
+  const head = siteEl("div", "cmp-head");
+  const listWrap = siteEl("div", "cmp-list");
+  listWrap.appendChild(siteEl("div", "sess-label", T.listLabel));
+  const chips = siteEl("div", "cmp-chips");
+  const paintChips = () => {
+    chips.innerHTML = "";
+    list.forEach((u, i) => {
+      const chip = siteEl("span", "cmp-chip");
+      chip.appendChild(siteEl("span", "cmp-chip-host", hostOfUrl(u)));
+      const x = siteEl("button", "cmp-chip-x", "×"); x.type = "button"; x.title = T.remove; x.setAttribute("aria-label", T.removeAria(hostOfUrl(u)));
+      x.addEventListener("click", async () => { list.splice(i, 1); await window.desktop.saveCompetitorList(list); paintChips(); updateReview(); });
+      chip.appendChild(x); chips.appendChild(chip);
+    });
+    if (!list.length) chips.appendChild(siteEl("span", "sess-desc", T.empty));
+  };
+  paintChips();
+  listWrap.appendChild(chips);
+  if (st.seeded && list.length) listWrap.appendChild(siteEl("div", "sess-desc", T.seeded));
+  const addRow = siteEl("div", "cmp-add");
+  const inp = document.createElement("input"); inp.className = "field"; inp.placeholder = T.addPlaceholder; inp.style.marginBottom = "0";
+  const addBtn = siteEl("button", "panelbtn", T.add); addBtn.style.cssText = "margin:0;width:auto;white-space:nowrap;";
+  const add = async () => {
+    const v = inp.value.trim(); if (!v) return;
+    if (list.length >= 6) { inp.value = ""; inp.placeholder = T.max; return; }
+    const saved = await window.desktop.saveCompetitorList([...list, v]);
+    list = (saved && saved.list) || list; inp.value = ""; paintChips(); updateReview();
+  };
+  addBtn.addEventListener("click", add); inp.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+  addRow.append(inp, addBtn); listWrap.appendChild(addRow);
+  head.appendChild(listWrap);
+
+  const act = siteEl("div", "cmp-act");
+  const reviewBtn = siteEl("button", "panelbtn primary", run ? T.reviewAgain : T.review); reviewBtn.style.cssText = "margin:0;width:auto;";
+  const progress = siteEl("div", "cmp-progress"); progress.hidden = true;
+  const when = siteEl("div", "sess-desc", run ? T.lastRun(new Date(run.ranAt).toLocaleString(), run.sitesRead, (run.sitesFailed || []).length) : T.notYet);
+  act.append(reviewBtn, progress, when);
+  head.appendChild(act);
+  host.appendChild(head);
+  if (!st.licensed) { host.appendChild(siteEl("div", "sess-desc cmp-note", T.notLicensed)); }
+  else if (!st.hasKey) { host.appendChild(siteEl("div", "sess-desc cmp-note", T.needKey)); }
+
+  const updateReview = () => {
+    const blocked = !st.licensed || !st.hasKey || st.running || agentBusy || !list.length;
+    reviewBtn.disabled = blocked;
+    reviewBtn.title = !st.licensed ? T.notLicensed : !st.hasKey ? T.needKey : st.running ? T.running : agentBusy ? T.busy : !list.length ? T.empty : "";
+  };
+  updateReview();
+  const showProgress = (p) => {
+    progress.hidden = false;
+    if (p.phase === "reading") progress.textContent = T.progressReading(p.done || 0, p.total || list.length, p.url ? hostOfUrl(p.url) : "", !!p.failed);
+    else if (p.phase === "reviewing") progress.textContent = T.progressReviewing(p.sitesRead || 0);
+    else if (p.phase === "done") progress.textContent = T.progressDone;
+    else if (p.phase === "error") { progress.textContent = T.progressError(p.message || ""); progress.classList.add("err"); }
+  };
+  if (competitorProgressOff) { competitorProgressOff(); competitorProgressOff = null; }
+  competitorProgressOff = window.desktop.onCompetitorProgress((p) => {
+    showProgress(p);
+    if (p.phase === "done") { st.running = false; siteRailState.selected = null; setTimeout(refresh, 400); }
+    if (p.phase === "error") { st.running = false; updateReview(); }
+  });
+  if (st.running) { showProgress({ phase: "reading", done: 0, total: list.length }); }
+  reviewBtn.addEventListener("click", async () => {
+    if (reviewBtn.disabled) return;
+    st.running = true; updateReview(); progress.classList.remove("err"); showProgress({ phase: "reading", done: 0, total: list.length });
+    const res = await window.desktop.runCompetitorReview(list).catch((e) => ({ ok: false, error: String(e) }));
+    if (!res || !res.ok) { st.running = false; updateReview(); if (res && res.error) showProgress({ phase: "error", message: res.error }); }
+  });
+
+  if (!run) { host.appendChild(siteEl("div", "sess-desc cmp-intro", T.intro)); return; }
+
+  // ── The report's lede + the field table ──
+  const paras = String(run.report || "").split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
+  if (paras.length) {
+    const rep = siteEl("div", "cmp-report");
+    rep.appendChild(siteEl("p", "cmp-lede", paras[0]));
+    if (paras.length > 1) {
+      const more = siteEl("div", "cmp-report-more"); more.hidden = true;
+      paras.slice(1).forEach((t) => more.appendChild(siteEl("p", "", t)));
+      const tog = siteEl("button", "site-mini", T.readMore); tog.type = "button";
+      tog.addEventListener("click", () => { more.hidden = !more.hidden; tog.textContent = more.hidden ? T.readMore : T.readLess; });
+      rep.append(tog, more);
+    }
+    host.appendChild(rep);
+  }
+  if (st.table && st.table.rows && st.table.rows.length) host.appendChild(competitorTable(st.table, T));
+
+  // ── The recommendations: list left, the selected one right ──
+  const active = (run.active || []).slice();
+  const dismissed = (run.dismissed || []).slice();
+  const completed = (run.completed || []).slice();
+  const held = active.filter((r) => r.held);
+  const open = active.filter((r) => !r.held);
+  const persist = () => window.desktop.saveCompetitorRecs(active, dismissed, completed).catch(() => {});
+  const cols = siteEl("div", "site-cols cmp-cols"); const left = siteEl("div"); const right = siteEl("div", "site-detail"); cols.append(left, right); host.appendChild(cols);
+  const sel = siteRailState.selected && siteRailState.selected.kind === "cmp" ? siteRailState.selected.id : null;
+  const all = [...open, ...held, ...completed, ...dismissed];
+  let current = all.find((r) => r.id === sel) || open[0] || held[0] || null;
+  const row = (rec, state) => {
+    const b = siteEl("button", "adrec cmp-rec" + (current && current.id === rec.id ? " active" : "") + (state !== "open" ? " cmp-rec-" + state : "")); b.type = "button";
+    const badge = siteEl("span", "cmp-angle cmp-angle-" + (rec.angle === "opportunity" ? "opportunity" : "edge"), rec.angle === "opportunity" ? T.opportunity : T.edge);
+    const title = siteEl("span", "adrec-title", rec.title || rec.id);
+    const kind = siteEl("span", "adrec-kind adrec-kind-" + (rec.kind === "create" ? "code" : (rec.kind || "code")), T.kinds[rec.kind] || T.kinds.code);
+    b.append(badge, title, kind);
+    b.addEventListener("click", () => { siteRailState.selected = { kind: "cmp", id: rec.id }; current = rec; paintDetail(); left.querySelectorAll(".cmp-rec").forEach((x) => x.classList.toggle("active", x === b)); });
+    return b;
+  };
+  const group = (label, recs, state) => {
+    if (!recs.length) return;
+    left.appendChild(siteEl("div", "sess-label cmp-group", label));
+    const l = siteEl("div", "adrec-list"); l.style.marginTop = "6px";
+    recs.forEach((r) => l.appendChild(row(r, state)));
+    left.appendChild(l);
+  };
+  group(T.groupEdge, open.filter((r) => r.angle !== "opportunity"), "open");
+  group(T.groupOpportunity, open.filter((r) => r.angle === "opportunity"), "open");
+  group(T.groupHeld, held, "held");
+  group(T.groupDone, completed, "done");
+  group(T.groupDismissed, dismissed, "dismissed");
+  if (!all.length) left.appendChild(siteEl("div", "sess-desc", T.noRecs));
+
+  const pageOf = (rec) => (data.pages || []).find((p) => p.id === rec.page) || (data.pages || []).find((p) => p.id === "home") || (data.pages || [])[0] || null;
+  const blockOf = (rec, page) => {
+    if (!page || !Array.isArray(page.blocks)) return null;
+    const want = rec.anchor && rec.anchor.block;
+    return (want && page.blocks.find((b) => b.type === want)) || page.blocks[0] || null;
+  };
+  let detailPreview = null;
+  function paintDetail() {
+    right.innerHTML = "";
+    if (detailPreview && detailPreview.destroy) { try { detailPreview.destroy(); } catch {} }
+    detailPreview = null;
+    if (!current) { right.appendChild(siteEl("div", "sess-desc", all.length ? T.pickOne : T.noRecs)); return; }
+    const rec = current;
+    const state = completed.includes(rec) ? "done" : dismissed.includes(rec) ? "dismissed" : rec.held ? "held" : "open";
+    const top = siteEl("div", "cmp-detail-head");
+    top.appendChild(siteEl("span", "cmp-angle cmp-angle-" + (rec.angle === "opportunity" ? "opportunity" : "edge"), rec.angle === "opportunity" ? T.opportunity : T.edge));
+    top.appendChild(siteEl("span", "adrec-kind adrec-kind-" + (rec.kind === "create" ? "code" : (rec.kind || "code")), T.kinds[rec.kind] || T.kinds.code));
+    right.appendChild(top);
+    right.appendChild(siteEl("h3", "cmp-detail-title", rec.title || rec.id));
+    if (rec.why) right.appendChild(siteEl("p", "cmp-detail-why", rec.why));
+    if (rec.evidence) { const ev = siteEl("div", "cmp-evidence"); ev.appendChild(siteEl("div", "cmp-evidence-label", T.evidence)); ev.appendChild(siteEl("div", "cmp-evidence-text", rec.evidence)); right.appendChild(ev); }
+    if (rec.kind === "create" && rec.create) right.appendChild(siteEl("p", "sess-desc", T.createPlan(rec.create.title, (rec.create.blocks || []).join(", "))));
+    // The block the move lands on, live, at the width the designer picks.
+    const page = pageOf(rec); const block = rec.kind === "create" ? null : blockOf(rec, page);
+    if (page) right.appendChild(siteEl("div", "sess-desc cmp-where", T.where(page.title, block ? (blockNameOf(data, block.type) || block.type) : "")));
+    if (block && block.type) { detailPreview = siteBlockPreview(block.type, () => block.props || {}); right.appendChild(detailPreview.el); }
+    // Actions
+    const acts = siteEl("div", "cmp-actions");
+    const btn = (label, cls, fn) => { const b = siteEl("button", "panelbtn" + (cls ? " " + cls : ""), label); b.type = "button"; b.style.cssText = "margin:0;width:auto;"; b.addEventListener("click", fn); return b; };
+    const moveTo = (to) => {
+      const drop = (arr) => { const i = arr.indexOf(rec); if (i !== -1) arr.splice(i, 1); };
+      drop(active); drop(dismissed); drop(completed); delete rec.held;
+      if (to === "held") { rec.held = true; active.push(rec); } else if (to === "open") active.push(rec); else if (to === "dismissed") dismissed.push(rec); else if (to === "done") completed.push(rec);
+      persist(); siteRailState.selected = { kind: "cmp", id: rec.id }; refresh();
+    };
+    if (state === "open" || state === "held") {
+      if ((rec.kind === "code" && rec.apply) || (rec.kind === "create" && rec.create)) {
+        const a = btn(rec.kind === "create" ? T.createPage : T.apply, "primary", () => { moveTo("done"); applyCompetitorRec(rec, page, data); });
+        a.disabled = !appHasKey || agentBusy; if (a.disabled) a.title = !appHasKey ? COPY.errors.needKey : T.busy;
+        acts.appendChild(a);
+      } else acts.appendChild(siteEl("div", "sess-desc", rec.kind === "asset" ? T.assetNote : T.decisionNote));
+      acts.appendChild(btn(state === "held" ? T.resume : T.hold, "", () => moveTo(state === "held" ? "open" : "held")));
+      acts.appendChild(btn(T.dismiss, "", () => moveTo("dismissed")));
+    } else if (state === "done") { acts.appendChild(siteEl("div", "sess-desc", T.doneNote)); acts.appendChild(btn(T.reopen, "", () => moveTo("open"))); }
+    else { acts.appendChild(btn(T.restore, "", () => moveTo("open"))); }
+    right.appendChild(acts);
+  }
+  paintDetail();
+}
+function hostOfUrl(u) { try { return new URL(u).host.replace(/^www\./, ""); } catch { return String(u || ""); } }
+function blockNameOf(data, type) { const b = (data.blocks || []).find((x) => x.key === type || x.type === type); return b ? b.name : null; }
+// The field table: this site first, then each competitor; a tick, a dash, a count or a label per cell.
+function competitorTable(table, T) {
+  const wrap = siteEl("div", "cmp-table-wrap");
+  const tbl = document.createElement("table"); tbl.className = "cmp-table";
+  const thead = document.createElement("thead"); const hr = document.createElement("tr");
+  hr.appendChild(siteEl("th", "", T.colSite));
+  table.columns.forEach((c) => hr.appendChild(siteEl("th", "", T.columns[c] || c)));
+  thead.appendChild(hr); tbl.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  table.rows.forEach((r) => {
+    const tr = document.createElement("tr"); if (r.self) tr.className = "self";
+    const name = siteEl("td", "cmp-site", r.self ? (r.name || T.thisSite) : r.name);
+    if (r.self) name.appendChild(siteEl("span", "cmp-you", T.you));
+    tr.appendChild(name);
+    table.columns.forEach((c) => {
+      const v = r.failed ? null : r.cells[c];
+      const td = siteEl("td", "cmp-cell");
+      if (r.failed) { td.textContent = "?"; td.title = T.unreadable; }
+      else if (c === "cta") { td.textContent = v || "–"; td.className += " cmp-cta"; }
+      else if (typeof v === "number") { td.textContent = v > 0 ? String(v) : "–"; if (v > 0) td.className += " yes"; }
+      else if (v) { td.textContent = "✓"; td.className += " yes"; }
+      else td.textContent = "–";
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  tbl.appendChild(tbody); wrap.appendChild(tbl);
+  return wrap;
+}
+// Apply = a scoped BUILDER edit turn on the page the rec names (the Art Director's applyRec
+// shape); a create rec first adds the page the CMS way, then a turn fills it from the site's
+// own blocks. The chat surfaces so the edit streams where the designer can see it.
+async function applyCompetitorRec(rec, page, data) {
+  if (!appHasKey) return;
+  const T = COPY.site.competitors;
+  const vid = data.design || "v01";
+  closeModal();
+  if (rec.kind === "create" && rec.create) {
+    const res = await window.desktop.createSitePage(rec.create.title).catch(() => null);
+    if (!res || !res.ok) { addMsg("error", (res && res.error) || T.createFailed); return; }
+    const id = res.page.id;
+    const prompt =
+      `[Create the "${rec.create.title}" page of the site from a competitor review recommendation.] The page file \`content/pages/${id}.json\` exists with no blocks yet (it is a draft). ` +
+      `Compose it from these block types the site already has: ${(rec.create.blocks || []).join(", ")} (their props are in \`site/blocks/\` and in use under \`content/pages/\`). ` +
+      `Write real content for it in the site's voice. Edit only \`content/pages/${id}.json\` (and \`src/app/pages.ts\` / \`src/app/menu.ts\` if the page belongs in the nav); set \`draft\` to false when it reads well. ` +
+      `Keep to the block contract. Then run \`npx astro build --root site\` to check it builds.\n\n${rec.title}\n${rec.why || ""}\n${rec.apply || ""}`;
+    runAgent(prompt, T.creatingEcho(rec.create.title), {});
+    return;
+  }
+  const pg = page || { id: "home", title: "Home" };
+  const prompt =
+    `[Apply a competitor review recommendation to the "${pg.title}" page of the site.] Make ONLY this change, ` +
+    `editing only the block file(s) under \`site/blocks/\`, the page's content in \`content/pages/${pg.id}.json\`, or the palette in \`src/variations/${vid}/styles/tokens.css\` (the site imports the pinned design's tokens), as the instruction says. ` +
+    `Nothing else under \`src/variations/${vid}/\`, and do not rebuild the page. Keep to the block contract (tokens/utilities, container queries, static HTML). ` +
+    `Then run \`npx astro build --root site\` to check it builds.\n\n${rec.title}\n${rec.apply}`;
+  runAgent(prompt, T.applyingEcho(rec.title), {});
+}
+
 async function renderSite(body) {
   destroyLiveEditors();
   const gen = Number(body.dataset.gen || 0); // this render's claim on the body
@@ -9077,7 +9320,7 @@ async function renderSite(body) {
   // eight round-trips ran, stop here rather than building into someone else's panel.
   if (!bodyIsCurrent(body, gen)) return;
   siteFolds = { ...((cms.ui && cms.ui.folds) || {}) };
-  const TABS = ["pages", "posts", "types", "forms", "media", "blocks", "nav", "settings"];
+  const TABS = ["pages", "posts", "types", "forms", "media", "blocks", "nav", "competitors", "settings"];
   if (!TABS.includes(siteRailState.tab)) siteRailState.tab = "pages";
   if (!cms.enabled) siteRailState.tab = "settings";
   el("modal-info").hidden = !cms.enabled; // the CMS walkthrough "i" in the header (site is ready here)
@@ -9184,6 +9427,12 @@ async function renderSite(body) {
     sitePreviewPath = "/";
     const wrap = siteEl("div"); body.appendChild(wrap); // full width: the Forms fold holds two columns
     renderSiteForms(wrap, ctx, refresh);
+  } else if (siteRailState.tab === "competitors") {
+    // The competitor review (docs/competitor-review-spec.md): the field table, then the
+    // recommendations on the left and the evidence + the block they land on, on the right.
+    sitePreviewPath = "/";
+    const wrap = siteEl("div"); body.appendChild(wrap);
+    await renderSiteCompetitors(wrap, data, refresh);
   } else if (siteRailState.tab === "media") {
     // Its own host, like the other single-panel tabs: the Images | Video | Files
     // switcher clears and repaints this element, and the tab row above must survive it.

@@ -4014,6 +4014,91 @@ ipcMain.handle("research:get", () => ({
   effective: researchActive(currentProject),
   broadEffective: broadActive(currentProject),
 }));
+// ---- Competitor review (docs/competitor-review-spec.md) -------------------------------
+// The deterministic half is desktop/competitors.cjs; this runs it and the one review turn
+// from the app, reporting progress to the Competitors tab. The turn runs here rather than
+// through the chat (agent:prompt), so its report and suggestions land in the run record
+// instead of the conversation; the tab paints the run.
+const competitors = require("./competitors.cjs");
+// Its own licensed line in time; the research license carries it for now.
+function competitorLicensed() { return researchLicensed(); }
+// The extractor with --signals: the project's own copy (CORE, refreshed on open), else the
+// app's bundled one (unpacked from the asar: a child process can't run a file inside it).
+function competitorExtractor(dir) {
+  const own = path.join(dir, "scripts", "extract-layout.mjs");
+  try { if (/--signals/.test(fs.readFileSync(own, "utf8"))) return own; } catch { /* no project copy */ }
+  return unpacked(path.join(appRoot, "desktop", "template", "scripts", "extract-layout.mjs"));
+}
+let competitorReviewRunning = false;
+function competitorState(dir) {
+  const store = competitors.loadStore(dir);
+  // An empty list is seeded from the brief's references, the sites the designer named as models.
+  const list = (store.list || []).length ? store.list : competitors.readBriefSummary(dir).references.map(competitors.normalizeUrl).filter(Boolean).slice(0, competitors.MAX_COMPETITORS);
+  const run = (store.runs || [])[0] || null;
+  let table = null;
+  if (run && run.read) { const read = readJsonFile(path.join(dir, ".thinkany", run.read)); if (read) table = competitors.fieldTable(read); }
+  return { licensed: competitorLicensed(), hasKey: !!process.env.ANTHROPIC_API_KEY, running: competitorReviewRunning, list, seeded: !(store.list || []).length && list.length > 0, run, runs: (store.runs || []).length, table };
+}
+ipcMain.handle("competitor:get", () => (currentProject ? competitorState(currentProject) : { licensed: false, hasKey: false, running: false, list: [], run: null, runs: 0, table: null }));
+ipcMain.handle("competitor:saveList", (_e, { list } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  return { ok: true, list: competitors.saveList(currentProject, Array.isArray(list) ? list : []) };
+});
+ipcMain.handle("competitor:saveRecs", (_e, { active, dismissed, completed } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  const store = competitors.loadStore(currentProject);
+  if (!store.runs || !store.runs[0]) return { ok: false, error: "No review yet." };
+  store.runs[0] = { ...store.runs[0], active: active || [], dismissed: dismissed || [], completed: completed || [] };
+  competitors.saveStore(currentProject, store);
+  return { ok: true };
+});
+ipcMain.handle("competitor:review", async (event, { list } = {}) => {
+  if (!currentProject) return { ok: false, error: "No project is open." };
+  if (!competitorLicensed()) return { ok: false, error: "The competitor review is part of the Design license. Add your key under Keys & Licenses." };
+  if (!process.env.ANTHROPIC_API_KEY) return { ok: false, reason: "no-key", error: "Add your Claude API key to run a review." };
+  if (competitorReviewRunning) return { ok: false, error: "A review is already running." };
+  const urls = competitors.saveList(currentProject, Array.isArray(list) ? list : []);
+  if (!urls.length) return { ok: false, error: "Add at least one competitor site." };
+  competitorReviewRunning = true;
+  const dir = currentProject;
+  const send = (p) => { try { if (!event.sender.isDestroyed()) event.sender.send("competitor:progress", p); } catch { /* window gone */ } };
+  try {
+    send({ phase: "reading", done: 0, total: urls.length });
+    const field = await competitors.readField(urls, {
+      extractor: competitorExtractor(dir), node: process.execPath,
+      onProgress: ({ done, total, url, failed }) => send({ phase: "reading", done, total, url, failed }),
+    });
+    const site = competitors.readProjectContent(dir);
+    const brief = competitors.readBriefSummary(dir);
+    const readPath = competitors.writeRead(dir, { field, site, brief });
+    const prompt = competitors.buildReviewPrompt({ field, site, brief, readPath });
+    if (!field.some((c) => !c.failed)) { send({ phase: "error", message: "None of the competitor sites could be read." }); return { ok: false, error: "None of the competitor sites could be read." }; }
+    send({ phase: "reviewing", sitesRead: field.filter((c) => !c.failed).length });
+    let report = "", suggestions = [], errorMsg = null;
+    const { runPrompt } = await import(pathToFileURL(path.join(__dirname, "agent.mjs")).href);
+    await runPrompt({
+      prompt, cwd: dir, model: currentModel, reviewMode: "competitor",
+      onSuggest: (s) => { suggestions = Array.isArray(s) ? s : []; },
+      onEvent: (ev) => { if (ev.type === "text") report += ev.text; else if (ev.type === "error") errorMsg = ev.message; },
+      projectState: projectStateForAgent(dir),
+    });
+    if (errorMsg && !suggestions.length && !report.trim()) { send({ phase: "error", message: errorMsg }); return { ok: false, error: errorMsg }; }
+    const run = competitors.recordRun(dir, {
+      ranAt: new Date().toISOString(), read: readPath,
+      sitesRead: field.filter((c) => !c.failed).length, sitesFailed: field.filter((c) => c.failed).map((c) => c.url),
+      report: report.trim(), active: suggestions.map((s, i) => ({ ...s, id: s.id || `c${i + 1}` })),
+    });
+    appLog.write("info", "competitors", `review done: ${run.sitesRead} read, ${run.active.length} suggestion(s)`);
+    send({ phase: "done" });
+    return { ok: true, run };
+  } catch (e) {
+    const message = String((e && e.message) || e);
+    appLog.write("info", "competitors", `review failed: ${message}`);
+    send({ phase: "error", message });
+    return { ok: false, error: message };
+  } finally { competitorReviewRunning = false; }
+});
+
 // ---- Images mode IPC (placeholder-only vs source) — a global preference --------
 function loadImagesPlaceholder() { return !!loadUiState().imagesPlaceholder; }
 ipcMain.handle("images:get", () => ({ placeholder: loadImagesPlaceholder() }));

@@ -137,6 +137,40 @@ const runExtractor = (url, flags = []) => new Promise((resolve, reject) => execF
   const persona = agent.slice(agent.indexOf("const COMPETITOR_PERSONA"), agent.indexOf("// Where the design renders"));
   ok(!persona.includes("—"), "the persona has no em-dash");
 
+  // 8. the field table: this site first, then each competitor, one cell per signal.
+  const table = C.fieldTable({ field, site });
+  eq(table.columns, ["pricing", "faq", "testimonials", "logos", "stats", "form", "blog", "cta"], "the signal columns");
+  ok(table.rows[0].self && table.rows[0].name === "Marlow & Finch", "this site is the first row");
+  eq(table.rows[0].cells.form, true, "the site's contact-form block shows as a form");
+  eq(table.rows[0].cells.blog, true, "a post counts as a blog");
+  eq(table.rows[0].cells.cta, "Start a project", "the home hero's first CTA");
+  const acme = table.rows.find((r) => !r.self && !r.failed);
+  ok(acme && acme.cells.pricing && acme.cells.faq && acme.cells.testimonials, "the fixture competitor has pricing, a FAQ and testimonials on its home page");
+  eq(acme.cells.form, 3, "its shortest form has three fields");
+  eq(acme.cells.cta, "Book a visit", "its primary CTA");
+  ok(table.rows.some((r) => r.failed && !Object.keys(r.cells).length), "an unreadable competitor is a row with no cells");
+
+  // 9. phase 2 wiring (static): the tab, the IPCs, the bridge, the copy, the CSS.
+  const shell = fs.readFileSync(path.join(ROOT, "desktop", "shell.js"), "utf8");
+  const main = fs.readFileSync(path.join(ROOT, "desktop", "main.cjs"), "utf8");
+  const preload = fs.readFileSync(path.join(ROOT, "desktop", "preload.cjs"), "utf8");
+  const copy = fs.readFileSync(path.join(ROOT, "desktop", "copy.js"), "utf8");
+  const html = fs.readFileSync(path.join(ROOT, "desktop", "shell.html"), "utf8");
+  ok(/const TABS = \["pages", "posts", "types", "forms", "media", "blocks", "nav", "competitors", "settings"\]/.test(shell), "the Competitors tab sits before Settings");
+  ok(/siteRailState\.tab === "competitors"/.test(shell) && /async function renderSiteCompetitors\(host, data, refresh\)/.test(shell), "the tab has its renderer");
+  ok(/siteBlockPreview\(block\.type, \(\) => block\.props \|\| \{\}\)/.test(shell), "the detail shows the block the rec lands on, live");
+  ok(/function applyCompetitorRec\(rec, page, data\)/.test(shell) && /Apply a competitor review recommendation to the/.test(shell) && /npx astro build --root site/.test(shell), "Apply is a scoped builder turn on the rec's page that checks the build");
+  ok(/createSitePage\(rec\.create\.title\)/.test(shell), "a create rec adds the page the CMS way first");
+  for (const ipc of ["competitor:get", "competitor:saveList", "competitor:saveRecs", "competitor:review"]) ok(main.includes(`ipcMain.handle("${ipc}"`), `main handles ${ipc}`);
+  ok(/reviewMode: "competitor"/.test(main) && /event\.sender\.send\("competitor:progress"/.test(main), "the review turn runs in main as the competitor reviewer and reports progress");
+  ok(/const \{ runPrompt \} = await import\(pathToFileURL\(path\.join\(__dirname, "agent\.mjs"\)\)\.href\);\s*\n\s*await runPrompt\(\{\s*\n\s*prompt, cwd: dir, model: currentModel, reviewMode: "competitor"/.test(main), "runPrompt is imported inside the handler, like the other turns");
+  ok(/competitorExtractor\(dir\)/.test(main) && /unpacked\(path\.join\(appRoot, "desktop", "template", "scripts", "extract-layout\.mjs"\)\)/.test(main), "the extractor falls back to the bundled, unpacked copy");
+  for (const fn of ["getCompetitors", "saveCompetitorList", "runCompetitorReview", "saveCompetitorRecs", "onCompetitorProgress"]) ok(preload.includes(`${fn}:`), `preload exposes ${fn}`);
+  ok(/competitors: "Competitors"/.test(copy) && /competitors: \{\s*\n\s*listLabel:/.test(copy) && /competitors: \{\s*\n\s*title: "Competitors"/.test(copy), "tab label, strings and help copy exist");
+  const cmpCopy = copy.slice(copy.indexOf("    competitors: {\n      listLabel"), copy.indexOf("    },", copy.indexOf("    competitors: {\n      listLabel")));
+  ok(!cmpCopy.includes("—"), "no em-dash in the tab's copy");
+  ok(/\.cmp-table \{/.test(html) && /\.cmp-angle-opportunity \{/.test(html) && /\.cmp-evidence \{/.test(html), "the tab's CSS is in");
+
   server.close();
   fs.rmSync(proj, { recursive: true, force: true });
   console.log(`competitor review: ${checks} checks passed`);
