@@ -34,7 +34,7 @@ ok(!/—/.test(app), "no em-dashes");
 
 // ---- routing --------------------------------------------------------------------
 ok(/const builderPersona = projectState && projectState\.projectType === "app" \? APP_PERSONA : CHAT_PERSONA;/.test(agent), "an app project gets the App persona, anything else the designer's");
-ok(/reviewMode \? ART_DIRECTOR_PERSONA : \(builderPersona \+ buildVoiceAppend\(copyVoice\)\)/.test(agent), "the Art Director review is unaffected, and the copy voice still rides the builder");
+ok(/const reviewPersona = reviewMode === "competitor" \? COMPETITOR_PERSONA : ART_DIRECTOR_PERSONA;/.test(agent) && /reviewMode \? reviewPersona : \(builderPersona \+ buildVoiceAppend\(copyVoice\)\)/.test(agent), "the Art Director review is unaffected (the competitor review is its own reviewer), and the copy voice still rides the builder");
 const state = main.slice(main.indexOf("function projectStateForAgent"), main.indexOf("function siteReady"));
 ok(/VITE_PROJECT_TYPE/.test(state) && /intakeBrief\.projectType/.test(state), "main reads the type from .env, else from the walk-through's first fork");
 ok(/if \(\(envType \|\| briefType\) === "app"\) projectType = "app";/.test(state), ".env wins once set; otherwise the fork; anything but app is a web site");
