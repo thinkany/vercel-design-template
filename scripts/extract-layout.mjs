@@ -219,12 +219,15 @@ function classify(node, index, total) {
 // ---- signals (--signals): what a competitor review compares -------------------
 const STAT_RE = /\b\d[\d,.]*\s?(?:\+|%|k\b|m\b|years?|clients?|customers?|projects?|reviews?|stars?|countries)/gi;
 const BTN_CLS = /\b(btn|button|cta)\b/i;
+const UI_CHROME = /^(previous|prev|next|close|menu|cancel|copy|copy copy|ok|dismiss|log ?in|log ?out|sign ?in|sign ?out|downgrade.*|play|pause|mute|skip|back|search)$/i;
 function sectionSignals(node, section) {
   const headings = find(node, (n) => /^h[1-3]$/.test(n.tag)).map(textOf).filter(Boolean).slice(0, 5);
   const ctas = [];
   for (const n of find(node, (n) => n.tag === "button" || (n.tag === "a" && (BTN_CLS.test(cls(n)) || CTA_RE.test(textOf(n)))))) {
-    const t = textOf(n);
-    if (t && t.length <= 40 && !ctas.includes(t)) ctas.push(t);
+    const t = textOf(n).replace(/\s*[→↗►▶↓←↑»›]+\s*$/g, "").trim();
+    // UI chrome is not a call to action: arrows, carousel and dialog buttons, account links.
+    if (!t || t.length > 40 || !/[a-z]/i.test(t) || UI_CHROME.test(t) || ctas.includes(t)) continue;
+    ctas.push(t);
     if (ctas.length >= 5) break;
   }
   const text = decode(deepText(node, 6000)).replace(/\s+/g, " ").trim();

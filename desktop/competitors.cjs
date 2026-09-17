@@ -186,11 +186,19 @@ function readProjectContent(dir) {
     contact: site.contact && typeof site.contact === "object" ? Object.keys(site.contact).filter((k) => site.contact[k]) : [],
   };
 }
-// The brief's angle for the review: what the site is, for whom, in what tone.
+// The brief's angle for the review: what the site is, for whom, in what tone. The intake
+// record is cleared at the build handoff, so after a build the pinned design's own record
+// (variation.json, which keeps the designer's brief text) is the source.
 function readBriefSummary(dir) {
   const saved = readJson(path.join(dir, ".thinkany", "intake.json"));
   const b = (saved && saved.brief) || saved || {};
-  return { what: b.what || "", audience: Array.isArray(b.audience) ? b.audience : [], tone: b.tone || "", references: (Array.isArray(b.references) ? b.references : []).map((r) => r && r.url).filter(Boolean) };
+  let what = b.what || "";
+  if (!what) {
+    const site = readJson(path.join(dir, "content", "site.json")) || {};
+    const v = site.design ? readJson(path.join(dir, "src", "variations", site.design, "variation.json")) : null;
+    if (v && typeof v.brief === "string") what = v.brief.slice(0, 600);
+  }
+  return { what, audience: Array.isArray(b.audience) ? b.audience : [], tone: b.tone || "", references: (Array.isArray(b.references) ? b.references : []).map((r) => r && r.url).filter(Boolean) };
 }
 
 // ---- the store ----------------------------------------------------------------------
