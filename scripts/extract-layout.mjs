@@ -9,10 +9,14 @@
 // instead of the agent eyeballing it. Pure fetch + a zero-dep HTML parse + rules;
 // no browser, screenshots, or API keys. Runnable in isolation.
 //
-//   node scripts/extract-layout.mjs <url> [--summary]
+//   node scripts/extract-layout.mjs <url> [--summary] [--signals]
 //
 // Default output is JSON on stdout (the orchestrator parses it). `--summary` adds
-// a human-readable outline on stderr. Exit non-zero only on a usage error or a
+// a human-readable outline on stderr. `--signals` adds what a competitor review
+// compares (the app's Competitors drawer): per section its headings, CTA labels,
+// proof counts (quotes, logos, FAQs, stats) and a short text sample; page-level the
+// title + meta description, the forms (field counts) and the nav's links with hrefs
+// (so the review can follow a site's main pages). The default output is unchanged. Exit non-zero only on a usage error or a
 // total fetch failure — a thin page still yields a best-effort outline.
 //
 // The output schema is deliberately wireframe-friendly: each section is a labeled
@@ -43,6 +47,21 @@ async function fetchText(url) {
   } finally {
     clearTimeout(t);
   }
+}
+
+// ---- page meta (read from the raw html: the parser drops <head>) --------------
+function headMeta(html) {
+  const head = (html.match(/<head\b[\s\S]*?<\/head>/i) || [""])[0];
+  const title = (head.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [, ""])[1];
+  const meta = (name) => {
+    const re = new RegExp(`<meta\\s+[^>]*(?:name|property)=["']${name}["'][^>]*>`, "i");
+    const tag = (head.match(re) || [""])[0];
+    return (tag.match(/content=["']([^"']*)["']/i) || [, ""])[1];
+  };
+  return {
+    title: decode(title).replace(/\s+/g, " ").trim().slice(0, 120),
+    description: decode(meta("description") || meta("og:description")).replace(/\s+/g, " ").trim().slice(0, 300),
+  };
 }
 
 // ---- zero-dep HTML parse ----------------------------------------------------
@@ -167,7 +186,7 @@ function classify(node, index, total) {
   // words "pricing"/"plan" litter marketing copy and cause false positives.
   const strongPrice = /\bper (month|year)\b|\/mo\b|\/yr\b|billed (annually|monthly)/.test(text);
   const c2 = c + " " + heading.toLowerCase();
-  const quoteBlocks = (deepText(node).match(/[""][^""]{15,}[""]/g) || []).length;
+  const quoteBlocks = (deepText(node).match(/[“”"][^“”"]{15,}[“”"]/g) || []).length;
 
   let type = "section", confidence = 0.4;
   if (node.tag === "footer" || (isLast && links > 8 && imgs <= 3)) { type = "footer"; confidence = 0.9; }
@@ -195,6 +214,45 @@ function classify(node, index, total) {
     hasCta,
     confidence,
   };
+}
+
+// ---- signals (--signals): what a competitor review compares -------------------
+const STAT_RE = /\b\d[\d,.]*\s?(?:\+|%|k\b|m\b|years?|clients?|customers?|projects?|reviews?|stars?|countries)/gi;
+const BTN_CLS = /\b(btn|button|cta)\b/i;
+function sectionSignals(node, section) {
+  const headings = find(node, (n) => /^h[1-3]$/.test(n.tag)).map(textOf).filter(Boolean).slice(0, 5);
+  const ctas = [];
+  for (const n of find(node, (n) => n.tag === "button" || (n.tag === "a" && (BTN_CLS.test(cls(n)) || CTA_RE.test(textOf(n)))))) {
+    const t = textOf(n);
+    if (t && t.length <= 40 && !ctas.includes(t)) ctas.push(t);
+    if (ctas.length >= 5) break;
+  }
+  const text = decode(deepText(node, 6000)).replace(/\s+/g, " ").trim();
+  const proof = {
+    quotes: (text.match(/[“”"][^“”"]{15,}[“”"]/g) || []).length,
+    logos: section.type === "logos" ? find(node, (n) => n.tag === "img").length : 0,
+    faqs: section.type === "faq" ? Math.max(find(node, (n) => n.tag === "details").length, find(node, (n) => n.tag === "h3").length) : 0,
+    stats: (text.match(STAT_RE) || []).length,
+  };
+  return { headings, ctas, proof, sample: text.slice(0, 300) };
+}
+function pageForms(root) {
+  return find(root, (n) => n.tag === "form").map((f) => ({
+    fields: find(f, (n) => (n.tag === "input" && !/^(hidden|submit|button)$/i.test(n.attrs.type || "")) || n.tag === "textarea" || n.tag === "select").length,
+  }));
+}
+// The nav's links with hrefs (labels only in the default output), so a review can follow a site's main pages.
+function navLinks(root) {
+  const nav = firstOf(root, ["nav"]) || firstOf(root, ["header"]);
+  if (!nav) return [];
+  const out = [];
+  for (const a of find(nav, (n) => n.tag === "a")) {
+    const label = textOf(a), href = a.attrs.href || "";
+    if (!label || label.length > 24 || !href || /^(#|javascript:)/i.test(href)) continue;
+    if (!out.some((l) => l.href === href)) out.push({ label, href });
+    if (out.length >= 12) break;
+  }
+  return out;
 }
 
 // ---- nav --------------------------------------------------------------------
@@ -259,9 +317,10 @@ function titleOf(root) {
 async function main() {
   const args = process.argv.slice(2);
   const summary = args.includes("--summary");
+  const signals = args.includes("--signals");
   const url = args.find((a) => !a.startsWith("--"));
   if (!url) {
-    process.stderr.write("usage: node scripts/extract-layout.mjs <url> [--summary]\n");
+    process.stderr.write("usage: node scripts/extract-layout.mjs <url> [--summary] [--signals]\n");
     process.exit(2);
   }
   const full = /^https?:\/\//.test(url) ? url : "https://" + url;
@@ -276,8 +335,10 @@ async function main() {
   const sectionNodes = extractSections(root);
   const sections = sectionNodes.map((n, i) => classify(n, i, sectionNodes.length));
   if (sections.length < 2) notes.push("Thin server HTML (likely an SPA) — structure may be partial; treat as a rough outline.");
+  if (signals) sectionNodes.forEach((n, i) => Object.assign(sections[i], sectionSignals(n, sections[i])));
 
   const out = { url: full, title: titleOf(root), nav, sections, notes };
+  if (signals) { out.meta = headMeta(html); out.forms = pageForms(root); out.nav = { ...nav, links: navLinks(root) }; }
   process.stdout.write(JSON.stringify(out, null, 2) + "\n");
 
   if (summary) {
